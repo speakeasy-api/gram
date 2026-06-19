@@ -17,6 +17,7 @@ import {
 import { useLatestDeployment, useToolset } from "@/hooks/toolTypes";
 import { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
+import { useHideInsightsDock } from "@/components/insights-context";
 import { Confirm } from "@gram/client/models/components";
 import {
   invalidateAllToolset,
@@ -68,7 +69,11 @@ function PlaygroundEmptyState({ onCreate }: { onCreate: () => void }) {
   );
 }
 
-export default function Playground() {
+export default function Playground(): JSX.Element {
+  // The playground hosts its own chat runtime, so hide the floating dock (and
+  // keep the shared runtime out of this page's tree — two RemoteThreadListRuntimes
+  // cannot nest).
+  useHideInsightsDock();
   return (
     <RequireScope scope={["mcp:read", "mcp:write", "mcp:connect"]} level="page">
       <ChatProvider>
@@ -205,7 +210,7 @@ function PlaygroundInner() {
   );
 }
 
-export function ToolsetPanel({
+function ToolsetPanel({
   configRef,
   setSelectedToolset,
   setSelectedEnvironment,
@@ -306,13 +311,13 @@ export function ToolsetPanel({
       {
         onSuccess: () => {
           // Invalidate both toolsets and instance queries to refresh the UI
-          queryClient.invalidateQueries({
+          void queryClient.invalidateQueries({
             queryKey: queryKeyListToolsets({}),
           });
           if (selectedToolset) {
             // Use partial query key (toolsetSlug only) to match all instances
             // of this toolset, regardless of environment
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
               queryKey: queryKeyInstance({
                 toolsetSlug: selectedToolset,
               }),
@@ -347,13 +352,13 @@ export function ToolsetPanel({
       {
         onSuccess: () => {
           // Invalidate both toolsets and instance queries to refresh the UI
-          queryClient.invalidateQueries({
+          void queryClient.invalidateQueries({
             queryKey: queryKeyListToolsets({}),
           });
           if (selectedToolset) {
             // Use partial query key (toolsetSlug only) to match all instances
             // of this toolset, regardless of environment
-            queryClient.invalidateQueries({
+            void queryClient.invalidateQueries({
               queryKey: queryKeyInstance({
                 toolsetSlug: selectedToolset,
               }),
@@ -378,7 +383,7 @@ export function ToolsetPanel({
           ...updates,
         },
       });
-      invalidateTemplate(queryClient, [{ name: tool.name }]);
+      void invalidateTemplate(queryClient, [{ name: tool.name }]);
     } else {
       const form = {
         ...tool.variation,
@@ -393,9 +398,9 @@ export function ToolsetPanel({
     }
 
     // Invalidate to refresh tool data in the sidebar
-    invalidateAllToolset(queryClient);
+    void invalidateAllToolset(queryClient);
     if (selectedToolset) {
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: queryKeyInstance({ toolsetSlug: selectedToolset }),
       });
     }
@@ -455,8 +460,7 @@ export function ToolsetPanel({
               // Force remount on toolset change so user-provided values
               // and edited keys reset and don't leak across toolsets.
               key={toolset.slug}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              toolset={toolset as any}
+              toolset={toolset}
               onPlaygroundEnvironmentSlug={onPlaygroundEnvironmentSlug}
             />
           ) : undefined
@@ -496,8 +500,7 @@ export function ToolsetPanel({
         <ManageToolsDialog
           open={showManageToolsDialog}
           onOpenChange={setShowManageToolsDialog}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          toolset={toolset as any}
+          toolset={toolset}
           currentTools={toolset.tools}
           onAddTools={(toolUrns) => handleAddTools(toolUrns)}
           onRemoveTools={(toolUrns) => handleRemoveTools(toolUrns)}
@@ -508,7 +511,9 @@ export function ToolsetPanel({
       {/* EditToolDialog */}
       <EditToolDialog
         open={!!editingTool}
-        onOpenChange={(open) => !open && setEditingTool(null)}
+        onOpenChange={(open) => {
+          void (!open && setEditingTool(null));
+        }}
         tool={editingTool}
         documentIdToName={documentIdToName}
         functionIdToName={functionIdToName}

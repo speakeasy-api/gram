@@ -1,4 +1,9 @@
+import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
+import {
+  onboardExternalMcpToUserSessions as onboardToolsetToUserSessions,
+  resolveExternalMcpUserSessionOAuthConfig,
+} from "@/lib/externalMcpUserSessions";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import {
   useDeployment,
@@ -20,14 +25,14 @@ export function generateSlug(name: string): string {
     .replace(/^-|-$/g, "");
 }
 
-export type ReleasePhase =
+type ReleasePhase =
   | "selectRemotes"
   | "configure"
   | "deploying"
   | "complete"
   | "error";
 
-export interface ServerConfig {
+interface ServerConfig {
   server: PulseMCPServer;
   name: string;
   /** For multi-remote servers, track which remotes are selected */
@@ -35,7 +40,7 @@ export interface ServerConfig {
 }
 
 /** Configuration for a server with multiple remotes during the selectRemotes phase */
-export interface MultiRemoteServerConfig {
+interface MultiRemoteServerConfig {
   server: PulseMCPServer;
   name: string;
   remotes: ExternalMCPRemote[];
@@ -53,6 +58,7 @@ export interface ServerToolsetStatus {
 
 interface WorkflowBase {
   projectSlug?: string;
+  isInstallStateLoading: boolean;
   isServerAlreadyInstalled: (server: PulseMCPServer) => boolean;
   reset: () => void;
 }
@@ -116,6 +122,7 @@ export type ExternalMcpReleaseWorkflow =
 interface UseExternalMcpReleaseWorkflowOptions {
   servers: PulseMCPServer[];
   projectSlug?: string;
+  onboardExternalMcpToUserSessions?: boolean;
 }
 
 function buildInitialToolsetStatuses(
@@ -158,14 +165,15 @@ function buildForkPrefillName(server: PulseMCPServer): string {
 export function useExternalMcpReleaseWorkflow({
   servers,
   projectSlug,
+  onboardExternalMcpToUserSessions = false,
 }: UseExternalMcpReleaseWorkflowOptions): ExternalMcpReleaseWorkflow {
   const client = useSdkClient();
-  const { data: toolsetsResult } = useListToolsets(
+  const { fetch: authedFetch } = useFetcher();
+  const { data: toolsetsResult, isLoading: toolsetsLoading } = useListToolsets(
     projectSlug ? { gramProject: projectSlug } : undefined,
   );
-  const { data: latestDeploymentResult } = useLatestDeployment(
-    projectSlug ? { gramProject: projectSlug } : undefined,
-  );
+  const { data: latestDeploymentResult, isLoading: latestDeploymentLoading } =
+    useLatestDeployment(projectSlug ? { gramProject: projectSlug } : undefined);
   const latestDeployment = latestDeploymentResult?.deployment;
 
   const existingSpecifiers = useMemo(
@@ -342,7 +350,7 @@ export function useExternalMcpReleaseWorkflow({
 
     async function createToolsets() {
       for (let i = 0; i < serverConfigs.length; i++) {
-        const config = serverConfigs[i];
+        const config = serverConfigs[i]!;
 
         setToolsetStatuses((prev) =>
           prev.map((s, idx) =>
@@ -354,12 +362,12 @@ export function useExternalMcpReleaseWorkflow({
           const toolset = await client.toolsets.create(
             {
               createToolsetRequestBody: {
-                name: config.name,
+                name: config!.name!,
                 description:
-                  config.server.description ||
-                  `MCP server: ${config.server.registrySpecifier}`,
-                origin: buildToolsetOrigin(config.server),
-                toolUrns: buildToolUrns(config),
+                  config!.server.description! ||
+                  `MCP server: ${config!.server.registrySpecifier!}`,
+                origin: buildToolsetOrigin(config!.server!),
+                toolUrns: buildToolUrns(config!),
               },
             },
             undefined,
@@ -371,7 +379,7 @@ export function useExternalMcpReleaseWorkflow({
               slug: toolset.slug,
               updateToolsetRequestBody: {
                 mcpEnabled: true,
-                mcpIsPublic: true,
+                mcpIsPublic: !onboardExternalMcpToUserSessions,
               },
             },
             undefined,
@@ -383,6 +391,31 @@ export function useExternalMcpReleaseWorkflow({
             undefined,
             reqOpts,
           );
+
+          if (onboardExternalMcpToUserSessions) {
+            const oauth =
+              resolveExternalMcpUserSessionOAuthConfig(updatedToolset);
+            if (oauth) {
+              await onboardToolsetToUserSessions({
+                client,
+                authedFetch,
+                toolsetSlug: updatedToolset.slug,
+                oauth,
+                options: reqOpts,
+              });
+            } else {
+              await client.toolsets.updateBySlug(
+                {
+                  slug: toolset.slug,
+                  updateToolsetRequestBody: {
+                    mcpIsPublic: true,
+                  },
+                },
+                undefined,
+                reqOpts,
+              );
+            }
+          }
 
           setToolsetStatuses((prev) =>
             prev.map((s, idx) =>
@@ -412,7 +445,7 @@ export function useExternalMcpReleaseWorkflow({
       }
     }
 
-    createToolsets();
+    void createToolsets();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- toolset creation should only trigger on phase transition to "complete", not when serverConfigs/toolsetStatuses change mid-creation
   }, [phase]);
 
@@ -635,6 +668,7 @@ export function useExternalMcpReleaseWorkflow({
 
   const base: WorkflowBase = {
     projectSlug,
+    isInstallStateLoading: toolsetsLoading || latestDeploymentLoading,
     isServerAlreadyInstalled,
     reset,
   };

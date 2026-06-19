@@ -55,6 +55,20 @@ func TestNewTool(t *testing.T) {
 			wantErr:  nil,
 		},
 		{
+			name:     "valid MCP tool name with uppercase",
+			kind:     urn.ToolKindExternalMCP,
+			source:   "atlassian",
+			toolName: "getAccessibleResources",
+			wantErr:  nil,
+		},
+		{
+			name:     "valid MCP tool name with period",
+			kind:     urn.ToolKindExternalMCP,
+			source:   "atlassian",
+			toolName: "admin.tools.list",
+			wantErr:  nil,
+		},
+		{
 			name:     "empty source",
 			kind:     urn.ToolKindFunction,
 			source:   "",
@@ -142,6 +156,105 @@ func TestNewTool(t *testing.T) {
 				_, err = tool.Value()
 				require.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestParseTool(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		input   string
+		want    urn.Tool
+		wantErr error
+	}{
+		{
+			name:    "valid external MCP camelCase tool name",
+			input:   "tools:externalmcp:atlassian:getAccessibleResources",
+			want:    urn.NewTool(urn.ToolKindExternalMCP, "atlassian", "getAccessibleResources"),
+			wantErr: nil,
+		},
+		{
+			name:    "valid external MCP PascalCase tool name",
+			input:   "tools:externalmcp:atlassian:GetAccessibleResources",
+			want:    urn.NewTool(urn.ToolKindExternalMCP, "atlassian", "GetAccessibleResources"),
+			wantErr: nil,
+		},
+		{
+			name:    "valid external MCP dotted tool name",
+			input:   "tools:externalmcp:atlassian:admin.tools.list",
+			want:    urn.NewTool(urn.ToolKindExternalMCP, "atlassian", "admin.tools.list"),
+			wantErr: nil,
+		},
+		{
+			name:    "valid HTTP MCP-style tool name",
+			input:   "tools:http:petstore:getUser",
+			want:    urn.NewTool(urn.ToolKindHTTP, "petstore", "getUser"),
+			wantErr: nil,
+		},
+		{
+			name:    "wrong URN namespace",
+			input:   "tool:externalmcp:atlassian:getAccessibleResources",
+			want:    urn.Tool{Kind: "", Source: "", Name: ""},
+			wantErr: urn.ErrInvalid,
+		},
+		{
+			name:    "source remains slug-strict",
+			input:   "tools:externalmcp:BadSource:getAccessibleResources",
+			want:    urn.Tool{Kind: "", Source: "", Name: ""},
+			wantErr: urn.ErrInvalid,
+		},
+		{
+			name:    "slash is not allowed by MCP 2025-11-25 tool names",
+			input:   "tools:externalmcp:atlassian:bad/name",
+			want:    urn.Tool{Kind: "", Source: "", Name: ""},
+			wantErr: urn.ErrInvalid,
+		},
+		{
+			name:    "space is not allowed",
+			input:   "tools:externalmcp:atlassian:has space",
+			want:    urn.Tool{Kind: "", Source: "", Name: ""},
+			wantErr: urn.ErrInvalid,
+		},
+		{
+			name:    "comma is not allowed",
+			input:   "tools:externalmcp:atlassian:has,comma",
+			want:    urn.Tool{Kind: "", Source: "", Name: ""},
+			wantErr: urn.ErrInvalid,
+		},
+		{
+			name:    "empty name",
+			input:   "tools:externalmcp:atlassian:",
+			want:    urn.Tool{Kind: "", Source: "", Name: ""},
+			wantErr: urn.ErrInvalid,
+		},
+		{
+			name:    "extra colon segment remains invalid",
+			input:   "tools:externalmcp:atlassian:name:extra",
+			want:    urn.Tool{Kind: "", Source: "", Name: ""},
+			wantErr: urn.ErrInvalid,
+		},
+		{
+			name:    "tool name too long",
+			input:   "tools:externalmcp:atlassian:" + strings.Repeat("a", 129),
+			want:    urn.Tool{Kind: "", Source: "", Name: ""},
+			wantErr: urn.ErrInvalid,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := urn.ParseTool(tt.input)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tt.want.Kind, got.Kind)
+			require.Equal(t, tt.want.Source, got.Source)
+			require.Equal(t, tt.want.Name, got.Name)
 		})
 	}
 }
@@ -641,6 +754,44 @@ func TestTool_edgeCases(t *testing.T) {
 				tool := urn.NewTool(urn.ToolKindFunction, invalidCase, "valid")
 
 				// Test validation through marshaling - should fail
+				_, err := tool.MarshalJSON()
+				require.Error(t, err)
+			})
+		}
+	})
+
+	t.Run("boundary MCP tool name patterns", func(t *testing.T) {
+		t.Parallel()
+		validNames := []string{
+			"getUser",
+			"DATA_EXPORT_v2",
+			"admin.tools.list",
+			"abc-def_ghi.123",
+		}
+
+		for _, validName := range validNames {
+			t.Run("valid_"+validName, func(t *testing.T) {
+				t.Parallel()
+				tool := urn.NewTool(urn.ToolKindFunction, "valid-source", validName)
+
+				_, err := tool.MarshalJSON()
+				require.NoError(t, err)
+			})
+		}
+
+		invalidNames := []string{
+			"has space",
+			"has,comma",
+			"slash/name",
+			"colon:name",
+			strings.Repeat("a", 129),
+		}
+
+		for _, invalidName := range invalidNames {
+			t.Run("invalid_"+invalidName, func(t *testing.T) {
+				t.Parallel()
+				tool := urn.NewTool(urn.ToolKindFunction, "valid-source", invalidName)
+
 				_, err := tool.MarshalJSON()
 				require.Error(t, err)
 			})

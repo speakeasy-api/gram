@@ -1,0 +1,1271 @@
+package auth_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/workos/workos-go/v6/pkg/usermanagement"
+
+	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/users"
+	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+)
+
+// --- mock WorkOS membership fetcher ---
+
+type mockWorkOSFetcher struct {
+	members map[string][]workos.Member      // keyed by WorkOS user ID
+	orgs    map[string]*workos.Organization // keyed by WorkOS org ID
+
+	// Track calls to CreateOrganization / CreateOrganizationMembership.
+	createdOrgs        []createdOrgRecord
+	createdMemberships []createdMembershipRecord
+
+	// Counters for reads. Steady-state logins (org already linked locally)
+	// must not hit either path; see TestE2E_Callback_LinkedOrgsSkipWorkOSReads.
+	getOrgCalls           int
+	ensureExternalIDCalls int
+}
+
+type createdOrgRecord struct {
+	Name, ExternalID string
+}
+
+type createdMembershipRecord struct {
+	WorkOSUserID, WorkOSOrgID string
+}
+
+func (m *mockWorkOSFetcher) ListUserMemberships(_ context.Context, userID string) ([]workos.Member, error) {
+	return m.members[userID], nil
+}
+
+func (m *mockWorkOSFetcher) GetOrganization(_ context.Context, orgID string) (*workos.Organization, error) {
+	m.getOrgCalls++
+	if org, ok := m.orgs[orgID]; ok {
+		return org, nil
+	}
+	return nil, &workos.APIError{StatusCode: 404, Body: "not found"}
+}
+
+func (m *mockWorkOSFetcher) EnsureUserExternalID(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (m *mockWorkOSFetcher) EnsureOrgExternalID(_ context.Context, _, _ string) error {
+	m.ensureExternalIDCalls++
+	return nil
+}
+
+func (m *mockWorkOSFetcher) UpdateOrganizationExternalID(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (m *mockWorkOSFetcher) CreateOrganization(_ context.Context, name, gramOrgID string) (string, error) {
+	m.createdOrgs = append(m.createdOrgs, createdOrgRecord{Name: name, ExternalID: gramOrgID})
+	return "workos_org_" + name, nil
+}
+
+func (m *mockWorkOSFetcher) CreateOrganizationMembership(_ context.Context, workosUserID, workosOrgID, _ string) (string, error) {
+	m.createdMemberships = append(m.createdMemberships, createdMembershipRecord{WorkOSUserID: workosUserID, WorkOSOrgID: workosOrgID})
+	return "om_mock_" + workosUserID, nil
+}
+
+func (m *mockWorkOSFetcher) GetOrgMembership(_ context.Context, workosUserID, workosOrgID string) (*workos.Member, error) {
+	for _, member := range m.members[workosUserID] {
+		if member.OrganizationID == workosOrgID {
+			return &member, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockWorkOSFetcher) UpdateMemberRoles(_ context.Context, membershipID string, roleSlugs []string) (*workos.Member, error) {
+	for userID, members := range m.members {
+		for i := range members {
+			if members[i].ID == membershipID {
+				members[i].RoleSlugs = roleSlugs
+				m.members[userID] = members
+				return &members[i], nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+// --- test setup that wires a WorkOSMembershipFetcher into the session manager ---
+
+type e2eInstance struct {
+	testInstance
+	fetcher *mockWorkOSFetcher
+}
+
+func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOSFetcher) (context.Context, *e2eInstance) {
+	t.Helper()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+
+	conn, err := infra.CloneTestDatabase(t, "authtest")
+	require.NoError(t, err)
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	mockServer := createMockWorkOSServer(userInfo)
+	t.Cleanup(mockServer.Close)
+
+	umClient := usermanagement.NewClient("test-api-key")
+	umClient.Endpoint = mockServer.URL
+	umClient.HTTPClient = mockServer.Client()
+	idpClient := identity.NewWorkOSAdapter(umClient)
+
+	pylonClient, err := pylon.NewPylon(logger, "")
+	require.NoError(t, err)
+
+	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
+	billingClient := billing.NewStubClient(logger, tracerProvider)
+
+	var wf identity.WorkOSClient
+	if fetcher != nil {
+		wf = fetcher
+	}
+
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, wf, orgRepo.New(conn), usersRepo.New(conn), pylonClient, posthogClient, cache.SuffixNone)
+	sessionManager := sessions.NewManager(
+		logger, tracerProvider, conn, redisClient, cache.Suffix("gram-e2e"),
+		idpClient, billingClient, resolver,
+	)
+
+	authConfigs := auth.AuthConfigurations{
+		IDPBaseURL:        mockServer.URL,
+		GramServerURL:     "http://localhost:8080",
+		SignInRedirectURL: "http://localhost:3000/dashboard",
+		Environment:       "test",
+	}
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	nonceStore := cache.NewRedisCacheAdapter(redisClient)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nonceStore)
+
+	ti := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
+	return ctx, &e2eInstance{testInstance: *ti, fetcher: fetcher}
+}
+
+// setUserWorkosID stamps the WorkOS user ID on an existing Gram user so the
+// fallback path can fire.
+func (e *e2eInstance) setUserWorkosID(ctx context.Context, t *testing.T, gramUserID, workosUserID string) {
+	t.Helper()
+	q := usersRepo.New(e.conn)
+	err := q.SetUserWorkosID(ctx, usersRepo.SetUserWorkosIDParams{
+		ID:       gramUserID,
+		WorkosID: pgtype.Text{String: workosUserID, Valid: true},
+	})
+	require.NoError(t, err)
+}
+
+// --- E2E tests ---
+
+// TestE2E_Callback_NewUserWithWorkOSOrgMemberships exercises the production
+// flow where a brand-new user logs in for the first time. The WorkOS sync job
+// has not run yet, so the local DB has no org metadata or relationships. The
+// session manager falls back to the WorkOS API, upserts the org and
+// relationship, and the callback proceeds normally.
+func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01WORKOS_NEW"
+		workosOrgID  = "org_01WORKOS_ACME"
+		orgName      = "Acme Corp"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_01ABC", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlugs: []string{"member"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: orgName},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "alice@acme.com",
+		Organizations: []MockOrganizationEntry{}, // DB starts empty
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	// Callback fires code exchange → UpsertUserFromIDP → BuildUserInfoFromDB.
+	// No pre-seeding — the fallback must create the org and relationship.
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotContains(t, result.Location, "signin_error=", "callback should succeed without error")
+	require.NotEmpty(t, result.SessionToken)
+
+	// The org ID is now derived via UUIDv5 (no pre-seeded org, no external_id).
+	expectedOrgID := orgid.FromWorkOSID(workosOrgID)
+
+	// Verify the session is functional and points at the correct org.
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	assert.Equal(t, expectedOrgID, authCtx.ActiveOrganizationID)
+
+	// Verify the org was persisted in DB with the derived ID.
+	orgMeta, err := orgRepo.New(inst.conn).GetOrganizationMetadata(ctx, expectedOrgID)
+	require.NoError(t, err)
+	assert.Equal(t, orgName, orgMeta.Name)
+	assert.Equal(t, workosOrgID, orgMeta.WorkosID.String)
+	assert.False(t, orgMeta.Whitelisted, "new org created via login must not be auto-whitelisted")
+}
+
+// TestE2E_Callback_NewUserJoiningExistingOrg verifies that when a new user
+// joins an org that already has metadata in the DB (from another user), the
+// fallback creates the relationship without corrupting the existing org row.
+func TestE2E_Callback_NewUserJoiningExistingOrg(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01WORKOS_BOB"
+		workosOrgID  = "org_01EXISTING"
+		orgName      = "Existing Corp"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_02DEF", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlugs: []string{"admin"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: orgName},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "bob@existing.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	// Pre-seed the org (as if another user already exists in this org).
+	orgQueries := orgRepo.New(inst.conn)
+	_, err := orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          workosOrgID,
+		Name:        orgName,
+		Slug:        "existing-corp",
+		WorkosID:    pgtype.Text{String: workosOrgID, Valid: true},
+		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	assert.Equal(t, workosOrgID, authCtx.ActiveOrganizationID)
+
+	// Verify the org's whitelisted flag was NOT overwritten by the fallback.
+	orgMeta, err := orgQueries.GetOrganizationMetadata(ctx, workosOrgID)
+	require.NoError(t, err)
+	assert.True(t, orgMeta.Whitelisted, "existing org's whitelisted flag must be preserved")
+}
+
+// TestE2E_Callback_NewUserNoWorkOSOrgs verifies that when a new user has no
+// orgs in WorkOS at all, the zero-org flow (onboarding redirect) still works.
+func TestE2E_Callback_NewUserNoWorkOSOrgs(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "user_01WORKOS_EMPTY"
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{}, // no memberships
+		orgs:    map[string]*workos.Organization{},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "empty@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	// Zero-org users get a session but no active org.
+	require.NotEmpty(t, result.SessionToken)
+	require.NotContains(t, result.Location, "signin_error=")
+	assert.Equal(t, inst.authConfigs.SignInRedirectURL, result.Location)
+}
+
+// TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition verifies that a
+// new user with zero orgs and the "assistants" disposition gets auto-provisioned.
+func TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "user_01WORKOS_ASSIST"
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "assist@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	ctx, stateParam := inst.stateWithNonce(ctx, t, "/?disposition=assistants")
+
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &stateParam})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotContains(t, result.Location, "signin_error=")
+	assert.Contains(t, result.Location, "assistants")
+	require.NotEmpty(t, result.SessionToken)
+}
+
+// TestE2E_Callback_ExistingUserWithDBOrgs verifies the happy path: user
+// already has an org in the DB and WorkOS confirms the same membership.
+// Sync runs on every login; when WorkOS and DB agree the active org is unchanged.
+func TestE2E_Callback_ExistingUserWithDBOrgs(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "user_01WORKOS_EXISTING"
+
+	// WorkOS returns the same org that already exists in the DB.
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {{ID: "om_99", UserID: workosUserID, OrganizationID: "org_01DB_EXISTING", Organization: "DB Corp", RoleSlugs: []string{"admin"}}},
+		},
+		orgs: map[string]*workos.Organization{
+			"org_01DB_EXISTING": {ID: "org_01DB_EXISTING", Name: "DB Corp"},
+		},
+	}
+
+	existingOrgWorkosID := "org_01DB_EXISTING"
+	orgEntry := MockOrganizationEntry{
+		ID:                 "org_01DB_EXISTING",
+		Name:               "DB Corp",
+		Slug:               "db-corp",
+		WorkosID:           &existingOrgWorkosID,
+		UserWorkspaceSlugs: []string{"db-corp"},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "exists@dbcorp.com",
+		Organizations: []MockOrganizationEntry{orgEntry},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	require.NoError(t, inst.createTestUser(ctx, userInfo))
+	require.NoError(t, inst.createTestOrganization(ctx, orgEntry, userInfo.UserID))
+	inst.setUserWorkosID(ctx, t, userInfo.UserID, workosUserID)
+
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	assert.Equal(t, orgEntry.ID, authCtx.ActiveOrganizationID, "should use DB org, not WorkOS ghost org")
+}
+
+// TestE2E_Callback_LinkedOrgsSkipWorkOSReads verifies the AGE-2324 fix:
+// when every WorkOS membership maps to a local org row already linked by
+// workos_id, the per-membership loop must skip both GetOrganization and
+// EnsureOrgExternalID. Each retained call is one cross-region round-trip per
+// org per login, so this is the load-bearing assertion for the latency win.
+func TestE2E_Callback_LinkedOrgsSkipWorkOSReads(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01LINKED_STEADY"
+		orgID1       = "org_01LINKED_A"
+		orgID2       = "org_01LINKED_B"
+		orgID3       = "org_01LINKED_C"
+	)
+	gramUserID := users.UserIDFromWorkOSID(workosUserID)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_LA", UserID: workosUserID, OrganizationID: orgID1, Organization: "Linked A", RoleSlugs: []string{"admin"}},
+				{ID: "om_LB", UserID: workosUserID, OrganizationID: orgID2, Organization: "Linked B", RoleSlugs: []string{"member"}},
+				{ID: "om_LC", UserID: workosUserID, OrganizationID: orgID3, Organization: "Linked C", RoleSlugs: []string{"member"}},
+			},
+		},
+		// Populate orgs so any errant GetOrganization would succeed — we want
+		// the assertion to fail on call count, not on a 404 masquerading as
+		// the fix.
+		orgs: map[string]*workos.Organization{
+			orgID1: {ID: orgID1, Name: "Linked A"},
+			orgID2: {ID: orgID2, Name: "Linked B"},
+			orgID3: {ID: orgID3, Name: "Linked C"},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:         workosUserID,
+		Email:          "linked@example.com",
+		OrganizationID: orgID1, // triggers inline SyncMembershipsFromWorkOS in Callback
+		Organizations:  []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	require.NoError(t, inst.createTestUser(ctx, userInfo))
+	inst.setUserWorkosID(ctx, t, gramUserID, workosUserID)
+
+	wid1, wid2, wid3 := orgID1, orgID2, orgID3
+	for _, entry := range []MockOrganizationEntry{
+		{ID: orgid.FromWorkOSID(orgID1), Name: "Linked A", Slug: "linked-a", WorkosID: &wid1, UserWorkspaceSlugs: []string{"linked-a"}},
+		{ID: orgid.FromWorkOSID(orgID2), Name: "Linked B", Slug: "linked-b", WorkosID: &wid2, UserWorkspaceSlugs: []string{"linked-b"}},
+		{ID: orgid.FromWorkOSID(orgID3), Name: "Linked C", Slug: "linked-c", WorkosID: &wid3, UserWorkspaceSlugs: []string{"linked-c"}},
+	} {
+		require.NoError(t, inst.createTestOrganization(ctx, entry, gramUserID))
+	}
+
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+
+	require.Equal(t, 0, fetcher.getOrgCalls, "linked-org steady-state must not call WorkOS GetOrganization")
+	require.Equal(t, 0, fetcher.ensureExternalIDCalls, "linked-org steady-state must not call WorkOS EnsureOrgExternalID")
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, orgid.FromWorkOSID(orgID1), authCtx.ActiveOrganizationID)
+}
+
+func TestE2E_Callback_IDPOrgSelectionSyncsMissingMembershipForExistingUser(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID      = "user_01IDP_EXISTING_SYNC"
+		speakeasyWorkosID = "org_01EXISTING_SPEAKEASY"
+		walkerWorkosID    = "org_01EXISTING_WALKER"
+		collidingOrgID    = "existing-walker-slug-org"
+	)
+	gramUserID := users.UserIDFromWorkOSID(workosUserID)
+	existingLocalOrgID := orgid.FromWorkOSID(speakeasyWorkosID)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_EXISTING_SPEAKEASY", UserID: workosUserID, OrganizationID: speakeasyWorkosID, Organization: "Speakeasy Team", RoleSlugs: []string{"admin"}},
+				{ID: "om_EXISTING_WALKER", UserID: workosUserID, OrganizationID: walkerWorkosID, Organization: "Walker Test Org", RoleSlugs: []string{"admin"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			speakeasyWorkosID: {ID: speakeasyWorkosID, Name: "Speakeasy Team"},
+			walkerWorkosID:    {ID: walkerWorkosID, Name: "Walker Test Org"},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:         workosUserID,
+		Email:          "existing-sync@example.com",
+		OrganizationID: walkerWorkosID,
+		Organizations:  []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	_, err := usersRepo.New(inst.conn).UpsertUser(ctx, usersRepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       userInfo.Email,
+		DisplayName: userInfo.Email,
+		PhotoUrl:    conv.PtrToPGText(nil),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	inst.setUserWorkosID(ctx, t, gramUserID, workosUserID)
+
+	orgQueries := orgRepo.New(inst.conn)
+	_, err = orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          existingLocalOrgID,
+		Name:        "Local Speakeasy",
+		Slug:        "local-speakeasy",
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = orgQueries.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: existingLocalOrgID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
+	require.NoError(t, inst.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 collidingOrgID,
+		Name:               "Walker Test Org",
+		Slug:               "walker-test-org",
+		UserWorkspaceSlugs: []string{"walker-test-org"},
+	}, ""))
+
+	cached, _, err := inst.sessionManager.GetUserInfo(ctx, gramUserID)
+	require.NoError(t, err)
+	require.Len(t, cached.Organizations, 1)
+	require.Equal(t, existingLocalOrgID, cached.Organizations[0].ID)
+
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+
+	infoResult, err := inst.service.Info(ctx, &gen.InfoPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, infoResult)
+	assert.Equal(t, orgid.FromWorkOSID(walkerWorkosID), infoResult.ActiveOrganizationID)
+
+	walkerOrg, err := orgRepo.New(inst.conn).GetOrganizationMetadata(ctx, orgid.FromWorkOSID(walkerWorkosID))
+	require.NoError(t, err)
+	assert.Regexp(t, `^walker-test-org-[0-9a-f]{4}$`, walkerOrg.Slug)
+
+	speakeasyOrg, err := orgQueries.GetOrganizationMetadata(ctx, existingLocalOrgID)
+	require.NoError(t, err)
+	assert.Equal(t, "Local Speakeasy", speakeasyOrg.Name)
+	assert.Equal(t, "local-speakeasy", speakeasyOrg.Slug)
+	assert.Equal(t, speakeasyWorkosID, speakeasyOrg.WorkosID.String)
+	assert.False(t, speakeasyOrg.Whitelisted)
+}
+
+// TestE2E_Callback_RejoinedOrg verifies that when a user left an org (soft-deleted
+// relationship) and then rejoined in WorkOS, the fallback clears deleted_at.
+func TestE2E_Callback_RejoinedOrg(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01WORKOS_REJOIN"
+		workosOrgID  = "org_01REJOIN"
+		orgName      = "Rejoin Corp"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_03GHI", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlugs: []string{"member"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: orgName},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "rejoin@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	// Pre-seed the org.
+	orgQueries := orgRepo.New(inst.conn)
+	_, err := orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:       workosOrgID,
+		Name:     orgName,
+		Slug:     "rejoin-corp",
+		WorkosID: pgtype.Text{String: workosOrgID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	// Create the user first via callback so UpsertUserFromIDP runs.
+	// Then soft-delete the relationship to simulate "user left".
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+
+	// The Gram user ID is a UUIDv5 derived from the WorkOS user ID.
+	gramUserID := users.UserIDFromWorkOSID(workosUserID)
+
+	// Soft-delete the relationship via the SQLc method.
+	err = orgRepo.New(inst.conn).DeleteOrganizationUserRelationship(ctx, orgRepo.DeleteOrganizationUserRelationshipParams{
+		OrganizationID: workosOrgID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.NoError(t, err)
+
+	// Invalidate cache so the next login re-reads from DB.
+	require.NoError(t, inst.sessionManager.InvalidateUserInfoCache(ctx, gramUserID))
+
+	// Second login: relationship is soft-deleted, so ListOrganizationsForUser
+	// returns 0 rows. The fallback should fire and clear deleted_at.
+	result2, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result2.Location, "signin_error=")
+	require.NotEmpty(t, result2.SessionToken)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, result2.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	assert.Equal(t, workosOrgID, authCtx.ActiveOrganizationID, "should be active after rejoin")
+}
+
+// TestE2E_Callback_MultipleOrgs verifies that when WorkOS returns multiple
+// org memberships, all are synced and the first is selected as active.
+func TestE2E_Callback_MultipleOrgs(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01WORKOS_MULTI"
+		orgID1       = "org_01MULTI_A"
+		orgID2       = "org_01MULTI_B"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_A", UserID: workosUserID, OrganizationID: orgID1, Organization: "Alpha Inc", RoleSlugs: []string{"admin"}},
+				{ID: "om_B", UserID: workosUserID, OrganizationID: orgID2, Organization: "Beta LLC", RoleSlugs: []string{"member"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			orgID1: {ID: orgID1, Name: "Alpha Inc"},
+			orgID2: {ID: orgID2, Name: "Beta LLC"},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "multi@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+
+	// Org IDs are derived via UUIDv5 (no pre-seeded orgs, no external_id).
+	expectedOrgID1 := orgid.FromWorkOSID(orgID1)
+	expectedOrgID2 := orgid.FromWorkOSID(orgID2)
+
+	// Verify both orgs exist in DB with derived IDs.
+	orgQueries := orgRepo.New(inst.conn)
+	org1, err := orgQueries.GetOrganizationMetadata(ctx, expectedOrgID1)
+	require.NoError(t, err)
+	assert.Equal(t, "Alpha Inc", org1.Name)
+
+	org2, err := orgQueries.GetOrganizationMetadata(ctx, expectedOrgID2)
+	require.NoError(t, err)
+	assert.Equal(t, "Beta LLC", org2.Name)
+}
+
+// TestE2E_Callback_IDPOrgSelection verifies that when the IDP auth response
+// includes an organization_id (the org the user selected in AuthKit), Callback
+// uses that org as the active org instead of defaulting to the first one.
+func TestE2E_Callback_IDPOrgSelection(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01IDP_ORG_SELECT"
+		workosOrgA   = "org_01SELECT_A"
+		workosOrgB   = "org_01SELECT_B"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_SA", UserID: workosUserID, OrganizationID: workosOrgA, Organization: "Org A", RoleSlugs: []string{"member"}},
+				{ID: "om_SB", UserID: workosUserID, OrganizationID: workosOrgB, Organization: "Org B", RoleSlugs: []string{"member"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgA: {ID: workosOrgA, Name: "Org A"},
+			workosOrgB: {ID: workosOrgB, Name: "Org B"},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:         workosUserID,
+		Email:          "org-select@example.com",
+		OrganizationID: workosOrgB, // user selected Org B in AuthKit
+		Organizations:  []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+
+	// Authenticate and check which org is active.
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+
+	infoResult, err := inst.service.Info(ctx, &gen.InfoPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, infoResult)
+
+	// Active org should be Org B (the one selected in AuthKit), not Org A.
+	expectedOrgB := orgid.FromWorkOSID(workosOrgB)
+	assert.Equal(t, expectedOrgB, infoResult.ActiveOrganizationID,
+		"active org should be the one selected in the IDP auth flow, not the first org")
+}
+
+func TestE2E_Callback_AcceptsPendingInviteAndAppliesRole(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01INVITE_SSO"
+		workosOrgID  = "org_01INVITE_SSO"
+		gramOrgID    = "invite-sso-org"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_01INVITE_SSO", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Invite SSO", RoleSlugs: []string{"member"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: "Invite SSO", ExternalID: gramOrgID},
+		},
+	}
+	userInfo := &MockUserInfo{
+		UserID:         workosUserID,
+		Email:          "invite-sso@example.com",
+		OrganizationID: workosOrgID,
+		Organizations:  []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	workosID := workosOrgID
+	require.NoError(t, inst.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:       gramOrgID,
+		Name:     "Invite SSO",
+		Slug:     "invite-sso",
+		WorkosID: &workosID,
+	}, ""))
+
+	invite, err := orgRepo.New(inst.conn).CreateInvitation(ctx, orgRepo.CreateInvitationParams{
+		OrganizationID: gramOrgID,
+		Email:          userInfo.Email,
+		TokenHash:      "invite-sso-token-hash",
+		InviterUserID:  pgtype.Text{String: "", Valid: false},
+		RoleSlug:       pgtype.Text{String: "admin", Valid: true},
+		ExpiresInDays:  7,
+	})
+	require.NoError(t, err)
+
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+
+	storedInvite, err := orgRepo.New(inst.conn).GetInvitationByID(ctx, invite.ID)
+	require.NoError(t, err)
+	require.Equal(t, "accepted", storedInvite.State)
+
+	member, err := fetcher.GetOrgMembership(ctx, workosUserID, workosOrgID)
+	require.NoError(t, err)
+	require.NotNil(t, member)
+	require.Contains(t, member.RoleSlugs, "admin")
+}
+
+// TestE2E_Callback_ThenInfo exercises the full login→info flow.
+// After callback creates the session, calling Info should return the user's
+// orgs (populated via the WorkOS fallback) with a default project.
+func TestE2E_Callback_ThenInfo(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01WORKOS_INFO"
+		workosOrgID  = "org_01INFO_CORP"
+		orgName      = "Info Corp"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_INFO", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlugs: []string{"admin"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: orgName},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "info@infocorp.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	// Step 1: Callback
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, callbackResult.Location, "signin_error=")
+
+	// Step 2: Authenticate with the session token
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+
+	// Step 3: Call Info
+	infoResult, err := inst.service.Info(ctx, &gen.InfoPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, infoResult)
+
+	assert.Equal(t, users.UserIDFromWorkOSID(workosUserID), infoResult.UserID)
+	assert.Equal(t, "info@infocorp.com", infoResult.UserEmail)
+	assert.Equal(t, orgid.FromWorkOSID(workosOrgID), infoResult.ActiveOrganizationID)
+	require.Len(t, infoResult.Organizations, 1)
+	assert.Equal(t, orgName, infoResult.Organizations[0].Name)
+	assert.NotEmpty(t, infoResult.Organizations[0].Projects, "default project should be auto-created")
+}
+
+// TestE2E_Callback_ThenSwitchScopes exercises: login → info → switch to
+// second org. The second org was also created via the WorkOS fallback.
+func TestE2E_Callback_ThenSwitchScopes(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01WORKOS_SWITCH"
+		orgID1       = "org_01SWITCH_A"
+		orgID2       = "org_01SWITCH_B"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_SW_A", UserID: workosUserID, OrganizationID: orgID1, Organization: "Switch Alpha", RoleSlugs: []string{"admin"}},
+				{ID: "om_SW_B", UserID: workosUserID, OrganizationID: orgID2, Organization: "Switch Beta", RoleSlugs: []string{"member"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			orgID1: {ID: orgID1, Name: "Switch Alpha"},
+			orgID2: {ID: orgID2, Name: "Switch Beta"},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "switch@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	// Step 1: Callback (creates session with orgID1 as active)
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, callbackResult.Location, "signin_error=")
+
+	// Org IDs are derived via UUIDv5 (no pre-seeded orgs).
+	gramOrgID1 := orgid.FromWorkOSID(orgID1)
+	gramOrgID2 := orgid.FromWorkOSID(orgID2)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	assert.Equal(t, gramOrgID1, authCtx.ActiveOrganizationID)
+
+	// Step 2: SwitchScopes to orgID2
+	switchResult, err := inst.service.SwitchScopes(ctx, &gen.SwitchScopesPayload{OrganizationID: &gramOrgID2})
+	require.NoError(t, err)
+	require.NotNil(t, switchResult)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, switchResult.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok = contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	assert.Equal(t, gramOrgID2, authCtx.ActiveOrganizationID, "should have switched to second org")
+}
+
+// TestE2E_Callback_NoWorkOSClient verifies that when no WorkOS client is
+// configured (nil), the fallback is silently skipped and the zero-org flow
+// proceeds normally.
+func TestE2E_Callback_NoWorkOSClient(t *testing.T) {
+	t.Parallel()
+
+	userInfo := &MockUserInfo{
+		UserID:        "user_01_NIL_CLIENT",
+		Email:         "nilclient@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, nil) // nil fetcher
+
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+	assert.Equal(t, inst.authConfigs.SignInRedirectURL, result.Location)
+}
+
+// TestE2E_Login_BuildsAuthorizationURL verifies that Login returns a valid
+// authorization URL pointing at the mock IDP.
+func TestE2E_Login(t *testing.T) {
+	t.Parallel()
+
+	userInfo := &MockUserInfo{
+		UserID:        "user_01LOGIN",
+		Email:         "login@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	_, inst := newE2EAuthService(t, userInfo, nil)
+
+	result, err := inst.service.Login(t.Context(), &gen.LoginPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Contains(t, result.Location, "/authorize")
+	assert.Contains(t, result.Location, "client_id=test-client-id")
+	assert.Contains(t, result.Location, "response_type=code")
+}
+
+// TestE2E_Login_WithRedirect verifies that the redirect parameter is encoded
+// in the state and the authorization URL is still valid.
+func TestE2E_Login_WithRedirect(t *testing.T) {
+	t.Parallel()
+
+	userInfo := &MockUserInfo{
+		UserID:        "user_01LOGIN_REDIR",
+		Email:         "redir@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	_, inst := newE2EAuthService(t, userInfo, nil)
+
+	redirect := "/org/my-org/dashboard"
+	result, err := inst.service.Login(t.Context(), &gen.LoginPayload{Redirect: &redirect})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Contains(t, result.Location, "/authorize")
+	assert.Contains(t, result.Location, "state=")
+}
+
+// TestE2E_Logout verifies that after logging out the session is invalidated
+// and cannot be used to authenticate.
+func TestE2E_Logout(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "user_01LOGOUT"
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_LOGOUT", UserID: workosUserID, OrganizationID: "org_01LOGOUT", Organization: "Logout Corp", RoleSlugs: []string{"admin"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			"org_01LOGOUT": {ID: "org_01LOGOUT", Name: "Logout Corp"},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "logout@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	// Step 1: Login via callback
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, callbackResult.Location, "signin_error=")
+
+	// Step 2: Authenticate with session
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+
+	// Step 3: Logout
+	logoutResult, err := inst.service.Logout(ctx, &gen.LogoutPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, logoutResult)
+	assert.Empty(t, logoutResult.SessionCookie, "logout should clear session cookie")
+
+	// Step 4: Verify session is invalidated — Authenticate should fail
+	_, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	assert.Error(t, err, "session should be invalidated after logout")
+}
+
+// TestE2E_Register_ZeroOrgUserCreatesOrg exercises the full onboarding flow:
+// callback with zero orgs → register a new org → info returns the new org.
+func TestE2E_Register_ZeroOrgUserCreatesOrg(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "user_01REGISTER"
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "register@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	// Step 1: Callback — zero orgs, gets session but no active org
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, callbackResult.Location, "signin_error=")
+	require.NotEmpty(t, callbackResult.SessionToken)
+
+	// Step 2: Authenticate
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+
+	// Step 3: Register — creates org and assigns it as active
+	err = inst.service.Register(ctx, &gen.RegisterPayload{OrgName: "My New Org"})
+	require.NoError(t, err)
+
+	// Step 4: Re-authenticate (Register updates the session with the new org)
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+
+	// Step 5: Info — should show the newly created org
+	infoResult, err := inst.service.Info(ctx, &gen.InfoPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, infoResult)
+	assert.Equal(t, users.UserIDFromWorkOSID(workosUserID), infoResult.UserID)
+	require.Len(t, infoResult.Organizations, 1)
+	assert.Equal(t, "My New Org", infoResult.Organizations[0].Name)
+	assert.Equal(t, "my-new-org", infoResult.Organizations[0].Slug)
+	assert.NotEmpty(t, infoResult.ActiveOrganizationID)
+	assert.NotEmpty(t, infoResult.Organizations[0].Projects, "default project should be auto-created")
+}
+
+// TestE2E_Register_CreatesWorkOSOrg verifies that Register provisions the org
+// in WorkOS with the Gram org ID as external_id, and creates a membership
+// linking the user to the new WorkOS org.
+func TestE2E_Register_CreatesWorkOSOrg(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "user_01REG_WORKOS"
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "register-workos@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	// Login → Callback (zero orgs)
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotEmpty(t, callbackResult.SessionToken)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+
+	// Register — should provision WorkOS org.
+	err = inst.service.Register(ctx, &gen.RegisterPayload{OrgName: "WorkOS Test Org"})
+	require.NoError(t, err)
+
+	// Assert WorkOS CreateOrganization was called.
+	require.Len(t, fetcher.createdOrgs, 1, "should have called CreateOrganization once")
+	assert.Equal(t, "WorkOS Test Org", fetcher.createdOrgs[0].Name)
+
+	// The mock returns "workos_org_<name>" as the WorkOS org ID.
+	workosOrgID := "workos_org_WorkOS Test Org"
+	expectedGramOrgID := orgid.FromWorkOSID(workosOrgID)
+
+	// Assert WorkOS membership was created.
+	require.Len(t, fetcher.createdMemberships, 1, "should have called CreateOrganizationMembership once")
+	assert.Equal(t, workosUserID, fetcher.createdMemberships[0].WorkOSUserID)
+	assert.Equal(t, workosOrgID, fetcher.createdMemberships[0].WorkOSOrgID)
+
+	// Verify workos_id was stored on the Gram org row.
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+	orgQueries := orgRepo.New(inst.conn)
+	dbOrg, err := orgQueries.GetOrganizationMetadata(ctx, expectedGramOrgID)
+	require.NoError(t, err)
+	assert.True(t, dbOrg.WorkosID.Valid, "workos_id should be stored on org")
+	assert.Equal(t, workosOrgID, dbOrg.WorkosID.String)
+}
+
+// TestE2E_Register_RejectsWhenOrgAlreadyActive verifies that Register returns
+// an error when the user already has an active organization.
+func TestE2E_Register_RejectsWhenOrgAlreadyActive(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "user_01REG_REJECT"
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_REJ", UserID: workosUserID, OrganizationID: "org_01REJ", Organization: "Existing", RoleSlugs: []string{"admin"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			"org_01REJ": {ID: "org_01REJ", Name: "Existing"},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "reject@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	// Callback — user gets an org via WorkOS fallback
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, callbackResult.Location, "signin_error=")
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+
+	// Register should fail — user already has an active org
+	err = inst.service.Register(ctx, &gen.RegisterPayload{OrgName: "Should Fail"})
+	assert.Error(t, err, "register should reject when user already has active org")
+}
+
+// TestE2E_Register_RejectsInvalidOrgName verifies that Register rejects org
+// names with invalid characters.
+func TestE2E_Register_RejectsInvalidOrgName(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "user_01REG_INVALID"
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "invalid@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, nil)
+
+	// Callback — zero orgs
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+
+	// Register with invalid characters
+	err = inst.service.Register(ctx, &gen.RegisterPayload{OrgName: "Bad<>Org!"})
+	assert.Error(t, err, "register should reject invalid org name characters")
+}
+
+// TestE2E_FullOnboardingFlow exercises the complete new-user journey end to end:
+// Login → Callback (zero orgs) → Register → SwitchScopes (no-op, same org) → Info.
+func TestE2E_FullOnboardingFlow(t *testing.T) {
+	t.Parallel()
+
+	const workosUserID = "user_01FULL_ONBOARD"
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "onboard@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, nil)
+
+	// Step 1: Login — get authorization URL
+	loginResult, err := inst.service.Login(ctx, &gen.LoginPayload{})
+	require.NoError(t, err)
+	assert.Contains(t, loginResult.Location, "/authorize")
+
+	// Step 2: Callback — simulates redirect back with code
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, callbackResult.Location, "signin_error=")
+	require.NotEmpty(t, callbackResult.SessionToken)
+
+	// Step 3: Authenticate
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+
+	// Step 4: Register org
+	err = inst.service.Register(ctx, &gen.RegisterPayload{OrgName: "Onboarding Corp"})
+	require.NoError(t, err)
+
+	// Step 5: Re-authenticate (session updated by Register)
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+
+	// Step 6: Info — verify org is visible
+	infoResult, err := inst.service.Info(ctx, &gen.InfoPayload{})
+	require.NoError(t, err)
+	require.Len(t, infoResult.Organizations, 1)
+	assert.Equal(t, "Onboarding Corp", infoResult.Organizations[0].Name)
+	assert.NotEmpty(t, infoResult.Organizations[0].Projects)
+
+	// Step 7: SwitchScopes to same org (no-op, should succeed)
+	orgID := infoResult.Organizations[0].ID
+	switchResult, err := inst.service.SwitchScopes(ctx, &gen.SwitchScopesPayload{OrganizationID: &orgID})
+	require.NoError(t, err)
+	require.NotNil(t, switchResult)
+
+	// Step 8: Logout
+	ctx, err = inst.sessionManager.Authenticate(ctx, switchResult.SessionToken)
+	require.NoError(t, err)
+	logoutResult, err := inst.service.Logout(ctx, &gen.LogoutPayload{})
+	require.NoError(t, err)
+	assert.Empty(t, logoutResult.SessionCookie)
+}

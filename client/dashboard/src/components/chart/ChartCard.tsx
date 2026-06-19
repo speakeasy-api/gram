@@ -1,24 +1,32 @@
-import { cn } from "@/lib/utils";
-import { Maximize2, Minimize2 } from "lucide-react";
+import { cn, Icon } from "@speakeasy-api/moonshine";
 import type { ReactNode } from "react";
+import { ChartButton } from "./ChartButton";
+
+export type ChartCardProps = {
+  title: string;
+  chartId: string;
+  hasData?: boolean;
+  expandable?: boolean;
+  expandedChart: string | null;
+  onExpand: (id: string | null) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
+  children: ReactNode;
+};
 
 export function ChartCard({
   title,
   chartId,
+  hasData = true,
+  expandable = true,
   expandedChart,
   onExpand,
-  hasData = true,
+  isZoomed,
+  onResetZoom,
   children,
-}: {
-  title: string;
-  chartId: string;
-  expandedChart: string | null;
-  onExpand: (id: string | null) => void;
-  hasData?: boolean;
-  children: ReactNode;
-}) {
+}: ChartCardProps): ReactNode {
   const isExpanded = expandedChart === chartId;
-  const showExpandButton = hasData || isExpanded;
+  const showExpandButton = expandable && (hasData || isExpanded);
   return (
     <div
       className={cn(
@@ -28,20 +36,26 @@ export function ChartCard({
     >
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text font-semibold">{title}</h3>
-        {showExpandButton && (
-          <button
-            type="button"
-            onClick={() => onExpand(isExpanded ? null : chartId)}
-            className="text-muted-foreground hover:text-foreground rounded p-0.5 transition-colors"
-            aria-label={isExpanded ? "Minimize chart" : "Expand chart"}
-          >
-            {isExpanded ? (
-              <Minimize2 className="size-4" />
-            ) : (
-              <Maximize2 className="size-4" />
-            )}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {isZoomed && onResetZoom && (
+            <ChartButton onClick={onResetZoom} ariaLabel="Reset zoom">
+              <Icon name="rotate-ccw" />
+              Reset zoom
+            </ChartButton>
+          )}
+          {showExpandButton && (
+            <ChartButton
+              onClick={() => onExpand(isExpanded ? null : chartId)}
+              ariaLabel={isExpanded ? "Minimize chart" : "Expand chart"}
+            >
+              {isExpanded ? (
+                <Icon name="minimize-2" />
+              ) : (
+                <Icon name="maximize-2" />
+              )}
+            </ChartButton>
+          )}
+        </div>
       </div>
       {children}
     </div>

@@ -2,6 +2,7 @@ package risk_test
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"testing"
@@ -11,16 +12,18 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
-	"github.com/speakeasy-api/gram/server/internal/background"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -50,11 +53,27 @@ func TestMain(m *testing.M) {
 }
 
 type signalerStub struct {
-	calls []background.DrainRiskAnalysisParams
+	calls []uuid.UUID
 }
 
-func (s *signalerStub) SignalNewMessages(_ context.Context, params background.DrainRiskAnalysisParams) error {
-	s.calls = append(s.calls, params)
+func (s *signalerStub) Signal(_ context.Context, projectID uuid.UUID) error {
+	s.calls = append(s.calls, projectID)
+	return nil
+}
+
+// syncResultsCleaner implements risk.RiskPolicyResultsCleaner synchronously for
+// tests (no Temporal worker available).
+type syncResultsCleaner struct {
+	conn *pgxpool.Pool
+}
+
+func (c *syncResultsCleaner) Clean(ctx context.Context, projectID, policyID uuid.UUID) error {
+	if _, err := riskrepo.New(c.conn).DeleteRiskResultsByPolicy(ctx, riskrepo.DeleteRiskResultsByPolicyParams{
+		RiskPolicyID: policyID,
+		ProjectID:    projectID,
+	}); err != nil {
+		return fmt.Errorf("delete risk results by policy: %w", err)
+	}
 	return nil
 }
 
@@ -64,6 +83,7 @@ type testInstance struct {
 	sessionManager *sessions.Manager
 	signaler       *signalerStub
 	chatRepo       *chatrepo.Queries
+	flags          *feature.InMemory
 }
 
 func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
@@ -73,9 +93,6 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
-
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
@@ -84,7 +101,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -93,12 +110,15 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cache.NewRedisCacheAdapter(redisClient))
+	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
+	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
 	auditLogger := audit.NewLogger()
+	flags := &feature.InMemory{}
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, shadowMCPClient, auditLogger, false)
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, nil, shadowMCPClient, auditLogger, "test-jwt-secret", nil, nil, flags)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -106,6 +126,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager: sessionManager,
 		signaler:       sig,
 		chatRepo:       chatrepo.New(conn),
+		flags:          flags,
 	}
 }
 

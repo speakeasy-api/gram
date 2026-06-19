@@ -1,7 +1,11 @@
 import { Button } from "@speakeasy-api/moonshine";
 import { PlusIcon } from "lucide-react";
 
-export const AddButton = ({ onClick }: { onClick?: () => void }) => {
+export const AddButton = ({
+  onClick,
+}: {
+  onClick?: () => void;
+}): JSX.Element => {
   return (
     <Button
       variant="tertiary"

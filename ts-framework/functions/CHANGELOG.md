@@ -1,5 +1,25 @@
 # @gram-ai/functions
 
+## 0.16.2
+
+### Patch Changes
+
+- c58be73: fix: stop leaking stack traces in `ctx.fail()` errors and intercept errors in dev mode
+
+  `ctx.fail()` no longer includes a stack trace in the user-facing error body — only the supplied message is returned. The dev-mode MCP server now intercepts thrown failures (and unexpected JavaScript errors) and surfaces them as normal `isError` tool results instead of an opaque "Internal Error" in clients like the MCP Inspector.
+
+## 0.16.1
+
+### Patch Changes
+
+- faaab73: Upgrade pnpm to v11
+
+## 0.16.0
+
+### Minor Changes
+
+- 37158f0: ingest tags declared on Gram Function tools (top-level `tags` on the manifest and `tags?: string[]` on the TS framework `ToolDefinition`) and expose them through the management API; the playground tool editor now opens for function tools the same way it does for HTTP tools
+
 ## 0.15.1
 
 ### Patch Changes

@@ -9,10 +9,14 @@ import "context"
 //
 // The contract is inspection and rejection: implementations may observe
 // msg and return a non-nil error to block the message from being relayed
-// to the user. Payload mutation is not yet supported — changes to
-// msg.Message are silent no-ops and the proxy forwards the original bytes.
-// Typed setters for payload modification will be introduced when
-// modification becomes a requirement.
+// to the user. Payload mutation has no typed setter on this generic
+// view; direct changes to msg.Message are silent no-ops and the proxy
+// forwards the original bytes. Mutation requires an RPC-specific typed
+// interceptor with its own setter (e.g. [ToolsListResponse.SetTools]),
+// which the proxy dispatches AFTER this generic chain — so generic
+// interceptors never observe mutations from the typed chain in the same
+// message lifecycle. RPC-specific typed setters will be added as
+// concrete consumers need them.
 //
 // Rejection produces a spec-aligned JSON-RPC error envelope back to the
 // user. The exact wire form depends on the message shape and transport:

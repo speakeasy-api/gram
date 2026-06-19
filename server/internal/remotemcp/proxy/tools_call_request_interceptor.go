@@ -14,10 +14,15 @@ import "context"
 // a plain error falls back to a generic mapping (see
 // [RejectErrorFromCause]).
 //
-// Payload mutation is not yet supported — changes to call.User or call.Params
-// are silent no-ops and the request body is forwarded verbatim. Typed setters
-// for payload modification will be introduced when modification becomes a
-// requirement.
+// Payload mutation is available via [ToolsCallRequest.SetArguments],
+// which rewrites the call's arguments payload before the request is
+// forwarded upstream. Mutations are observed by every subsequent
+// interceptor in the same chain through the shared *Params pointer.
+// Direct mutation of call.Params fields without going through the setter
+// is a silent no-op against the wire — the framework only re-marshals
+// the body when a typed setter flips the dirty flag. If a downstream
+// interceptor rejects, prior mutations in the chain are discarded; the
+// rejection envelope wins and the upstream is never called.
 //
 // Non-"tools/call" requests are not routed to this interface; implement
 // [UserRequestInterceptor] for RPC-agnostic hooks.

@@ -6,7 +6,7 @@ export const AssetImage = ({
 }: {
   assetId: string;
   className?: string;
-}) => {
+}): JSX.Element => {
   return (
     <img
       src={`${getServerURL()}/rpc/assets.serveImage?id=${assetId}`}

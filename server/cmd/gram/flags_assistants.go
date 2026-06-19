@@ -2,6 +2,7 @@ package gram
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -13,17 +14,18 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/k8s"
 )
 
 var assistantRuntimeFlags = []cli.Flag{
 	&cli.StringFlag{
 		Name:    "assistant-runtime-provider",
-		Usage:   "Assistant runtime provider. Allowed values: local, flyio.",
-		Value:   assistants.RuntimeProviderLocal,
+		Usage:   "Assistant runtime provider. Allowed values: flyio, gke.",
+		Value:   assistants.RuntimeProviderFlyIO,
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_PROVIDER"},
 		Action: func(_ *cli.Context, val string) error {
 			switch val {
-			case "", assistants.RuntimeProviderLocal, assistants.RuntimeProviderFlyIO, "firecracker":
+			case "", assistants.RuntimeProviderFlyIO, assistants.RuntimeProviderGKE:
 				return nil
 			default:
 				return fmt.Errorf("invalid assistant runtime provider: %s", val)
@@ -31,89 +33,34 @@ var assistantRuntimeFlags = []cli.Flag{
 		},
 	},
 	&cli.StringFlag{
-		Name:    "assistant-runtime-firecracker-bin",
-		Usage:   "Path to the Firecracker binary used for assistant runtimes.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_FIRECRACKER_BIN"},
+		Name:    "assistant-runtime-gke-namespace",
+		Usage:   "Kubernetes namespace for GKE Agent Sandbox assistant runtimes. Defaults to gram-{environment}.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_NAMESPACE"},
 	},
 	&cli.StringFlag{
-		Name:    "assistant-runtime-kernel-path",
-		Usage:   "Path to the guest kernel used for assistant runtimes.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_KERNEL_PATH"},
+		Name:    "assistant-runtime-gke-sandbox-template",
+		Usage:   "SandboxTemplate name that GKE assistant runtime claims reference (a SandboxWarmPool on the same template pre-warms pods).",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_SANDBOX_TEMPLATE"},
 	},
 	&cli.StringFlag{
-		Name:    "assistant-runtime-rootfs-path",
-		Usage:   "Path to the guest rootfs ext4 image used for assistant runtimes.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_ROOTFS_PATH"},
+		Name:    "assistant-runtime-gke-cluster-endpoint",
+		Usage:   "API endpoint (host or IP) of the assistant runtime cluster. Setting this enables the GKE backend.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_CLUSTER_ENDPOINT"},
 	},
 	&cli.StringFlag{
-		Name:    "assistant-runtime-workdir",
-		Usage:   "Directory where per-thread assistant runtime state is created.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_WORKDIR"},
+		Name:    "assistant-runtime-gke-cluster-ca",
+		Usage:   "Base64-encoded CA certificate of the assistant runtime cluster.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_CLUSTER_CA"},
+	},
+	&cli.StringSliceFlag{
+		Name:    "assistant-runtime-gke-runner-cidr",
+		Usage:   "Pod CIDR(s) the assistant runner pods are reachable on. The server dials runners by pod IP, so these are allowlisted past the guardian egress policy (which blocks RFC1918 by default).",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_RUNNER_CIDR"},
 	},
 	&cli.StringFlag{
 		Name:    "assistant-runtime-server-url",
-		Usage:   "Optional host-reachable server base URL for assistant runtimes. Defaults to rewriting --server-url when it points at localhost.",
+		Usage:   "Optional host-reachable server base URL for assistant runtimes. Defaults to --server-url.",
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_SERVER_URL"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-server-hostname",
-		Usage:   "Stable hostname that assistant runtimes should use when calling back into the Gram server.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_SERVER_HOSTNAME"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-server-ip",
-		Usage:   "Optional IP address that Firecracker guests should map to the assistant runtime server hostname.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_SERVER_IP"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-host-kind",
-		Usage:   "Host strategy for assistant runtimes. Allowed values: linux, lima.",
-		Value:   "linux",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_HOST_KIND"},
-		Action: func(_ *cli.Context, val string) error {
-			switch val {
-			case assistants.RuntimeHostKindLinux, assistants.RuntimeHostKindLima:
-				return nil
-			default:
-				return fmt.Errorf("invalid assistant runtime host kind: %s", val)
-			}
-		},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-lima-instance",
-		Usage:   "Lima instance name to use when assistant runtimes are hosted inside Lima on macOS.",
-		Value:   "gram-firecracker",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_LIMA_INSTANCE"},
-	},
-	&cli.IntFlag{
-		Name:    "assistant-runtime-guest-port",
-		Usage:   "Guest HTTP port exposed by the assistant runtime.",
-		Value:   8081,
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GUEST_PORT"},
-	},
-	&cli.IntFlag{
-		Name:    "assistant-runtime-memory-mib",
-		Usage:   "Memory size in MiB for assistant Firecracker VMs.",
-		Value:   1024,
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_MEMORY_MIB"},
-	},
-	&cli.Int64Flag{
-		Name:    "assistant-runtime-vcpu-count",
-		Usage:   "vCPU count for assistant Firecracker VMs.",
-		Value:   2,
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_VCPU_COUNT"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-tap-prefix",
-		Usage:   "Prefix used when creating per-runtime tap devices.",
-		Value:   "gramast",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_TAP_PREFIX"},
-	},
-	&cli.StringFlag{
-		Name:    "assistant-runtime-network-base-cidr",
-		Usage:   "IPv4 base CIDR used to allocate /30 host/guest subnets for assistant runtimes.",
-		Value:   "172.29.0.0/16",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_NETWORK_BASE_CIDR"},
 	},
 	&cli.StringFlag{
 		Name:    "assistant-runtime-flyio-api-token",
@@ -141,96 +88,138 @@ var assistantRuntimeFlags = []cli.Flag{
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OCI_IMAGE"},
 	},
 	&cli.StringFlag{
-		Name:    "assistant-runtime-image-version",
-		Usage:   "The assistant runtime image tag/version to run on fly.io.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_IMAGE_VERSION"},
+		Name:    "assistant-runtime-otlp-endpoint",
+		Usage:   "OTLP endpoint assistant runtimes export traces to. Trace export is disabled when unset.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OTLP_ENDPOINT"},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-otlp-protocol",
+		Usage:   "OTLP transport for assistant runtime traces. Allowed values: grpc, http/protobuf, http/json.",
+		Value:   "grpc",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OTLP_PROTOCOL"},
+		Action: func(_ *cli.Context, val string) error {
+			switch val {
+			case "", "grpc", "http/protobuf", "http/json":
+				return nil
+			default:
+				return fmt.Errorf("invalid assistant runtime otlp protocol: %s", val)
+			}
+		},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-otlp-headers",
+		Usage:   "Headers for the assistant runtime OTLP exporter as comma-separated key=value pairs.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OTLP_HEADERS"},
 	},
 }
 
-func assistantRuntimeConfigFromCLI(c *cli.Context) (assistants.RuntimeBackendConfig, error) {
-	var override *url.URL
+func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistants.RuntimeBackendConfig, error) {
+	resolvedServerURL := serverURL
 	if raw := c.String("assistant-runtime-server-url"); raw != "" {
 		parsed, err := url.Parse(raw)
 		if err != nil {
 			return assistants.RuntimeBackendConfig{}, fmt.Errorf("parse --assistant-runtime-server-url: %w", err)
 		}
-		override = parsed
+		resolvedServerURL = parsed
 	}
 
 	provider := c.String("assistant-runtime-provider")
 	switch provider {
-	case "", "firecracker":
-		provider = assistants.RuntimeProviderLocal
-	case assistants.RuntimeProviderLocal, assistants.RuntimeProviderFlyIO:
+	case "", assistants.RuntimeProviderFlyIO:
+		provider = assistants.RuntimeProviderFlyIO
+	case assistants.RuntimeProviderGKE:
 	default:
 		return assistants.RuntimeBackendConfig{}, fmt.Errorf("invalid assistant runtime provider: %s", provider)
 	}
 
+	gkeNamespace := c.String("assistant-runtime-gke-namespace")
+	if gkeNamespace == "" {
+		gkeNamespace = "gram-" + c.String("environment")
+	}
+
+	// tokens.Parse returns a non-nil value even for an empty string, so guard on
+	// the raw flag: a GKE-only deployment leaves the Fly token unset and must not
+	// have the Fly backend (and its validation) forced on.
+	var flyTokens *tokens.Tokens
+	if raw := c.String("assistant-runtime-flyio-api-token"); raw != "" {
+		flyTokens = tokens.Parse(raw)
+	}
+
 	return assistants.RuntimeBackendConfig{
 		Provider: provider,
-		Local: assistants.RuntimeManagerConfig{
-			FirecrackerBinPath: c.String("assistant-runtime-firecracker-bin"),
-			KernelImagePath:    c.String("assistant-runtime-kernel-path"),
-			RootFSPath:         c.String("assistant-runtime-rootfs-path"),
-			Workdir:            c.String("assistant-runtime-workdir"),
-			GuestAPIPort:       c.Int("assistant-runtime-guest-port"),
-			MemoryMiB:          c.Int("assistant-runtime-memory-mib"),
-			VCPUCount:          c.Int64("assistant-runtime-vcpu-count"),
-			TapPrefix:          c.String("assistant-runtime-tap-prefix"),
-			NetworkBaseCIDR:    c.String("assistant-runtime-network-base-cidr"),
-			ServerURLOverride:  override,
-			ServerHostname:     c.String("assistant-runtime-server-hostname"),
-			ServerIPOverride:   c.String("assistant-runtime-server-ip"),
-			HostKind:           c.String("assistant-runtime-host-kind"),
-			LimaInstance:       c.String("assistant-runtime-lima-instance"),
-			OnUnexpectedExit:   nil,
-		},
 		Fly: assistants.FlyRuntimeConfig{
 			ServiceName:        "gram",
 			ServiceVersion:     GitSHA,
-			FlyTokens:          tokens.Parse(c.String("assistant-runtime-flyio-api-token")),
+			FlyTokens:          flyTokens,
 			FlyAPIURL:          "",
 			FlyMachinesBaseURL: "",
 			DefaultFlyOrg:      c.String("assistant-runtime-flyio-org"),
 			DefaultFlyRegion:   c.String("assistant-runtime-flyio-region"),
 			OCIImage:           c.String("assistant-runtime-oci-image"),
-			ImageVersion:       c.String("assistant-runtime-image-version"),
+			ImageTag:           AssistantRuntimeImageHash,
 			AppNamePrefix:      c.String("assistant-runtime-flyio-app-name-prefix"),
-			ServerURLOverride:  override,
+			ServerURL:          resolvedServerURL,
+			OTLPEndpoint:       c.String("assistant-runtime-otlp-endpoint"),
+			OTLPProtocol:       c.String("assistant-runtime-otlp-protocol"),
+			OTLPHeaders:        c.String("assistant-runtime-otlp-headers"),
+			Environment:        c.String("environment"),
+		},
+		// Dynamic is injected in newAssistantRuntime from a remote client for the
+		// assistant cluster (k8s.NewRemoteDynamicClient); the egress-controlled
+		// HTTP client is built from the guardian policy in NewRuntimeBackend.
+		GKE: assistants.GKERuntimeConfig{
+			Dynamic:          nil,
+			Namespace:        gkeNamespace,
+			SandboxTemplate:  c.String("assistant-runtime-gke-sandbox-template"),
+			GuestPort:        0,
+			OCIImage:         c.String("assistant-runtime-oci-image"),
+			ImageTag:         AssistantRuntimeImageHash,
+			ServerURL:        resolvedServerURL,
+			RunnerCIDRBlocks: c.StringSlice("assistant-runtime-gke-runner-cidr"),
 		},
 	}, nil
 }
 
 // newAssistantRuntime resolves CLI flags into an assistant RuntimeBackend.
-// Construction is deferred for any non-local provider: a stub backend is
-// returned so the assistants service can mount its CRUD surface without
-// touching Lima/Firecracker paths or other host-specific resources that
-// only exist in the local development environment. Concrete remote
-// providers (flyio) are wired up in their own follow-up PRs.
 func newAssistantRuntime(
 	ctx context.Context,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	c *cli.Context,
 	guardianPolicy *guardian.Policy,
-	db *pgxpool.Pool,
+	_ *pgxpool.Pool,
 	serverURL *url.URL,
 ) (assistants.RuntimeBackend, error) {
-	cfg, err := assistantRuntimeConfigFromCLI(c)
+	cfg, err := assistantRuntimeConfigFromCLI(c, serverURL)
 	if err != nil {
 		return nil, err
 	}
-	if cfg.Provider == assistants.RuntimeProviderLocal {
-		cfg.Local.OnUnexpectedExit = assistants.NewUnexpectedRuntimeExitHandler(logger, db)
-	}
-	if cfg.Provider == assistants.RuntimeProviderFlyIO {
-		if err := cfg.Fly.Validate(); err != nil {
-			return nil, fmt.Errorf("invalid fly assistant runtime config: %w", err)
+
+	// Build the GKE backend whenever an assistant cluster is configured (its
+	// endpoint is set), not only when it is the target: a fly-target process must
+	// still reach the assistant cluster to reap gke-backed runtime rows (and vice
+	// versa). The client authenticates with the process's Google credentials
+	// (workload identity in-cluster, ADC locally) against the separate cluster.
+	if endpoint := c.String("assistant-runtime-gke-cluster-endpoint"); endpoint != "" {
+		caCert, err := base64.StdEncoding.DecodeString(c.String("assistant-runtime-gke-cluster-ca"))
+		if err != nil {
+			return nil, fmt.Errorf("decode --assistant-runtime-gke-cluster-ca: %w", err)
 		}
+		dynamicClient, err := k8s.NewRemoteDynamicClient(ctx, endpoint, caCert)
+		if err != nil {
+			return nil, fmt.Errorf("build assistant cluster client: %w", err)
+		}
+		cfg.GKE.Dynamic = dynamicClient
 	}
-	rb := assistants.NewRuntimeBackend(logger, tracerProvider, guardianPolicy, cfg)
-	if err := assistants.ValidateRuntimeBackendServerURL(ctx, rb, serverURL); err != nil {
-		return nil, fmt.Errorf("validate assistant runtime server url: %w", err)
+
+	// Fly and GKE call back to the server at the same URL; validate it once.
+	if err := guardianPolicy.ValidateHost(ctx, cfg.Fly.ServerURL.Hostname()); err != nil {
+		return nil, fmt.Errorf("assistant runtime requires a public --assistant-runtime-server-url or --server-url; got %q: %w", cfg.Fly.ServerURL.String(), err)
 	}
-	return rb, nil
+
+	backend, err := assistants.NewRuntimeBackend(logger, tracerProvider, guardianPolicy, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("build assistant runtime backend: %w", err)
+	}
+	return backend, nil
 }

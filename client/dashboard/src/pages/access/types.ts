@@ -2,11 +2,10 @@ import { Scope } from "@gram/client/models/components/rolegrant.js";
 import type {
   Selector,
   Disposition,
-  ResourceKind,
 } from "@gram/client/models/components/selector.js";
 
 export { Scope };
-export type { Selector, Disposition, ResourceKind };
+export type { Selector, Disposition };
 
 /** Derive role slug from name the same way the server does (conv.ToSlug + "org-" prefix). */
 export function toRoleSlug(name: string): string {
@@ -23,7 +22,12 @@ export function toRoleSlug(name: string): string {
 }
 
 /** What kind of resource a scope protects. */
-export type ResourceType = "org" | "project" | "mcp" | "environment";
+export type ResourceType =
+  | "org"
+  | "project"
+  | "mcp"
+  | "environment"
+  | "risk_policy";
 
 /** The 4 MCP tool annotation hint keys. */
 export type AnnotationHint =
@@ -43,15 +47,28 @@ export type ActivePanel =
   | "tools"
   | "collection";
 
-/** A single grant within a role: a scope + optional selector constraints. */
+/** Policy effect for a grant: allow (default) or deny. */
+export type PolicyEffect = "allow" | "deny";
+
+/** A single allow or deny rule within a scope grant. */
+export interface ScopeRule {
+  /** Unique identifier (React key + editing reference). */
+  id: string;
+  /** Whether this rule allows or denies access. */
+  effect: PolicyEffect;
+  /** null = unrestricted (all resources); Selector[] = constrained. */
+  selectors: Selector[] | null;
+  /** Annotation hints for annotation-level rules (UI-only). */
+  annotations?: AnnotationHint[];
+  /** Which custom tab was last active when editing (UI-only). */
+  customTab?: CustomTab;
+}
+
+/** A scope within a role, containing one or more allow/deny rules. */
 export interface RoleGrant {
   scope: Scope;
-  /** null = unrestricted; Selector[] = constrained by selectors */
-  selectors: Selector[] | null;
-  /** Selected annotation hints for auto-group matching (MCP scopes only) */
-  annotations?: AnnotationHint[];
-  /** Which custom tab was last active (UI-only, not persisted to backend) */
-  customTab?: CustomTab;
+  /** The set of allow and deny rules for this scope. */
+  rules: ScopeRule[];
 }
 
 /** Maps annotation hint keys to disposition values stored in selectors.

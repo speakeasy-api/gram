@@ -112,7 +112,7 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").LogError(ctx, logger)
 	}
 
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
@@ -126,15 +126,18 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		err = jsonschema.ValidateInputSchema(bytes.NewReader(args))
 		switch {
 		case errors.Is(err, jsonschema.ErrSchemaUnsupportedType) || errors.Is(err, jsonschema.ErrSchemaNotObject):
-			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema").Log(ctx, logger)
+			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema").LogError(ctx, logger)
 		case errors.Is(err, jsonschema.ErrSchemaHasNoProperties):
 			// This is allowed, it means the schema is empty, which is valid.
 		case err != nil:
-			return nil, oops.E(oops.CodeBadRequest, err, "failed to validate arguments schema").Log(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to validate arguments schema").LogError(ctx, logger)
 		}
 	}
 
 	toolURN := urn.NewTool(urn.ToolKindPrompt, payload.Kind, string(payload.Name))
+	if err := toolURN.Validate(); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid tool URN").LogError(ctx, logger)
+	}
 
 	id, err := tr.CreateTemplate(ctx, repo.CreateTemplateParams{
 		ProjectID:    projectID,
@@ -154,9 +157,9 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		if pgErr.Code == pgerrcode.UniqueViolation {
 			return nil, oops.E(oops.CodeConflict, err, "template name already exists")
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "unexpected database error").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "unexpected database error").LogError(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create template").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create template").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogTemplateCreate(ctx, dbtx, audit.LogTemplateCreateEvent{
@@ -171,11 +174,11 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		TemplateURN:  toolURN,
 		TemplateName: string(payload.Name),
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save template create audit log").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save template create audit log").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save template").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save template").LogError(ctx, logger)
 	}
 
 	pt, err := mv.DescribePromptTemplate(ctx, logger, s.db, mv.ProjectID(projectID), mv.PromptTemplateID(uuid.NullUUID{UUID: id, Valid: true}), mv.PromptTemplateName(nil))
@@ -202,7 +205,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin update operation").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin update operation").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -219,9 +222,9 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "template not found").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, err, "template not found").LogError(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").LogError(ctx, logger)
 	}
 
 	nextid := current.ID
@@ -233,19 +236,22 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 		err = jsonschema.ValidateInputSchema(bytes.NewReader(args))
 		switch {
 		case errors.Is(err, jsonschema.ErrSchemaUnsupportedType) || errors.Is(err, jsonschema.ErrSchemaNotObject):
-			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema").LogError(ctx, s.logger)
 		case errors.Is(err, jsonschema.ErrSchemaHasNoProperties):
 			// This is allowed, it means the schema is empty, which is valid.
 		case err != nil:
-			return nil, oops.E(oops.CodeBadRequest, err, "failed to validate arguments schema").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to validate arguments schema").LogError(ctx, s.logger)
 		}
 	}
 
 	if payload.Kind != nil && *payload.Kind != current.Kind.String {
-		return nil, oops.E(oops.CodeBadRequest, nil, "kind cannot be changed").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "kind cannot be changed").LogError(ctx, logger)
 	}
 
 	toolURN := urn.NewTool(urn.ToolKindPrompt, current.Kind.String, current.Name)
+	if err := toolURN.Validate(); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid tool URN").LogError(ctx, logger)
+	}
 
 	// We allow the editing of the name via variation
 	if payload.Name != nil && *payload.Name != current.Name {
@@ -269,7 +275,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 			OpenWorldHint:    nil,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to update template").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to update template").LogError(ctx, logger)
 		}
 	}
 
@@ -293,7 +299,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 	case errors.Is(err, pgx.ErrNoRows):
 		// No change, so we can use the existing id
 	default:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to update template").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update template").LogError(ctx, logger)
 	}
 
 	if updated {
@@ -309,17 +315,17 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 			TemplateURN:  toolURN,
 			TemplateName: current.Name,
 		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to save template update audit log").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to save template update audit log").LogError(ctx, logger)
 		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save updated template").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save updated template").LogError(ctx, s.logger)
 	}
 
 	// We need to invalidate the cache for any toolsets that contain this template as a tool
 	if err := s.toolsets.InvalidateCacheByTool(ctx, toolURN, projectID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to invalidate toolset cache").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to invalidate toolset cache").LogError(ctx, s.logger)
 	}
 
 	pt, err := mv.DescribePromptTemplate(ctx, logger, s.db,
@@ -350,7 +356,7 @@ func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplat
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to access templates").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to access templates").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -384,7 +390,7 @@ func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplat
 		case errors.Is(err, pgx.ErrNoRows):
 			return nil
 		case err != nil:
-			return oops.E(oops.CodeUnexpected, err, "failed to delete template by id").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to delete template by id").LogError(ctx, logger)
 		}
 
 		auditEntry.id = deleted.ID
@@ -401,7 +407,7 @@ func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplat
 		case errors.Is(err, pgx.ErrNoRows):
 			return nil
 		case err != nil:
-			return oops.E(oops.CodeUnexpected, err, "failed to delete template by name").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to delete template by name").LogError(ctx, logger)
 		}
 
 		auditEntry.id = deleted.ID
@@ -424,18 +430,18 @@ func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplat
 			TemplateURN:  *auditEntry.toolURN,
 			TemplateName: auditEntry.name,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to save template delete audit log").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to save template delete audit log").LogError(ctx, logger)
 		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to save template deletion").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to save template deletion").LogError(ctx, logger)
 	}
 
 	// Invalidate cache for any toolsets that contain this template as a tool
 	if auditEntry.id != uuid.Nil {
 		if err := s.toolsets.InvalidateCacheByTool(ctx, *auditEntry.toolURN, projectID); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to invalidate toolset cache").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to invalidate toolset cache").LogError(ctx, s.logger)
 		}
 	}
 
@@ -522,14 +528,14 @@ func (s *Service) RenderTemplateByID(ctx context.Context, payload *gen.RenderTem
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "template not found").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, err, "template not found").LogError(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").LogError(ctx, logger)
 	}
 
 	data, err := RenderTemplate(ctx, logger, pt.Prompt, pt.Kind.String, pt.Engine.String, payload.Arguments)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "failed to render template").LogError(ctx, logger)
 	}
 
 	return &gen.RenderTemplateResult{Prompt: data}, nil
@@ -563,7 +569,7 @@ func RenderTemplate(ctx context.Context, logger *slog.Logger, template string, k
 	if kind == "higher_order_tool" {
 		renderedPrompt, err = RenderTemplateJSON(ctx, logger, template)
 		if err != nil {
-			return "", oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
+			return "", oops.E(oops.CodeBadRequest, err, "failed to render template").LogError(ctx, logger)
 		}
 	}
 
@@ -574,10 +580,10 @@ func RenderTemplate(ctx context.Context, logger *slog.Logger, template string, k
 	case "mustache":
 		data, err = mustache.Render(renderedPrompt, arguments)
 		if err != nil {
-			return "", oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
+			return "", oops.E(oops.CodeBadRequest, err, "failed to render template").LogError(ctx, logger)
 		}
 	default:
-		return "", oops.E(oops.CodeBadRequest, nil, "unsupported template engine").Log(ctx, logger)
+		return "", oops.E(oops.CodeBadRequest, nil, "unsupported template engine").LogError(ctx, logger)
 	}
 
 	return data, nil
@@ -607,7 +613,7 @@ type Step struct {
 func RenderTemplateJSON(ctx context.Context, logger *slog.Logger, promptJSON string) (string, error) {
 	var prompt CustomToolJSONV1
 	if err := json.Unmarshal([]byte(promptJSON), &prompt); err != nil {
-		return "", oops.E(oops.CodeBadRequest, err, "failed to unmarshal prompt").Log(ctx, logger)
+		return "", oops.E(oops.CodeBadRequest, err, "failed to unmarshal prompt").LogError(ctx, logger)
 	}
 
 	inputsPortion := ""

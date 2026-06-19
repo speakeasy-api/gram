@@ -17,9 +17,9 @@ import {
   wrapToolsWithApproval,
   wrapToolsWithByteCap,
   type ApprovalHelpers,
-  type FrontendTool,
 } from "@/lib/tools";
 import { compactForModel } from "@/lib/contextCompaction";
+import { describeStreamError } from "@/lib/streamErrorMessage";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/plugins";
 import { ElementsConfig, Model } from "@/types";
@@ -48,6 +48,8 @@ import {
   type ChatTransport,
   type UIMessage,
 } from "ai";
+
+type UIMessagePart = UIMessage["parts"][number];
 import {
   ReactNode,
   useCallback,
@@ -66,30 +68,47 @@ import { ElementsContext } from "./contexts";
 import { ToolApprovalProvider } from "./ToolApprovalContext";
 import { ToolExecutionProvider } from "./ToolExecutionContext";
 
+// Reads the active local thread id from the runtime's threads store. Goes
+// through assistant-ui's public ThreadListRuntime.getState() API.
+function getActiveLocalThreadId(
+  runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>,
+): string | undefined {
+  const threadsState = runtimeRef.current?.threads.getState();
+  if (!threadsState) return undefined;
+  // `mainThreadId` is always populated by the SDK; the secondary read is a
+  // defensive fallback in case the SDK ever returns a state shape with an
+  // older `threadIds` field instead. The cast widens to an indexable shape
+  // because `ThreadListState` doesn't declare that historical field.
+  const legacy = (threadsState as { threadIds?: readonly string[] }).threadIds;
+  return threadsState.mainThreadId ?? legacy?.[0];
+}
+
+type ExecutableTool = {
+  execute?: (args: unknown, options?: unknown) => Promise<unknown>;
+};
+
 /**
  * Extracts executable tools from frontend tool definitions.
  * Frontend tools created via defineFrontendTool have an unstable_tool property
  * that contains the tool definition with execute function.
+ *
+ * The AI SDK's `ToolExecuteFunction<INPUT, OUTPUT>` signature is too strict on
+ * its second parameter (a typed `ToolCallOptions`) and too broad on its return
+ * (`AsyncIterable | PromiseLike | OUTPUT`) to match `ExecutableTool.execute`
+ * directly. The reference is copied as-is — no runtime wrapping — and only the
+ * type surface is widened.
  */
 function extractExecutableTools(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  frontendTools: Record<string, FrontendTool<any, any>> | undefined,
-): Record<
-  string,
-  { execute?: (args: unknown, options?: unknown) => Promise<unknown> }
-> {
+  frontendTools: Record<string, AssistantTool> | undefined,
+): Record<string, ExecutableTool> {
   if (!frontendTools) return {};
 
   return Object.fromEntries(
     Object.entries(frontendTools).map(([name, tool]) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const toolDef = (tool as any).unstable_tool;
-      return [
-        name,
-        {
-          execute: toolDef?.execute,
-        },
-      ];
+      const toolDef = tool.unstable_tool as {
+        execute?: ExecutableTool["execute"];
+      };
+      return [name, { execute: toolDef.execute }];
     }),
   );
 }
@@ -140,13 +159,14 @@ function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
       return message;
     }
 
-    // Process each part: strip providerOptions/providerMetadata and filter reasoning
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cleanedParts = partsArray.map((part: any) => {
-      // Strip providerOptions and providerMetadata from all remaining parts
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { callProviderMetadata: _, ...cleanPart } = part;
-      return cleanPart;
+    // Process each part: strip providerOptions/providerMetadata and filter reasoning.
+    // `callProviderMetadata` is not declared on `UIMessagePart`, so we widen the
+    // part to an indexable record just for the destructure.
+    const cleanedParts = partsArray.map((part) => {
+      const { callProviderMetadata: _omit, ...cleanPart } =
+        part as UIMessagePart & { callProviderMetadata?: unknown };
+      void _omit;
+      return cleanPart as UIMessagePart;
     });
 
     return {
@@ -170,6 +190,13 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // Ref to access ensureValidHeaders in async transport without stale closures
   const ensureValidHeadersRef = useRef(auth.ensureValidHeaders);
   ensureValidHeadersRef.current = auth.ensureValidHeaders;
+  // Stable async header resolution for the thread-list adapter: awaits the
+  // session fetch when auth hasn't settled yet, so the history runtime can
+  // mount before auth resolves.
+  const getValidHeaders = useCallback(
+    () => ensureValidHeadersRef.current(),
+    [],
+  );
   const toolApproval = useToolApproval();
 
   const [model, setModel] = useState<Model>(
@@ -204,6 +231,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       projectSlug: config.projectSlug,
       variant: config.variant,
     });
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- one-time init at mount; later config changes are intentionally ignored
   }, []);
 
   // Generate a stable chat ID for server-side persistence (when history is disabled)
@@ -213,7 +241,11 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // State to expose the current chat ID via context
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
 
-  const { data: mcpTools, mcpHeaders } = useMCPTools({
+  const {
+    data: mcpTools,
+    mcpHeaders,
+    isLoading: mcpQueryLoading,
+  } = useMCPTools({
     auth,
     mcp: config.mcp,
     mcps: config.mcps,
@@ -221,6 +253,11 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     toolsToInclude: config.tools?.toolsToInclude,
     gramEnvironment: config.gramEnvironment,
   });
+  // Treat auth-loading as "tools not yet resolved" too — the MCP query is
+  // disabled (and so not "loading") until auth settles, so without this a
+  // tool-list consumer would briefly see an empty, settled state before tools
+  // arrive.
+  const mcpToolsLoading = auth.isLoading || mcpQueryLoading;
 
   // Store approval helpers in ref so they can be used in async contexts
   const approvalHelpersRef = useRef<ApprovalHelpers>({
@@ -275,8 +312,10 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // in a way that's accessible from the transport's sendMessages function.
   const currentRemoteIdRef = useRef<string | null>(null);
 
-  // Create chat transport configuration
-  const transport = useMemo<ChatTransport<UIMessage>>(
+  // Create chat transport configuration. This is the built-in client-side
+  // streaming transport; a consumer can override it via config.transport (see
+  // below) to route the conversation through a server-side assistant instead.
+  const defaultTransport = useMemo<ChatTransport<UIMessage>>(
     () => ({
       sendMessages: async ({ messages, abortSignal }) => {
         const usingCustomModel = !!config.languageModel;
@@ -297,12 +336,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // chatId is already set correctly from the synced ref
         } else if (isLocalThreadId(chatId) || !chatId) {
           // For local thread IDs or no ID, check/generate UUID mapping
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const runtimeAny = runtimeRef.current as any;
-          const threadsState = runtimeAny?.threads?.getState?.();
-          const localThreadId = (threadsState?.mainThreadId ??
-            threadsState?.threadIds?.[0]) as string | undefined;
-
+          const localThreadId = getActiveLocalThreadId(runtimeRef);
           const lookupKey = chatId ?? localThreadId;
           if (lookupKey) {
             const existingUuid = localIdToUuidMapRef.current.get(lookupKey);
@@ -465,11 +499,17 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // fresh random messageId into every `start` chunk. On auto-resume that mismatches the
           // prior assistant message's id, so useChat pushes a new UIMessage carrying the snapshot
           // of the prior turn's parts — duplicating text and tool_calls into storage.
+          //
+          // onError: AI SDK masks errors by default; surface the friendly
+          // credits prompt for 402, otherwise keep the masking intact.
           return createUIMessageStream({
             execute: ({ writer }) => {
               writer.merge(result.toUIMessageStream());
             },
             originalMessages: messages,
+            onError: (error) =>
+              describeStreamError(error) ??
+              "An error occurred while generating a response.",
           });
         } catch (error) {
           console.error("Error creating stream:", error);
@@ -505,14 +545,63 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       config.contextCompaction?.maxTokens,
       config.contextCompaction?.compactAtFraction,
       config.contextCompaction?.keepRecent,
+      config.gramEnvironment,
+      config.api?.headers,
       model,
       mcpTools,
+      mcpHeaders,
       getApprovalHelpers,
       apiUrl,
       auth.isLoading,
       connectionStatus,
     ],
   );
+
+  // A consumer-supplied transport (e.g. a server-side assistant transport) takes
+  // precedence over the built-in client-side one. It may be a ChatTransport or a
+  // factory: a factory is invoked here, inside the provider, with a getChatId()
+  // sourced from the synced thread state, so the transport can read the active
+  // chat id at send time without reaching into Elements internals. Local
+  // (unpersisted) thread ids read as null so the transport can treat them as a
+  // brand-new conversation.
+  const getChatId = useCallback(() => {
+    const id = currentRemoteIdRef.current;
+    return id && !isLocalThreadId(id) ? id : null;
+  }, []);
+  // Capture the active local thread identity now and return a bind function
+  // closing over it. Consumer transports call this at the start of
+  // `sendMessages`; once a server-minted chat id is known, invoking the
+  // returned function reconciles the captured thread to it — the same
+  // reconciliation the built-in transport does inline when it generates an id.
+  // Closing over the captured id (instead of re-reading active state at bind
+  // time) is what makes a thread switch or a parallel send on another thread
+  // during the round-trip safe.
+  const adoptChatId = useCallback(() => {
+    const capturedLocalThreadId = getActiveLocalThreadId(runtimeRef);
+    return (chatId: string) => {
+      if (capturedLocalThreadId) {
+        localIdToUuidMapRef.current.set(capturedLocalThreadId, chatId);
+      }
+      currentRemoteIdRef.current = chatId;
+      mcpHeaders["Gram-Chat-ID"] = chatId;
+      setCurrentChatId(chatId);
+    };
+  }, [mcpHeaders, setCurrentChatId]);
+  const configTransport = config.transport;
+  // Resolved separately from `defaultTransport` so that churn in the default
+  // transport's dependencies (MCP tool discovery settling, connection status,
+  // auth refresh) cannot change the transport identity while a custom
+  // transport is in use. Transport identity feeds the per-thread runtime hook
+  // (`useChatRuntimeHook` → `setRuntimeHook`), and an identity change there
+  // rebuilds the thread runtimes — wiping in-flight optimistic messages, e.g.
+  // a message sent right after a cold open while MCP tools are still loading.
+  const customTransport = useMemo<ChatTransport<UIMessage> | null>(() => {
+    if (typeof configTransport === "function") {
+      return configTransport({ getChatId, adoptChatId });
+    }
+    return configTransport ?? null;
+  }, [configTransport, getChatId, adoptChatId]);
+  const transport = customTransport ?? defaultTransport;
 
   const historyEnabled = config.history?.enabled ?? false;
 
@@ -528,8 +617,9 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       setIsOpen,
       plugins,
       mcpTools,
+      mcpToolsLoading,
     }),
-    [config, model, isExpanded, isOpen, plugins, mcpTools],
+    [config, model, isExpanded, isOpen, plugins, mcpTools, mcpToolsLoading],
   );
 
   const frontendTools = config.tools?.frontendTools ?? {};
@@ -554,12 +644,20 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
 
   // Render the appropriate runtime provider based on history config.
   // We use separate components to avoid conditional hook calls.
-  if (historyEnabled && !auth.isLoading) {
+  //
+  // The history branch must NOT wait for auth: gating it on `!auth.isLoading`
+  // would mount the without-history runtime first and swap it for the history
+  // one when auth settles — replacing the runtime and wiping any message sent
+  // into the first one (e.g. a prompt queued before a cold open). Instead the
+  // history runtime mounts immediately and its adapter awaits auth via
+  // `getHeaders` before issuing requests.
+  if (historyEnabled) {
     return (
       <ElementsProviderWithHistory
         transport={transport}
         apiUrl={apiUrl}
-        headers={auth.headers}
+        headers={auth.headers ?? {}}
+        getHeaders={getValidHeaders}
         contextValue={contextValue}
         runtimeRef={runtimeRef}
         frontendTools={frontendTools}
@@ -601,10 +699,10 @@ interface ElementsProviderWithHistoryProps {
   transport: ChatTransport<UIMessage>;
   apiUrl: string;
   headers: Record<string, string>;
+  getHeaders: () => Promise<Record<string, string>>;
   contextValue: React.ContextType<typeof ElementsContext>;
   runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  frontendTools: Record<string, AssistantTool | FrontendTool<any, any>>;
+  frontendTools: Record<string, AssistantTool>;
   localIdToUuidMap: Map<string, string>;
   currentRemoteIdRef: React.RefObject<string | null>;
   executableTools: ExecutableToolSet;
@@ -638,6 +736,7 @@ const ElementsProviderWithHistory = ({
   transport,
   apiUrl,
   headers,
+  getHeaders,
   contextValue,
   runtimeRef,
   frontendTools,
@@ -650,7 +749,11 @@ const ElementsProviderWithHistory = ({
   const threadListAdapter = useGramThreadListAdapter({
     apiUrl,
     headers,
+    getHeaders,
     localIdToUuidMap,
+    threadListFilters: contextValue?.config.history?.threadListFilters,
+    deferThreadIdMinting: contextValue?.config.history?.deferThreadIdMinting,
+    transformChatMessage: contextValue?.config.history?.transformChatMessage,
   });
   const initialThreadId = contextValue?.config.history?.initialThreadId;
 
@@ -658,6 +761,7 @@ const ElementsProviderWithHistory = ({
   // half-finished: the tool-result is patched in but the agent never resumes,
   // so the next user message lands on top of an unresolved tool-call sequence.
   const useChatRuntimeHook = useCallback(() => {
+    // oxlint-disable-next-line react-hooks/rules-of-hooks -- intentional: useChatRuntime is invoked by useRemoteThreadListRuntime as a hook for each thread
     return useChatRuntime({
       transport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
@@ -729,8 +833,7 @@ interface ElementsProviderWithoutHistoryProps {
   transport: ChatTransport<UIMessage>;
   contextValue: React.ContextType<typeof ElementsContext>;
   runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  frontendTools: Record<string, AssistantTool | FrontendTool<any, any>>;
+  frontendTools: Record<string, AssistantTool>;
   executableTools: ExecutableToolSet;
   currentChatId: string | null;
 }
@@ -779,7 +882,9 @@ const ElementsProviderWithoutHistory = ({
 
 const queryClient = new QueryClient();
 
-export const ElementsProvider = (props: ElementsProviderProps) => {
+export const ElementsProvider = (
+  props: ElementsProviderProps,
+): React.JSX.Element => {
   return (
     <QueryClientProvider client={queryClient}>
       <ConnectionStatusProvider>

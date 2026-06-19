@@ -188,6 +188,36 @@ func TestGetUserMetricsSummary_WithUserID(t *testing.T) {
 	require.Equal(t, int64(1), toolStats["tools:http:petstore:getPet"].FailureCount)
 }
 
+func TestGetUserMetricsSummary_FallsBackToUserEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	email := "metrics-unmatched-" + uuid.New().String() + "@example.com"
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), email, 100, 50, 1.25)
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.GetUserMetricsSummary(ctx, &gen.GetUserMetricsSummaryPayload{
+		From:   from,
+		To:     to,
+		UserID: &email,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, int64(100), result.Metrics.TotalInputTokens)
+	require.Equal(t, int64(50), result.Metrics.TotalOutputTokens)
+}
+
 func TestGetUserMetricsSummary_WithExternalUserID(t *testing.T) {
 	t.Parallel()
 

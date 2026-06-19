@@ -77,7 +77,7 @@ func (s *Service) Get(ctx context.Context, form *gen.GetPayload) (res *gen.GetIn
 	if form.ID != nil {
 		id, err := uuid.Parse(*form.ID)
 		if err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid package id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeInvalid, err, "invalid package id").LogError(ctx, s.logger)
 		}
 
 		pid = uuid.NullUUID{UUID: id, Valid: id != uuid.Nil}
@@ -95,7 +95,7 @@ func (s *Service) Get(ctx context.Context, form *gen.GetPayload) (res *gen.GetIn
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting integration").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting integration").LogError(ctx, s.logger)
 	}
 
 	v := semver.Semver{
@@ -112,7 +112,7 @@ func (s *Service) Get(ctx context.Context, form *gen.GetPayload) (res *gen.GetIn
 		PackageName: pname,
 	})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing integration versions").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing integration versions").LogError(ctx, s.logger)
 	}
 
 	versions := make([]*gen.IntegrationVersion, 0, len(versionRows))
@@ -152,7 +152,7 @@ func (s *Service) Get(ctx context.Context, form *gen.GetPayload) (res *gen.GetIn
 func (s *Service) List(ctx context.Context, form *gen.ListPayload) (res *gen.ListIntegrationsResult, err error) {
 	rows, err := s.repo.ListIntegrations(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing integrations").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing integrations").LogError(ctx, s.logger)
 	}
 
 	integrations := make([]*gen.IntegrationEntry, 0, len(rows))

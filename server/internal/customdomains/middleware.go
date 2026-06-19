@@ -35,7 +35,7 @@ func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *ur
 			}
 
 			if host == "" {
-				serr := oops.E(oops.CodeBadRequest, nil, "request host is not set").Log(ctx, logger, attr.SlogHostName(host))
+				serr := oops.E(oops.CodeBadRequest, nil, "request host is not set").LogError(ctx, logger, attr.SlogHostName(host))
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadRequest)
 				if err := json.NewEncoder(w).Encode(serr); err != nil {
@@ -56,7 +56,7 @@ func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *ur
 				http.Error(w, "invalid domain", http.StatusForbidden)
 				return
 			case err != nil:
-				serr := oops.E(oops.CodeUnexpected, err, "domain check failed").Log(ctx, logger, attr.SlogHostName(host), attr.SlogError(err))
+				serr := oops.E(oops.CodeUnexpected, err, "domain check failed").LogError(ctx, logger, attr.SlogHostName(host), attr.SlogError(err))
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
 				if err := json.NewEncoder(w).Encode(serr); err != nil {

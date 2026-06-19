@@ -26,25 +26,25 @@ func TestPresidio_DetectsPersonName(t *testing.T) {
 
 	findings := results[0]
 	ruleIDs := findingRuleIDs(findings)
-	assert.Contains(t, ruleIDs, "PERSON", "expected PERSON entity")
+	assert.Contains(t, ruleIDs, "pii.person", "expected PERSON entity")
 }
 
 func TestPresidio_DetectsEmail(t *testing.T) {
 	t.Parallel()
 	client := infra.NewPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
-		"Please contact me at john.smith@acmecorp.com for details",
+		"Please contact me at john.smith@globex.com for details",
 	}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
 	findings := results[0]
 	ruleIDs := findingRuleIDs(findings)
-	assert.Contains(t, ruleIDs, "EMAIL_ADDRESS", "expected EMAIL_ADDRESS entity")
+	assert.Contains(t, ruleIDs, "pii.email_address", "expected EMAIL_ADDRESS entity")
 
 	for _, f := range findings {
-		if f.RuleID == "EMAIL_ADDRESS" {
-			assert.Equal(t, "john.smith@acmecorp.com", f.Match)
+		if f.RuleID == "pii.email_address" {
+			assert.Equal(t, "john.smith@globex.com", f.Match)
 			assert.InDelta(t, 1.0, f.Confidence, 0.1)
 			assert.Equal(t, "presidio", f.Source)
 		}
@@ -58,7 +58,7 @@ func TestPresidio_BatchResultsMapBackToInputIndexes(t *testing.T) {
 	messages := make([]string, 75)
 	emails := make([]string, len(messages))
 	for i := range messages {
-		emails[i] = fmt.Sprintf("remap%03d@example.com", i)
+		emails[i] = fmt.Sprintf("remap%03d@globex.com", i)
 		messages[i] = fmt.Sprintf("message %03d contact %s end", i, emails[i])
 	}
 
@@ -69,7 +69,7 @@ func TestPresidio_BatchResultsMapBackToInputIndexes(t *testing.T) {
 	for i, findings := range results {
 		var got string
 		for _, f := range findings {
-			if f.RuleID == "EMAIL_ADDRESS" {
+			if f.RuleID == "pii.email_address" {
 				got = f.Match
 				break
 			}
@@ -91,7 +91,7 @@ func TestPresidio_DetectsCreditCard(t *testing.T) {
 
 	for i, findings := range results {
 		ruleIDs := findingRuleIDs(findings)
-		assert.Contains(t, ruleIDs, "CREDIT_CARD", "expected CREDIT_CARD for message %d", i)
+		assert.Contains(t, ruleIDs, "pii.credit_card", "expected CREDIT_CARD for message %d", i)
 	}
 }
 
@@ -110,7 +110,7 @@ func TestPresidio_DetectsPhoneNumber(t *testing.T) {
 	for _, findings := range results {
 		ruleIDs := findingRuleIDs(findings)
 		for _, id := range ruleIDs {
-			if id == "PHONE_NUMBER" {
+			if id == "pii.phone_number" {
 				anyDetected = true
 			}
 		}
@@ -129,9 +129,9 @@ func TestPresidio_DetectsMultiplePIIInSingleMessage(t *testing.T) {
 
 	findings := results[0]
 	ruleIDs := findingRuleIDs(findings)
-	assert.Contains(t, ruleIDs, "PERSON")
-	assert.Contains(t, ruleIDs, "EMAIL_ADDRESS")
-	assert.Contains(t, ruleIDs, "CREDIT_CARD")
+	assert.Contains(t, ruleIDs, "pii.person")
+	assert.Contains(t, ruleIDs, "pii.email_address")
+	assert.Contains(t, ruleIDs, "pii.credit_card")
 }
 
 // --- False positives: text that should NOT be flagged ---
@@ -179,7 +179,7 @@ func TestPresidio_NoFalsePositiveOnCodeSnippets(t *testing.T) {
 		highConfidence := filterHighConfidence(piiFindings, 0.8)
 		for _, f := range highConfidence {
 			// URL detections in code are expected and OK
-			if f.RuleID != "URL" {
+			if f.RuleID != "pii.url" {
 				t.Errorf("message %d: unexpected high-confidence PII %q (%s) in code snippet", i, f.RuleID, f.Match)
 			}
 		}
@@ -210,7 +210,7 @@ func TestCombinedScanners_BothSourcesAppear(t *testing.T) {
 	scanner := risk_analysis.NewScanner()
 
 	// Message with both a secret (AWS key) and PII (email)
-	content := "Here is my AWS key: AKIAIOSFODNN7REALKEY and my email is alice@example.com"
+	content := "Here is my AWS key: AKIAIOSFODNN7REALKEY and my email is alice@globex.com"
 
 	gitleaksFindings, err := scanner.Scan(content)
 	require.NoError(t, err)
@@ -267,7 +267,7 @@ func TestPresidio_StressBatch(t *testing.T) {
 	t.Logf("Stress test completed in %s. Finding counts: %v", elapsed, counts)
 
 	// Messages with emails should have findings
-	assert.Positive(t, counts["EMAIL_ADDRESS"], "expected some EMAIL_ADDRESS detections")
+	assert.Positive(t, counts["pii.email_address"], "expected some EMAIL_ADDRESS detections")
 }
 
 // --- Helpers ---

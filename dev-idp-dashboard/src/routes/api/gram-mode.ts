@@ -6,10 +6,10 @@ import { ENV_DOCS } from "@/lib/env-docs";
  * Detect which dev-idp mode the Gram server is currently configured against by
  * looking at the URLs Gram is told to call.
  *
- * Heuristic: if `SPEAKEASY_SERVER_ADDRESS` or `WORKOS_API_URL` starts with
- * `${GRAM_DEVIDP_EXTERNAL_URL}/<mode>`, that mode is active. If neither of
- * these env vars points back at the dev-idp, Gram is running against an
- * external upstream and we report `null`.
+ * Heuristic: if `WORKOS_API_URL` or `GRAM_IDP_BASE_URL` starts with
+ * `${GRAM_DEVIDP_EXTERNAL_URL}/<mode>`, that mode is active. If neither
+ * points back at the dev-idp, Gram is running against an external upstream
+ * and we report `null`.
  *
  * `oauth2-1` is checked before `oauth2` so the longer prefix wins.
  */
@@ -17,14 +17,14 @@ function detectMode(): Mode | null {
   const dev = process.env["GRAM_DEVIDP_EXTERNAL_URL"];
   if (!dev) return null;
   const candidates = [
-    process.env["SPEAKEASY_SERVER_ADDRESS"],
     process.env["WORKOS_API_URL"],
+    process.env["GRAM_IDP_BASE_URL"],
   ];
   const prefix = `${dev.replace(/\/$/, "")}/`;
   for (const url of candidates) {
     if (!url || !url.startsWith(prefix)) continue;
     const rest = url.slice(prefix.length);
-    if (rest.startsWith("local-speakeasy")) return "local-speakeasy";
+    if (rest.startsWith("mock-workos")) return "mock-workos";
     if (rest.startsWith("oauth2-1")) return "oauth2-1";
     if (rest.startsWith("oauth2")) return "oauth2";
     if (rest.startsWith("workos")) return "workos";

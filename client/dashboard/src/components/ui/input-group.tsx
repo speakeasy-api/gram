@@ -5,10 +5,12 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { TextArea as Textarea } from "@/components/ui/textarea";
 
-function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
+function InputGroup({
+  className,
+  ...props
+}: React.ComponentProps<"div">): React.JSX.Element {
   return (
     <div
       data-slot="input-group"
@@ -61,7 +63,8 @@ function InputGroupAddon({
   className,
   align = "inline-start",
   ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof inputGroupAddonVariants>) {
+}: React.ComponentProps<"div"> &
+  VariantProps<typeof inputGroupAddonVariants>): React.JSX.Element {
   return (
     <div
       role="group"
@@ -105,7 +108,7 @@ function InputGroupButton({
   size = "xs",
   ...props
 }: Omit<React.ComponentProps<typeof Button>, "size"> &
-  VariantProps<typeof inputGroupButtonVariants>) {
+  VariantProps<typeof inputGroupButtonVariants>): React.JSX.Element {
   return (
     <Button
       type={type}
@@ -117,11 +120,15 @@ function InputGroupButton({
   );
 }
 
-function InputGroupText({ className, ...props }: React.ComponentProps<"span">) {
+function InputGroupInput({
+  className,
+  ...props
+}: React.ComponentProps<"input">): React.JSX.Element {
   return (
-    <span
+    <input
+      data-slot="input-group-control"
       className={cn(
-        "text-muted-foreground flex items-center gap-2 text-sm [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4",
+        "placeholder:text-muted-foreground h-full min-w-0 flex-1 rounded-none border-0 bg-transparent px-3 text-sm shadow-none outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent",
         className,
       )}
       {...props}
@@ -129,27 +136,10 @@ function InputGroupText({ className, ...props }: React.ComponentProps<"span">) {
   );
 }
 
-function InputGroupInput({
-  className,
-  ...props
-}: React.ComponentProps<"input">) {
-  return (
-    <Input
-      data-slot="input-group-control"
-      className={cn(
-        "flex-1 rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent",
-        className,
-      )}
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      {...(props as any)}
-    />
-  );
-}
-
 function InputGroupTextarea({
   className,
   ...props
-}: React.ComponentProps<typeof Textarea>) {
+}: React.ComponentProps<typeof Textarea>): React.JSX.Element {
   return (
     <Textarea
       data-slot="input-group-control"
@@ -166,7 +156,6 @@ export {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
-  InputGroupText,
   InputGroupInput,
   InputGroupTextarea,
 };

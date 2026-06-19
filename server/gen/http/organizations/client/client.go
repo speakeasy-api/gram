@@ -17,6 +17,9 @@ import (
 
 // Client lists the organizations service endpoint HTTP clients.
 type Client struct {
+	// Get Doer is the HTTP client used to make requests to the get endpoint.
+	GetDoer goahttp.Doer
+
 	// SendInvite Doer is the HTTP client used to make requests to the sendInvite
 	// endpoint.
 	SendInviteDoer goahttp.Doer
@@ -25,13 +28,13 @@ type Client struct {
 	// revokeInvite endpoint.
 	RevokeInviteDoer goahttp.Doer
 
+	// UpdateInviteRole Doer is the HTTP client used to make requests to the
+	// updateInviteRole endpoint.
+	UpdateInviteRoleDoer goahttp.Doer
+
 	// ListInvites Doer is the HTTP client used to make requests to the listInvites
 	// endpoint.
 	ListInvitesDoer goahttp.Doer
-
-	// GetInviteByToken Doer is the HTTP client used to make requests to the
-	// getInviteByToken endpoint.
-	GetInviteByTokenDoer goahttp.Doer
 
 	// ListUsers Doer is the HTTP client used to make requests to the listUsers
 	// endpoint.
@@ -40,6 +43,34 @@ type Client struct {
 	// RemoveUser Doer is the HTTP client used to make requests to the removeUser
 	// endpoint.
 	RemoveUserDoer goahttp.Doer
+
+	// EnableWebhooks Doer is the HTTP client used to make requests to the
+	// enableWebhooks endpoint.
+	EnableWebhooksDoer goahttp.Doer
+
+	// DisableWebhooks Doer is the HTTP client used to make requests to the
+	// disableWebhooks endpoint.
+	DisableWebhooksDoer goahttp.Doer
+
+	// CreatePortalSession Doer is the HTTP client used to make requests to the
+	// createPortalSession endpoint.
+	CreatePortalSessionDoer goahttp.Doer
+
+	// GetOnboardingStatus Doer is the HTTP client used to make requests to the
+	// getOnboardingStatus endpoint.
+	GetOnboardingStatusDoer goahttp.Doer
+
+	// VerifyOnboardingHooksSetup Doer is the HTTP client used to make requests to
+	// the verifyOnboardingHooksSetup endpoint.
+	VerifyOnboardingHooksSetupDoer goahttp.Doer
+
+	// SendEnterpriseAdminOnboardingEmail Doer is the HTTP client used to make
+	// requests to the sendEnterpriseAdminOnboardingEmail endpoint.
+	SendEnterpriseAdminOnboardingEmailDoer goahttp.Doer
+
+	// GenerateWorkOSAdminPortalLink Doer is the HTTP client used to make requests
+	// to the generateWorkOSAdminPortalLink endpoint.
+	GenerateWorkOSAdminPortalLinkDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -62,17 +93,49 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		SendInviteDoer:       doer,
-		RevokeInviteDoer:     doer,
-		ListInvitesDoer:      doer,
-		GetInviteByTokenDoer: doer,
-		ListUsersDoer:        doer,
-		RemoveUserDoer:       doer,
-		RestoreResponseBody:  restoreBody,
-		scheme:               scheme,
-		host:                 host,
-		decoder:              dec,
-		encoder:              enc,
+		GetDoer:                                doer,
+		SendInviteDoer:                         doer,
+		RevokeInviteDoer:                       doer,
+		UpdateInviteRoleDoer:                   doer,
+		ListInvitesDoer:                        doer,
+		ListUsersDoer:                          doer,
+		RemoveUserDoer:                         doer,
+		EnableWebhooksDoer:                     doer,
+		DisableWebhooksDoer:                    doer,
+		CreatePortalSessionDoer:                doer,
+		GetOnboardingStatusDoer:                doer,
+		VerifyOnboardingHooksSetupDoer:         doer,
+		SendEnterpriseAdminOnboardingEmailDoer: doer,
+		GenerateWorkOSAdminPortalLinkDoer:      doer,
+		RestoreResponseBody:                    restoreBody,
+		scheme:                                 scheme,
+		host:                                   host,
+		decoder:                                dec,
+		encoder:                                enc,
+	}
+}
+
+// Get returns an endpoint that makes HTTP requests to the organizations
+// service get server.
+func (c *Client) Get() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRequest(c.encoder)
+		decodeResponse = DecodeGetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "get", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 
@@ -124,6 +187,30 @@ func (c *Client) RevokeInvite() goa.Endpoint {
 	}
 }
 
+// UpdateInviteRole returns an endpoint that makes HTTP requests to the
+// organizations service updateInviteRole server.
+func (c *Client) UpdateInviteRole() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateInviteRoleRequest(c.encoder)
+		decodeResponse = DecodeUpdateInviteRoleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateInviteRoleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateInviteRoleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "updateInviteRole", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // ListInvites returns an endpoint that makes HTTP requests to the
 // organizations service listInvites server.
 func (c *Client) ListInvites() goa.Endpoint {
@@ -143,30 +230,6 @@ func (c *Client) ListInvites() goa.Endpoint {
 		resp, err := c.ListInvitesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "listInvites", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// GetInviteByToken returns an endpoint that makes HTTP requests to the
-// organizations service getInviteByToken server.
-func (c *Client) GetInviteByToken() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeGetInviteByTokenRequest(c.encoder)
-		decodeResponse = DecodeGetInviteByTokenResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetInviteByTokenRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.GetInviteByTokenDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("organizations", "getInviteByToken", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -215,6 +278,175 @@ func (c *Client) RemoveUser() goa.Endpoint {
 		resp, err := c.RemoveUserDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "removeUser", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// EnableWebhooks returns an endpoint that makes HTTP requests to the
+// organizations service enableWebhooks server.
+func (c *Client) EnableWebhooks() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeEnableWebhooksRequest(c.encoder)
+		decodeResponse = DecodeEnableWebhooksResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildEnableWebhooksRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.EnableWebhooksDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "enableWebhooks", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DisableWebhooks returns an endpoint that makes HTTP requests to the
+// organizations service disableWebhooks server.
+func (c *Client) DisableWebhooks() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDisableWebhooksRequest(c.encoder)
+		decodeResponse = DecodeDisableWebhooksResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDisableWebhooksRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DisableWebhooksDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "disableWebhooks", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreatePortalSession returns an endpoint that makes HTTP requests to the
+// organizations service createPortalSession server.
+func (c *Client) CreatePortalSession() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreatePortalSessionRequest(c.encoder)
+		decodeResponse = DecodeCreatePortalSessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreatePortalSessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreatePortalSessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "createPortalSession", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetOnboardingStatus returns an endpoint that makes HTTP requests to the
+// organizations service getOnboardingStatus server.
+func (c *Client) GetOnboardingStatus() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetOnboardingStatusRequest(c.encoder)
+		decodeResponse = DecodeGetOnboardingStatusResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetOnboardingStatusRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetOnboardingStatusDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "getOnboardingStatus", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// VerifyOnboardingHooksSetup returns an endpoint that makes HTTP requests to
+// the organizations service verifyOnboardingHooksSetup server.
+func (c *Client) VerifyOnboardingHooksSetup() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeVerifyOnboardingHooksSetupRequest(c.encoder)
+		decodeResponse = DecodeVerifyOnboardingHooksSetupResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildVerifyOnboardingHooksSetupRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.VerifyOnboardingHooksSetupDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "verifyOnboardingHooksSetup", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SendEnterpriseAdminOnboardingEmail returns an endpoint that makes HTTP
+// requests to the organizations service sendEnterpriseAdminOnboardingEmail
+// server.
+func (c *Client) SendEnterpriseAdminOnboardingEmail() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSendEnterpriseAdminOnboardingEmailRequest(c.encoder)
+		decodeResponse = DecodeSendEnterpriseAdminOnboardingEmailResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSendEnterpriseAdminOnboardingEmailRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SendEnterpriseAdminOnboardingEmailDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GenerateWorkOSAdminPortalLink returns an endpoint that makes HTTP requests
+// to the organizations service generateWorkOSAdminPortalLink server.
+func (c *Client) GenerateWorkOSAdminPortalLink() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGenerateWorkOSAdminPortalLinkRequest(c.encoder)
+		decodeResponse = DecodeGenerateWorkOSAdminPortalLinkResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGenerateWorkOSAdminPortalLinkRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GenerateWorkOSAdminPortalLinkDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "generateWorkOSAdminPortalLink", err)
 		}
 		return decodeResponse(resp)
 	}

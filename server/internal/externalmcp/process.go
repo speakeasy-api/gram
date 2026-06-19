@@ -102,7 +102,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 	if task.MCP.OrganizationMcpCollectionRegistryID.Valid {
 		// Internal Gram-hosted server — build ServerDetails directly from selected_remotes
 		if len(task.MCP.SelectedRemotes) == 0 {
-			return oops.E(oops.CodeBadRequest, nil, "[%s] internal mcp server has no selected remotes", task.MCP.Name).Log(ctx, logger)
+			return oops.E(oops.CodeBadRequest, nil, "[%s] internal mcp server has no selected remotes", task.MCP.Name).LogError(ctx, logger)
 		}
 		serverDetails = &ServerDetails{
 			Name:          task.MCP.Name,
@@ -118,7 +118,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 		// External registry server — look up registry and fetch details via HTTP
 		registry, err := te.repo.GetMCPRegistryByID(ctx, task.MCP.RegistryID.UUID)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "[%s] error getting registry for mcp server", task.MCP.Name).Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "[%s] error getting registry for mcp server", task.MCP.Name).LogError(ctx, logger)
 		}
 
 		serverDetails, err = te.registryClient.GetServerDetails(ctx, Registry{
@@ -126,7 +126,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 			URL: registry.Url,
 		}, task.MCP.RegistryServerSpecifier, task.MCP.SelectedRemotes)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "[%s] error fetching server details from registry", task.MCP.Name).Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "[%s] error fetching server details from registry", task.MCP.Name).LogError(ctx, logger)
 		}
 	}
 
@@ -141,7 +141,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 
 		oauthDiscovery, err = DiscoverOAuthMetadata(ctx, internalLogger, te.guardianPolicy, authErr.WWWAuthenticate, serverDetails.RemoteURL)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "[%s] error discovering OAuth metadata", task.MCP.Name).Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "[%s] error discovering OAuth metadata", task.MCP.Name).LogError(ctx, logger)
 		}
 
 		switch oauthDiscovery.Version {
@@ -183,7 +183,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 			})
 		}
 	} else if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "[%s] external mcp server unavailable", task.MCP.Name).Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "[%s] external mcp server unavailable", task.MCP.Name).LogError(ctx, logger)
 	} else {
 		defer o11y.LogDefer(ctx, logger, mcpClient.Close)
 	}
@@ -211,7 +211,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 	if len(serverDetails.Headers) > 0 {
 		headerDefinitions, err = json.Marshal(serverDetails.Headers)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "[%s] error marshaling header definitions", task.MCP.Name).Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "[%s] error marshaling header definitions", task.MCP.Name).LogError(ctx, logger)
 		}
 	}
 
@@ -219,10 +219,9 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 	if len(serverDetails.Tools) > 0 {
 		// Create individual tool definitions for each tool from the registry
 		for _, tool := range serverDetails.Tools {
-			toolURN := urn.Tool{
-				Kind:   urn.ToolKindExternalMCP,
-				Source: task.MCP.Slug,
-				Name:   tool.Name,
+			toolURN := urn.NewTool(urn.ToolKindExternalMCP, task.MCP.Slug, tool.Name)
+			if err := toolURN.Validate(); err != nil {
+				return oops.E(oops.CodeInvalid, err, "[%s] invalid external mcp tool name %s", task.MCP.Name, tool.Name).LogError(ctx, logger)
 			}
 
 			_, err = te.repo.CreateExternalMCPToolDefinition(ctx, repo.CreateExternalMCPToolDefinitionParams{
@@ -248,7 +247,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 				OpenWorldHint:              extractAnnotationBool(tool.Annotations, "openWorldHint"),
 			})
 			if err != nil {
-				return oops.E(oops.CodeUnexpected, err, "[%s] error creating external mcp tool definition for %s", task.MCP.Name, tool.Name).Log(ctx, logger)
+				return oops.E(oops.CodeUnexpected, err, "[%s] error creating external mcp tool definition for %s", task.MCP.Name, tool.Name).LogError(ctx, logger)
 			}
 		}
 
@@ -258,10 +257,9 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 		)
 	} else {
 		// Fallback to proxy tool when no tools are defined in the registry
-		toolURN := urn.Tool{
-			Kind:   urn.ToolKindExternalMCP,
-			Source: task.MCP.Slug,
-			Name:   "proxy",
+		toolURN := urn.NewTool(urn.ToolKindExternalMCP, task.MCP.Slug, "proxy")
+		if err := toolURN.Validate(); err != nil {
+			return oops.E(oops.CodeInvalid, err, "[%s] invalid external mcp proxy tool name", task.MCP.Name).LogError(ctx, logger)
 		}
 
 		_, err = te.repo.CreateExternalMCPToolDefinition(ctx, repo.CreateExternalMCPToolDefinitionParams{
@@ -287,7 +285,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 			OpenWorldHint:              pgtype.Bool{Bool: false, Valid: false},
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "[%s] error creating external mcp tool definition", task.MCP.Name).Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "[%s] error creating external mcp tool definition", task.MCP.Name).LogError(ctx, logger)
 		}
 
 		logger.InfoContext(ctx, fmt.Sprintf("[%s] created external mcp proxy tool", task.MCP.Name),

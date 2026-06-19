@@ -1,8 +1,7 @@
+// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import { cn } from "@/lib/utils";
 import React from "react";
-import { Cards } from "./card";
 import { MoreActions } from "./more-actions";
-import { Skeleton } from "./skeleton";
 import { Type } from "./type";
 
 const MiniCardComponent = ({
@@ -76,46 +75,6 @@ function MiniCardDescription({
       className={cn("w-full truncate text-xs", className)}
       {...props}
     />
-  );
-}
-
-export function MiniCards({
-  className,
-  children,
-  isLoading,
-}: {
-  className?: string;
-  children: React.ReactNode;
-  isLoading?: boolean;
-}) {
-  let content = children;
-  if (isLoading) {
-    content = (
-      <>
-        <MiniCardSkeleton />
-        <MiniCardSkeleton />
-        <MiniCardSkeleton />
-      </>
-    );
-  }
-
-  return (
-    <Cards cardSize={1} className={cn("gap-x-3 gap-y-2", className)}>
-      {content}
-    </Cards>
-  );
-}
-
-function MiniCardSkeleton() {
-  return (
-    <MiniCard>
-      <MiniCard.Title>
-        <Skeleton className="h-4 w-[150px]" />
-      </MiniCard.Title>
-      <MiniCard.Description>
-        <Skeleton className="h-4 w-full" />
-      </MiniCard.Description>
-    </MiniCard>
   );
 }
 

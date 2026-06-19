@@ -7,9 +7,11 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import { AgentUsage, AgentUsage$inboundSchema } from "./agentusage.js";
 import { ChatMessage, ChatMessage$inboundSchema } from "./chatmessage.js";
 
 export type Chat = {
+  agentUsage?: AgentUsage | undefined;
   /**
    * When the chat was created.
    */
@@ -19,6 +21,10 @@ export type Chat = {
    */
   externalUserId?: string | undefined;
   /**
+   * The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.
+   */
+  generation: number;
+  /**
    * The ID of the chat
    */
   id: string;
@@ -27,13 +33,21 @@ export type Chat = {
    */
   lastMessageTimestamp: Date;
   /**
-   * The list of messages in the chat
+   * The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
+   */
+  maxGeneration: number;
+  /**
+   * The list of messages in the chat for the returned generation
    */
   messages: Array<ChatMessage>;
   /**
    * The number of messages in the chat
    */
   numMessages: number;
+  /**
+   * Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
+   */
+  riskFindingsCount?: number | undefined;
   /**
    * The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)
    */
@@ -71,18 +85,22 @@ export type Chat = {
 /** @internal */
 export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
   z.object({
+    agent_usage: z.optional(AgentUsage$inboundSchema),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
     external_user_id: z.optional(z.string()),
+    generation: z.int(),
     id: z.string(),
     last_message_timestamp: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    max_generation: z.int(),
     messages: z.array(ChatMessage$inboundSchema),
     num_messages: z.int(),
+    risk_findings_count: z.optional(z.int()),
     source: z.optional(z.string()),
     title: z.string(),
     total_cost: z.optional(z.number()),
@@ -97,10 +115,13 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
   }),
   z.transform((v) => {
     return remap$(v, {
+      "agent_usage": "agentUsage",
       "created_at": "createdAt",
       "external_user_id": "externalUserId",
       "last_message_timestamp": "lastMessageTimestamp",
+      "max_generation": "maxGeneration",
       "num_messages": "numMessages",
+      "risk_findings_count": "riskFindingsCount",
       "total_cost": "totalCost",
       "total_input_tokens": "totalInputTokens",
       "total_output_tokens": "totalOutputTokens",

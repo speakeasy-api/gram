@@ -1,10 +1,9 @@
 #!/usr/bin/env -S node
 
-//MISE description="Stream assistant runtime logs across local and Fly.io runtimes"
+//MISE description="Stream assistant runtime logs from Fly.io runtimes"
 //MISE hide=true
 //USAGE flag "--poll-seconds <seconds>" default="3" help="How often to poll for active assistant runtimes."
 
-import path from "node:path";
 import process from "node:process";
 import { spawn, type ChildProcessByStdio } from "node:child_process";
 import type { Readable } from "node:stream";
@@ -30,8 +29,6 @@ const pollSeconds = Math.max(
   1,
   Number.parseInt(process.env["usage_poll_seconds"] ?? "3", 10) || 3,
 );
-const workdirRoot =
-  process.env["GRAM_ASSISTANT_RUNTIME_WORKDIR"] || "local/assistant-runtimes";
 // Prefer a user-scoped token for log streaming since deploy tokens returned
 // by `fly tokens create deploy` lack `logs:read` and 401 here.
 const flyAccessToken =
@@ -40,13 +37,6 @@ const flyAccessToken =
   "";
 const flyAppNamePrefix =
   process.env["GRAM_ASSISTANT_RUNTIME_FLYIO_APP_NAME_PREFIX"] || "gram-asst";
-const configuredProvider = (() => {
-  const raw = (process.env["GRAM_ASSISTANT_RUNTIME_PROVIDER"] || "").trim();
-  if (raw === "" || raw === "firecracker") {
-    return "local";
-  }
-  return raw;
-})();
 const databaseURL = process.env["GRAM_DATABASE_URL"];
 
 if (!databaseURL) {
@@ -88,10 +78,6 @@ function flyAppName(runtime: RuntimeRow): string {
     return runtime.app_name;
   }
   return `${flyAppNamePrefix}-${runtime.thread_id.toLowerCase()}`;
-}
-
-function localLogPath(runtime: RuntimeRow): string {
-  return path.join(workdirRoot, `${runtime.thread_id}.log`);
 }
 
 function writeLine(prefix: string, line: string) {
@@ -140,23 +126,6 @@ function sameTarget(left: RuntimeRow, right: RuntimeRow): boolean {
   );
 }
 
-function spawnLocalSubscriber(runtime: RuntimeRow): LogStreamProcess {
-  const logPath = localLogPath(runtime);
-  return spawn(
-    "bash",
-    [
-      "-lc",
-      'while [[ ! -e "$1" ]]; do sleep 1; done; exec tail -n +1 -F "$1"',
-      "bash",
-      logPath,
-    ],
-    {
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
-}
-
 function spawnFlySubscriber(runtime: RuntimeRow): LogStreamProcess {
   const appName = flyAppName(runtime);
   const args = ["logs", "-a", appName];
@@ -174,9 +143,6 @@ function spawnFlySubscriber(runtime: RuntimeRow): LogStreamProcess {
 
 function spawnSubscriber(runtime: RuntimeRow): LogStreamProcess {
   switch (runtime.backend) {
-    case "local":
-    case "firecracker":
-      return spawnLocalSubscriber(runtime);
     case "flyio":
       return spawnFlySubscriber(runtime);
     default:
@@ -218,9 +184,7 @@ function startSubscriber(runtime: RuntimeRow) {
 
   writeLine(
     linePrefix(runtime),
-    runtime.backend === "flyio"
-      ? `attached fly logs for ${flyAppName(runtime)}`
-      : `attached local log ${localLogPath(runtime)}`,
+    `attached fly logs for ${flyAppName(runtime)}`,
   );
 
   proc.on("close", (code, signal) => {
@@ -315,11 +279,9 @@ FROM runtimes;
 }
 
 async function reconcileOnce() {
-  const runtimes = (await loadRuntimes()).filter((runtime) => {
-    const backend =
-      runtime.backend === "firecracker" ? "local" : runtime.backend;
-    return backend === configuredProvider;
-  });
+  const runtimes = (await loadRuntimes()).filter(
+    (runtime) => runtime.backend === "flyio",
+  );
   desiredRuntimes.clear();
   for (const runtime of runtimes) {
     desiredRuntimes.set(runtime.runtime_id, runtime);

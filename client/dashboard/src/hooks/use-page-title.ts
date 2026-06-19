@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { AppRoute, AppRoutes } from "@/routes";
 
-const BASE_TITLE = "Gram";
+const BASE_TITLE = "Speakeasy";
 
 function isAppRoute(value: unknown): value is AppRoute {
   return (

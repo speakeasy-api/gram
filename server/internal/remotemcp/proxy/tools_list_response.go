@@ -3,6 +3,7 @@ package proxy
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -77,4 +78,62 @@ func toolsListResponseFromRemoteMessage(request *ToolsListRequest, msg *RemoteMe
 	}
 	resp.Result = result
 	return resp, true
+}
+
+// SetTools replaces the tools array on a successful tools/list response,
+// marking the underlying remote message dirty so the proxy re-emits the
+// mutated payload to the user. Use this for filter and inject patterns:
+// dropping tools that the caller is not authorized to see, injecting
+// additional schema fields, or replacing the array wholesale.
+//
+// A nil tools argument is normalized to an empty slice so the wire shape
+// stays spec-compliant — MCP tools/list responses carry a JSON array,
+// never null. Use an explicit empty slice or nil interchangeably when a
+// filter removes every entry.
+//
+// The replacement is observed by every subsequent interceptor in the same
+// chain through the shared *Result pointer — no re-read of wire bytes is
+// required. The outer jsonrpc.Message is re-encoded once after the chain
+// completes (see [RemoteMessage.materializedBytes]); this method does the
+// inner payload swap up front so the dirty signal alone is sufficient to
+// trigger that re-encode. Marshal happens before any typed-view or
+// underlying-message state is touched so a marshal failure leaves
+// everything at its pre-call values — the typed view and the wire
+// remain in sync regardless of the failure mode.
+//
+// Returns a [*MutationError] when the response carries a JSON-RPC Error
+// rather than a Result (mutually exclusive per the typed-view
+// contract), when marshaling the mutated ListToolsResult fails, or when
+// the underlying jsonrpc.Message is not a *jsonrpc.Response. The proxy
+// detects [*MutationError] at the interceptor return path and surfaces
+// it as an HTTP 5xx via [oops.E] with [oops.CodeUnexpected] rather than
+// as a user-facing JSON-RPC rejection.
+func (r *ToolsListResponse) SetTools(tools []*mcp.Tool) error {
+	if r.Result == nil {
+		return &MutationError{Op: "set tools", Cause: errors.New("response carries an error, not a result")}
+	}
+	rpcResp, ok := r.RemoteMessage.Message.(*jsonrpc.Response)
+	if !ok {
+		return &MutationError{Op: "set tools", Cause: fmt.Errorf("underlying message is %T, want *jsonrpc.Response", r.RemoteMessage.Message)}
+	}
+
+	if tools == nil {
+		tools = []*mcp.Tool{}
+	}
+
+	// Stage the mutation against a temporary copy of Result so a marshal
+	// failure can't leave the typed view's Tools desynced from the
+	// underlying wire bytes. Only commit (assign to Result.Tools,
+	// rpcResp.Result, dirty) once marshaling has succeeded.
+	staged := *r.Result
+	staged.Tools = tools
+	payload, err := json.Marshal(&staged)
+	if err != nil {
+		return &MutationError{Op: "set tools", Cause: fmt.Errorf("marshal mutated ListToolsResult: %w", err)}
+	}
+
+	r.Result.Tools = tools
+	rpcResp.Result = payload
+	r.RemoteMessage.dirty = true
+	return nil
 }

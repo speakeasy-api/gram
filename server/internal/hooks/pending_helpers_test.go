@@ -23,6 +23,220 @@ func otelOnlyCtx(ctx context.Context) context.Context {
 	return contextvalues.SetAuthContext(ctx, nil)
 }
 
+// MCP-routed tool calls must carry the resolved server identifier on every
+// telemetry log via gram.mcp.match — for *every* MCP tool call regardless
+// of policy state. The offline risk batch scanner reads this back by
+// trace_id to populate risk_results.match.
+func TestBuildTelemetryAttributesWithMetadata_SetsMCPMatchFromCachedList(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
+		sessionMCPListTTL,
+	))
+
+	mcpToolName := "mcp__mise__run_task"
+	toolUse := "toolu_local_mcp"
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &mcpToolName,
+		ToolUseID:     &toolUse,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, "mise mcp", attrs[attr.MCPMatchKey])
+}
+
+// Native (non-MCP) tools must NOT get a gram.mcp.match attribute — the
+// hook never routes them through an MCP server, and an empty value on the
+// log row would pollute the CH index.
+func TestBuildTelemetryAttributesWithMetadata_NoMCPMatchForNativeTool(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	bashTool := "Bash"
+	toolUse := "toolu_bash"
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &bashTool,
+		ToolUseID:     &toolUse,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	_, has := attrs[attr.MCPMatchKey]
+	assert.False(t, has, "Bash and other native tools must not get an MCP match attribute")
+}
+
+// Cowork tool names embed the connector UUID rather than a sanitized
+// server name, so the SessionStart inventory match must resolve the
+// entry by ConnectorUUID and rewrite gram.tool_call.source from the UUID
+// to the human-readable Name. The MCP server URL is persisted alongside.
+func TestBuildTelemetryAttributesWithMetadata_CoworkOverridesSourceWithName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	connectorUUID := "a1b2c3d4-e5f6-7890-abcd-ef0123456789"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{
+			Source: "claude.ai", Name: "Slack",
+			URL: "https://mcp.example.com/slack", Transport: "HTTP",
+			ConnectorUUID: connectorUUID,
+		}},
+		sessionMCPListTTL,
+	))
+
+	mcpToolName := "mcp__" + connectorUUID + "__send_message"
+	toolUse := "toolu_cowork_mcp"
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &mcpToolName,
+		ToolUseID:     &toolUse,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, "Slack", attrs[attr.ToolCallSourceKey])
+	assert.Equal(t, "https://mcp.example.com/slack", attrs[attr.MCPServerURLKey])
+	assert.Equal(t, "https://mcp.example.com/slack", attrs[attr.MCPMatchKey])
+}
+
+// When the Cowork inventory entry has no Name (defensive fallback), the
+// source must remain the connector UUID — the matched entry still
+// contributes its URL.
+func TestBuildTelemetryAttributesWithMetadata_CoworkFallsBackToUUIDWhenNoName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	connectorUUID := "a1b2c3d4-e5f6-7890-abcd-ef0123456789"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{
+			Source: "claude.ai", URL: "https://mcp.example.com/slack",
+			Transport: "HTTP", ConnectorUUID: connectorUUID,
+		}},
+		sessionMCPListTTL,
+	))
+
+	mcpToolName := "mcp__" + connectorUUID + "__send_message"
+	toolUse := "toolu_cowork_mcp_no_name"
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &mcpToolName,
+		ToolUseID:     &toolUse,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, connectorUUID, attrs[attr.ToolCallSourceKey])
+	assert.Equal(t, "https://mcp.example.com/slack", attrs[attr.MCPServerURLKey])
+}
+
+// Claude Code MCP tool names embed a sanitized form of the server name
+// ("claude_ai_Linear_Speakeasy"); when the SessionStart inventory carries
+// the raw Name ("Linear (Speakeasy)") we replace the sanitized source
+// with it so dashboards display the same value Cowork produces.
+func TestBuildTelemetryAttributesWithMetadata_ClaudeCodeReplacesSanitizedSourceWithName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{
+			Source: "claude.ai", Name: "Linear (Speakeasy)",
+			URL: "https://chat.speakeasy.com/mcp/linear", Transport: "HTTP",
+		}},
+		sessionMCPListTTL,
+	))
+
+	mcpToolName := "mcp__claude_ai_Linear_Speakeasy__list_issues"
+	toolUse := "toolu_claude_mcp"
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &mcpToolName,
+		ToolUseID:     &toolUse,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, "Linear (Speakeasy)", attrs[attr.ToolCallSourceKey])
+	assert.Equal(t, "https://chat.speakeasy.com/mcp/linear", attrs[attr.MCPServerURLKey])
+}
+
+// When the MCP list snapshot doesn't include the called server, we fall
+// back to the server-prefix portion of the tool name so the batch scanner
+// still has *something* to allowlist on. Better than no attribute (which
+// would force the scanner into its own prefix-derivation fallback).
+func TestBuildTelemetryAttributesWithMetadata_FallsBackToServerPrefix(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "other", URL: "https://other.example.com/mcp", Transport: "HTTP"}},
+		sessionMCPListTTL,
+	))
+
+	mcpToolName := "mcp__mise__run_task"
+	toolUse := "toolu_no_match"
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &mcpToolName,
+		ToolUseID:     &toolUse,
+		SessionID:     &sessionID,
+	}, metadata)
+
+	assert.Equal(t, "mise", attrs[attr.MCPMatchKey])
+}
+
 func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -50,9 +264,35 @@ func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing
 		SessionID:     &metadata.SessionID,
 	}, metadata)
 
-	assert.Equal(t, userEmail, attrs[attr.UserEmailKey])
-	assert.Equal(t, userID, attrs[attr.UserIDKey])
+	// User identity travels on LogParams.UserInfo, not the attributes map;
+	// the build call's job is to resolve the user ID onto the metadata.
+	assert.NotContains(t, attrs, attr.UserEmailKey)
+	assert.NotContains(t, attrs, attr.UserIDKey)
 	assert.Equal(t, userID, metadata.UserID)
+}
+
+func TestBuildTelemetryAttributesWithMetadata_SetsHookHostname(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	metadata := &SessionMetadata{
+		SessionID: uuid.NewString(),
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+	hostname := " subomi-mbp "
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &metadata.SessionID,
+		HookHostname:  &hostname,
+	}, metadata)
+
+	assert.Equal(t, "subomi-mbp", attrs[attr.HookHostnameKey])
 }
 
 var (

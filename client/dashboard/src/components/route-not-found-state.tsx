@@ -12,7 +12,7 @@ export function RouteNotFoundState({
   title,
   description,
   action,
-}: RouteNotFoundStateProps) {
+}: RouteNotFoundStateProps): JSX.Element {
   return (
     <div className="flex min-h-[420px] w-full items-center justify-center">
       <Stack gap={4} align="center" className="max-w-md text-center">
@@ -27,7 +27,11 @@ export function RouteNotFoundState({
   );
 }
 
-export function SecondaryRouteAction({ children }: { children: ReactNode }) {
+export function SecondaryRouteAction({
+  children,
+}: {
+  children: ReactNode;
+}): JSX.Element {
   return (
     <Button variant="secondary">
       <Button.Text>{children}</Button.Text>

@@ -7,7 +7,7 @@ set -e
 docker compose --profile "*" down --volumes --remove-orphans
 
 # dev-idp's SQLite database lives outside docker -- nuke it too so a
-# follow-up `./zero` boots from a clean local-speakeasy/oauth2 state.
+# follow-up `./zero` boots from a clean mock-workos/oauth2 state.
 rm -rf local/devidp
 
 echo ""

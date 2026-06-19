@@ -22,7 +22,7 @@ export type CreateMcpServerFormVisibility = ClosedEnum<
 >;
 
 /**
- * Form for creating a new MCP server. Exactly one of remote_mcp_server_id or toolset_id must be provided. At most one of external_oauth_server_id or oauth_proxy_server_id may be provided.
+ * Form for creating a new MCP server. Exactly one of remote_mcp_server_id or toolset_id must be provided.
  */
 export type CreateMcpServerForm = {
   /**
@@ -30,21 +30,25 @@ export type CreateMcpServerForm = {
    */
   environmentId?: string | undefined;
   /**
-   * The ID of the external OAuth server to associate with the server
+   * A human-readable display name for the server
    */
-  externalOauthServerId?: string | undefined;
-  /**
-   * The ID of the OAuth proxy server to associate with the server
-   */
-  oauthProxyServerId?: string | undefined;
+  name: string;
   /**
    * The ID of the remote MCP server to use as the backend
    */
   remoteMcpServerId?: string | undefined;
   /**
+   * The ID of the tool variations group enabling MCP tool filtering for this server. Omit to leave filtering disabled.
+   */
+  toolVariationsGroupId?: string | undefined;
+  /**
    * The ID of the toolset to use as the backend
    */
   toolsetId?: string | undefined;
+  /**
+   * The ID of the user session issuer that gates OAuth-based MCP client authentication. When set, MCP clients are required to authenticate against this issuer before connecting.
+   */
+  userSessionIssuerId?: string | undefined;
   /**
    * The visibility of an MCP server
    */
@@ -59,10 +63,11 @@ export const CreateMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
 /** @internal */
 export type CreateMcpServerForm$Outbound = {
   environment_id?: string | undefined;
-  external_oauth_server_id?: string | undefined;
-  oauth_proxy_server_id?: string | undefined;
+  name: string;
   remote_mcp_server_id?: string | undefined;
+  tool_variations_group_id?: string | undefined;
   toolset_id?: string | undefined;
+  user_session_issuer_id?: string | undefined;
   visibility: string;
 };
 
@@ -73,19 +78,20 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     environmentId: z.optional(z.string()),
-    externalOauthServerId: z.optional(z.string()),
-    oauthProxyServerId: z.optional(z.string()),
+    name: z.string(),
     remoteMcpServerId: z.optional(z.string()),
+    toolVariationsGroupId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
+    userSessionIssuerId: z.optional(z.string()),
     visibility: CreateMcpServerFormVisibility$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       environmentId: "environment_id",
-      externalOauthServerId: "external_oauth_server_id",
-      oauthProxyServerId: "oauth_proxy_server_id",
       remoteMcpServerId: "remote_mcp_server_id",
+      toolVariationsGroupId: "tool_variations_group_id",
       toolsetId: "toolset_id",
+      userSessionIssuerId: "user_session_issuer_id",
     });
   }),
 );

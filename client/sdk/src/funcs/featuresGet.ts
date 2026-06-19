@@ -40,7 +40,7 @@ export function featuresGet(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.GramProductFeatures,
+    components.GetProductFeaturesResponseBody,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -68,7 +68,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      components.GramProductFeatures,
+      components.GetProductFeaturesResponseBody,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -175,7 +175,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.GramProductFeatures,
+    components.GetProductFeaturesResponseBody,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -186,7 +186,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.GramProductFeatures$inboundSchema),
+    M.json(200, components.GetProductFeaturesResponseBody$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

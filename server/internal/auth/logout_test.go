@@ -25,6 +25,7 @@ func TestService_Logout(t *testing.T) {
 			SessionID:            "test-session-id",
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
+			WorkOSSessionID:      "",
 		}
 		err := instance.sessionManager.StoreSession(ctx, session)
 		require.NoError(t, err)

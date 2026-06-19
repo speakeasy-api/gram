@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@speakeasy-api/moonshine";
-import { buildLoginRedirectURL } from "@/lib/utils";
+import { buildLoginRedirectURL, cn } from "@/lib/utils";
 import { useSearchParams } from "react-router";
 import { useState } from "react";
 import {
@@ -28,7 +28,7 @@ function getAuthErrorMessage(errorCode?: string | null): string {
   return authErrorMessages[errorCode] || unexpected;
 }
 
-const FEATURE_BADGES = ["Build", "Secure", "Observe", "Distribute"];
+const FEATURE_BADGES = ["Connect", "Secure", "Control", "Observe"];
 
 function FeatureBadges({ labels = FEATURE_BADGES }: { labels?: string[] }) {
   return (
@@ -83,13 +83,30 @@ function DotBackground() {
   );
 }
 
-function AuthLayout({ children }: { children: React.ReactNode }) {
+export function AuthLayout({
+  children,
+  topRight,
+  contentClassName = "max-w-sm",
+}: {
+  children: React.ReactNode;
+  topRight?: React.ReactNode;
+  contentClassName?: string;
+}): JSX.Element {
   return (
     <div className="login-right-pane relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#FAFAFA] p-8 md:w-1/2 md:p-16">
       {/* Moving dot background — scrolls on hover */}
       <DotBackground />
 
-      <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-8">
+      {topRight && (
+        <div className="absolute top-6 right-6 z-10">{topRight}</div>
+      )}
+
+      <div
+        className={cn(
+          "relative z-10 flex w-full flex-col items-center gap-8",
+          contentClassName,
+        )}
+      >
         <div className="flex flex-col items-center gap-4">
           <a
             href="https://www.speakeasy.com/product/mcp-platform"
@@ -104,8 +121,7 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
           <div className="flex flex-col gap-2 text-center text-sm dark:text-black">
             <p>Securely scale AI usage across your organization.</p>
             <p className="text-[#8B8684]">
-              Control plane for distribution of MCP, Skills, Assistants and
-              more.
+              Control plane to govern MCP, Skills, and Assistants
             </p>
           </div>
           <FeatureBadges />
@@ -145,7 +161,7 @@ export type LoginSectionProps = {
   redirectTo: string | null;
 };
 
-export function LoginSection(props: LoginSectionProps) {
+export function LoginSection(props: LoginSectionProps): JSX.Element {
   const [searchParams] = useSearchParams();
   const signinError = searchParams.get("signin_error");
 
@@ -164,7 +180,7 @@ export function LoginSection(props: LoginSectionProps) {
       )}
 
       <div className="relative z-10">
-        <Button variant="brand" onClick={handleLogin}>
+        <Button variant="brand" onClick={() => void handleLogin()}>
           Login
         </Button>
       </div>
@@ -172,7 +188,7 @@ export function LoginSection(props: LoginSectionProps) {
   );
 }
 
-export function RegisterSection() {
+export function RegisterSection(): JSX.Element {
   const [searchParams] = useSearchParams();
   const signinError = searchParams.get("signin_error");
   const telemetry = useTelemetry();

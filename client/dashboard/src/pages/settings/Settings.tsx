@@ -8,7 +8,7 @@ import { Stack } from "@speakeasy-api/moonshine";
 import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
 
-export default function Settings() {
+export default function Settings(): JSX.Element {
   const isAdmin = useIsAdmin();
   const organization = useOrganization();
   const project = useProject();
@@ -27,7 +27,9 @@ export default function Settings() {
             Manage your project configuration and perform administrative
             actions.
           </Type>
-          <SettingsDangerZone />
+          <div>
+            <SettingsDangerZone />
+          </div>
 
           {isAdmin && (
             <div className="mt-8 rounded-lg border border-red-500/20 bg-red-500/5 p-4">

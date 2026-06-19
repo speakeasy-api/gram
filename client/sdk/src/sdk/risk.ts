@@ -3,14 +3,41 @@
  */
 
 import { ClientSDK } from "../lib/sdks.js";
-import { Capabilities } from "./capabilities.js";
+import { Categories } from "./categories.js";
+import { CustomRules } from "./customrules.js";
+import { Exclusions } from "./exclusions.js";
+import { Overview } from "./overview.js";
 import { Policies } from "./policies.js";
+import { PolicyBypassRequests } from "./policybypassrequests.js";
 import { Results } from "./results.js";
+import { Rules } from "./rules.js";
 
 export class Risk extends ClientSDK {
-  private _capabilities?: Capabilities;
-  get capabilities(): Capabilities {
-    return (this._capabilities ??= new Capabilities(this._options));
+  private _policyBypassRequests?: PolicyBypassRequests;
+  get policyBypassRequests(): PolicyBypassRequests {
+    return (this._policyBypassRequests ??= new PolicyBypassRequests(
+      this._options,
+    ));
+  }
+
+  private _categories?: Categories;
+  get categories(): Categories {
+    return (this._categories ??= new Categories(this._options));
+  }
+
+  private _exclusions?: Exclusions;
+  get exclusions(): Exclusions {
+    return (this._exclusions ??= new Exclusions(this._options));
+  }
+
+  private _customRules?: CustomRules;
+  get customRules(): CustomRules {
+    return (this._customRules ??= new CustomRules(this._options));
+  }
+
+  private _overview?: Overview;
+  get overview(): Overview {
+    return (this._overview ??= new Overview(this._options));
   }
 
   private _policies?: Policies;
@@ -21,5 +48,10 @@ export class Risk extends ClientSDK {
   private _results?: Results;
   get results(): Results {
     return (this._results ??= new Results(this._options));
+  }
+
+  private _rules?: Rules;
+  get rules(): Rules {
+    return (this._rules ??= new Rules(this._options));
   }
 }

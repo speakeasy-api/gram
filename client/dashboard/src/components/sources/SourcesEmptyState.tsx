@@ -20,20 +20,18 @@ import {
   Server,
 } from "lucide-react";
 
-export function SourcesEmptyState() {
+export function SourcesEmptyState(): JSX.Element {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
-  const isRemoteMcpEnabled =
-    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
 
   return (
     <Page.Section>
       <Page.Section.Title>Sources</Page.Section.Title>
       <Page.Section.Description className="max-w-2xl">
         {isFunctionsEnabled
-          ? "OpenAPI documents, Gram Functions, and third-party MCP servers providing tools for your project"
+          ? "OpenAPI documents, functions, and third-party MCP servers providing tools for your project"
           : "OpenAPI documents and third-party MCP servers providing tools for your project"}
       </Page.Section.Description>
       <Page.Section.Body>
@@ -100,30 +98,28 @@ export function SourcesEmptyState() {
                         <Server className="h-5 w-5 text-violet-600 dark:text-violet-400" />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="font-medium">Registry server</span>
+                        <span className="font-medium">3rd-party server</span>
                         <span className="text-muted-foreground text-xs">
                           Add pre-built servers from the catalog
                         </span>
                       </div>
                     </DropdownMenuItem>
-                    {isRemoteMcpEnabled && (
-                      <DropdownMenuItem
-                        onSelect={() => routes.sources.addRemoteMcp.goTo()}
-                        className="flex cursor-pointer items-start gap-3 rounded-md p-2"
-                      >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
-                          <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium">
-                            Custom remote server
-                          </span>
-                          <span className="text-muted-foreground text-xs">
-                            Add existing remote servers by URL
-                          </span>
-                        </div>
-                      </DropdownMenuItem>
-                    )}
+                    <DropdownMenuItem
+                      onSelect={() => routes.sources.addRemoteMcp.goTo()}
+                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
+                        <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium">
+                          Custom remote server
+                        </span>
+                        <span className="text-muted-foreground text-xs">
+                          Add existing remote servers by URL
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 )}
               </DropdownMenu>

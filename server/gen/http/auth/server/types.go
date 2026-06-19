@@ -1126,6 +1126,11 @@ type OrganizationEntryResponseBody struct {
 	Slug               string                      `form:"slug" json:"slug" xml:"slug"`
 	Projects           []*ProjectEntryResponseBody `form:"projects" json:"projects" xml:"projects"`
 	UserWorkspaceSlugs []string                    `form:"user_workspace_slugs,omitempty" json:"user_workspace_slugs,omitempty" xml:"user_workspace_slugs,omitempty"`
+	// Whether SSO is enabled for this organization (synced from WorkOS)
+	SsoEnabled *bool `form:"sso_enabled,omitempty" json:"sso_enabled,omitempty" xml:"sso_enabled,omitempty"`
+	// Whether SCIM directory sync is enabled for this organization (synced from
+	// WorkOS)
+	ScimEnabled *bool `form:"scim_enabled,omitempty" json:"scim_enabled,omitempty" xml:"scim_enabled,omitempty"`
 }
 
 // ProjectEntryResponseBody is used to define fields on response body types.

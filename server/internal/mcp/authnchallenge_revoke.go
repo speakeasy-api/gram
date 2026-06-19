@@ -21,8 +21,26 @@ import (
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// HandleRevoke implements RFC 7009 token revocation. Mounted at
-// `POST /mcp/{mcpSlug}/revoke`.
+// HandleRevoke is the chi handler at `POST /mcp/{mcpSlug}/revoke`.
+// Resolves the slug to an issuer-gated ResolvedMcpEndpoint and dispatches
+// to ServeRevoke.
+func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	mcpSlug := chi.URLParam(r, "mcpSlug")
+	if mcpSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
+	}
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	if err != nil {
+		return err
+	}
+	return s.ServeRevoke(w, r, endpoint)
+}
+
+// ServeRevoke implements RFC 7009 token revocation. Post-resolution entry
+// point shared by /mcp's HandleRevoke (toolset-keyed) and /x/mcp's
+// mcp_endpoint-keyed route registration.
 //
 // Per RFC 7009 §2.2: the response is HTTP 200 unconditionally on success or
 // when the token is unknown / already revoked / was never valid -- the spec
@@ -40,61 +58,45 @@ import (
 //     signature -- the client_secret check above establishes authenticity --
 //     and push it into the revocation cache. We do NOT have to find a
 //     matching user_sessions row to honour the request.
-func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
+func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
-	mcpSlug := chi.URLParam(r, "mcpSlug")
-	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
-	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
 		return writeTokenError(ctx, w, s.logger, http.StatusBadRequest, "invalid_request", "failed to parse form")
 	}
 
-	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
-	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
-	}
-	if !toolset.UserSessionIssuerID.Valid {
-		return oops.E(oops.CodeNotFound, nil, "not found")
-	}
-	if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
-		return err
-	}
+	logger := endpoint.LogWith(s.logger)
 
-	logger := s.logger.With(
-		attr.SlogToolsetID(toolset.ID.String()),
-		attr.SlogProjectID(toolset.ProjectID.String()),
-	)
-
-	clientID, clientSecret, _ := extractClientCredentials(r)
+	clientID, clientSecret, presentedAuthMethod, _ := extractClientCredentials(r)
 	if clientID == "" {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", "missing_client_id")
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
 	}
 	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		ClientID:            clientID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", "unknown_client_id")
 			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
 		}
-		return oops.E(oops.CodeUnexpected, err, "lookup user session client").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
 	// Public clients (NULL hash) skip the secret check; their possession of
 	// the token alone authenticates the revoke per RFC 7009 §2.1.
 	if clientRow.ClientSecretHash.Valid {
 		if err := bcrypt.CompareHashAndPassword([]byte(clientRow.ClientSecretHash.String), []byte(clientSecret)); err != nil {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", "client_secret_mismatch")
 			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client secret mismatch")
 		}
 	}
+	logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authenticated", clientID, presentedAuthMethod, "", "")
 
 	token := r.PostForm.Get("token")
 	if token == "" {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke request rejected", clientID, presentedAuthMethod, "", "missing_token")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "token is required")
 	}
 	hint := r.PostForm.Get("token_type_hint")
@@ -104,7 +106,7 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
 	// authenticated client before revoking; ownership mismatches look like
 	// the "unknown token" success path to the caller (§2.2 — don't leak
 	// ownership).
-	issuerID := toolset.UserSessionIssuerID.UUID
+	issuerID := endpoint.UserSessionIssuerID
 	clientUUID := clientRow.ID
 	switch hint {
 	case "refresh_token":

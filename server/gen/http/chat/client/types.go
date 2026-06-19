@@ -35,13 +35,25 @@ type SubmitFeedbackRequestBody struct {
 type ListChatsResponseBody struct {
 	// The list of chats
 	Chats []*ChatOverviewResponseBody `form:"chats,omitempty" json:"chats,omitempty" xml:"chats,omitempty"`
+	// Total number of chats (before pagination)
+	Total *int `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
 }
 
 // LoadChatResponseBody is the type of the "chat" service "loadChat" endpoint
 // HTTP response body.
 type LoadChatResponseBody struct {
-	// The list of messages in the chat
+	// The list of messages in the chat for the returned generation
 	Messages []*ChatMessageResponseBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
+	// The generation that this response's messages belong to. A generation is an
+	// immutable snapshot of the transcript; a new one is opened on compaction or
+	// message edits, while normal turns append to the current one.
+	Generation *int `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+	// The highest generation number present for this chat. To load the full
+	// history, walk from `max_generation` down to 0, requesting each generation in
+	// turn.
+	MaxGeneration *int `form:"max_generation,omitempty" json:"max_generation,omitempty" xml:"max_generation,omitempty"`
+	// Agent-specific usage enrichment for the chat, when available.
+	AgentUsage *AgentUsageResponseBody `form:"agent_usage,omitempty" json:"agent_usage,omitempty" xml:"agent_usage,omitempty"`
 	// The ID of the chat
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The title of the chat
@@ -69,6 +81,10 @@ type LoadChatResponseBody struct {
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp *string `form:"last_message_timestamp,omitempty" json:"last_message_timestamp,omitempty" xml:"last_message_timestamp,omitempty"`
+	// Number of risk findings recorded against messages in this chat
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
 }
 
 // GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
@@ -85,15 +101,6 @@ type CreditUsageResponseBody struct {
 	CreditsUsed *float64 `form:"credits_used,omitempty" json:"credits_used,omitempty" xml:"credits_used,omitempty"`
 	// The number of monthly credits
 	MonthlyCredits *int `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
-}
-
-// ListChatsWithResolutionsResponseBody is the type of the "chat" service
-// "listChatsWithResolutions" endpoint HTTP response body.
-type ListChatsWithResolutionsResponseBody struct {
-	// List of chats with resolutions
-	Chats []*ChatOverviewWithResolutionsResponseBody `form:"chats,omitempty" json:"chats,omitempty" xml:"chats,omitempty"`
-	// Total number of chats (before pagination)
-	Total *int `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
 }
 
 // SubmitFeedbackResponseBody is the type of the "chat" service
@@ -826,196 +833,6 @@ type CreditUsageGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListChatsWithResolutionsUnauthorizedResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "unauthorized" error.
-type ListChatsWithResolutionsUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListChatsWithResolutionsForbiddenResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "forbidden" error.
-type ListChatsWithResolutionsForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListChatsWithResolutionsBadRequestResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "bad_request" error.
-type ListChatsWithResolutionsBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListChatsWithResolutionsNotFoundResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "not_found" error.
-type ListChatsWithResolutionsNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListChatsWithResolutionsConflictResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "conflict" error.
-type ListChatsWithResolutionsConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListChatsWithResolutionsUnsupportedMediaResponseBody is the type of the
-// "chat" service "listChatsWithResolutions" endpoint HTTP response body for
-// the "unsupported_media" error.
-type ListChatsWithResolutionsUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListChatsWithResolutionsInvalidResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "invalid" error.
-type ListChatsWithResolutionsInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListChatsWithResolutionsInvariantViolationResponseBody is the type of the
-// "chat" service "listChatsWithResolutions" endpoint HTTP response body for
-// the "invariant_violation" error.
-type ListChatsWithResolutionsInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListChatsWithResolutionsUnexpectedResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "unexpected" error.
-type ListChatsWithResolutionsUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListChatsWithResolutionsGatewayErrorResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "gateway_error" error.
-type ListChatsWithResolutionsGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // DeleteChatUnauthorizedResponseBody is the type of the "chat" service
 // "deleteChat" endpoint HTTP response body for the "unauthorized" error.
 type DeleteChatUnauthorizedResponseBody struct {
@@ -1407,6 +1224,10 @@ type ChatOverviewResponseBody struct {
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// When the last message in the chat was created.
 	LastMessageTimestamp *string `form:"last_message_timestamp,omitempty" json:"last_message_timestamp,omitempty" xml:"last_message_timestamp,omitempty"`
+	// Number of risk findings recorded against messages in this chat
+	// (project-scoped, found=true). Only populated by endpoints that join risk
+	// data; absent elsewhere.
+	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
 }
 
 // ChatMessageResponseBody is used to define fields on response body types.
@@ -1427,6 +1248,8 @@ type ChatMessageResponseBody struct {
 	ToolCalls *string `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
 	// The finish reason of the message
 	FinishReason *string `form:"finish_reason,omitempty" json:"finish_reason,omitempty" xml:"finish_reason,omitempty"`
+	// The agent prompt/turn ID associated with this message, when available.
+	PromptID *string `form:"prompt_id,omitempty" json:"prompt_id,omitempty" xml:"prompt_id,omitempty"`
 	// The ID of the user who created the message
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The ID of the external user who created the message
@@ -1437,56 +1260,64 @@ type ChatMessageResponseBody struct {
 	Generation *int `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
 }
 
-// ChatOverviewWithResolutionsResponseBody is used to define fields on response
-// body types.
-type ChatOverviewWithResolutionsResponseBody struct {
-	// List of resolutions for this chat
-	Resolutions []*ChatResolutionResponseBody `form:"resolutions,omitempty" json:"resolutions,omitempty" xml:"resolutions,omitempty"`
-	// The ID of the chat
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The title of the chat
-	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
-	// The ID of the user who created the chat
-	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	// The ID of the external user who created the chat
-	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
-	// The number of messages in the chat
-	NumMessages *int `form:"num_messages,omitempty" json:"num_messages,omitempty" xml:"num_messages,omitempty"`
-	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
-	// messages)
-	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
-	// When the chat was created.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// When the chat was last updated.
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-	// Total input tokens used in this chat
-	TotalInputTokens *int64 `form:"total_input_tokens,omitempty" json:"total_input_tokens,omitempty" xml:"total_input_tokens,omitempty"`
-	// Total output tokens used in this chat
-	TotalOutputTokens *int64 `form:"total_output_tokens,omitempty" json:"total_output_tokens,omitempty" xml:"total_output_tokens,omitempty"`
-	// Total tokens (input + output) used in this chat
-	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
-	// Total cost in USD for this chat
-	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
-	// When the last message in the chat was created.
-	LastMessageTimestamp *string `form:"last_message_timestamp,omitempty" json:"last_message_timestamp,omitempty" xml:"last_message_timestamp,omitempty"`
+// AgentUsageResponseBody is used to define fields on response body types.
+type AgentUsageResponseBody struct {
+	// The agent usage payload discriminator.
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// Claude Code usage details.
+	Claude *ClaudeAgentUsageResponseBody `form:"claude,omitempty" json:"claude,omitempty" xml:"claude,omitempty"`
 }
 
-// ChatResolutionResponseBody is used to define fields on response body types.
-type ChatResolutionResponseBody struct {
-	// Resolution ID
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// User's intended goal
-	UserGoal *string `form:"user_goal,omitempty" json:"user_goal,omitempty" xml:"user_goal,omitempty"`
-	// Resolution status
-	Resolution *string `form:"resolution,omitempty" json:"resolution,omitempty" xml:"resolution,omitempty"`
-	// Notes about the resolution
-	ResolutionNotes *string `form:"resolution_notes,omitempty" json:"resolution_notes,omitempty" xml:"resolution_notes,omitempty"`
-	// Score 0-100
-	Score *int `form:"score,omitempty" json:"score,omitempty" xml:"score,omitempty"`
-	// When resolution was created
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// Message IDs associated with this resolution
-	MessageIds []string `form:"message_ids,omitempty" json:"message_ids,omitempty" xml:"message_ids,omitempty"`
+// ClaudeAgentUsageResponseBody is used to define fields on response body types.
+type ClaudeAgentUsageResponseBody struct {
+	// Per-prompt Claude usage turns ordered by start time.
+	Turns []*ClaudeTurnUsageResponseBody `form:"turns,omitempty" json:"turns,omitempty" xml:"turns,omitempty"`
+	// Per-tool Claude usage keyed by tool_use_id.
+	Tools []*ClaudeToolUsageResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+}
+
+// ClaudeTurnUsageResponseBody is used to define fields on response body types.
+type ClaudeTurnUsageResponseBody struct {
+	// Claude prompt.id that correlates events for one user turn.
+	PromptID *string `form:"prompt_id,omitempty" json:"prompt_id,omitempty" xml:"prompt_id,omitempty"`
+	// Earliest OTEL log timestamp in this turn, as Unix nanoseconds.
+	StartTimeUnixNano *string `form:"start_time_unix_nano,omitempty" json:"start_time_unix_nano,omitempty" xml:"start_time_unix_nano,omitempty"`
+	// Latest OTEL log timestamp in this turn, as Unix nanoseconds.
+	EndTimeUnixNano *string `form:"end_time_unix_nano,omitempty" json:"end_time_unix_nano,omitempty" xml:"end_time_unix_nano,omitempty"`
+	// Number of Claude API request events in this turn.
+	RequestCount *int64 `form:"request_count,omitempty" json:"request_count,omitempty" xml:"request_count,omitempty"`
+	// Input tokens used by this turn.
+	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
+	// Output tokens used by this turn.
+	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
+	// Cache read tokens used by this turn.
+	CacheReadTokens *int64 `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
+	// Cache creation tokens used by this turn.
+	CacheCreationTokens *int64 `form:"cache_creation_tokens,omitempty" json:"cache_creation_tokens,omitempty" xml:"cache_creation_tokens,omitempty"`
+	// Total tokens used by this turn.
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Total USD cost for this turn.
+	CostUsd *float64 `form:"cost_usd,omitempty" json:"cost_usd,omitempty" xml:"cost_usd,omitempty"`
+	// Total cost for this turn in micros of a USD.
+	CostMicros *int64 `form:"cost_micros,omitempty" json:"cost_micros,omitempty" xml:"cost_micros,omitempty"`
+	// Distinct model names used by this turn.
+	Models []string `form:"models,omitempty" json:"models,omitempty" xml:"models,omitempty"`
+	// Distinct Claude query sources used by this turn.
+	QuerySources []string `form:"query_sources,omitempty" json:"query_sources,omitempty" xml:"query_sources,omitempty"`
+}
+
+// ClaudeToolUsageResponseBody is used to define fields on response body types.
+type ClaudeToolUsageResponseBody struct {
+	// Claude tool_use_id that correlates the tool call and result.
+	ToolUseID *string `form:"tool_use_id,omitempty" json:"tool_use_id,omitempty" xml:"tool_use_id,omitempty"`
+	// Claude prompt.id for the turn that used this tool.
+	PromptID *string `form:"prompt_id,omitempty" json:"prompt_id,omitempty" xml:"prompt_id,omitempty"`
+	// Tool name reported by Claude Code.
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Serialized tool input size in bytes.
+	InputSizeBytes *int64 `form:"input_size_bytes,omitempty" json:"input_size_bytes,omitempty" xml:"input_size_bytes,omitempty"`
+	// Serialized tool result size in bytes.
+	ResultSizeBytes *int64 `form:"result_size_bytes,omitempty" json:"result_size_bytes,omitempty" xml:"result_size_bytes,omitempty"`
 }
 
 // NewGenerateTitleRequestBody builds the HTTP request body from the payload of
@@ -1511,7 +1342,9 @@ func NewSubmitFeedbackRequestBody(p *chat.SubmitFeedbackPayload) *SubmitFeedback
 // NewListChatsResultOK builds a "chat" service "listChats" endpoint result
 // from a HTTP "OK" response.
 func NewListChatsResultOK(body *ListChatsResponseBody) *chat.ListChatsResult {
-	v := &chat.ListChatsResult{}
+	v := &chat.ListChatsResult{
+		Total: *body.Total,
+	}
 	v.Chats = make([]*chat.ChatOverview, len(body.Chats))
 	for i, val := range body.Chats {
 		if val == nil {
@@ -1676,6 +1509,8 @@ func NewListChatsGatewayError(body *ListChatsGatewayErrorResponseBody) *goa.Serv
 // HTTP "OK" response.
 func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 	v := &chat.Chat{
+		Generation:           *body.Generation,
+		MaxGeneration:        *body.MaxGeneration,
 		ID:                   *body.ID,
 		Title:                *body.Title,
 		UserID:               body.UserID,
@@ -1689,6 +1524,7 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 		TotalTokens:          body.TotalTokens,
 		TotalCost:            body.TotalCost,
 		LastMessageTimestamp: *body.LastMessageTimestamp,
+		RiskFindingsCount:    body.RiskFindingsCount,
 	}
 	v.Messages = make([]*chat.ChatMessage, len(body.Messages))
 	for i, val := range body.Messages {
@@ -1697,6 +1533,9 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 			continue
 		}
 		v.Messages[i] = unmarshalChatMessageResponseBodyToChatChatMessage(val)
+	}
+	if body.AgentUsage != nil {
+		v.AgentUsage = unmarshalAgentUsageResponseBodyToChatAgentUsage(body.AgentUsage)
 	}
 
 	return v
@@ -2169,174 +2008,6 @@ func NewCreditUsageGatewayError(body *CreditUsageGatewayErrorResponseBody) *goa.
 	return v
 }
 
-// NewListChatsWithResolutionsResultOK builds a "chat" service
-// "listChatsWithResolutions" endpoint result from a HTTP "OK" response.
-func NewListChatsWithResolutionsResultOK(body *ListChatsWithResolutionsResponseBody) *chat.ListChatsWithResolutionsResult {
-	v := &chat.ListChatsWithResolutionsResult{
-		Total: *body.Total,
-	}
-	v.Chats = make([]*chat.ChatOverviewWithResolutions, len(body.Chats))
-	for i, val := range body.Chats {
-		if val == nil {
-			v.Chats[i] = nil
-			continue
-		}
-		v.Chats[i] = unmarshalChatOverviewWithResolutionsResponseBodyToChatChatOverviewWithResolutions(val)
-	}
-
-	return v
-}
-
-// NewListChatsWithResolutionsUnauthorized builds a chat service
-// listChatsWithResolutions endpoint unauthorized error.
-func NewListChatsWithResolutionsUnauthorized(body *ListChatsWithResolutionsUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListChatsWithResolutionsForbidden builds a chat service
-// listChatsWithResolutions endpoint forbidden error.
-func NewListChatsWithResolutionsForbidden(body *ListChatsWithResolutionsForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListChatsWithResolutionsBadRequest builds a chat service
-// listChatsWithResolutions endpoint bad_request error.
-func NewListChatsWithResolutionsBadRequest(body *ListChatsWithResolutionsBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListChatsWithResolutionsNotFound builds a chat service
-// listChatsWithResolutions endpoint not_found error.
-func NewListChatsWithResolutionsNotFound(body *ListChatsWithResolutionsNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListChatsWithResolutionsConflict builds a chat service
-// listChatsWithResolutions endpoint conflict error.
-func NewListChatsWithResolutionsConflict(body *ListChatsWithResolutionsConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListChatsWithResolutionsUnsupportedMedia builds a chat service
-// listChatsWithResolutions endpoint unsupported_media error.
-func NewListChatsWithResolutionsUnsupportedMedia(body *ListChatsWithResolutionsUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListChatsWithResolutionsInvalid builds a chat service
-// listChatsWithResolutions endpoint invalid error.
-func NewListChatsWithResolutionsInvalid(body *ListChatsWithResolutionsInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListChatsWithResolutionsInvariantViolation builds a chat service
-// listChatsWithResolutions endpoint invariant_violation error.
-func NewListChatsWithResolutionsInvariantViolation(body *ListChatsWithResolutionsInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListChatsWithResolutionsUnexpected builds a chat service
-// listChatsWithResolutions endpoint unexpected error.
-func NewListChatsWithResolutionsUnexpected(body *ListChatsWithResolutionsUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListChatsWithResolutionsGatewayError builds a chat service
-// listChatsWithResolutions endpoint gateway_error error.
-func NewListChatsWithResolutionsGatewayError(body *ListChatsWithResolutionsGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewDeleteChatUnauthorized builds a chat service deleteChat endpoint
 // unauthorized error.
 func NewDeleteChatUnauthorized(body *DeleteChatUnauthorizedResponseBody) *goa.ServiceError {
@@ -2652,6 +2323,9 @@ func ValidateListChatsResponseBody(body *ListChatsResponseBody) (err error) {
 	if body.Chats == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("chats", "body"))
 	}
+	if body.Total == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
+	}
 	for _, e := range body.Chats {
 		if e != nil {
 			if err2 := ValidateChatOverviewResponseBody(e); err2 != nil {
@@ -2667,6 +2341,12 @@ func ValidateListChatsResponseBody(body *ListChatsResponseBody) (err error) {
 func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	if body.Messages == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("messages", "body"))
+	}
+	if body.Generation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
+	}
+	if body.MaxGeneration == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("max_generation", "body"))
 	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
@@ -2691,6 +2371,11 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 			if err2 := ValidateChatMessageResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.AgentUsage != nil {
+		if err2 := ValidateAgentUsageResponseBody(body.AgentUsage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.CreatedAt != nil {
@@ -2722,25 +2407,6 @@ func ValidateCreditUsageResponseBody(body *CreditUsageResponseBody) (err error) 
 	}
 	if body.MonthlyCredits == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("monthly_credits", "body"))
-	}
-	return
-}
-
-// ValidateListChatsWithResolutionsResponseBody runs the validations defined on
-// ListChatsWithResolutionsResponseBody
-func ValidateListChatsWithResolutionsResponseBody(body *ListChatsWithResolutionsResponseBody) (err error) {
-	if body.Chats == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("chats", "body"))
-	}
-	if body.Total == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
-	}
-	for _, e := range body.Chats {
-		if e != nil {
-			if err2 := ValidateChatOverviewWithResolutionsResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
 	}
 	return
 }
@@ -3714,248 +3380,6 @@ func ValidateCreditUsageGatewayErrorResponseBody(body *CreditUsageGatewayErrorRe
 	return
 }
 
-// ValidateListChatsWithResolutionsUnauthorizedResponseBody runs the
-// validations defined on listChatsWithResolutions_unauthorized_response_body
-func ValidateListChatsWithResolutionsUnauthorizedResponseBody(body *ListChatsWithResolutionsUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListChatsWithResolutionsForbiddenResponseBody runs the validations
-// defined on listChatsWithResolutions_forbidden_response_body
-func ValidateListChatsWithResolutionsForbiddenResponseBody(body *ListChatsWithResolutionsForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListChatsWithResolutionsBadRequestResponseBody runs the validations
-// defined on listChatsWithResolutions_bad_request_response_body
-func ValidateListChatsWithResolutionsBadRequestResponseBody(body *ListChatsWithResolutionsBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListChatsWithResolutionsNotFoundResponseBody runs the validations
-// defined on listChatsWithResolutions_not_found_response_body
-func ValidateListChatsWithResolutionsNotFoundResponseBody(body *ListChatsWithResolutionsNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListChatsWithResolutionsConflictResponseBody runs the validations
-// defined on listChatsWithResolutions_conflict_response_body
-func ValidateListChatsWithResolutionsConflictResponseBody(body *ListChatsWithResolutionsConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListChatsWithResolutionsUnsupportedMediaResponseBody runs the
-// validations defined on
-// listChatsWithResolutions_unsupported_media_response_body
-func ValidateListChatsWithResolutionsUnsupportedMediaResponseBody(body *ListChatsWithResolutionsUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListChatsWithResolutionsInvalidResponseBody runs the validations
-// defined on listChatsWithResolutions_invalid_response_body
-func ValidateListChatsWithResolutionsInvalidResponseBody(body *ListChatsWithResolutionsInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListChatsWithResolutionsInvariantViolationResponseBody runs the
-// validations defined on
-// listChatsWithResolutions_invariant_violation_response_body
-func ValidateListChatsWithResolutionsInvariantViolationResponseBody(body *ListChatsWithResolutionsInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListChatsWithResolutionsUnexpectedResponseBody runs the validations
-// defined on listChatsWithResolutions_unexpected_response_body
-func ValidateListChatsWithResolutionsUnexpectedResponseBody(body *ListChatsWithResolutionsUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListChatsWithResolutionsGatewayErrorResponseBody runs the
-// validations defined on listChatsWithResolutions_gateway_error_response_body
-func ValidateListChatsWithResolutionsGatewayErrorResponseBody(body *ListChatsWithResolutionsGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateDeleteChatUnauthorizedResponseBody runs the validations defined on
 // deleteChat_unauthorized_response_body
 func ValidateDeleteChatUnauthorizedResponseBody(body *DeleteChatUnauthorizedResponseBody) (err error) {
@@ -4493,78 +3917,113 @@ func ValidateChatMessageResponseBody(body *ChatMessageResponseBody) (err error) 
 	return
 }
 
-// ValidateChatOverviewWithResolutionsResponseBody runs the validations defined
-// on ChatOverviewWithResolutionsResponseBody
-func ValidateChatOverviewWithResolutionsResponseBody(body *ChatOverviewWithResolutionsResponseBody) (err error) {
-	if body.Resolutions == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resolutions", "body"))
+// ValidateAgentUsageResponseBody runs the validations defined on
+// AgentUsageResponseBody
+func ValidateAgentUsageResponseBody(body *AgentUsageResponseBody) (err error) {
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
 	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Title == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
-	}
-	if body.NumMessages == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("num_messages", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.LastMessageTimestamp == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("last_message_timestamp", "body"))
-	}
-	for _, e := range body.Resolutions {
-		if e != nil {
-			if err2 := ValidateChatResolutionResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
+	if body.Type != nil {
+		if !(*body.Type == "claude") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"claude"}))
 		}
 	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
-	}
-	if body.LastMessageTimestamp != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_message_timestamp", *body.LastMessageTimestamp, goa.FormatDateTime))
+	if body.Claude != nil {
+		if err2 := ValidateClaudeAgentUsageResponseBody(body.Claude); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }
 
-// ValidateChatResolutionResponseBody runs the validations defined on
-// ChatResolutionResponseBody
-func ValidateChatResolutionResponseBody(body *ChatResolutionResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+// ValidateClaudeAgentUsageResponseBody runs the validations defined on
+// ClaudeAgentUsageResponseBody
+func ValidateClaudeAgentUsageResponseBody(body *ClaudeAgentUsageResponseBody) (err error) {
+	if body.Turns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("turns", "body"))
 	}
-	if body.UserGoal == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_goal", "body"))
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
-	if body.Resolution == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resolution", "body"))
+	for _, e := range body.Turns {
+		if e != nil {
+			if err2 := ValidateClaudeTurnUsageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
-	if body.ResolutionNotes == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resolution_notes", "body"))
+	for _, e := range body.Tools {
+		if e != nil {
+			if err2 := ValidateClaudeToolUsageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
-	if body.Score == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("score", "body"))
+	return
+}
+
+// ValidateClaudeTurnUsageResponseBody runs the validations defined on
+// ClaudeTurnUsageResponseBody
+func ValidateClaudeTurnUsageResponseBody(body *ClaudeTurnUsageResponseBody) (err error) {
+	if body.PromptID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_id", "body"))
 	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	if body.StartTimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("start_time_unix_nano", "body"))
 	}
-	if body.MessageIds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message_ids", "body"))
+	if body.EndTimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("end_time_unix_nano", "body"))
 	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	if body.RequestCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_count", "body"))
 	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	if body.InputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input_tokens", "body"))
+	}
+	if body.OutputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("output_tokens", "body"))
+	}
+	if body.CacheReadTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_read_tokens", "body"))
+	}
+	if body.CacheCreationTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_creation_tokens", "body"))
+	}
+	if body.TotalTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.CostUsd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cost_usd", "body"))
+	}
+	if body.CostMicros == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cost_micros", "body"))
+	}
+	if body.Models == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("models", "body"))
+	}
+	if body.QuerySources == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("query_sources", "body"))
+	}
+	return
+}
+
+// ValidateClaudeToolUsageResponseBody runs the validations defined on
+// ClaudeToolUsageResponseBody
+func ValidateClaudeToolUsageResponseBody(body *ClaudeToolUsageResponseBody) (err error) {
+	if body.ToolUseID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_use_id", "body"))
+	}
+	if body.PromptID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_id", "body"))
+	}
+	if body.ToolName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_name", "body"))
+	}
+	if body.InputSizeBytes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input_size_bytes", "body"))
+	}
+	if body.ResultSizeBytes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("result_size_bytes", "body"))
 	}
 	return
 }

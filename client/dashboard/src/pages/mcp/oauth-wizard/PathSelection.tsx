@@ -12,8 +12,9 @@ import { ReactNode } from "react";
 import { canAutoConfigureFromDiscovered, WizardContext } from "./machine";
 import type { DiscoveredOAuth } from "./machine-types";
 
-export function PathSelection() {
-  const send = WizardContext.useActorRef().send;
+export function PathSelection(): JSX.Element {
+  const actorRef = WizardContext.useActorRef();
+  const send = actorRef.send.bind(actorRef);
   const discovered = WizardContext.useSelector((s) => s.context.discovered);
   const canAutoConfigure = canAutoConfigureFromDiscovered(discovered);
 
@@ -31,7 +32,11 @@ export function PathSelection() {
             title="Auto-Configure"
             onClick={() => send({ type: "SELECT_PROXY_AUTO" })}
             icon={ZapIcon}
-            badges={<Badge variant="information">Recommended</Badge>}
+            badges={[
+              <Badge key="recommended" variant="information">
+                Recommended
+              </Badge>,
+            ]}
           >
             <Type muted small>
               Automatically set up OAuth Proxy based on pre-discovered details
@@ -46,9 +51,15 @@ export function PathSelection() {
           icon={WaypointsIcon}
           badges={[
             !canAutoConfigure && discovered?.version === "2.0" && (
-              <Badge variant="information">Recommended</Badge>
+              <Badge key="recommended" variant="information">
+                Recommended
+              </Badge>
             ),
-            discovered && <Badge variant="neutral">Discovered</Badge>,
+            discovered && (
+              <Badge key="discovered" variant="neutral">
+                Discovered
+              </Badge>
+            ),
           ]}
         >
           <Type muted small>

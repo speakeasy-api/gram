@@ -6,7 +6,6 @@ import { chatCreditUsage } from "../funcs/chatCreditUsage.js";
 import { chatDelete } from "../funcs/chatDelete.js";
 import { chatGenerateTitle } from "../funcs/chatGenerateTitle.js";
 import { chatList } from "../funcs/chatList.js";
-import { chatListChatsWithResolutions } from "../funcs/chatListChatsWithResolutions.js";
 import { chatLoad } from "../funcs/chatLoad.js";
 import { chatSubmitFeedback } from "../funcs/chatSubmitFeedback.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -92,29 +91,10 @@ export class Chat extends ClientSDK {
   }
 
   /**
-   * listChatsWithResolutions chat
-   *
-   * @remarks
-   * List all chats for a project with their resolutions
-   */
-  async listChatsWithResolutions(
-    request?: operations.ListChatsWithResolutionsRequest | undefined,
-    security?: operations.ListChatsWithResolutionsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.ListChatsWithResolutionsResult> {
-    return unwrapAsync(chatListChatsWithResolutions(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
    * loadChat chat
    *
    * @remarks
-   * Load a chat by its ID
+   * Load a chat by its ID. Messages are paginated one generation per request; omit `generation` to receive the latest generation.
    */
   async load(
     request: operations.LoadChatRequest,

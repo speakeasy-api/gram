@@ -4,3 +4,7 @@
 INSERT INTO outbox (organization_id, event_type, payload)
 VALUES (@organization_id, @event_type, @payload)
 RETURNING id, created_at;
+
+-- name: BulkInsertOutboxEntries :copyfrom
+INSERT INTO outbox (organization_id, event_type, payload)
+VALUES (@organization_id, @event_type, @payload);

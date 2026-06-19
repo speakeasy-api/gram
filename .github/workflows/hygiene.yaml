@@ -1,7 +1,7 @@
 name: Hygiene
 on:
   pull_request:
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
     branches:
       - main
   merge_group:
@@ -80,8 +80,15 @@ jobs:
         env:
           DB_FILES: ${{ steps.filter.outputs.database-changes_files }}
           INTERNAL_FILES: ${{ steps.filter-internal.outputs.server-internal_files }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'skip-migration-check') }}
         run: |
           set -e
+          if [[ "$PR_BODY" == *"[skip migration check]"* || "$HAS_SKIP_LABEL" == "true" ]]; then
+            echo "Migration PR isolation check skipped via explicit directive."
+            exit 0
+          fi
+
           echo "❌ This PR mixes database migration changes with other server changes."
           echo ""
           echo "Database migration files changed:"
@@ -92,6 +99,8 @@ jobs:
           echo ""
           echo "Database schema changes should be scheduled separately from business logic changes"
           echo "so each can be reviewed and rolled out independently."
+          echo "To explicitly allow this exception, add '[skip migration check]'"
+          echo "to the PR body or apply the 'skip-migration-check' label."
           echo "Please move the non-migration changes to a separate PR."
           exit 1
 

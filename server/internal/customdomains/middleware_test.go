@@ -93,6 +93,7 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 					Domain:         "custom.example.com",
 					IngressName:    pgtype.Text{String: "", Valid: false},
 					CertSecretName: pgtype.Text{String: "", Valid: false},
+					IpAllowlist:    []string{},
 				})
 				require.NoError(t, err)
 
@@ -122,6 +123,7 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 					Domain:         "unverified.example.com",
 					IngressName:    pgtype.Text{String: "", Valid: false},
 					CertSecretName: pgtype.Text{String: "", Valid: false},
+					IpAllowlist:    []string{},
 				})
 				require.NoError(t, err)
 				return &domain
@@ -141,6 +143,7 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 					Domain:         "notactivated.example.com",
 					IngressName:    pgtype.Text{String: "", Valid: false},
 					CertSecretName: pgtype.Text{String: "", Valid: false},
+					IpAllowlist:    []string{},
 				})
 				require.NoError(t, err)
 
@@ -188,6 +191,7 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 					Domain:         "custom-dev.example.com",
 					IngressName:    pgtype.Text{String: "", Valid: false},
 					CertSecretName: pgtype.Text{String: "", Valid: false},
+					IpAllowlist:    []string{},
 				})
 				require.NoError(t, err)
 
@@ -271,6 +275,7 @@ func TestCustomDomainsMiddleware_DeletedDomain(t *testing.T) {
 		Domain:         "deleted.example.com",
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 

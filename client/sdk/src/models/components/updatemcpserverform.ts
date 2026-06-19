@@ -22,7 +22,7 @@ export type UpdateMcpServerFormVisibility = ClosedEnum<
 >;
 
 /**
- * Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.
+ * Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.
  */
 export type UpdateMcpServerForm = {
   /**
@@ -30,25 +30,29 @@ export type UpdateMcpServerForm = {
    */
   environmentId?: string | undefined;
   /**
-   * The ID of the external OAuth server to associate with the server
-   */
-  externalOauthServerId?: string | undefined;
-  /**
    * The ID of the MCP server to update
    */
   id: string;
   /**
-   * The ID of the OAuth proxy server to associate with the server
+   * A human-readable display name for the server. Omit to leave the existing name unchanged; if provided, must be non-empty.
    */
-  oauthProxyServerId?: string | undefined;
+  name?: string | undefined;
   /**
    * The ID of the remote MCP server to use as the backend
    */
   remoteMcpServerId?: string | undefined;
   /**
+   * The ID of the tool variations group enabling MCP tool filtering for this server. Omit to disable filtering (cleared to null, consistent with the full-record replace semantics of the other UUID references).
+   */
+  toolVariationsGroupId?: string | undefined;
+  /**
    * The ID of the toolset to use as the backend
    */
   toolsetId?: string | undefined;
+  /**
+   * The ID of the user session issuer that gates OAuth-based MCP client authentication. Omit to disable issuer-gated OAuth.
+   */
+  userSessionIssuerId?: string | undefined;
   /**
    * The visibility of an MCP server
    */
@@ -63,11 +67,12 @@ export const UpdateMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
 /** @internal */
 export type UpdateMcpServerForm$Outbound = {
   environment_id?: string | undefined;
-  external_oauth_server_id?: string | undefined;
   id: string;
-  oauth_proxy_server_id?: string | undefined;
+  name?: string | undefined;
   remote_mcp_server_id?: string | undefined;
+  tool_variations_group_id?: string | undefined;
   toolset_id?: string | undefined;
+  user_session_issuer_id?: string | undefined;
   visibility: string;
 };
 
@@ -78,20 +83,21 @@ export const UpdateMcpServerForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     environmentId: z.optional(z.string()),
-    externalOauthServerId: z.optional(z.string()),
     id: z.string(),
-    oauthProxyServerId: z.optional(z.string()),
+    name: z.optional(z.string()),
     remoteMcpServerId: z.optional(z.string()),
+    toolVariationsGroupId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
+    userSessionIssuerId: z.optional(z.string()),
     visibility: UpdateMcpServerFormVisibility$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       environmentId: "environment_id",
-      externalOauthServerId: "external_oauth_server_id",
-      oauthProxyServerId: "oauth_proxy_server_id",
       remoteMcpServerId: "remote_mcp_server_id",
+      toolVariationsGroupId: "tool_variations_group_id",
       toolsetId: "toolset_id",
+      userSessionIssuerId: "user_session_issuer_id",
     });
   }),
 );

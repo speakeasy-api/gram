@@ -2,6 +2,7 @@ package proxy_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,10 +10,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -732,6 +735,88 @@ func TestProxy_Post_OversizedUserBodyReturnsError(t *testing.T) {
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
+func TestProxy_Post_BatchRequestBodyReturnsJSONRPCError(t *testing.T) {
+	t.Parallel()
+
+	// MCP Streamable HTTP § Sending Messages to the Server disallows
+	// batched (array) request bodies. The proxy must reject ahead of the
+	// decoder with a spec-shaped JSON-RPC envelope (code -32600, HTTP 400,
+	// no "id" field since no id can be extracted from a batch body) rather
+	// than the generic decode-error envelope a stray array would otherwise
+	// produce.
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("upstream must not be called when the user request body is a batch")
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	batchBody := `[{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}]`
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(batchBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req), "batch rejection writes a JSON-RPC envelope rather than returning an error")
+	require.Equal(t, http.StatusBadRequest, rr.Code, "batch bodies have no decodable id; writeRejection uses the invalid-id branch (HTTP 400)")
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Contains(t, rr.Body.String(), `"code":-32600`, "JSON-RPC InvalidRequest code per spec for malformed/disallowed request shapes")
+	require.Contains(t, rr.Body.String(), "batch requests are not supported")
+	require.NotContains(t, rr.Body.String(), `"id":`, "no id is present on batch bodies; envelope omits the id field")
+}
+
+func TestProxy_Post_BatchRequestBodyWithLeadingWhitespaceReturnsJSONRPCError(t *testing.T) {
+	t.Parallel()
+
+	// JSON permits leading whitespace (RFC 8259 § 2) so the peek must
+	// skip it before checking for the array marker — otherwise a batch
+	// body with a leading newline would slip past detection and fall
+	// through to the generic decode error.
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("upstream must not be called when the user request body is a batch")
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	batchBody := "  \n\t\r [{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}]"
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(batchBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+	require.Contains(t, rr.Body.String(), `"code":-32600`)
+	require.Contains(t, rr.Body.String(), "batch requests are not supported")
+}
+
+func TestProxy_Post_SingleMessageBodyWithLeadingWhitespaceStillParses(t *testing.T) {
+	t.Parallel()
+
+	// Defensive: the whitespace-aware batch peek must not false-positive
+	// on a valid single-message body whose JSON object happens to be
+	// preceded by whitespace. The first non-whitespace byte for a
+	// well-formed request is '{', which falls through to the decoder.
+	var gotBody string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+
+	paddedBody := "  \n  " + initializeRequest
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(paddedBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, paddedBody, gotBody, "leading whitespace is forwarded verbatim along with the body")
+}
+
 func TestProxy_Get_LongStreamsAreNotSubjectToCumulativeCap(t *testing.T) {
 	t.Parallel()
 
@@ -791,7 +876,7 @@ func TestProxy_Post_RecordsMetrics(t *testing.T) {
 
 	p := newProxyForTest(t, upstream.URL)
 	p.Metrics = metrics
-	p.ServerID = "srv-abc"
+	p.Identity = proxy.ServerIdentity{RemoteMCPServerID: "srv-abc", McpServerID: "mcp-abc"}
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
@@ -814,6 +899,7 @@ func TestProxy_Post_RecordsMetrics(t *testing.T) {
 		attr.HTTPRequestMethod(http.MethodPost),
 		attr.RemoteMCPProxyRemoteStatusClass("2xx"),
 		attr.RemoteMCPServerID("srv-abc"),
+		attr.McpServerID("mcp-abc"),
 	)
 
 	duration, ok := byName[proxy.MeterRequestDuration]
@@ -1102,6 +1188,75 @@ func TestProxy_Post_ToolsCallRequestInterceptor_RunsAfterGeneric(t *testing.T) {
 	rr := httptest.NewRecorder()
 	require.NoError(t, p.Post(rr, req))
 	require.Equal(t, []string{"generic-req", "typed-req"}, order, "generic interceptors must run before typed interceptors")
+}
+
+func TestProxy_Post_ToolsCallRequest_SetArguments_RewritesForwardedBody(t *testing.T) {
+	t.Parallel()
+
+	var gotBody string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"ok"}]}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsCallRequestInterceptors = []proxy.ToolsCallRequestInterceptor{
+		&mutatingToolsCallRequestInterceptor{
+			name: "rewrite-location",
+			argsFn: func(_ json.RawMessage) json.RawMessage {
+				return json.RawMessage(`{"location":"nyc"}`)
+			},
+		},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+
+	require.Contains(t, gotBody, `"nyc"`, "upstream must receive the mutated arguments")
+	require.NotContains(t, gotBody, `"sf"`, "original arguments must not leak upstream")
+	require.Contains(t, gotBody, `"tools/call"`, "method must survive re-encoding")
+	require.Contains(t, gotBody, `"id":1`, "request id must survive re-encoding")
+}
+
+func TestProxy_Post_ToolsCallRequest_SetArguments_MarshalFailureSurfacesAs5xx(t *testing.T) {
+	t.Parallel()
+
+	// Force a marshal failure inside SetArguments by handing it a
+	// json.RawMessage holding invalid JSON bytes. json.Marshal of the
+	// enclosing CallToolParamsRaw delegates to RawMessage.MarshalJSON
+	// and then validates the returned bytes; an invalid byte (0xff)
+	// trips the validator. SetArguments must reject with a
+	// *MutationError before mutating any state, and the proxy must
+	// surface that as a 5xx rather than a JSON-RPC rejection.
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Errorf("upstream must never be called when SetArguments fails")
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsCallRequestInterceptors = []proxy.ToolsCallRequestInterceptor{
+		&mutatingToolsCallRequestInterceptor{
+			name: "inject-invalid-json",
+			argsFn: func(_ json.RawMessage) json.RawMessage {
+				return json.RawMessage([]byte{0xff})
+			},
+		},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	err := p.Post(rr, req)
+	require.Error(t, err, "marshal failure must surface as a server-side error, not a rejection envelope")
+	require.Contains(t, err.Error(), "mutation", "error chain must identify the failure as a mutation anomaly")
+	require.Empty(t, rr.Body.String(), "the proxy must not commit a JSON-RPC body when surfacing a 5xx")
 }
 
 func TestProxy_Post_ToolsCallResponseInterceptor_RunsForSuccessResult(t *testing.T) {
@@ -1739,6 +1894,250 @@ func TestProxy_Post_ToolsListResponseInterceptor_RejectionWritesJSONRPCError(t *
 	require.Contains(t, rr.Body.String(), "listing blocked", "RejectError message must propagate")
 }
 
+const toolsListResponseThreeTools = `{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "tools": [
+      {"name": "tool_a", "description": "first", "inputSchema": {"type": "object"}},
+      {"name": "tool_b", "description": "second", "inputSchema": {"type": "object"}},
+      {"name": "tool_c", "description": "third", "inputSchema": {"type": "object"}}
+    ]
+  }
+}`
+
+func TestProxy_Post_ToolsListResponse_LaterInterceptorObservesEarlierMutation(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, toolsListResponseThreeTools)
+	}))
+	t.Cleanup(upstream.Close)
+
+	var observedLen int32
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
+		&mutatingToolsListResponseInterceptor{
+			name: "filter-to-one",
+			toolsFn: func(tools []*mcp.Tool) []*mcp.Tool {
+				return tools[:1]
+			},
+		},
+		&observingToolsListResponseInterceptor{
+			name:        "count-observer",
+			observedLen: &observedLen,
+		},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+
+	require.Equal(t, int32(1), atomic.LoadInt32(&observedLen), "second interceptor must observe the first interceptor's mutation via shared pointer")
+}
+
+func TestProxy_Post_ToolsListResponse_MutationThenRejection_DiscardsMutation(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, toolsListResponseThreeTools)
+	}))
+	t.Cleanup(upstream.Close)
+
+	// First interceptor mutates; second rejects. The user must see the
+	// rejection envelope, not the mutated payload — first-error-wins.
+	rejectionErr := errors.New("policy denied tools/list")
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
+		&mutatingToolsListResponseInterceptor{
+			name: "mutate-then-pass",
+			toolsFn: func(_ []*mcp.Tool) []*mcp.Tool {
+				return []*mcp.Tool{{Name: "should_not_reach_client", InputSchema: map[string]any{}}}
+			},
+		},
+		&mutatingToolsListResponseInterceptor{
+			name: "reject",
+			err:  rejectionErr,
+		},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+
+	require.NotContains(t, rr.Body.String(), `"should_not_reach_client"`, "mutation discarded — rejection wins, mutated payload must not leak")
+	require.Contains(t, rr.Body.String(), `"error"`, "rejection produces an error envelope")
+	require.Contains(t, rr.Body.String(), `"id":2`, "rejection envelope preserves originating id")
+}
+
+func TestProxy_Post_ToolsListResponse_SetTools_EmptyArrayWhenAllFiltered(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, toolsListResponseThreeTools)
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
+		&mutatingToolsListResponseInterceptor{
+			name:    "deny-all",
+			toolsFn: func(_ []*mcp.Tool) []*mcp.Tool { return []*mcp.Tool{} },
+		},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+
+	// Filtering to zero tools is a valid result, not a rejection — the
+	// user just has access to nothing in this toolset. The wire shape
+	// must still be a well-formed tools/list result with an empty array.
+	require.Contains(t, rr.Body.String(), `"tools":[]`, "empty filter must yield an empty tools array, not a rejection")
+	require.NotContains(t, rr.Body.String(), `"error"`, "all-filtered must not surface as a JSON-RPC error")
+}
+
+func TestProxy_Post_ToolsListResponse_SetTools_OnErrorResponse_SurfacesAs5xx(t *testing.T) {
+	t.Parallel()
+
+	// Upstream returns a JSON-RPC error response (no result). A mutating
+	// interceptor that tries SetTools gets a [*MutationError] back from
+	// the setter; the framework recognises it and surfaces an internal
+	// 5xx via oops.E rather than rendering as a user-facing JSON-RPC
+	// rejection envelope. The HTTP response stays uncommitted.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":2,"error":{"code":-32601,"message":"method not found"}}`)
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
+		&mutatingToolsListResponseInterceptor{
+			name:    "blind-filter",
+			toolsFn: func(_ []*mcp.Tool) []*mcp.Tool { return nil },
+		},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	err := p.Post(rr, req)
+	require.Error(t, err, "MutationError must surface as a server-side error, not a rejection envelope")
+	require.Contains(t, err.Error(), "mutation", "error chain must identify the failure as a mutation anomaly")
+	require.Empty(t, rr.Body.String(), "the proxy must not commit a JSON-RPC body when surfacing a 5xx")
+}
+
+func TestProxy_Post_ToolsListResponse_SetTools_MarshalFailureSurfacesAs5xx(t *testing.T) {
+	t.Parallel()
+
+	// Force a marshal failure inside SetTools by handing it an
+	// unmarshalable InputSchema (channels cannot be JSON-encoded). The
+	// setter must reject with a *MutationError before any state on the
+	// typed view or wire bytes changes, and the proxy must surface that
+	// as a 5xx rather than a JSON-RPC rejection envelope.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, toolsListResponseThreeTools)
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
+		&mutatingToolsListResponseInterceptor{
+			name: "inject-unmarshalable-schema",
+			toolsFn: func(_ []*mcp.Tool) []*mcp.Tool {
+				return []*mcp.Tool{{Name: "broken", InputSchema: make(chan int)}}
+			},
+		},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	err := p.Post(rr, req)
+	require.Error(t, err, "marshal failure must surface as a server-side error, not a rejection envelope")
+	require.Contains(t, err.Error(), "mutation", "error chain must identify the failure as a mutation anomaly")
+	require.Empty(t, rr.Body.String(), "the proxy must not commit a JSON-RPC body when surfacing a 5xx")
+}
+
+func TestProxy_Post_ToolsListResponse_SetTools_NilToolsNormalizesToEmptyArray(t *testing.T) {
+	t.Parallel()
+
+	// A common filter pattern is `return nil` when every tool is denied.
+	// SetTools must normalize nil to an empty slice so the wire shape
+	// stays spec-compliant ("tools":[], not "tools":null).
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, toolsListResponseThreeTools)
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
+		&mutatingToolsListResponseInterceptor{
+			name:    "deny-all-via-nil",
+			toolsFn: func(_ []*mcp.Tool) []*mcp.Tool { return nil },
+		},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Contains(t, rr.Body.String(), `"tools":[]`, "nil tools must marshal as an empty array, not as null")
+	require.NotContains(t, rr.Body.String(), `"tools":null`, "nil tools must never reach the wire as null")
+}
+
+func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedBody_JSONPath(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, toolsListResponseThreeTools)
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
+		&mutatingToolsListResponseInterceptor{
+			name: "keep-only-tool-b",
+			toolsFn: func(tools []*mcp.Tool) []*mcp.Tool {
+				kept := tools[:0]
+				for _, t := range tools {
+					if t.Name == "tool_b" {
+						kept = append(kept, t)
+					}
+				}
+				return kept
+			},
+		},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+
+	require.Contains(t, rr.Body.String(), `"tool_b"`, "client must see the kept tool")
+	require.NotContains(t, rr.Body.String(), `"tool_a"`, "filtered tool must not reach client")
+	require.NotContains(t, rr.Body.String(), `"tool_c"`, "filtered tool must not reach client")
+	require.Contains(t, rr.Body.String(), `"id":2`, "response id must survive re-encoding")
+}
+
 func TestProxy_Post_SSEResponse_TerminalEventDispatchesTypedToolsListInterceptor(t *testing.T) {
 	t.Parallel()
 
@@ -1810,4 +2209,52 @@ func TestProxy_Post_SSEResponse_TypedToolsListRejectionSubstitutesTerminalEvent(
 	require.Contains(t, rr.Body.String(), `"id":2`, "substitute must preserve the originating request id")
 	require.Contains(t, rr.Body.String(), `"code":-32000`, "RejectError code must propagate to the substitute")
 	require.Contains(t, rr.Body.String(), "policy: tool not allowed", "RejectError message must propagate to the substitute")
+}
+
+func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedEvent_SSEPath(t *testing.T) {
+	t.Parallel()
+
+	// Terminal event id (2) matches toolsListRequest's id so the typed
+	// interceptor fires on this event. The non-data prefix carries an
+	// "event:" type and an "id:" field that must survive the re-emit.
+	body := "event: response\nid: terminal-7\ndata: " + strings.ReplaceAll(toolsListResponseThreeTools, "\n", "") + "\n\n"
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, body)
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsListResponseInterceptors = []proxy.ToolsListResponseInterceptor{
+		&mutatingToolsListResponseInterceptor{
+			name: "keep-only-tool-a",
+			toolsFn: func(tools []*mcp.Tool) []*mcp.Tool {
+				kept := tools[:0]
+				for _, t := range tools {
+					if t.Name == "tool_a" {
+						kept = append(kept, t)
+					}
+				}
+				return kept
+			},
+		},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+
+	out := rr.Body.String()
+	require.Contains(t, out, `"tool_a"`, "client must see kept tool on terminal SSE event")
+	require.NotContains(t, out, `"tool_b"`, "filtered tool must not reach client")
+	require.NotContains(t, out, `"tool_c"`, "filtered tool must not reach client")
+
+	// Non-data SSE fields must survive the rebuild so the client's MCP
+	// runtime sees the same event type and id as the upstream sent.
+	require.Contains(t, out, "event: response\n", "event: field must be preserved on mutation re-emit")
+	require.Contains(t, out, "id: terminal-7\n", "id: field must be preserved on mutation re-emit")
 }

@@ -42,7 +42,7 @@ type ClearCurrentUserRequestBody struct {
 type GetCurrentUserResponseBody struct {
 	// Mode whose currentUser is being reported.
 	Mode string `form:"mode" json:"mode" xml:"mode"`
-	// Local user record. Populated for local-speakeasy / oauth2-1 / oauth2.
+	// Local user record. Populated for mock-workos / oauth2-1 / oauth2.
 	User *UserResponseBody `form:"user,omitempty" json:"user,omitempty" xml:"user,omitempty"`
 	// Live WorkOS profile. Populated for workos mode only.
 	Workos *WorkosCurrentUserResponseBody `form:"workos,omitempty" json:"workos,omitempty" xml:"workos,omitempty"`
@@ -53,7 +53,7 @@ type GetCurrentUserResponseBody struct {
 type SetCurrentUserResponseBody struct {
 	// Mode whose currentUser is being reported.
 	Mode string `form:"mode" json:"mode" xml:"mode"`
-	// Local user record. Populated for local-speakeasy / oauth2-1 / oauth2.
+	// Local user record. Populated for mock-workos / oauth2-1 / oauth2.
 	User *UserResponseBody `form:"user,omitempty" json:"user,omitempty" xml:"user,omitempty"`
 	// Live WorkOS profile. Populated for workos mode only.
 	Workos *WorkosCurrentUserResponseBody `form:"workos,omitempty" json:"workos,omitempty" xml:"workos,omitempty"`
@@ -71,9 +71,9 @@ type UserResponseBody struct {
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
 	// Optional GitHub handle.
 	GithubHandle *string `form:"github_handle,omitempty" json:"github_handle,omitempty" xml:"github_handle,omitempty"`
-	// Admin flag echoed by local-speakeasy validate.
+	// Admin flag.
 	Admin bool `form:"admin" json:"admin" xml:"admin"`
-	// Whitelist flag echoed by local-speakeasy validate.
+	// Whitelist flag.
 	Whitelisted bool   `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -162,8 +162,8 @@ func ValidateGetCurrentUserRequestBody(body *GetCurrentUserRequestBody) (err err
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
 	}
 	if body.Mode != nil {
-		if !(*body.Mode == "local-speakeasy" || *body.Mode == "oauth2-1" || *body.Mode == "oauth2" || *body.Mode == "workos") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"local-speakeasy", "oauth2-1", "oauth2", "workos"}))
+		if !(*body.Mode == "mock-workos" || *body.Mode == "oauth2-1" || *body.Mode == "oauth2" || *body.Mode == "workos") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"mock-workos", "oauth2-1", "oauth2", "workos"}))
 		}
 	}
 	return
@@ -176,8 +176,8 @@ func ValidateSetCurrentUserRequestBody(body *SetCurrentUserRequestBody) (err err
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
 	}
 	if body.Mode != nil {
-		if !(*body.Mode == "local-speakeasy" || *body.Mode == "oauth2-1" || *body.Mode == "oauth2" || *body.Mode == "workos") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"local-speakeasy", "oauth2-1", "oauth2", "workos"}))
+		if !(*body.Mode == "mock-workos" || *body.Mode == "oauth2-1" || *body.Mode == "oauth2" || *body.Mode == "workos") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"mock-workos", "oauth2-1", "oauth2", "workos"}))
 		}
 	}
 	if body.UserID != nil {
@@ -193,8 +193,8 @@ func ValidateClearCurrentUserRequestBody(body *ClearCurrentUserRequestBody) (err
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
 	}
 	if body.Mode != nil {
-		if !(*body.Mode == "local-speakeasy" || *body.Mode == "oauth2-1" || *body.Mode == "oauth2" || *body.Mode == "workos") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"local-speakeasy", "oauth2-1", "oauth2", "workos"}))
+		if !(*body.Mode == "mock-workos" || *body.Mode == "oauth2-1" || *body.Mode == "oauth2" || *body.Mode == "workos") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"mock-workos", "oauth2-1", "oauth2", "workos"}))
 		}
 	}
 	return

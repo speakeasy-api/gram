@@ -12,7 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -37,7 +39,7 @@ func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen
 // resolveUserByEmail looks up a connected user by email within an org.
 // Returns the user ID if found, or empty string if not found or if email is empty.
 func (s *Service) resolveUserByEmail(ctx context.Context, email, orgID string) string {
-	lookup := strings.ToLower(strings.TrimSpace(email))
+	lookup := conv.NormalizeEmail(email)
 	if lookup == "" {
 		return ""
 	}
@@ -86,6 +88,7 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeP
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
+			UserInfo:   telemetry.UserInfoByID(metadata.UserID),
 			Attributes: attrs,
 		})
 
@@ -127,17 +130,14 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        generateTraceID(),
 		attr.LogBodyKey:        fmt.Sprintf("Tool: %s, Hook: %s", toolName, payload.HookEventName),
-		attr.UserEmailKey:      metadata.UserEmail,
 		attr.ProjectIDKey:      metadata.ProjectID,
 		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     hookSource,
 	}
-	if metadata.UserID == "" {
+	if metadata.UserID == "" && metadata.UserEmail != "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 	}
-	if metadata.UserID != "" {
-		attrs[attr.UserIDKey] = metadata.UserID
-	}
+	applyHookHostnameAttr(attrs, payload.HookHostname)
 
 	if payload.Error != nil {
 		attrs[attr.HookErrorKey] = payload.Error
@@ -148,11 +148,28 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	}
 
 	// Parse MCP tool names
-	if strings.HasPrefix(toolName, "mcp__") {
-		parts := strings.SplitN(toolName, "__", 3)
-		if len(parts) == 3 {
-			attrs[attr.ToolCallSourceKey] = parts[1]
-			attrs[attr.ToolNameKey] = parts[2]
+	if server, fn, ok := toolref.AttributeTool(toolName); ok {
+		attrs[attr.ToolCallSourceKey] = server
+		attrs[attr.ToolNameKey] = fn
+	}
+
+	// Annotate every MCP-routed tool call with the resolved server
+	// identifier (HTTP/SSE URL, stdio command, or — when the snapshot
+	// didn't resolve — the `mcp__<server>__` prefix). This runs on every
+	// hook event regardless of policy state, because the offline risk
+	// batch scanner reads it back by trace_id to populate
+	// risk_results.match for shadow_mcp findings: the chat_message alone
+	// only carries the tool name, which is too granular to allowlist on.
+	// Best-effort — when the MCP list snapshot is missing the attribute
+	// just isn't set, and the scanner falls back to its server-prefix
+	// guess.
+	if parsed := parseClaudeToolName(toolName); parsed.IsMCP && payload.SessionID != nil && *payload.SessionID != "" {
+		if entries, err := s.getCachedMCPList(ctx, *payload.SessionID); err == nil {
+			matched := matchCachedMCPEntry(entries, parsed.Server)
+			if v := resolvedMCPMatch(matched, parsed.Server); v != "" {
+				attrs[attr.MCPMatchKey] = v
+			}
+			applyMCPInventoryAttrs(attrs, matched)
 		}
 	}
 
@@ -186,6 +203,15 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	}
 
 	return attrs
+}
+
+func applyHookHostnameAttr(attrs map[attr.Key]any, hostname *string) {
+	if hostname == nil {
+		return
+	}
+	if value := strings.TrimSpace(*hostname); value != "" {
+		attrs[attr.HookHostnameKey] = value
+	}
 }
 
 // MetricDataPoint represents a single metric aggregated across all data points for a model+session
@@ -224,7 +250,7 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 	// data points sharing the same email don't each trigger a DB round-trip.
 	emailToUserID := make(map[string]string)
 	for _, m := range metrics {
-		email := strings.ToLower(strings.TrimSpace(m.UserEmail))
+		email := conv.NormalizeEmail(m.UserEmail)
 		if email == "" {
 			continue
 		}
@@ -256,6 +282,7 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			attr.ProjectIDKey:      projectID,
 			attr.OrganizationIDKey: orgID,
 			attr.ResourceURNKey:    urn,
+			attr.HookSourceKey:     "claude-code",
 		}
 
 		// Only include non-zero values
@@ -277,12 +304,6 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		if m.Model != "" {
 			attrs[attr.GenAIResponseModelKey] = m.Model
 		}
-		if m.UserEmail != "" {
-			attrs[attr.UserEmailKey] = m.UserEmail
-			if userID := emailToUserID[strings.ToLower(strings.TrimSpace(m.UserEmail))]; userID != "" {
-				attrs[attr.UserIDKey] = userID
-			}
-		}
 		if m.SessionID != "" {
 			attrs[attr.GenAIConversationIDKey] = m.SessionID
 		}
@@ -297,9 +318,15 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			FunctionID:     nil,
 		}
 
+		userInfo := telemetry.UserInfoByEmail(m.UserEmail)
+		if userID := emailToUserID[conv.NormalizeEmail(m.UserEmail)]; userID != "" {
+			userInfo = telemetry.UserInfoByID(userID)
+		}
+
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Unix(0, m.TimestampNano),
 			ToolInfo:   toolInfo,
+			UserInfo:   userInfo,
 			Attributes: attrs,
 		})
 	}

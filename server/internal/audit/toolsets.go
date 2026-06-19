@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -59,7 +60,7 @@ func (l *Logger) LogToolsetCreate(ctx context.Context, dbtx repo.DBTX, event Log
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ToolsetV1})
 }
 
 type LogToolsetUpdateEvent struct {
@@ -132,7 +133,7 @@ func (l *Logger) LogToolsetUpdate(ctx context.Context, dbtx repo.DBTX, event Log
 		Metadata:       metadata,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ToolsetV1})
 }
 
 type LogToolsetDeleteEvent struct {
@@ -171,7 +172,7 @@ func (l *Logger) LogToolsetDelete(ctx context.Context, dbtx repo.DBTX, event Log
 		Metadata:       nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ToolsetV1})
 }
 
 type LogToolsetAttachExternalOAuthEvent struct {
@@ -224,7 +225,7 @@ func (l *Logger) LogToolsetAttachExternalOAuth(ctx context.Context, dbtx repo.DB
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ToolsetV1})
 }
 
 type LogToolsetDetachExternalOAuthEvent struct {
@@ -277,7 +278,7 @@ func (l *Logger) LogToolsetDetachExternalOAuth(ctx context.Context, dbtx repo.DB
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ToolsetV1})
 }
 
 type LogToolsetAttachOAuthProxyEvent struct {
@@ -330,7 +331,7 @@ func (l *Logger) LogToolsetAttachOAuthProxy(ctx context.Context, dbtx repo.DBTX,
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ToolsetV1})
 }
 
 type LogToolsetDetachOAuthProxyEvent struct {
@@ -383,7 +384,7 @@ func (l *Logger) LogToolsetDetachOAuthProxy(ctx context.Context, dbtx repo.DBTX,
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ToolsetV1})
 }
 
 type LogToolsetUpdateOAuthProxyEvent struct {
@@ -462,5 +463,5 @@ func (l *Logger) LogToolsetUpdateOAuthProxy(ctx context.Context, dbtx repo.DBTX,
 		AfterSnapshot:  afterSnapshot,
 	}
 
-	return l.log(ctx, dbtx, entry)
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ToolsetV1})
 }

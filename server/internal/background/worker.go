@@ -6,15 +6,19 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	svix "github.com/svix/svix-webhooks/go"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -33,10 +37,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -45,36 +51,42 @@ import (
 )
 
 type WorkerOptions struct {
-	GuardianPolicy      *guardian.Policy
-	DB                  *pgxpool.Pool
-	EncryptionClient    *encryption.Client
-	FeatureProvider     feature.Provider
-	AssetStorage        assets.BlobStore
-	SlackClient         *slack_client.SlackClient
-	ChatClient          *chat.Client
-	OpenRouter          openrouter.Provisioner
-	K8sClient           *k8s.KubernetesClients
-	ExpectedTargetCNAME string
-	BillingTracker      billing.Tracker
-	BillingRepository   billing.Repository
-	RedisClient         *redis.Client
-	CacheAdapter        cache.Cache
-	PosthogClient       *posthog.Posthog
-	FunctionsDeployer   functions.Deployer
-	FunctionsVersion    functions.RunnerVersion
-	RagService          *rag.ToolsetVectorStore
-	MCPRegistryClient   *externalmcp.RegistryClient
-	TelemetryLogger     *telemetry.Logger
-	TriggersApp         *bgtriggers.App
-	AssistantsCore      *assistants.ServiceCore
-	TemporalEnv         *tenv.Environment
-	PIIScanner          risk_analysis.PIIScanner
-	PIScanner           *risk_analysis.PromptInjectionScanner
-	ShadowMCPClient     *shadowmcp.Client
-	AuditLogger         *audit.Logger
-	WorkOSClient        activities.WorkOSClient
-	SvixClient          *svix.Svix
-	ProductFeatures     *productfeatures.Client
+	GuardianPolicy                 *guardian.Policy
+	DB                             *pgxpool.Pool
+	EncryptionClient               *encryption.Client
+	FeatureProvider                feature.Provider
+	AssetStorage                   assets.BlobStore
+	SlackClient                    *slack_client.SlackClient
+	ChatMessageWriter              *chat.ChatMessageWriter
+	ChatClient                     *chat.Client
+	OpenRouter                     openrouter.Provisioner
+	K8sClient                      *k8s.KubernetesClients
+	DefaultCustomDomainProvisioner k8s.ProvisionerKind
+	ExpectedTargetCNAME            string
+	BillingTracker                 billing.Tracker
+	BillingRepository              billing.Repository
+	RedisClient                    *redis.Client
+	CacheAdapter                   cache.Cache
+	PosthogClient                  *posthog.Posthog
+	FunctionsDeployer              functions.Deployer
+	FunctionsVersion               functions.RunnerVersion
+	RagService                     *rag.ToolsetVectorStore
+	MCPRegistryClient              *externalmcp.RegistryClient
+	TelemetryLogger                *telemetry.Logger
+	ClickhouseConn                 clickhouse.Conn
+	TelemetryRepo                  *telemetryrepo.Queries
+	TriggersApp                    *bgtriggers.App
+	AssistantsCore                 *assistants.ServiceCore
+	TemporalEnv                    *tenv.Environment
+	PIIScanner                     risk_analysis.PIIScanner
+	PIScanner                      *risk_analysis.PromptInjectionScanner
+	ShadowMCPClient                *shadowmcp.Client
+	AuditLogger                    *audit.Logger
+	WorkOSClient                   activities.WorkOSClient
+	SvixClient                     *svix.Svix
+	ProductFeatures                *productfeatures.Client
+	PluginPublisher                *plugins.Service
+	Publishers                     *Publishers
 }
 
 func ForDeploymentProcessing(
@@ -88,36 +100,44 @@ func ForDeploymentProcessing(
 	auditLogger *audit.Logger,
 ) *WorkerOptions {
 	return &WorkerOptions{
-		DB:                  db,
-		GuardianPolicy:      guardianPolicy,
-		EncryptionClient:    enc,
-		FeatureProvider:     f,
-		AssetStorage:        assetStorage,
-		FunctionsDeployer:   deployer,
-		FunctionsVersion:    "local", // Test deployers don't use baked versions
-		MCPRegistryClient:   mcpRegistryClient,
-		AuditLogger:         auditLogger,
-		SlackClient:         nil,
-		ChatClient:          nil,
-		OpenRouter:          nil,
-		K8sClient:           nil,
-		ExpectedTargetCNAME: "",
-		BillingTracker:      nil,
-		BillingRepository:   nil,
-		RagService:          nil,
-		RedisClient:         nil,
-		PosthogClient:       nil,
-		TelemetryLogger:     nil,
-		TriggersApp:         nil,
-		CacheAdapter:        nil,
-		AssistantsCore:      nil,
-		TemporalEnv:         nil,
-		PIIScanner:          nil,
-		PIScanner:           nil,
-		ShadowMCPClient:     nil,
-		WorkOSClient:        workos.NewStubClient(),
-		SvixClient:          nil,
-		ProductFeatures:     nil,
+		DB:                             db,
+		GuardianPolicy:                 guardianPolicy,
+		EncryptionClient:               enc,
+		FeatureProvider:                f,
+		AssetStorage:                   assetStorage,
+		FunctionsDeployer:              deployer,
+		FunctionsVersion:               "local", // Test deployers don't use baked versions
+		MCPRegistryClient:              mcpRegistryClient,
+		AuditLogger:                    auditLogger,
+		SlackClient:                    nil,
+		ChatMessageWriter:              nil,
+		ChatClient:                     nil,
+		OpenRouter:                     nil,
+		K8sClient:                      nil,
+		DefaultCustomDomainProvisioner: k8s.ProvisionerKindIngress,
+		ExpectedTargetCNAME:            "",
+		BillingTracker:                 nil,
+		BillingRepository:              nil,
+		RagService:                     nil,
+		RedisClient:                    nil,
+		PosthogClient:                  nil,
+		TelemetryLogger:                nil,
+		TelemetryRepo:                  nil,
+		TriggersApp:                    nil,
+		CacheAdapter:                   nil,
+		AssistantsCore:                 nil,
+		TemporalEnv:                    nil,
+		PIIScanner:                     nil,
+		PIScanner:                      nil,
+		ShadowMCPClient:                nil,
+		WorkOSClient:                   workos.NewStubClient(),
+		SvixClient:                     nil,
+		ProductFeatures:                nil,
+		ClickhouseConn:                 nil,
+		PluginPublisher:                nil,
+		Publishers: &Publishers{
+			PresidioRequest: gcp.NewNoopPublisher[*riskv1.PresidioRequest](),
+		},
 	}
 }
 
@@ -129,70 +149,82 @@ func NewTemporalWorker(
 	options ...*WorkerOptions,
 ) *Workers {
 	opts := &WorkerOptions{
-		GuardianPolicy:      nil,
-		DB:                  nil,
-		EncryptionClient:    nil,
-		FeatureProvider:     nil,
-		AssetStorage:        nil,
-		SlackClient:         nil,
-		ChatClient:          nil,
-		OpenRouter:          nil,
-		K8sClient:           nil,
-		ExpectedTargetCNAME: "",
-		BillingTracker:      nil,
-		BillingRepository:   nil,
-		RedisClient:         nil,
-		PosthogClient:       nil,
-		FunctionsDeployer:   nil,
-		FunctionsVersion:    "",
-		RagService:          nil,
-		MCPRegistryClient:   nil,
-		TelemetryLogger:     nil,
-		TriggersApp:         nil,
-		CacheAdapter:        nil,
-		AssistantsCore:      nil,
-		TemporalEnv:         env,
-		PIIScanner:          nil,
-		PIScanner:           nil,
-		ShadowMCPClient:     nil,
-		AuditLogger:         nil,
-		WorkOSClient:        workos.NewStubClient(),
-		SvixClient:          nil,
-		ProductFeatures:     nil,
+		GuardianPolicy:                 nil,
+		DB:                             nil,
+		EncryptionClient:               nil,
+		FeatureProvider:                nil,
+		AssetStorage:                   nil,
+		SlackClient:                    nil,
+		ChatMessageWriter:              nil,
+		ChatClient:                     nil,
+		OpenRouter:                     nil,
+		K8sClient:                      nil,
+		DefaultCustomDomainProvisioner: k8s.ProvisionerKindIngress,
+		ExpectedTargetCNAME:            "",
+		BillingTracker:                 nil,
+		BillingRepository:              nil,
+		RedisClient:                    nil,
+		PosthogClient:                  nil,
+		FunctionsDeployer:              nil,
+		FunctionsVersion:               "",
+		RagService:                     nil,
+		MCPRegistryClient:              nil,
+		TelemetryLogger:                nil,
+		TelemetryRepo:                  nil,
+		TriggersApp:                    nil,
+		CacheAdapter:                   nil,
+		AssistantsCore:                 nil,
+		TemporalEnv:                    env,
+		PIIScanner:                     nil,
+		PIScanner:                      nil,
+		ShadowMCPClient:                nil,
+		AuditLogger:                    nil,
+		WorkOSClient:                   workos.NewStubClient(),
+		SvixClient:                     nil,
+		ProductFeatures:                nil,
+		ClickhouseConn:                 nil,
+		PluginPublisher:                nil,
+		Publishers:                     nil,
 	}
 
 	for _, o := range options {
 		opts = &WorkerOptions{
-			GuardianPolicy:      conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
-			DB:                  conv.Default(o.DB, opts.DB),
-			EncryptionClient:    conv.Default(o.EncryptionClient, opts.EncryptionClient),
-			FeatureProvider:     conv.Default(o.FeatureProvider, opts.FeatureProvider),
-			AssetStorage:        conv.Default(o.AssetStorage, opts.AssetStorage),
-			SlackClient:         conv.Default(o.SlackClient, opts.SlackClient),
-			OpenRouter:          conv.Default(o.OpenRouter, opts.OpenRouter),
-			ChatClient:          conv.Default(o.ChatClient, opts.ChatClient),
-			K8sClient:           conv.Default(o.K8sClient, opts.K8sClient),
-			ExpectedTargetCNAME: conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
-			BillingTracker:      conv.Default(o.BillingTracker, opts.BillingTracker),
-			BillingRepository:   conv.Default(o.BillingRepository, opts.BillingRepository),
-			RedisClient:         conv.Default(o.RedisClient, opts.RedisClient),
-			PosthogClient:       conv.Default(o.PosthogClient, opts.PosthogClient),
-			FunctionsDeployer:   conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
-			FunctionsVersion:    conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
-			RagService:          conv.Default(o.RagService, opts.RagService),
-			MCPRegistryClient:   conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
-			TelemetryLogger:     conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
-			TriggersApp:         conv.Default(o.TriggersApp, opts.TriggersApp),
-			CacheAdapter:        conv.Default(o.CacheAdapter, opts.CacheAdapter),
-			AssistantsCore:      conv.Default(o.AssistantsCore, opts.AssistantsCore),
-			TemporalEnv:         conv.Default(o.TemporalEnv, opts.TemporalEnv),
-			PIIScanner:          conv.Default(o.PIIScanner, opts.PIIScanner),
-			PIScanner:           conv.Default(o.PIScanner, opts.PIScanner),
-			ShadowMCPClient:     conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
-			AuditLogger:         conv.Default(o.AuditLogger, opts.AuditLogger),
-			WorkOSClient:        conv.Default(o.WorkOSClient, opts.WorkOSClient),
-			SvixClient:          conv.Default(o.SvixClient, opts.SvixClient),
-			ProductFeatures:     conv.Default(o.ProductFeatures, opts.ProductFeatures),
+			GuardianPolicy:                 conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
+			DB:                             conv.Default(o.DB, opts.DB),
+			EncryptionClient:               conv.Default(o.EncryptionClient, opts.EncryptionClient),
+			FeatureProvider:                conv.Default(o.FeatureProvider, opts.FeatureProvider),
+			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
+			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
+			ChatMessageWriter:              conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
+			OpenRouter:                     conv.Default(o.OpenRouter, opts.OpenRouter),
+			ChatClient:                     conv.Default(o.ChatClient, opts.ChatClient),
+			K8sClient:                      conv.Default(o.K8sClient, opts.K8sClient),
+			DefaultCustomDomainProvisioner: conv.Default(o.DefaultCustomDomainProvisioner, opts.DefaultCustomDomainProvisioner),
+			ExpectedTargetCNAME:            conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
+			BillingTracker:                 conv.Default(o.BillingTracker, opts.BillingTracker),
+			BillingRepository:              conv.Default(o.BillingRepository, opts.BillingRepository),
+			RedisClient:                    conv.Default(o.RedisClient, opts.RedisClient),
+			PosthogClient:                  conv.Default(o.PosthogClient, opts.PosthogClient),
+			FunctionsDeployer:              conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
+			FunctionsVersion:               conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
+			RagService:                     conv.Default(o.RagService, opts.RagService),
+			MCPRegistryClient:              conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
+			TelemetryLogger:                conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
+			TelemetryRepo:                  conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
+			TriggersApp:                    conv.Default(o.TriggersApp, opts.TriggersApp),
+			CacheAdapter:                   conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			AssistantsCore:                 conv.Default(o.AssistantsCore, opts.AssistantsCore),
+			TemporalEnv:                    conv.Default(o.TemporalEnv, opts.TemporalEnv),
+			PIIScanner:                     conv.Default(o.PIIScanner, opts.PIIScanner),
+			PIScanner:                      conv.Default(o.PIScanner, opts.PIScanner),
+			ShadowMCPClient:                conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
+			AuditLogger:                    conv.Default(o.AuditLogger, opts.AuditLogger),
+			WorkOSClient:                   conv.Default(o.WorkOSClient, opts.WorkOSClient),
+			SvixClient:                     conv.Default(o.SvixClient, opts.SvixClient),
+			ProductFeatures:                conv.Default(o.ProductFeatures, opts.ProductFeatures),
+			ClickhouseConn:                 conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
+			PluginPublisher:                conv.Default(o.PluginPublisher, opts.PluginPublisher),
+			Publishers:                     conv.Default(o.Publishers, opts.Publishers),
 		}
 	}
 
@@ -211,6 +243,11 @@ func NewTemporalWorker(
 		MaxConcurrentActivityExecutionSize: perPodAnalyzeBatchConcurrency,
 	})
 
+	aiUsageWorker := worker.New(env.Client(), AIUsagePollerTaskQueue(env.Queue()), worker.Options{
+		Interceptors:                       workerInterceptors,
+		MaxConcurrentActivityExecutionSize: perPodAIUsagePollerConcurrency,
+	})
+
 	activities := NewActivities(
 		logger,
 		tracerProvider,
@@ -224,6 +261,7 @@ func NewTemporalWorker(
 		opts.OpenRouter,
 		opts.ChatClient,
 		opts.K8sClient,
+		opts.DefaultCustomDomainProvisioner,
 		opts.ExpectedTargetCNAME,
 		opts.BillingTracker,
 		opts.BillingRepository,
@@ -234,6 +272,8 @@ func NewTemporalWorker(
 		opts.MCPRegistryClient,
 		opts.TemporalEnv,
 		opts.TelemetryLogger,
+		opts.ClickhouseConn,
+		opts.TelemetryRepo,
 		opts.TriggersApp,
 		opts.CacheAdapter,
 		opts.AssistantsCore,
@@ -244,6 +284,9 @@ func NewTemporalWorker(
 		opts.WorkOSClient,
 		opts.SvixClient,
 		opts.ProductFeatures,
+		opts.PluginPublisher,
+		opts.ChatMessageWriter,
+		opts.Publishers,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -251,21 +294,21 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ProvisionFunctionsAccess)
 	temporalWorker.RegisterActivity(activities.DeployFunctionRunners)
 	temporalWorker.RegisterActivity(activities.ReapFlyApps)
-	temporalWorker.RegisterActivity(activities.GetSlackProjectContext)
-	temporalWorker.RegisterActivity(activities.PostSlackMessage)
-	temporalWorker.RegisterActivity(activities.SlackChatCompletion)
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
+	temporalWorker.RegisterActivity(activities.CollectOpenRouterCreditsMetrics)
+	temporalWorker.RegisterActivity(activities.FireOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
-	temporalWorker.RegisterActivity(activities.FreeTierReportingUsageMetrics)
+	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
 	temporalWorker.RegisterActivity(activities.FallbackModelUsageTracking)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
+	temporalWorker.RegisterActivity(activities.CorrelateClaudePrompts)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
 	temporalWorker.RegisterActivity(activities.DeleteChatResolutions)
 	temporalWorker.RegisterActivity(activities.AnalyzeSegment)
@@ -276,6 +319,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.MarkTriggerFired)
 	// Risk analysis activities — AnalyzeBatch on the dedicated worker.
 	temporalWorker.RegisterActivity(activities.FetchUnanalyzedMessages)
+	temporalWorker.RegisterActivity(activities.MarkMessagesAnalyzed)
+	temporalWorker.RegisterActivity(activities.ReconcileExclusion)
+	temporalWorker.RegisterActivity(activities.CleanRiskPolicyResults)
 	riskWorker.RegisterActivity(activities.AnalyzeBatch)
 	// Assistant activities
 	temporalWorker.RegisterActivity(activities.AdmitAssistantThreads)
@@ -284,6 +330,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ReapStuckAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.ReapInactiveAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.ReapStoppedAssistantRuntimes)
+	temporalWorker.RegisterActivity(activities.RecycleAssistantRuntimeImages)
 	temporalWorker.RegisterActivity(activities.ReapSoftDeletedAssistantMemories)
 	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)
 	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
@@ -300,30 +347,47 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FilterNoopOutboxEvents)
 	temporalWorker.RegisterActivity(activities.RelayOutboxEvents)
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
+	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
+	temporalWorker.RegisterActivity(activities.PublishPluginProject)
+
+	// AI integration usage syncing runs on its own worker and task queue.
+	aiUsageWorker.RegisterActivity(activities.PollAIData)
+	// Legacy alias for workflow histories started before the
+	// PollAIUsage -> PollAIData rename. Remove once drained.
+	aiUsageWorker.RegisterActivityWithOptions(activities.PollAIData, activity.RegisterOptions{
+		Name: "PollAIUsage",
+	})
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
-	temporalWorker.RegisterWorkflow(SlackEventWorkflow)
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
+	temporalWorker.RegisterWorkflow(CustomDomainUpdateWorkflow)
+	temporalWorker.RegisterWorkflow(CollectOpenRouterCreditsMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
+	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(FallbackModelUsageTrackingWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
+	temporalWorker.RegisterWorkflow(CorrelateClaudePromptsWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
 	temporalWorker.RegisterWorkflow(DelayedChatResolutionAnalysisWorkflow)
 	// Trigger workflows
 	temporalWorker.RegisterWorkflow(TriggerCronWorkflow)
 	temporalWorker.RegisterWorkflow(TriggerDispatchWorkflow)
 	temporalWorker.RegisterWorkflow(TriggerWakeWorkflow)
-	// Risk analysis workflow
-	temporalWorker.RegisterWorkflow(DrainRiskAnalysisWorkflow)
+	// Risk analysis coordinator workflow
+	temporalWorker.RegisterWorkflow(RiskAnalysisCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(RiskExclusionReconcileWorkflow)
+	temporalWorker.RegisterWorkflow(RiskPolicyCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantReaperWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantRuntimeJanitorWorkflow)
+	temporalWorker.RegisterWorkflow(AssistantRuntimeImageRecycleWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantMemoriesReaperWorkflow)
 	// WorkOS sync workflows
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflow)
@@ -338,10 +402,23 @@ func NewTemporalWorker(
 	// Outbox -> Relay workflow and GC
 	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
+	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddOpenRouterCreditsMetricsSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add openrouter credits metrics schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddAIUsagePollerCoordinatorSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add ai integration usage polling schedule", attr.SlogError(err))
 		}
 	}
 
@@ -369,11 +446,29 @@ func NewTemporalWorker(
 		logger.ErrorContext(context.Background(), "failed to add assistant memories reaper schedule", attr.SlogError(err))
 	}
 
+	// One image recycle sweep per deployed runtime image: a new worker build
+	// carries a new image ref, so kicking on startup is the deploy signal.
+	// Best-effort — a failed kick just leaves runtimes to the lazy
+	// per-admission recycle.
+	if opts.AssistantsCore != nil {
+		if imageRef := opts.AssistantsCore.RuntimeImageRef(); imageRef != "" {
+			if err := KickAssistantRuntimeImageRecycle(context.Background(), env, imageRef); err != nil {
+				logger.ErrorContext(context.Background(), "failed to kick assistant runtime image recycle", attr.SlogError(err))
+			}
+		}
+	}
+
 	if err := AddOutboxGCSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
 	}
 
-	return &Workers{main: temporalWorker, riskAnalysis: riskWorker}
+	if opts.PluginPublisher != nil {
+		if err := AddPluginGeneratorRolloutSchedule(context.Background(), env); err != nil {
+			logger.ErrorContext(context.Background(), "failed to add plugin generator rollout schedule", attr.SlogError(err))
+		}
+	}
+
+	return &Workers{main: temporalWorker, riskAnalysis: riskWorker, aiUsage: aiUsageWorker}
 }
 
 // Fleet-wide cap on in-flight AnalyzeBatch per worker pod — the only knob
@@ -384,19 +479,31 @@ func RiskAnalysisTaskQueue(mainQueue tenv.TaskQueueName) string {
 	return string(mainQueue) + "-risk-analysis"
 }
 
-// Workers bundles the main and risk-analysis Temporal workers.
+const perPodAIUsagePollerConcurrency = 5
+
+func AIUsagePollerTaskQueue(mainQueue tenv.TaskQueueName) string {
+	return string(mainQueue) + "-ai-integration-usage"
+}
+
+// Workers bundles the main and dedicated Temporal workers.
 type Workers struct {
 	main         worker.Worker
 	riskAnalysis worker.Worker
+	aiUsage      worker.Worker
 }
 
-// Run starts the risk-analysis worker, then blocks running the main worker
-// until interruptCh receives.
+// Run starts dedicated workers, then blocks running the main worker until
+// interruptCh receives.
 func (w *Workers) Run(interruptCh <-chan any) error {
 	if err := w.riskAnalysis.Start(); err != nil {
 		return fmt.Errorf("start risk analysis worker: %w", err)
 	}
 	defer w.riskAnalysis.Stop()
+
+	if err := w.aiUsage.Start(); err != nil {
+		return fmt.Errorf("start ai integration usage worker: %w", err)
+	}
+	defer w.aiUsage.Stop()
 
 	if err := w.main.Run(interruptCh); err != nil {
 		return fmt.Errorf("run main worker: %w", err)
@@ -404,7 +511,7 @@ func (w *Workers) Run(interruptCh <-chan any) error {
 	return nil
 }
 
-// Start starts both workers without blocking. Pair with Stop (used by tests).
+// Start starts all workers without blocking. Pair with Stop (used by tests).
 func (w *Workers) Start() error {
 	if err := w.main.Start(); err != nil {
 		return fmt.Errorf("start main worker: %w", err)
@@ -413,10 +520,16 @@ func (w *Workers) Start() error {
 		w.main.Stop()
 		return fmt.Errorf("start risk analysis worker: %w", err)
 	}
+	if err := w.aiUsage.Start(); err != nil {
+		w.riskAnalysis.Stop()
+		w.main.Stop()
+		return fmt.Errorf("start ai integration usage worker: %w", err)
+	}
 	return nil
 }
 
 func (w *Workers) Stop() {
+	w.aiUsage.Stop()
 	w.riskAnalysis.Stop()
 	w.main.Stop()
 }

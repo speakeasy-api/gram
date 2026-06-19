@@ -1,19 +1,17 @@
 package access
 
 import (
-	"errors"
 	"testing"
 
-	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
-
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -27,6 +25,8 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeMCPConnect),
 	string(authz.ScopeEnvironmentRead),
 	string(authz.ScopeEnvironmentWrite),
+	string(authz.ScopeRiskPolicyEvaluate),
+	string(authz.ScopeRiskPolicyBypass),
 }
 
 func TestService_ListGrants(t *testing.T) {
@@ -40,16 +40,15 @@ func TestService_ListGrants(t *testing.T) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", ""))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, mockMember("", "membership_1", "workos_user_member", "custom-builder"))
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeProjectRead, "project_123")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeRiskPolicyEvaluate, "policy_123")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeMCPConnect, "tool_456")
-
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "workos_user_member", "custom-builder"),
-	}, nil).Once()
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Grants, 2)
+	require.Len(t, result.Grants, 3)
 	byScope := make(map[string]*gen.ListRoleGrant, len(result.Grants))
 	for _, grant := range result.Grants {
 		byScope[grant.Scope] = grant
@@ -58,9 +57,11 @@ func TestService_ListGrants(t *testing.T) {
 	require.Equal(t, "project_123", byScope["project:read"].Selectors[0].ResourceID)
 	require.Len(t, byScope["mcp:connect"].Selectors, 1)
 	require.Equal(t, "tool_456", byScope["mcp:connect"].Selectors[0].ResourceID)
+	require.Len(t, byScope["risk_policy:evaluate"].Selectors, 1)
+	require.Equal(t, "policy_123", byScope["risk_policy:evaluate"].Selectors[0].ResourceID)
 }
 
-func TestService_ListGrants_MultipleRoles(t *testing.T) {
+func TestService_ListGrants_RoleGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -71,13 +72,10 @@ func TestService_ListGrants_MultipleRoles(t *testing.T) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", ""))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, mockMember("", "membership_1", "workos_user_member", "custom-builder"))
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project_123")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-mcp"), authz.ScopeMCPConnect, "tool_456")
-
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "workos_user_member", "custom-builder"),
-		mockMember(mockidp.MockOrgID, "membership_2", "workos_user_member", "custom-mcp"),
-	}, nil).Once()
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeMCPConnect, "tool_456")
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
@@ -92,7 +90,7 @@ func TestService_ListGrants_MultipleRoles(t *testing.T) {
 	require.Equal(t, "tool_456", byScope["mcp:connect"].Selectors[0].ResourceID)
 }
 
-func TestService_ListGrants_NotConnected(t *testing.T) {
+func TestService_ListGrants_NotConnectedLoadsAllUserGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -102,9 +100,38 @@ func TestService_ListGrants_NotConnected(t *testing.T) {
 	authCtx.AccountType = "enterprise"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
+	// Remove the org-user relationship created by InitAuthContext so the user
+	// is "not connected" from the DB perspective.
+	err := orgrepo.New(ti.conn).DeleteOrganizationUserRelationship(ctx, orgrepo.DeleteOrganizationUserRelationshipParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText(authCtx.UserID),
+	})
+	require.NoError(t, err)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authz.AllUsersPrincipal(), authz.ScopeRiskPolicyEvaluate, "policy-for-everyone")
+
+	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Grants, 1)
+	require.Equal(t, string(authz.ScopeRiskPolicyEvaluate), result.Grants[0].Scope)
+	require.Equal(t, "policy-for-everyone", result.Grants[0].Selectors[0].ResourceID)
+}
+
+func TestService_ListGrants_InvalidUserPrincipal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	authCtx.AccountType = "enterprise"
+	authCtx.UserID = urn.AllUsersPrincipalID
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
 	_, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "current user has not joined this organization")
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+	require.ErrorIs(t, err, authz.ErrPrincipalInvalid)
 }
 
 func TestService_ListGrants_AdminImpersonatingReturnsFullAccess(t *testing.T) {
@@ -177,7 +204,7 @@ func TestService_ListGrants_RBACDisabledReturnsFullAccess(t *testing.T) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, chConn, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, ti.roles, nil)
+	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, chConn, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, ti.roles)
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
@@ -223,7 +250,7 @@ func TestService_ListGrants_EnterpriseWithoutSessionReturnsFullAccess(t *testing
 	}
 }
 
-func TestService_ListGrants_WorkOSMembersFailure(t *testing.T) {
+func TestService_ListGrants_NoRoleAssignments(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -235,9 +262,7 @@ func TestService_ListGrants_WorkOSMembersFailure(t *testing.T) {
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
 
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member(nil), errors.New("workos unavailable")).Once()
-
-	_, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "list members from workos")
+	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	require.NoError(t, err)
+	require.Empty(t, result.Grants)
 }

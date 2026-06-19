@@ -11,6 +11,18 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { Selector, Selector$inboundSchema } from "./selector.js";
 
 /**
+ * Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
+ */
+export const ListRoleGrantEffect = {
+  Allow: "allow",
+  Deny: "deny",
+} as const;
+/**
+ * Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
+ */
+export type ListRoleGrantEffect = ClosedEnum<typeof ListRoleGrantEffect>;
+
+/**
  * The scope slug this grant applies to.
  */
 export const ListRoleGrantScope = {
@@ -23,6 +35,8 @@ export const ListRoleGrantScope = {
   McpConnect: "mcp:connect",
   EnvironmentRead: "environment:read",
   EnvironmentWrite: "environment:write",
+  RiskPolicyEvaluate: "risk_policy:evaluate",
+  RiskPolicyBypass: "risk_policy:bypass",
 } as const;
 /**
  * The scope slug this grant applies to.
@@ -39,10 +53,16 @@ export const SubScopes = {
   McpConnect: "mcp:connect",
   EnvironmentRead: "environment:read",
   EnvironmentWrite: "environment:write",
+  RiskPolicyEvaluate: "risk_policy:evaluate",
+  RiskPolicyBypass: "risk_policy:bypass",
 } as const;
 export type SubScopes = ClosedEnum<typeof SubScopes>;
 
 export type ListRoleGrant = {
+  /**
+   * Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
+   */
+  effect: ListRoleGrantEffect;
   /**
    * The scope slug this grant applies to.
    */
@@ -56,6 +76,11 @@ export type ListRoleGrant = {
    */
   subScopes?: Array<SubScopes> | undefined;
 };
+
+/** @internal */
+export const ListRoleGrantEffect$inboundSchema: z.ZodMiniEnum<
+  typeof ListRoleGrantEffect
+> = z.enum(ListRoleGrantEffect);
 
 /** @internal */
 export const ListRoleGrantScope$inboundSchema: z.ZodMiniEnum<
@@ -73,6 +98,7 @@ export const ListRoleGrant$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    effect: z._default(ListRoleGrantEffect$inboundSchema, "allow"),
     scope: ListRoleGrantScope$inboundSchema,
     selectors: z.optional(z.array(Selector$inboundSchema)),
     sub_scopes: z.optional(z.array(SubScopes$inboundSchema)),

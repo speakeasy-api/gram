@@ -1,7 +1,8 @@
 export const SLACK_TOOL_URN_PREFIX = "tools:platform:slack:";
 
-export const SLACK_TOOL_SCOPES: Record<string, readonly string[]> = {
+const SLACK_TOOL_SCOPES: Record<string, readonly string[]> = {
   send_message: ["chat:write", "chat:write.public", "im:write"],
+  set_thread_status: ["chat:write"],
   schedule_message: ["chat:write", "chat:write.public"],
   read_channel_messages: [
     "channels:history",
@@ -23,13 +24,122 @@ export const SLACK_TOOL_SCOPES: Record<string, readonly string[]> = {
   get_reactions: ["reactions:read"],
   list_reactions: ["reactions:read"],
   list_emoji: ["emoji:read"],
+  update_message: ["chat:write"],
+  delete_message: ["chat:write"],
+  post_ephemeral: ["chat:write"],
+  get_permalink: [],
+  delete_scheduled_message: ["chat:write"],
+  list_scheduled_messages: [],
+  me_message: ["chat:write"],
+  get_channel_info: ["channels:read", "groups:read", "im:read", "mpim:read"],
+  list_channel_members: [
+    "channels:read",
+    "groups:read",
+    "im:read",
+    "mpim:read",
+  ],
+  open_conversation: [
+    "channels:manage",
+    "groups:write",
+    "im:write",
+    "mpim:write",
+  ],
+  create_channel: ["channels:manage", "groups:write", "im:write", "mpim:write"],
+  join_channel: ["channels:join"],
+  leave_channel: ["channels:manage", "groups:write", "im:write", "mpim:write"],
+  invite_to_channel: [
+    "channels:manage",
+    "channels:write.invites",
+    "groups:write",
+    "groups:write.invites",
+    "im:write",
+    "mpim:write",
+  ],
+  set_channel_topic: [
+    "channels:manage",
+    "channels:write.topic",
+    "groups:write",
+    "groups:write.topic",
+    "im:write",
+    "im:write.topic",
+    "mpim:write",
+    "mpim:write.topic",
+  ],
+  set_channel_purpose: [
+    "channels:manage",
+    "channels:write.topic",
+    "groups:write",
+    "groups:write.topic",
+    "im:write",
+    "im:write.topic",
+    "mpim:write",
+    "mpim:write.topic",
+  ],
+  mark_conversation: [
+    "channels:manage",
+    "groups:write",
+    "im:write",
+    "mpim:write",
+  ],
+  archive_channel: [
+    "channels:manage",
+    "groups:write",
+    "im:write",
+    "mpim:write",
+  ],
+  unarchive_channel: [
+    "channels:manage",
+    "groups:write",
+    "im:write",
+    "mpim:write",
+  ],
+  rename_channel: ["channels:manage", "groups:write", "im:write", "mpim:write"],
+  remove_from_channel: [
+    "channels:manage",
+    "groups:write",
+    "im:write",
+    "mpim:write",
+  ],
+  lookup_user_by_email: ["users:read", "users:read.email"],
+  list_user_conversations: [
+    "users:read",
+    "channels:read",
+    "groups:read",
+    "im:read",
+    "mpim:read",
+  ],
+  get_user_presence: ["users:read"],
+  get_user_profile_fields: ["users.profile:read"],
+  get_user_dnd: ["dnd:read"],
+  get_team_dnd: ["dnd:read"],
+  upload_file: ["files:write"],
+  get_file_info: ["files:read"],
+  list_files: ["files:read"],
+  delete_file: ["files:write"],
+  pin_message: ["pins:write"],
+  unpin_message: ["pins:write"],
+  list_pins: ["pins:read"],
+  add_bookmark: ["bookmarks:write"],
+  edit_bookmark: ["bookmarks:write"],
+  remove_bookmark: ["bookmarks:write"],
+  list_bookmarks: ["bookmarks:read"],
+  list_usergroups: ["usergroups:read"],
+  list_usergroup_members: ["usergroups:read"],
+  get_team_info: ["team:read"],
+  create_canvas: ["canvases:write"],
+  edit_canvas: ["canvases:write"],
+  delete_canvas: ["canvases:write"],
+  lookup_canvas_sections: ["canvases:read"],
+  set_canvas_access: ["canvases:write"],
+  remove_canvas_access: ["canvases:write"],
+  create_channel_canvas: ["canvases:write"],
 };
 
 // Always grant the full user-scope superset alongside bot scopes. Slack mints
 // both xoxb- and xoxp- at install; the assistant uses whichever fits each
 // call site. No per-tool gating — same rationale as ALL_BOT_SCOPES: adding a
 // scope post-install forces a re-install.
-export const SLACK_USER_SCOPES: readonly string[] = [
+const SLACK_USER_SCOPES: readonly string[] = [
   "channels:history",
   "channels:read",
   "emoji:read",
@@ -43,17 +153,19 @@ export const SLACK_USER_SCOPES: readonly string[] = [
   "mpim:read",
   "pins:read",
   "reactions:read",
+  "reminders:read",
+  "reminders:write",
   "search:read",
   "users:read",
   "users:read.email",
 ];
 
-export type SlackEventBinding = {
+type SlackEventBinding = {
   bot_events: readonly string[];
   scopes: readonly string[];
 };
 
-export const SLACK_EVENT_BINDINGS: Record<string, SlackEventBinding> = {
+const SLACK_EVENT_BINDINGS: Record<string, SlackEventBinding> = {
   app_home_opened: { bot_events: ["app_home_opened"], scopes: [] },
   app_mention: {
     bot_events: ["app_mention"],
@@ -186,7 +298,7 @@ function uniqueSorted(values: Iterable<string>): string[] {
 export function buildSlackManifest(
   input: SlackManifestInput,
 ): SlackManifestResult {
-  const displayName = (input.appName.trim() || "Gram Assistant").slice(
+  const displayName = (input.appName.trim() || "Platform Assistant").slice(
     0,
     SLACK_DISPLAY_NAME_LIMIT,
   );

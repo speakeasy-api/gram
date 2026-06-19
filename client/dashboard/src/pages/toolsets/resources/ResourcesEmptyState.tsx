@@ -7,7 +7,7 @@ export function ResourcesEmptyState({
   onAddResources,
 }: {
   onAddResources: () => void;
-}) {
+}): JSX.Element {
   const cta = (
     <RequireScope scope="mcp:write" level="component">
       <Button size="sm" onClick={onAddResources}>
@@ -19,7 +19,7 @@ export function ResourcesEmptyState({
   return (
     <EmptyState
       heading="No resources yet"
-      description="MCP resources can be created through Gram Functions."
+      description="MCP resources can be created through functions."
       nonEmptyProjectCTA={cta}
       graphic={<ToolsetsGraphic />}
       graphicClassName="scale-90"

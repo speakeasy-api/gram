@@ -13,7 +13,7 @@ export function ToolBadge({
   tool: Tool;
   variant?: "default" | "secondary" | "outline";
   className?: string;
-}) {
+}): JSX.Element {
   return (
     <Tooltip>
       <TooltipTrigger asChild>

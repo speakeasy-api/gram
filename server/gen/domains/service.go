@@ -20,8 +20,15 @@ type Service interface {
 	GetDomain(context.Context, *GetDomainPayload) (res *CustomDomain, err error)
 	// Create a custom domain for an organization
 	CreateDomain(context.Context, *CreateDomainPayload) (err error)
+	// Update the IP allowlist for the organization's custom domain
+	UpdateDomain(context.Context, *UpdateDomainPayload) (res *CustomDomain, err error)
 	// Delete a custom domain
 	DeleteDomain(context.Context, *DeleteDomainPayload) (err error)
+	// List the MCP endpoints registered under the organization's custom domain
+	// across every project. Returns enriched rows that include the parent MCP
+	// server and project so callers can preview what a custom-domain deletion
+	// would cascade through.
+	ListMcpEndpoints(context.Context, *ListMcpEndpointsPayload) (res *ListCustomDomainMcpEndpointsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -44,7 +51,7 @@ const ServiceName = "domains"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"getDomain", "createDomain", "deleteDomain"}
+var MethodNames = [5]string{"getDomain", "createDomain", "updateDomain", "deleteDomain", "listMcpEndpoints"}
 
 // CreateDomainPayload is the payload type of the domains service createDomain
 // method.
@@ -52,6 +59,8 @@ type CreateDomainPayload struct {
 	SessionToken *string
 	// The custom domain
 	Domain string
+	// IP addresses or CIDR ranges to allow. Leave empty for unrestricted access.
+	IPAllowlist []string
 }
 
 // CustomDomain is the result type of the domains service getDomain method.
@@ -72,6 +81,33 @@ type CustomDomain struct {
 	UpdatedAt string
 	// The custom domain is actively being registered
 	IsUpdating bool
+	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
+	// unrestricted.
+	IPAllowlist []string
+}
+
+// An MCP endpoint registered under a custom domain, with its parent MCP server
+// and project denormalised for display in the dashboard's delete-impact
+// preview.
+type CustomDomainMcpEndpoint struct {
+	// The ID of the MCP endpoint
+	ID string
+	// The endpoint slug
+	Slug string
+	// The ID of the project the endpoint belongs to
+	ProjectID string
+	// The display name of the project the endpoint belongs to
+	ProjectName string
+	// The url-friendly slug of the project the endpoint belongs to
+	ProjectSlug string
+	// The ID of the parent MCP server
+	McpServerID string
+	// The display name of the parent MCP server. May be empty if the parent has no
+	// configured name.
+	McpServerName *string
+	// The url-friendly slug of the parent MCP server. May be empty if the parent
+	// has no configured slug.
+	McpServerSlug *string
 }
 
 // DeleteDomainPayload is the payload type of the domains service deleteDomain
@@ -83,6 +119,26 @@ type DeleteDomainPayload struct {
 // GetDomainPayload is the payload type of the domains service getDomain method.
 type GetDomainPayload struct {
 	SessionToken *string
+}
+
+// ListCustomDomainMcpEndpointsResult is the result type of the domains service
+// listMcpEndpoints method.
+type ListCustomDomainMcpEndpointsResult struct {
+	McpEndpoints []*CustomDomainMcpEndpoint
+}
+
+// ListMcpEndpointsPayload is the payload type of the domains service
+// listMcpEndpoints method.
+type ListMcpEndpointsPayload struct {
+	SessionToken *string
+}
+
+// UpdateDomainPayload is the payload type of the domains service updateDomain
+// method.
+type UpdateDomainPayload struct {
+	SessionToken *string
+	// Replacement IP allowlist. Pass an empty list to remove all restrictions.
+	IPAllowlist []string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

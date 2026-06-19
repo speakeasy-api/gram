@@ -30,6 +30,7 @@ import { DeleteRoleDialog } from "./DeleteRoleDialog";
 import { Ellipsis } from "lucide-react";
 import { RequireScope } from "@/components/require-scope";
 import { cn } from "@/lib/utils";
+import { visiblePermissionCount } from "./roleDialogState";
 
 function RoleActionsMenu({
   role,
@@ -57,11 +58,19 @@ function RoleActionsMenu({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setTimeout(onEdit, 0)}>
+          <DropdownMenuItem
+            onSelect={() => {
+              void setTimeout(onEdit, 0);
+            }}
+          >
             Edit
           </DropdownMenuItem>
           {!role.isSystem && (
-            <DropdownMenuItem onSelect={() => setTimeout(onDelete, 0)}>
+            <DropdownMenuItem
+              onSelect={() => {
+                void setTimeout(onDelete, 0);
+              }}
+            >
               Delete
             </DropdownMenuItem>
           )}
@@ -71,7 +80,7 @@ function RoleActionsMenu({
   );
 }
 
-export function RolesTab() {
+export function RolesTab(): JSX.Element {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [deletingRole, setDeletingRole] = useState<Role | null>(null);
@@ -105,7 +114,7 @@ export function RolesTab() {
     roles.find((r) => r.isSystem && r.name === "Member") ?? null;
 
   const membersOfDeletingRole = deletingRole
-    ? members.filter((m) => m.roleId === deletingRole.id)
+    ? members.filter((m) => m.roleIds.includes(deletingRole.id))
     : [];
 
   const deleteRole = useDeleteRoleMutation({
@@ -149,7 +158,9 @@ export function RolesTab() {
       key: "permissions",
       header: "Permissions",
       width: "120px",
-      render: (role) => <Type variant="body">{role.grants.length}</Type>,
+      render: (role) => (
+        <Type variant="body">{visiblePermissionCount(role.grants)}</Type>
+      ),
     },
     {
       key: "members",
@@ -200,6 +211,9 @@ export function RolesTab() {
           data={roles}
           rowKey={(row) => row.id}
           className="mt-4"
+          noResultsMessage={
+            <div className="p-4">No roles have been created yet.</div>
+          }
         />
       )}
 
@@ -217,7 +231,8 @@ export function RolesTab() {
           </Badge>
           <Type variant="body" className="text-muted-foreground text-sm">
             The default role for most users. Grants read access across the
-            organization and the ability to connect to MCP servers.
+            organization and projects. Gives the ability to connect to MCP
+            servers and other resources.
           </Type>
         </div>
         <div className="mt-2 flex items-start gap-3 text-sm">
@@ -230,7 +245,7 @@ export function RolesTab() {
           </Badge>
           <Type variant="body" className="text-muted-foreground text-sm">
             Full access to all organization settings, billing, member
-            management, and every project and MCP server.
+            management, every project, MCP server, skills and assistants.
           </Type>
         </div>
       </div>
@@ -251,11 +266,15 @@ export function RolesTab() {
         onOpenChange={(open) => {
           if (!open) setDeletingRole(null);
         }}
-        handleDeleteRole={async () => {
-          if (deletingRole) {
-            await deleteRole.mutateAsync({ request: { id: deletingRole.id } });
-            setDeletingRole(null);
-          }
+        handleDeleteRole={() => {
+          void (async () => {
+            if (deletingRole) {
+              await deleteRole.mutateAsync({
+                request: { id: deletingRole.id },
+              });
+              setDeletingRole(null);
+            }
+          })();
         }}
         handleCancel={() => setDeletingRole(null)}
         role={deletingRole}

@@ -1,3 +1,4 @@
+*.tmp-*
 *.log
 mise.local.toml
 mise.*.local.toml
@@ -6,6 +7,7 @@ flags.local.csv
 node_modules
 bin
 junit-report.xml
+report.md
 .mise-tasks/local
 .assets
 .vscode/*
@@ -19,11 +21,17 @@ junit-report.xml
 /posting.env
 /client/sdk/docs
 /server/goa*
+/dev-idp/goa*
 /server/gram
+/risk-pi-report
 /server/risk_accuracy_metrics.json
-# Goa generates OpenAPI v2 specs with non-deterministic examples. Nothing consumes them.
+# Goa generates OpenAPI specs with non-deterministic examples. Nothing consumes them.
 /server/gen/http/openapi.yaml
 /server/gen/http/openapi.json
+/dev-idp/gen/http/openapi.json
+/dev-idp/gen/http/openapi.yaml
+/dev-idp/gen/http/openapi3.json
+/dev-idp/gen/http/openapi3.yaml
 scratch/
 /local/cache
 /local/ssl
@@ -65,3 +73,14 @@ package-lock.json
 .claude/hooks/*
 **/.claude/scheduled_tasks.lock
 flagged-chats.jsonl
+.superpowers/
+# Stray riskjudgebench build/output artifacts (compiled binary + bench result dumps)
+/server/riskjudgebench
+/results.json
+/finalists.json
+
+### Python ###
+__pycache__/
+*.py[cod]
+*$py.class
+.uv-cache

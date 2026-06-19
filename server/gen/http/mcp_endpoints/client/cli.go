@@ -233,6 +233,59 @@ func BuildUpdateMcpEndpointPayload(mcpEndpointsUpdateMcpEndpointBody string, mcp
 	return v, nil
 }
 
+// BuildCheckMcpEndpointSlugAvailabilityPayload builds the payload for the
+// mcpEndpoints checkMcpEndpointSlugAvailability endpoint from CLI flags.
+func BuildCheckMcpEndpointSlugAvailabilityPayload(mcpEndpointsCheckMcpEndpointSlugAvailabilitySlug string, mcpEndpointsCheckMcpEndpointSlugAvailabilityCustomDomainID string, mcpEndpointsCheckMcpEndpointSlugAvailabilitySessionToken string, mcpEndpointsCheckMcpEndpointSlugAvailabilityApikeyToken string, mcpEndpointsCheckMcpEndpointSlugAvailabilityProjectSlugInput string) (*mcpendpoints.CheckMcpEndpointSlugAvailabilityPayload, error) {
+	var err error
+	var slug string
+	{
+		slug = mcpEndpointsCheckMcpEndpointSlugAvailabilitySlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 128, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var customDomainID *string
+	{
+		if mcpEndpointsCheckMcpEndpointSlugAvailabilityCustomDomainID != "" {
+			customDomainID = &mcpEndpointsCheckMcpEndpointSlugAvailabilityCustomDomainID
+			err = goa.MergeErrors(err, goa.ValidateFormat("custom_domain_id", *customDomainID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpEndpointsCheckMcpEndpointSlugAvailabilitySessionToken != "" {
+			sessionToken = &mcpEndpointsCheckMcpEndpointSlugAvailabilitySessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpEndpointsCheckMcpEndpointSlugAvailabilityApikeyToken != "" {
+			apikeyToken = &mcpEndpointsCheckMcpEndpointSlugAvailabilityApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpEndpointsCheckMcpEndpointSlugAvailabilityProjectSlugInput != "" {
+			projectSlugInput = &mcpEndpointsCheckMcpEndpointSlugAvailabilityProjectSlugInput
+		}
+	}
+	v := &mcpendpoints.CheckMcpEndpointSlugAvailabilityPayload{}
+	v.Slug = types.McpEndpointSlug(slug)
+	v.CustomDomainID = customDomainID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildDeleteMcpEndpointPayload builds the payload for the mcpEndpoints
 // deleteMcpEndpoint endpoint from CLI flags.
 func BuildDeleteMcpEndpointPayload(mcpEndpointsDeleteMcpEndpointID string, mcpEndpointsDeleteMcpEndpointSessionToken string, mcpEndpointsDeleteMcpEndpointApikeyToken string, mcpEndpointsDeleteMcpEndpointProjectSlugInput string) (*mcpendpoints.DeleteMcpEndpointPayload, error) {

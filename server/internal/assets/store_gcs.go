@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/googleapi"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -128,16 +131,61 @@ func (gbs *GCSBlobStore) ReadAt(ctx context.Context, u *url.URL) (ReaderAtCloser
 	}, attrs.Size, nil
 }
 
+// Write attaches a DoesNotExist:true precondition so retries and concurrent
+// racers cannot produce duplicates: a retry after a transient failure can't
+// re-create the object, and concurrent writers racing to the same
+// content-addressable key won't trip GCS's per-object 1-write/sec limit with
+// ResourceExhausted — the loser instead returns FailedPrecondition, which
+// gcsConditionalWriter treats as success since the object is already in the
+// desired state. The precondition also flips the SDK's default
+// RetryIdempotent policy on for this Writer, so transient errors retry
+// automatically.
 func (gbs *GCSBlobStore) Write(ctx context.Context, subpath string, contentType string, contentLength int64) (io.WriteCloser, *url.URL, error) {
 	uri, err := gbs.getBucketURI(subpath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("generate asset path: %w", err)
 	}
 
-	w := gbs.bucket.Object(strings.TrimPrefix(uri.Path, "/")).NewWriter(ctx)
+	obj := gbs.bucket.Object(strings.TrimPrefix(uri.Path, "/")).If(storage.Conditions{
+		GenerationMatch:        0,
+		GenerationNotMatch:     0,
+		DoesNotExist:           true,
+		MetagenerationMatch:    0,
+		MetagenerationNotMatch: 0,
+	})
+	w := obj.NewWriter(ctx)
 	w.ContentType = contentType
 
-	return w, uri, nil
+	return &gcsConditionalWriter{Writer: w}, uri, nil
+}
+
+// gcsConditionalWriter wraps storage.Writer so a FailedPrecondition on Close
+// (from the DoesNotExist precondition) is reported as success — the object is
+// already in the desired state, which is what the caller wanted.
+type gcsConditionalWriter struct {
+	*storage.Writer
+}
+
+func (g *gcsConditionalWriter) Close() error {
+	err := g.Writer.Close()
+	if err == nil {
+		return nil
+	}
+	if isPreconditionFailed(err) {
+		return nil
+	}
+	return fmt.Errorf("close gcs writer: %w", err)
+}
+
+func isPreconditionFailed(err error) bool {
+	if status.Code(err) == codes.FailedPrecondition {
+		return true
+	}
+	var apiErr *googleapi.Error
+	if errors.As(err, &apiErr) && apiErr.Code == http.StatusPreconditionFailed {
+		return true
+	}
+	return false
 }
 
 func (gbs *GCSBlobStore) PresignRead(ctx context.Context, subpath string, ttl time.Duration) (*url.URL, error) {

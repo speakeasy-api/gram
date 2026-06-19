@@ -5,18 +5,28 @@ import process from "node:process";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-
-let key: Buffer | undefined;
-let cert: Buffer | undefined;
-
-if (process.env["GRAM_SSL_KEY_FILE"] && process.env["GRAM_SSL_CERT_FILE"]) {
-  key = fs.readFileSync(process.env["GRAM_SSL_KEY_FILE"]);
-  cert = fs.readFileSync(process.env["GRAM_SSL_CERT_FILE"]);
-}
-
 // https://vite.dev/config/
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
+
+  // Dev HTTPS key/cert. Env vars are set repo-wide by mise.toml, but the
+  // referenced files only exist on dev laptops — CI runners (and tools
+  // like knip that load this config) get an ENOENT. Swallow the read
+  // error so non-dev consumers of the config still work.
+  let key: Buffer | undefined;
+  let cert: Buffer | undefined;
+  if (
+    isDev &&
+    process.env["GRAM_SSL_KEY_FILE"] &&
+    process.env["GRAM_SSL_CERT_FILE"]
+  ) {
+    try {
+      key = fs.readFileSync(process.env["GRAM_SSL_KEY_FILE"]);
+      cert = fs.readFileSync(process.env["GRAM_SSL_CERT_FILE"]);
+    } catch {
+      // SSL files missing — fall through without HTTPS.
+    }
+  }
 
   const siteUrl = process.env["GRAM_SITE_URL"];
   if (isDev && !siteUrl) {
@@ -28,11 +38,23 @@ export default defineConfig(({ command }) => {
     throw new Error("GRAM_SERVER_URL must be set in development");
   }
 
+  // Two build-time constants, separated so MCP configs / callback URLs /
+  // anything operator-facing always report the server's authoritative URL,
+  // and only the playground (which needs same-origin cookie forwarding for
+  // the Vercel AI SDK) routes through the dashboard origin via the vite
+  // proxy.
+  //
+  //   __GRAM_SERVER_URL__       — the server's URL, always. Used everywhere
+  //                               except the playground.
+  //   __PLAYGROUND_PROXY_URL__  — the dashboard origin in dev (so the vite
+  //                               proxy can ferry cookies); undefined in
+  //                               prod (no proxy needed). Used only by the
+  //                               playground.
+
   return {
     define: {
-      __GRAM_SERVER_URL__: isDev
-        ? JSON.stringify(siteUrl) // Use siteUrl in dev to match the origin
-        : JSON.stringify(serverUrl),
+      __GRAM_SERVER_URL__: JSON.stringify(serverUrl),
+      __PLAYGROUND_PROXY_URL__: JSON.stringify(isDev ? siteUrl : undefined),
       __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
     },
     build: {
@@ -59,7 +81,6 @@ export default defineConfig(({ command }) => {
               "react-error-boundary",
               "react-router",
               "sonner",
-              "vaul",
               "zod",
             ],
           },

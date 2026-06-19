@@ -35,11 +35,50 @@ type Claims struct {
 	OrgID     string `json:"org_id"`
 	ProjectID string `json:"project_id"`
 	// UserID is the assistant owner at mint time. It outlives an ownership
-	// transfer by at most the token TTL — after that the next /configure or
-	// /turn mints a fresh token against the new owner.
+	// transfer by at most the token TTL — after that the next /turn mints
+	// a fresh token against the new owner.
 	UserID      string `json:"user_id"`
 	AssistantID string `json:"assistant_id"`
-	ThreadID    string `json:"thread_id"`
+	// ThreadID is omitted for v2 assistant-scoped tokens (a single VM serves
+	// every thread under one assistant). Older v1 tokens still carry it and
+	// must remain valid until the TTL drains.
+	ThreadID string `json:"thread_id,omitempty"`
+	jwt.RegisteredClaims
+}
+
+const mcpAuthFlowIssuer = "gram-assistants-mcp-auth-flow"
+
+type MCPAuthFlowInput struct {
+	OrgID         string
+	ProjectID     uuid.UUID
+	UserID        string
+	AssistantID   uuid.UUID
+	ThreadID      uuid.UUID
+	FlowID        string
+	ServerID      string
+	McpURL        string
+	ClientID      string
+	ClientSecret  string
+	RedirectURI   string
+	CodeVerifier  string
+	TokenEndpoint string
+	TTL           time.Duration
+}
+
+type MCPAuthFlowClaims struct {
+	OrgID         string `json:"org_id"`
+	ProjectID     string `json:"project_id"`
+	UserID        string `json:"user_id"`
+	AssistantID   string `json:"assistant_id"`
+	ThreadID      string `json:"thread_id"`
+	FlowID        string `json:"flow_id"`
+	ServerID      string `json:"server_id"`
+	McpURL        string `json:"mcp_url"`
+	ClientID      string `json:"client_id"`
+	ClientSecret  string `json:"client_secret,omitempty"`
+	RedirectURI   string `json:"redirect_uri"`
+	CodeVerifier  string `json:"code_verifier"`
+	TokenEndpoint string `json:"token_endpoint"`
 	jwt.RegisteredClaims
 }
 
@@ -48,8 +87,9 @@ type GenerateInput struct {
 	ProjectID   uuid.UUID
 	UserID      string
 	AssistantID uuid.UUID
-	ThreadID    uuid.UUID
-	TTL         time.Duration
+	// ThreadID may be uuid.Nil for assistant-scoped (v2) tokens.
+	ThreadID uuid.UUID
+	TTL      time.Duration
 }
 
 type Manager struct {
@@ -81,12 +121,17 @@ func (m *Manager) Generate(input GenerateInput) (string, error) {
 		ttl = 15 * time.Minute
 	}
 
+	threadClaim := ""
+	if input.ThreadID != uuid.Nil {
+		threadClaim = input.ThreadID.String()
+	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		OrgID:       input.OrgID,
 		ProjectID:   input.ProjectID.String(),
 		UserID:      input.UserID,
 		AssistantID: input.AssistantID.String(),
-		ThreadID:    input.ThreadID.String(),
+		ThreadID:    threadClaim,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    issuer,
 			Subject:   input.AssistantID.String(),
@@ -103,6 +148,94 @@ func (m *Manager) Generate(input GenerateInput) (string, error) {
 		return "", fmt.Errorf("sign assistant token: %w", err)
 	}
 	return signed, nil
+}
+
+func (m *Manager) GenerateMCPAuthFlow(input MCPAuthFlowInput) (string, error) {
+	now := time.Now()
+	ttl := input.TTL
+	if ttl <= 0 {
+		ttl = 15 * time.Minute
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, MCPAuthFlowClaims{
+		OrgID:         input.OrgID,
+		ProjectID:     input.ProjectID.String(),
+		UserID:        input.UserID,
+		AssistantID:   input.AssistantID.String(),
+		ThreadID:      input.ThreadID.String(),
+		FlowID:        input.FlowID,
+		ServerID:      input.ServerID,
+		McpURL:        input.McpURL,
+		ClientID:      input.ClientID,
+		ClientSecret:  input.ClientSecret,
+		RedirectURI:   input.RedirectURI,
+		CodeVerifier:  input.CodeVerifier,
+		TokenEndpoint: input.TokenEndpoint,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    mcpAuthFlowIssuer,
+			Subject:   input.AssistantID.String(),
+			Audience:  nil,
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+			NotBefore: nil,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ID:        input.FlowID,
+		},
+	})
+
+	signed, err := token.SignedString([]byte(m.jwtSecret))
+	if err != nil {
+		return "", fmt.Errorf("sign mcp auth flow token: %w", err)
+	}
+	return signed, nil
+}
+
+func (m *Manager) ValidateMCPAuthFlow(tokenString string) (*MCPAuthFlowClaims, error) {
+	tokenString = strings.TrimSpace(tokenString)
+	if tokenString == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	token, err := jwt.ParseWithClaims(tokenString, &MCPAuthFlowClaims{
+		OrgID:         "",
+		ProjectID:     "",
+		UserID:        "",
+		AssistantID:   "",
+		ThreadID:      "",
+		FlowID:        "",
+		ServerID:      "",
+		McpURL:        "",
+		ClientID:      "",
+		ClientSecret:  "",
+		RedirectURI:   "",
+		CodeVerifier:  "",
+		TokenEndpoint: "",
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "",
+			Subject:   "",
+			Audience:  nil,
+			ExpiresAt: nil,
+			NotBefore: nil,
+			IssuedAt:  nil,
+			ID:        "",
+		},
+	}, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(m.jwtSecret), nil
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "invalid mcp auth flow token")
+	}
+
+	claims, ok := token.Claims.(*MCPAuthFlowClaims)
+	if !ok || !token.Valid {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "invalid mcp auth flow token")
+	}
+	if claims.Issuer != mcpAuthFlowIssuer {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "invalid mcp auth flow token issuer")
+	}
+	return claims, nil
 }
 
 func (m *Manager) Validate(tokenString string) (*Claims, error) {
@@ -161,9 +294,14 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "invalid assistant token project")
 	}
 
-	threadID, err := uuid.Parse(claims.ThreadID)
-	if err != nil {
-		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "invalid assistant token thread")
+	// v1 tokens carry a ThreadID claim; v2 tokens omit it. Treat the empty
+	// claim as the v2 shape.
+	threadID := uuid.Nil
+	if claims.ThreadID != "" {
+		threadID, err = uuid.Parse(claims.ThreadID)
+		if err != nil {
+			return ctx, nil, oops.E(oops.CodeUnauthorized, err, "invalid assistant token thread")
+		}
 	}
 
 	assistantID, err := uuid.Parse(claims.AssistantID)
@@ -189,7 +327,7 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "unable to load assistant owner")
 	}
 
-	if err := m.checkRevocation(ctx, threadID, assistantID); err != nil {
+	if err := m.checkRevocation(ctx, projectID, assistantID, threadID); err != nil {
 		return ctx, nil, err
 	}
 
@@ -228,29 +366,59 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 // checkRevocation rejects tokens for deleted threads, deleted assistants, or
 // non-active assistants. Result is memoized for revocationCacheTTL so the
 // per-turn burst of authorized calls (1× /chat/completions + N× MCP)
-// collapses to a single DB hit.
-func (m *Manager) checkRevocation(ctx context.Context, threadID, assistantID uuid.UUID) error {
-	if allowed, ok := m.revocation.get(threadID); ok {
+// collapses to a single DB hit. v2 tokens omit ThreadID — the lookup
+// collapses to an assistant-only check.
+func (m *Manager) checkRevocation(ctx context.Context, projectID, assistantID, threadID uuid.UUID) error {
+	cacheKey := threadID
+	if cacheKey == uuid.Nil {
+		cacheKey = assistantID
+	}
+	if allowed, ok := m.revocation.get(cacheKey); ok {
 		if allowed {
 			return nil
 		}
 		return oops.E(oops.CodeUnauthorized, nil, "assistant token has been revoked")
 	}
 
-	row, err := m.tokens.GetAssistantTokenRevocation(ctx, tokenrepo.GetAssistantTokenRevocationParams{
-		ThreadID:    threadID,
-		AssistantID: assistantID,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			m.revocation.put(threadID, false)
-			return oops.E(oops.CodeUnauthorized, nil, "assistant token thread not found")
+	var (
+		threadDeleted    bool
+		assistantDeleted bool
+		assistantStatus  string
+	)
+	if threadID != uuid.Nil {
+		row, err := m.tokens.GetAssistantTokenRevocation(ctx, tokenrepo.GetAssistantTokenRevocationParams{
+			ThreadID:    threadID,
+			AssistantID: assistantID,
+			ProjectID:   projectID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				m.revocation.put(cacheKey, false)
+				return oops.E(oops.CodeUnauthorized, nil, "assistant token thread not found")
+			}
+			return oops.E(oops.CodeUnauthorized, err, "unable to load assistant thread")
 		}
-		return oops.E(oops.CodeUnauthorized, err, "unable to load assistant thread")
+		threadDeleted = row.ThreadDeleted
+		assistantDeleted = row.AssistantDeleted
+		assistantStatus = row.AssistantStatus
+	} else {
+		row, err := m.tokens.GetAssistantRevocation(ctx, tokenrepo.GetAssistantRevocationParams{
+			AssistantID: assistantID,
+			ProjectID:   projectID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				m.revocation.put(cacheKey, false)
+				return oops.E(oops.CodeUnauthorized, nil, "assistant token assistant not found")
+			}
+			return oops.E(oops.CodeUnauthorized, err, "unable to load assistant")
+		}
+		assistantDeleted = row.AssistantDeleted
+		assistantStatus = row.AssistantStatus
 	}
 
-	allowed := !row.ThreadDeleted && !row.AssistantDeleted && row.AssistantStatus == "active"
-	m.revocation.put(threadID, allowed)
+	allowed := !threadDeleted && !assistantDeleted && assistantStatus == "active"
+	m.revocation.put(cacheKey, allowed)
 	if !allowed {
 		return oops.E(oops.CodeUnauthorized, nil, "assistant token has been revoked")
 	}

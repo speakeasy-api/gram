@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 declare const __GRAM_SERVER_URL__: string | undefined;
+declare const __PLAYGROUND_PROXY_URL__: string | undefined;
 declare const __GRAM_GIT_SHA__: string | undefined;
 
 interface ViteTypeOptions {

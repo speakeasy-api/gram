@@ -16,31 +16,71 @@ import (
 
 // Client is the "risk" service client.
 type Client struct {
-	CreateRiskPolicyEndpoint      goa.Endpoint
-	ListRiskPoliciesEndpoint      goa.Endpoint
-	GetRiskCapabilitiesEndpoint   goa.Endpoint
-	GetRiskPolicyEndpoint         goa.Endpoint
-	UpdateRiskPolicyEndpoint      goa.Endpoint
-	DeleteRiskPolicyEndpoint      goa.Endpoint
-	ListRiskResultsEndpoint       goa.Endpoint
-	ListRiskResultsByChatEndpoint goa.Endpoint
-	GetRiskPolicyStatusEndpoint   goa.Endpoint
-	TriggerRiskAnalysisEndpoint   goa.Endpoint
+	CreateRiskPolicyEndpoint               goa.Endpoint
+	ListRiskPoliciesEndpoint               goa.Endpoint
+	GetRiskPolicyEndpoint                  goa.Endpoint
+	UpdateRiskPolicyEndpoint               goa.Endpoint
+	DeleteRiskPolicyEndpoint               goa.Endpoint
+	ListRiskResultsEndpoint                goa.Endpoint
+	ListRiskResultsForAgentEndpoint        goa.Endpoint
+	ListRiskResultsByChatEndpoint          goa.Endpoint
+	GetRiskOverviewEndpoint                goa.Endpoint
+	ListRiskCategoriesEndpoint             goa.Endpoint
+	GetRiskUserBreakdownEndpoint           goa.Endpoint
+	GetRiskRuleBreakdownEndpoint           goa.Endpoint
+	GetRiskPolicyStatusEndpoint            goa.Endpoint
+	CreateRiskPolicyBypassRequestEndpoint  goa.Endpoint
+	ListRiskPolicyBypassRequestsEndpoint   goa.Endpoint
+	ApproveRiskPolicyBypassRequestEndpoint goa.Endpoint
+	DenyRiskPolicyBypassRequestEndpoint    goa.Endpoint
+	RevokeRiskPolicyBypassRequestEndpoint  goa.Endpoint
+	TriggerRiskAnalysisEndpoint            goa.Endpoint
+	CreateCustomDetectionRuleEndpoint      goa.Endpoint
+	ListCustomDetectionRulesEndpoint       goa.Endpoint
+	GetCustomDetectionRuleEndpoint         goa.Endpoint
+	UpdateCustomDetectionRuleEndpoint      goa.Endpoint
+	DeleteCustomDetectionRuleEndpoint      goa.Endpoint
+	ListRiskExclusionsEndpoint             goa.Endpoint
+	CreateRiskExclusionEndpoint            goa.Endpoint
+	UpdateRiskExclusionEndpoint            goa.Endpoint
+	DeleteRiskExclusionEndpoint            goa.Endpoint
+	SuggestCustomDetectionRuleEndpoint     goa.Endpoint
+	TestDetectionRuleEndpoint              goa.Endpoint
 }
 
 // NewClient initializes a "risk" service client given the endpoints.
-func NewClient(createRiskPolicy, listRiskPolicies, getRiskCapabilities, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsByChat, getRiskPolicyStatus, triggerRiskAnalysis goa.Endpoint) *Client {
+func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, getRiskOverview, listRiskCategories, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, createRiskPolicyBypassRequest, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, testDetectionRule goa.Endpoint) *Client {
 	return &Client{
-		CreateRiskPolicyEndpoint:      createRiskPolicy,
-		ListRiskPoliciesEndpoint:      listRiskPolicies,
-		GetRiskCapabilitiesEndpoint:   getRiskCapabilities,
-		GetRiskPolicyEndpoint:         getRiskPolicy,
-		UpdateRiskPolicyEndpoint:      updateRiskPolicy,
-		DeleteRiskPolicyEndpoint:      deleteRiskPolicy,
-		ListRiskResultsEndpoint:       listRiskResults,
-		ListRiskResultsByChatEndpoint: listRiskResultsByChat,
-		GetRiskPolicyStatusEndpoint:   getRiskPolicyStatus,
-		TriggerRiskAnalysisEndpoint:   triggerRiskAnalysis,
+		CreateRiskPolicyEndpoint:               createRiskPolicy,
+		ListRiskPoliciesEndpoint:               listRiskPolicies,
+		GetRiskPolicyEndpoint:                  getRiskPolicy,
+		UpdateRiskPolicyEndpoint:               updateRiskPolicy,
+		DeleteRiskPolicyEndpoint:               deleteRiskPolicy,
+		ListRiskResultsEndpoint:                listRiskResults,
+		ListRiskResultsForAgentEndpoint:        listRiskResultsForAgent,
+		ListRiskResultsByChatEndpoint:          listRiskResultsByChat,
+		GetRiskOverviewEndpoint:                getRiskOverview,
+		ListRiskCategoriesEndpoint:             listRiskCategories,
+		GetRiskUserBreakdownEndpoint:           getRiskUserBreakdown,
+		GetRiskRuleBreakdownEndpoint:           getRiskRuleBreakdown,
+		GetRiskPolicyStatusEndpoint:            getRiskPolicyStatus,
+		CreateRiskPolicyBypassRequestEndpoint:  createRiskPolicyBypassRequest,
+		ListRiskPolicyBypassRequestsEndpoint:   listRiskPolicyBypassRequests,
+		ApproveRiskPolicyBypassRequestEndpoint: approveRiskPolicyBypassRequest,
+		DenyRiskPolicyBypassRequestEndpoint:    denyRiskPolicyBypassRequest,
+		RevokeRiskPolicyBypassRequestEndpoint:  revokeRiskPolicyBypassRequest,
+		TriggerRiskAnalysisEndpoint:            triggerRiskAnalysis,
+		CreateCustomDetectionRuleEndpoint:      createCustomDetectionRule,
+		ListCustomDetectionRulesEndpoint:       listCustomDetectionRules,
+		GetCustomDetectionRuleEndpoint:         getCustomDetectionRule,
+		UpdateCustomDetectionRuleEndpoint:      updateCustomDetectionRule,
+		DeleteCustomDetectionRuleEndpoint:      deleteCustomDetectionRule,
+		ListRiskExclusionsEndpoint:             listRiskExclusions,
+		CreateRiskExclusionEndpoint:            createRiskExclusion,
+		UpdateRiskExclusionEndpoint:            updateRiskExclusion,
+		DeleteRiskExclusionEndpoint:            deleteRiskExclusion,
+		SuggestCustomDetectionRuleEndpoint:     suggestCustomDetectionRule,
+		TestDetectionRuleEndpoint:              testDetectionRule,
 	}
 }
 
@@ -86,29 +126,6 @@ func (c *Client) ListRiskPolicies(ctx context.Context, p *ListRiskPoliciesPayloa
 		return
 	}
 	return ires.(*ListRiskPoliciesResult), nil
-}
-
-// GetRiskCapabilities calls the "getRiskCapabilities" endpoint of the "risk"
-// service.
-// GetRiskCapabilities may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) GetRiskCapabilities(ctx context.Context, p *GetRiskCapabilitiesPayload) (res *RiskCapabilitiesResult, err error) {
-	var ires any
-	ires, err = c.GetRiskCapabilitiesEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*RiskCapabilitiesResult), nil
 }
 
 // GetRiskPolicy calls the "getRiskPolicy" endpoint of the "risk" service.
@@ -195,6 +212,29 @@ func (c *Client) ListRiskResults(ctx context.Context, p *ListRiskResultsPayload)
 	return ires.(*ListRiskResultsResult), nil
 }
 
+// ListRiskResultsForAgent calls the "listRiskResultsForAgent" endpoint of the
+// "risk" service.
+// ListRiskResultsForAgent may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListRiskResultsForAgent(ctx context.Context, p *ListRiskResultsForAgentPayload) (res *ListRiskResultsForAgentResult, err error) {
+	var ires any
+	ires, err = c.ListRiskResultsForAgentEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListRiskResultsForAgentResult), nil
+}
+
 // ListRiskResultsByChat calls the "listRiskResultsByChat" endpoint of the
 // "risk" service.
 // ListRiskResultsByChat may return the following errors:
@@ -216,6 +256,97 @@ func (c *Client) ListRiskResultsByChat(ctx context.Context, p *ListRiskResultsBy
 		return
 	}
 	return ires.(*ListRiskResultsByChatResult), nil
+}
+
+// GetRiskOverview calls the "getRiskOverview" endpoint of the "risk" service.
+// GetRiskOverview may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetRiskOverview(ctx context.Context, p *GetRiskOverviewPayload) (res *RiskOverviewResult, err error) {
+	var ires any
+	ires, err = c.GetRiskOverviewEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RiskOverviewResult), nil
+}
+
+// ListRiskCategories calls the "listRiskCategories" endpoint of the "risk"
+// service.
+// ListRiskCategories may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListRiskCategories(ctx context.Context, p *ListRiskCategoriesPayload) (res *RiskCategoriesResult, err error) {
+	var ires any
+	ires, err = c.ListRiskCategoriesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RiskCategoriesResult), nil
+}
+
+// GetRiskUserBreakdown calls the "getRiskUserBreakdown" endpoint of the "risk"
+// service.
+// GetRiskUserBreakdown may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetRiskUserBreakdown(ctx context.Context, p *GetRiskUserBreakdownPayload) (res *RiskUserBreakdownResult, err error) {
+	var ires any
+	ires, err = c.GetRiskUserBreakdownEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RiskUserBreakdownResult), nil
+}
+
+// GetRiskRuleBreakdown calls the "getRiskRuleBreakdown" endpoint of the "risk"
+// service.
+// GetRiskRuleBreakdown may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetRiskRuleBreakdown(ctx context.Context, p *GetRiskRuleBreakdownPayload) (res *RiskRuleBreakdownResult, err error) {
+	var ires any
+	ires, err = c.GetRiskRuleBreakdownEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RiskRuleBreakdownResult), nil
 }
 
 // GetRiskPolicyStatus calls the "getRiskPolicyStatus" endpoint of the "risk"
@@ -241,6 +372,121 @@ func (c *Client) GetRiskPolicyStatus(ctx context.Context, p *GetRiskPolicyStatus
 	return ires.(*types.RiskPolicyStatus), nil
 }
 
+// CreateRiskPolicyBypassRequest calls the "createRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+// CreateRiskPolicyBypassRequest may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateRiskPolicyBypassRequest(ctx context.Context, p *CreateRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error) {
+	var ires any
+	ires, err = c.CreateRiskPolicyBypassRequestEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RiskPolicyBypassRequest), nil
+}
+
+// ListRiskPolicyBypassRequests calls the "listRiskPolicyBypassRequests"
+// endpoint of the "risk" service.
+// ListRiskPolicyBypassRequests may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListRiskPolicyBypassRequests(ctx context.Context, p *ListRiskPolicyBypassRequestsPayload) (res *ListRiskPolicyBypassRequestsResult, err error) {
+	var ires any
+	ires, err = c.ListRiskPolicyBypassRequestsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListRiskPolicyBypassRequestsResult), nil
+}
+
+// ApproveRiskPolicyBypassRequest calls the "approveRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+// ApproveRiskPolicyBypassRequest may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ApproveRiskPolicyBypassRequest(ctx context.Context, p *ApproveRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error) {
+	var ires any
+	ires, err = c.ApproveRiskPolicyBypassRequestEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RiskPolicyBypassRequest), nil
+}
+
+// DenyRiskPolicyBypassRequest calls the "denyRiskPolicyBypassRequest" endpoint
+// of the "risk" service.
+// DenyRiskPolicyBypassRequest may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DenyRiskPolicyBypassRequest(ctx context.Context, p *DenyRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error) {
+	var ires any
+	ires, err = c.DenyRiskPolicyBypassRequestEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RiskPolicyBypassRequest), nil
+}
+
+// RevokeRiskPolicyBypassRequest calls the "revokeRiskPolicyBypassRequest"
+// endpoint of the "risk" service.
+// RevokeRiskPolicyBypassRequest may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RevokeRiskPolicyBypassRequest(ctx context.Context, p *RevokeRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error) {
+	var ires any
+	ires, err = c.RevokeRiskPolicyBypassRequestEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RiskPolicyBypassRequest), nil
+}
+
 // TriggerRiskAnalysis calls the "triggerRiskAnalysis" endpoint of the "risk"
 // service.
 // TriggerRiskAnalysis may return the following errors:
@@ -258,4 +504,249 @@ func (c *Client) GetRiskPolicyStatus(ctx context.Context, p *GetRiskPolicyStatus
 func (c *Client) TriggerRiskAnalysis(ctx context.Context, p *TriggerRiskAnalysisPayload) (err error) {
 	_, err = c.TriggerRiskAnalysisEndpoint(ctx, p)
 	return
+}
+
+// CreateCustomDetectionRule calls the "createCustomDetectionRule" endpoint of
+// the "risk" service.
+// CreateCustomDetectionRule may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateCustomDetectionRule(ctx context.Context, p *CreateCustomDetectionRulePayload) (res *types.RiskCustomDetectionRule, err error) {
+	var ires any
+	ires, err = c.CreateCustomDetectionRuleEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RiskCustomDetectionRule), nil
+}
+
+// ListCustomDetectionRules calls the "listCustomDetectionRules" endpoint of
+// the "risk" service.
+// ListCustomDetectionRules may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListCustomDetectionRules(ctx context.Context, p *ListCustomDetectionRulesPayload) (res *ListCustomDetectionRulesResult, err error) {
+	var ires any
+	ires, err = c.ListCustomDetectionRulesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListCustomDetectionRulesResult), nil
+}
+
+// GetCustomDetectionRule calls the "getCustomDetectionRule" endpoint of the
+// "risk" service.
+// GetCustomDetectionRule may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetCustomDetectionRule(ctx context.Context, p *GetCustomDetectionRulePayload) (res *types.RiskCustomDetectionRule, err error) {
+	var ires any
+	ires, err = c.GetCustomDetectionRuleEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RiskCustomDetectionRule), nil
+}
+
+// UpdateCustomDetectionRule calls the "updateCustomDetectionRule" endpoint of
+// the "risk" service.
+// UpdateCustomDetectionRule may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateCustomDetectionRule(ctx context.Context, p *UpdateCustomDetectionRulePayload) (res *types.RiskCustomDetectionRule, err error) {
+	var ires any
+	ires, err = c.UpdateCustomDetectionRuleEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RiskCustomDetectionRule), nil
+}
+
+// DeleteCustomDetectionRule calls the "deleteCustomDetectionRule" endpoint of
+// the "risk" service.
+// DeleteCustomDetectionRule may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteCustomDetectionRule(ctx context.Context, p *DeleteCustomDetectionRulePayload) (err error) {
+	_, err = c.DeleteCustomDetectionRuleEndpoint(ctx, p)
+	return
+}
+
+// ListRiskExclusions calls the "listRiskExclusions" endpoint of the "risk"
+// service.
+// ListRiskExclusions may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListRiskExclusions(ctx context.Context, p *ListRiskExclusionsPayload) (res *ListRiskExclusionsResult, err error) {
+	var ires any
+	ires, err = c.ListRiskExclusionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListRiskExclusionsResult), nil
+}
+
+// CreateRiskExclusion calls the "createRiskExclusion" endpoint of the "risk"
+// service.
+// CreateRiskExclusion may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateRiskExclusion(ctx context.Context, p *CreateRiskExclusionPayload) (res *types.RiskExclusion, err error) {
+	var ires any
+	ires, err = c.CreateRiskExclusionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RiskExclusion), nil
+}
+
+// UpdateRiskExclusion calls the "updateRiskExclusion" endpoint of the "risk"
+// service.
+// UpdateRiskExclusion may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateRiskExclusion(ctx context.Context, p *UpdateRiskExclusionPayload) (res *types.RiskExclusion, err error) {
+	var ires any
+	ires, err = c.UpdateRiskExclusionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RiskExclusion), nil
+}
+
+// DeleteRiskExclusion calls the "deleteRiskExclusion" endpoint of the "risk"
+// service.
+// DeleteRiskExclusion may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteRiskExclusion(ctx context.Context, p *DeleteRiskExclusionPayload) (err error) {
+	_, err = c.DeleteRiskExclusionEndpoint(ctx, p)
+	return
+}
+
+// SuggestCustomDetectionRule calls the "suggestCustomDetectionRule" endpoint
+// of the "risk" service.
+// SuggestCustomDetectionRule may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SuggestCustomDetectionRule(ctx context.Context, p *SuggestCustomDetectionRulePayload) (res *SuggestCustomDetectionRuleResult, err error) {
+	var ires any
+	ires, err = c.SuggestCustomDetectionRuleEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SuggestCustomDetectionRuleResult), nil
+}
+
+// TestDetectionRule calls the "testDetectionRule" endpoint of the "risk"
+// service.
+// TestDetectionRule may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) TestDetectionRule(ctx context.Context, p *TestDetectionRulePayload) (res *TestDetectionRuleResult, err error) {
+	var ires any
+	ires, err = c.TestDetectionRuleEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*TestDetectionRuleResult), nil
 }

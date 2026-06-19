@@ -1,18 +1,14 @@
 package background
 
 import (
-	"context"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"go.temporal.io/api/enums/v1"
-	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
 	activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
-	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
 type AnalyzeChatResolutionsParams struct {
@@ -20,31 +16,6 @@ type AnalyzeChatResolutionsParams struct {
 	ProjectID uuid.UUID
 	OrgID     string
 	APIKeyID  string
-}
-
-// ChatResolutionAnalyzer schedules async chat resolution analysis.
-type ChatResolutionAnalyzer interface {
-	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error
-}
-
-func ScheduleChatResolutionAnalysis(ctx context.Context, env *tenv.Environment, chatID, projectID uuid.UUID, orgID, apiKeyID string) error {
-	_, err := ExecuteAnalyzeChatResolutionsWorkflow(ctx, env, AnalyzeChatResolutionsParams{
-		ChatID:    chatID,
-		ProjectID: projectID,
-		OrgID:     orgID,
-		APIKeyID:  apiKeyID,
-	})
-	return err
-}
-
-func ExecuteAnalyzeChatResolutionsWorkflow(ctx context.Context, env *tenv.Environment, params AnalyzeChatResolutionsParams) (client.WorkflowRun, error) {
-	id := fmt.Sprintf("v1:analyze-chat-resolutions:%s", params.ChatID.String())
-	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                    id,
-		TaskQueue:             string(env.Queue()),
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, // Necessary for chats that are resumed after a while
-		WorkflowRunTimeout:    5 * time.Minute,
-	}, AnalyzeChatResolutionsWorkflow, params)
 }
 
 func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatResolutionsParams) error {

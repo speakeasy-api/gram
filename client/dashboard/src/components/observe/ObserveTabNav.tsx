@@ -2,23 +2,23 @@ import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router";
 import { useSlugs } from "@/contexts/Sdk";
 
-export function ObserveTabNav({ base }: { base: "insights" | "logs" }) {
+type Tab = {
+  label: string;
+  href: string;
+};
+
+export function ObserveTabNav({
+  base,
+}: {
+  base: "insights" | "logs";
+}): JSX.Element {
   const { orgSlug, projectSlug } = useSlugs();
   const location = useLocation();
 
   const baseSlug = `/${orgSlug}/projects/${projectSlug}/${base}`;
-  const tabs = [
+  const tabs: Tab[] = [
     { label: "Tools", href: `${baseSlug}/tools` },
     { label: "MCP Servers", href: `${baseSlug}/mcp` },
-    ...(base === "logs"
-      ? [{ label: "Agents", href: `${baseSlug}/agents` }]
-      : []),
-    ...(base === "insights"
-      ? [{ label: "Employees", href: `${baseSlug}/employees` }]
-      : []),
-    ...(base === "insights"
-      ? [{ label: "Costs", href: `${baseSlug}/costs` }]
-      : []),
   ];
 
   return (
@@ -34,6 +34,7 @@ export function ObserveTabNav({ base }: { base: "insights" | "logs" }) {
             className={cn(
               "relative flex-none px-4 py-3 text-sm font-medium no-underline transition-colors",
               "after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5",
+              "inline-flex items-center gap-2",
               isActive
                 ? "text-foreground after:bg-primary"
                 : "text-muted-foreground hover:text-foreground bg-transparent after:bg-transparent",

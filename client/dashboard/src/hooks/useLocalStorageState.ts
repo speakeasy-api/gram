@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 
-export function useLocalStorageState<T>(key: string, defaultValue: T) {
+export function useLocalStorageState<T>(
+  key: string,
+  defaultValue: T,
+): readonly [T, (val: T | ((prev: T) => T)) => void] {
   const readValue = useCallback((): T => {
     try {
       const item = window.localStorage.getItem(key);

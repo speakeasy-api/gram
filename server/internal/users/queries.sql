@@ -66,13 +66,26 @@ WHERE u.email = @email
   AND our.deleted_at IS NULL
 LIMIT 1;
 
+-- name: GetConnectedUsersByEmails :many
+SELECT u.* FROM users u
+JOIN organization_user_relationships our ON our.user_id = u.id
+WHERE u.email = ANY(@emails::text[])
+  AND our.organization_id = @organization_id
+  AND our.deleted_at IS NULL;
+
 -- name: GetUsersByIDs :many
 SELECT * FROM users
 WHERE id = ANY(@ids::text[]);
 
 -- name: SetUserWorkosID :exec
-UPDATE users 
-SET workos_id = @workos_id, 
+UPDATE users
+SET workos_id = @workos_id,
   updated_at = clock_timestamp()
-WHERE id = @id AND 
+WHERE id = @id AND
   workos_id IS NULL;
+
+-- name: OverwriteUserWorkosID :exec
+UPDATE users
+SET workos_id = @workos_id,
+  updated_at = clock_timestamp()
+WHERE id = @id;

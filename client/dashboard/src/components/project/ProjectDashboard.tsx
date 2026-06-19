@@ -1,37 +1,44 @@
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
-import { useAuditLogs, useGramContext } from "@gram/client/react-query";
-import { useFeaturesGet } from "@gram/client/react-query/featuresGet";
+import {
+  useAuditLogs,
+  useGramContext,
+  useMembers,
+  useProductFeatures,
+} from "@gram/client/react-query";
 import { telemetryGetProjectOverview } from "@gram/client/funcs/telemetryGetProjectOverview";
+import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
+import type {
+  SearchUsersFilter,
+  UserSummary,
+} from "@gram/client/models/components";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
-import { Badge, Button, Card, Icon } from "@speakeasy-api/moonshine";
-import { TimeRangePicker } from "@gram-ai/elements";
+import { Button, Card, Icon } from "@speakeasy-api/moonshine";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Wand2 } from "lucide-react";
 import {
   INSIGHTS_AI_RAINBOW_CLASS,
   type InsightsConfigOptions,
-} from "@/components/insights-sidebar";
+} from "@/components/insights-dock";
 import { useInsightsState } from "@/components/insights-context";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
-import { ProjectOnboardingBanner } from "./ProjectOnboarding";
 
-export function ProjectDashboard() {
+export function ProjectDashboard(): JSX.Element {
   const { projectSlug } = useSlugs();
-  const project = useProject();
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
 
@@ -55,7 +62,7 @@ export function ProjectDashboard() {
     data: featuresData,
     isPending: isFeaturesPending,
     isError: isFeaturesError,
-  } = useFeaturesGet();
+  } = useProductFeatures();
   const logsEnabled = featuresData?.logsEnabled === true;
 
   // The SDK's useGetProjectOverview omits the request body from its query
@@ -74,6 +81,206 @@ export function ProjectDashboard() {
     enabled: logsEnabled,
     placeholderData: keepPreviousData,
   });
+
+  const { data: membersData, isPending: isMembersPending } = useMembers();
+  const members = useMemo(() => membersData?.members ?? [], [membersData]);
+  const memberById = useMemo(
+    () => new Map(members.map((m) => [m.id, m])),
+    [members],
+  );
+
+  const { data: topUsersSearchData, isPending: isTopUsersPending } = useQuery({
+    queryKey: ["project", "topUsers", from.toISOString(), to.toISOString()],
+    queryFn: () =>
+      fetchAllUsers(client, { from, to, eventSource: "hook" }, "internal"),
+    enabled: logsEnabled,
+    placeholderData: keepPreviousData,
+  });
+
+  // Mode detection: a project that only hosts MCP servers produces no hook
+  // telemetry, so the hook-filtered fetch above is empty. Once it has loaded we
+  // know which view to render — prefer the hook/agent view whenever any hook
+  // data exists, else fall back to the MCP-hosting view.
+  const hookDataLoaded = topUsersSearchData !== undefined;
+  const hasHookData = (topUsersSearchData?.length ?? 0) > 0;
+
+  const topUsersByTokens = useMemo(() => {
+    if (!topUsersSearchData) return [];
+    return [...topUsersSearchData]
+      .sort(
+        (a, b) =>
+          b.totalInputTokens +
+          b.totalOutputTokens -
+          (a.totalInputTokens + a.totalOutputTokens),
+      )
+      .slice(0, 5)
+      .map((u) => ({
+        key: u.userId,
+        label: memberById.get(u.userId)?.name ?? u.userId,
+        value: u.totalInputTokens + u.totalOutputTokens,
+      }));
+  }, [topUsersSearchData, memberById]);
+
+  // Most Agent Sessions by User reads from the same trusted telemetrySearchUsers
+  // data as Top Users (rather than overview.summary.topUsers), ranking by the
+  // number of distinct agent sessions (totalChats = unique gen_ai.conversation.id,
+  // which every hook source stamps with its session id). Names resolve via the
+  // shared memberById map; internal users only, so raw auth IDs no longer leak.
+  const topUsersBySessions = useMemo(() => {
+    if (!topUsersSearchData) return [];
+    return [...topUsersSearchData]
+      .filter((u) => u.totalChats > 0)
+      .sort((a, b) => b.totalChats - a.totalChats)
+      .slice(0, 5)
+      .map((u) => {
+        const member = memberById.get(u.userId);
+        return {
+          userId: u.userId,
+          name: member?.name ?? u.userId,
+          initialsSource: member?.email ?? member?.name ?? u.userId,
+          sessions: u.totalChats,
+        };
+      });
+  }, [topUsersSearchData, memberById]);
+
+  // Total agent sessions = sum of per-user distinct hook sessions (totalChats).
+  // Each session id (gen_ai.conversation.id) belongs to a single user, so summing
+  // per-user counts gives the project-wide distinct-session total.
+  const totalSessions = (topUsersSearchData ?? []).reduce(
+    (sum, u) => sum + u.totalChats,
+    0,
+  );
+
+  // Most Used Agents: aggregate per-user hook-source breakdowns (hookSources)
+  // across all users, ranking agents (claude-code, cursor, ...) by total events.
+  // Replaces overview.summary.llmClientBreakdown, whose tool-call-only count
+  // reads 0 for hook events (they carry no `tools:` URN).
+  const mostUsedAgents = useMemo(() => {
+    const bySource = new Map<string, number>();
+    for (const u of topUsersSearchData ?? []) {
+      for (const h of u.hookSources) {
+        bySource.set(h.source, (bySource.get(h.source) ?? 0) + h.eventCount);
+      }
+    }
+    return [...bySource.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([source, eventCount]) => ({
+        key: source,
+        label: source,
+        value: eventCount,
+      }));
+  }, [topUsersSearchData]);
+
+  // Total Spend mirrors the Employees ("cost") page exactly: internal users,
+  // all event sources (no eventSource filter), summing per-user totalCost — so
+  // this card shows the same figure as that page.
+  const { data: allUsersSpendData, isPending: isSpendPending } = useQuery({
+    queryKey: ["project", "totalSpend", from.toISOString(), to.toISOString()],
+    queryFn: () => fetchAllUsers(client, { from, to }, "internal"),
+    // Spend is only shown in the hook/agent view.
+    enabled: logsEnabled && hasHookData,
+    placeholderData: keepPreviousData,
+  });
+
+  const totalSpend = (allUsersSpendData ?? []).reduce(
+    (sum, u) => sum + u.totalCost,
+    0,
+  );
+
+  // MCP-hosting fallback: external end-users (customer-supplied IDs) and their
+  // tool-call activity. Fetched only when the project has no hook data. No
+  // eventSource filter — these projects' activity is MCP tool calls, not hooks.
+  const { data: externalUsersData } = useQuery({
+    queryKey: [
+      "project",
+      "externalUsers",
+      from.toISOString(),
+      to.toISOString(),
+    ],
+    queryFn: () => fetchAllUsers(client, { from, to }, "external"),
+    enabled: logsEnabled && hookDataLoaded && !hasHookData,
+    placeholderData: keepPreviousData,
+  });
+
+  // Top end-users by MCP tool-call volume. External IDs are customer-supplied,
+  // not Gram members, so they render raw (no member resolution).
+  const topEndUsers = useMemo(
+    () =>
+      [...(externalUsersData ?? [])]
+        .sort((a, b) => b.totalToolCalls - a.totalToolCalls)
+        .slice(0, 5)
+        .map((u) => ({
+          key: u.userId,
+          label: u.userId,
+          value: u.totalToolCalls,
+        })),
+    [externalUsersData],
+  );
+
+  // Most-used tools = aggregate per-user tool breakdowns by URN across all
+  // external users (replaces Most Used Agents, which has no MCP equivalent).
+  const mostUsedTools = useMemo(() => {
+    const byTool = new Map<string, number>();
+    for (const u of externalUsersData ?? []) {
+      for (const t of u.tools) {
+        byTool.set(t.urn, (byTool.get(t.urn) ?? 0) + t.count);
+      }
+    }
+    return [...byTool.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([urn, count]) => ({
+        key: urn,
+        label: toolLabelFromUrn(urn),
+        value: count,
+      }));
+  }, [externalUsersData]);
+
+  // Top tools by failure rate (MCP view): aggregate per-tool call + failure
+  // counts across external users; rank by failure rate, tie-broken by absolute
+  // failures so a high-volume failing tool outranks a one-off 100% failure.
+  const topToolsByFailureRate = useMemo(() => {
+    const agg = new Map<string, { calls: number; failures: number }>();
+    for (const u of externalUsersData ?? []) {
+      for (const t of u.tools) {
+        const cur = agg.get(t.urn) ?? { calls: 0, failures: 0 };
+        cur.calls += t.count;
+        cur.failures += t.failureCount;
+        agg.set(t.urn, cur);
+      }
+    }
+    return [...agg.entries()]
+      .filter(([, v]) => v.failures > 0)
+      .map(([urn, v]) => ({
+        key: urn,
+        label: toolLabelFromUrn(urn),
+        rate: v.calls > 0 ? (v.failures / v.calls) * 100 : 0,
+        failures: v.failures,
+      }))
+      .sort((a, b) => b.rate - a.rate || b.failures - a.failures)
+      .slice(0, 5)
+      .map((t) => ({
+        key: t.key,
+        label: t.label,
+        // Keep the raw rate for the bar width: every tool here has ≥1 failure,
+        // so rounding (e.g. 0.4% → 0) would zero out the bar and the label.
+        value: t.rate,
+        // Never render "0%" in a failures-only list; show "<1%" below 1%.
+        valueLabel: t.rate < 1 ? "<1%" : `${Math.round(t.rate)}%`,
+      }));
+  }, [externalUsersData]);
+
+  const endUsersCount = externalUsersData?.length ?? 0;
+
+  const isTopUsersLoading =
+    logsEnabled && (isTopUsersPending || isMembersPending);
+
+  // Mode is unknown until the hook fetch + members settle.
+  const modePending = isTopUsersLoading;
+  // Spend (hook view) / external users (MCP view) still loading after mode known.
+  const isSpendLoading = hasHookData && (isSpendPending || !allUsersSpendData);
+  const mcpUsersPending = !hasHookData && externalUsersData === undefined;
 
   const featuresSettled = !isFeaturesPending || isFeaturesError;
   const isOverviewLoading =
@@ -100,11 +307,13 @@ export function ProjectDashboard() {
     !isFeaturesPending && !isFeaturesError && !logsEnabled;
 
   const {
+    available: insightsDockAvailable,
     isExpanded: isInsightsExpanded,
     setIsExpanded: setInsightsExpanded,
     setOverride: setInsightsOverride,
     sendPrompt: sendInsightsPrompt,
   } = useInsightsState();
+  const navigate = useNavigate();
 
   const exploreWithAI = useCallback(
     (opts: InsightsConfigOptions) => {
@@ -114,11 +323,26 @@ export function ProjectDashboard() {
       // on the first runtime.append call and (b) triggered a click-outside
       // crash via the unmount→cleanup chain.
       setInsightsOverride(opts);
-      setInsightsExpanded(true);
       const firstPrompt = opts.suggestions?.[0]?.prompt;
+      // When the dock is hidden (e.g. the home page provides its own chat
+      // widget), there's no panel to expand into — drop the user into the
+      // full-page chat with the prompt instead.
+      if (!insightsDockAvailable) {
+        if (firstPrompt) sendInsightsPrompt(firstPrompt);
+        void navigate(routes.chat.conversation.href("new"));
+        return;
+      }
+      setInsightsExpanded(true);
       if (firstPrompt) sendInsightsPrompt(firstPrompt);
     },
-    [setInsightsOverride, setInsightsExpanded, sendInsightsPrompt],
+    [
+      insightsDockAvailable,
+      setInsightsOverride,
+      setInsightsExpanded,
+      sendInsightsPrompt,
+      navigate,
+      routes,
+    ],
   );
 
   // Clear the per-chart override when the panel is closed so the next opening
@@ -141,11 +365,6 @@ export function ProjectDashboard() {
   return (
     <Page.Section>
       <Page.Section.Title>Project Overview</Page.Section.Title>
-      <Page.Section.Description>
-        <Badge variant="neutral">
-          <Badge.Text>{project.name}</Badge.Text>
-        </Badge>
-      </Page.Section.Description>
       <Page.Section.CTA>
         {logsEnabled && (
           <TimeRangePicker
@@ -161,10 +380,6 @@ export function ProjectDashboard() {
 
       <Page.Section.Body>
         <div className="space-y-8">
-          {(isProjectEmpty || showDisabledBanner) && (
-            <ProjectOnboardingBanner />
-          )}
-
           {showDisabledBanner && (
             <LoggingDisabledBanner settingsHref={orgRoutes.logs.href()} />
           )}
@@ -180,7 +395,7 @@ export function ProjectDashboard() {
                     title="Active Servers"
                     value={overview?.summary.activeServersCount ?? 0}
                     icon="server"
-                    tooltip="Unique MCP servers that received at least one tool call via hook telemetry in the selected period. Servers with no activity in the window are not counted."
+                    tooltip="Unique MCP servers used by project members that received at least one tool call in the selected period. Servers with no activity in the window are not counted."
                   />
                 )}
                 {isOverviewPending ? (
@@ -190,27 +405,43 @@ export function ProjectDashboard() {
                     title="Tool Calls"
                     value={overview?.summary.totalToolCalls ?? 0}
                     icon="wrench"
-                    tooltip="Total tool invocations recorded across all servers and sources (Elements, MCP, hooks, and the Gram SDK) in the selected period."
+                    tooltip="Total tool invocations recorded across all servers and sources in the selected period."
                   />
                 )}
-                {isOverviewPending ? (
+                {modePending ||
+                (hasHookData ? isSpendLoading : mcpUsersPending) ? (
                   <Skeleton className="h-[100px] rounded-lg" />
+                ) : hasHookData ? (
+                  <MetricCard
+                    title="Total Spend"
+                    value={totalSpend}
+                    format="currency"
+                    icon="dollar-sign"
+                    tooltip="Total LLM spend by project members in the selected period, summed from per-user cost. Matches the figure on the Employees page."
+                  />
                 ) : (
                   <MetricCard
                     title="End Users"
-                    value={overview?.summary.activeUsersCount ?? 0}
+                    value={endUsersCount}
                     icon="users"
-                    tooltip="Unique end users identified during the selected period. When chat sessions exist they are counted from chat messages; otherwise they are counted from tool-call hook events."
+                    tooltip="Distinct external end users that made MCP tool calls in the selected period."
                   />
                 )}
-                {isOverviewPending ? (
+                {modePending || isOverviewPending ? (
                   <Skeleton className="h-[100px] rounded-lg" />
-                ) : (
+                ) : hasHookData ? (
                   <MetricCard
                     title="Sessions"
-                    value={overview?.summary.totalChats ?? 0}
+                    value={totalSessions}
                     icon="message-circle"
-                    tooltip="Chat sessions started in the selected period across Elements, MCP clients, hooks, and any other source that opens a Gram chat."
+                    tooltip="Distinct agent sessions across project members in the selected period."
+                  />
+                ) : (
+                  <MetricCard
+                    title="Failed Tool Calls"
+                    value={overview?.summary.failedToolCalls ?? 0}
+                    icon="circle-alert"
+                    tooltip="MCP tool calls that returned an error (HTTP 4xx/5xx) in the selected period."
                   />
                 )}
               </div>
@@ -218,8 +449,12 @@ export function ProjectDashboard() {
               {/* Row 1: Top Activity */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <DashboardCard
-                  title="Top Users"
-                  tooltip="End users ranked by activity in the selected period. Activity is measured in tool calls, skill invocations or in chat messages when agent sessions exist."
+                  title={hasHookData ? "Top Users" : "Top End Users"}
+                  tooltip={
+                    hasHookData
+                      ? "Employees ranked by total token consumption (input + output tokens) in the selected period."
+                      : "External end users ranked by MCP tool calls in the selected period."
+                  }
                   action={
                     <CardActions>
                       <ExploreWithAIButton
@@ -229,40 +464,32 @@ export function ProjectDashboard() {
                             subtitle:
                               "Dig into who is driving the most activity.",
                             contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Top Users chart.`,
-                            suggestions: [
-                              {
-                                title: "Top users & usage patterns",
-                                label: rangeLabel,
-                                prompt: `Who are my top 5 end users in the ${rangeLabel}, and what is each user's main usage pattern — tool calls, skill invocations, agent sessions, or a mix?`,
-                              },
-                            ],
+                            suggestions:
+                              INSIGHTS_SUGGESTIONS["home#top-users"](
+                                rangeLabel,
+                              ),
                           })
                         }
                       />
-                      <ViewAllLink to={routes.insights.tools.href()} />
+                      <ViewAllLink to={routes.employees.href()} />
                     </CardActions>
                   }
                 >
-                  {isOverviewPending ? (
+                  {modePending || (!hasHookData && mcpUsersPending) ? (
                     <SkeletonList />
-                  ) : (overview?.summary.topUsers.length ?? 0) === 0 ? (
+                  ) : (hasHookData ? topUsersByTokens : topEndUsers).length ===
+                    0 ? (
                     <EmptyState message="No user activity recorded" />
                   ) : (
                     <RankedBarList
-                      items={(overview?.summary.topUsers ?? [])
-                        .slice(0, 5)
-                        .map((u) => ({
-                          key: u.userId,
-                          label: u.userId,
-                          value: u.activityCount,
-                        }))}
+                      items={hasHookData ? topUsersByTokens : topEndUsers}
                     />
                   )}
                 </DashboardCard>
 
                 <DashboardCard
                   title="Top Servers"
-                  tooltip="Servers ranked by the number of tool calls they served in the selected period, based on logs captured in hook telemetry in addition to MCP servers hosted on Gram."
+                  tooltip="Servers ranked by the number of tool calls they served in the selected period, based on logs captured from user sessions in addition to MCP servers hosted in your project."
                   action={
                     <CardActions>
                       <ExploreWithAIButton
@@ -272,17 +499,14 @@ export function ProjectDashboard() {
                             subtitle:
                               "See which MCP servers are driving the most traffic.",
                             contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Top Servers chart.`,
-                            suggestions: [
-                              {
-                                title: "Top servers & hot tools",
-                                label: rangeLabel,
-                                prompt: `Which servers received the most tool calls in the ${rangeLabel}, and which specific tools on each server are driving that volume? Lets look at data from all logs including hooks telemetry.`,
-                              },
-                            ],
+                            suggestions:
+                              INSIGHTS_SUGGESTIONS["home#top-servers"](
+                                rangeLabel,
+                              ),
                           })
                         }
                       />
-                      <ViewAllLink to={routes.insights.tools.href()} />
+                      <ViewAllLink to={routes.insights.href()} />
                     </CardActions>
                   }
                 >
@@ -304,125 +528,152 @@ export function ProjectDashboard() {
                 </DashboardCard>
               </div>
 
-              {/* Row 2: Sessions */}
+              {/* Row 2: Sessions (hook view) / Tools (MCP view) */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <DashboardCard
-                  title="Most Agent Sessions by User"
-                  tooltip="End users ranked by agent activity in the selected period. When chat sessions exist, activity counts chat messages; otherwise it counts tool calls from hook events."
-                  action={
-                    <CardActions>
-                      <ExploreWithAIButton
-                        onClick={() =>
-                          exploreWithAI({
-                            title: "Analyze agent sessions",
-                            subtitle:
-                              "Understand how your power users interact with agents.",
-                            contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Most Agent Sessions by User chart.`,
-                            suggestions: [
-                              {
-                                title: "Power users & agent behavior",
-                                label: rangeLabel,
-                                prompt: `For the users with the most agent sessions in the ${rangeLabel}, what are the common prompts they send and which tools get invoked most often?`,
-                              },
-                            ],
-                          })
-                        }
-                      />
-                      <ViewAllLink
-                        to={
-                          // no hooks data and no chat sessions
-                          isProjectEmpty && overview?.summary.totalChats === 0
-                            ? routes.insights.href()
-                            : // has hooks data but no chat sessions
-                              !isProjectEmpty &&
-                                overview?.summary.totalChats === 0
-                              ? routes.insights.href()
-                              : routes.logs.agents.href()
-                        }
-                      />
-                    </CardActions>
-                  }
-                >
-                  {isOverviewPending ? (
-                    <SkeletonList />
-                  ) : (overview?.summary.topUsers.length ?? 0) === 0 ? (
-                    <EmptyState message="No session activity recorded" />
-                  ) : (
-                    <ul className="divide-border divide-y">
-                      {(overview?.summary.topUsers ?? [])
-                        .slice(0, 5)
-                        .map((user, i) => (
-                          <li
-                            key={user.userId}
-                            className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
-                          >
-                            <Avatar className="size-8 shrink-0">
-                              <AvatarFallback
-                                className={cn(
-                                  "text-xs font-medium",
-                                  avatarColor(i),
-                                )}
-                              >
-                                {emailInitials(user.userId)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium">
-                                {user.userId}
-                              </p>
-                              <p className="text-muted-foreground text-xs">
-                                {user.activityCount.toLocaleString()} calls
-                              </p>
-                            </div>
-                          </li>
-                        ))}
-                    </ul>
-                  )}
-                </DashboardCard>
+                {hasHookData ? (
+                  <>
+                    <DashboardCard
+                      title="Most Agent Sessions by User"
+                      tooltip="Employees ranked by the number of distinct agent sessions in the selected period."
+                      action={
+                        <CardActions>
+                          <ExploreWithAIButton
+                            onClick={() =>
+                              exploreWithAI({
+                                title: "Analyze agent sessions",
+                                subtitle:
+                                  "Understand how your power users interact with agents.",
+                                contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Most Agent Sessions by User chart.`,
+                                suggestions:
+                                  INSIGHTS_SUGGESTIONS["home#agent-sessions"](
+                                    rangeLabel,
+                                  ),
+                              })
+                            }
+                          />
+                          <ViewAllLink
+                            to={
+                              // no hooks data and no chat sessions
+                              isProjectEmpty &&
+                              overview?.summary.totalChats === 0
+                                ? routes.insights.href()
+                                : // has hooks data but no chat sessions
+                                  !isProjectEmpty &&
+                                    overview?.summary.totalChats === 0
+                                  ? routes.insights.href()
+                                  : routes.agentSessions.href()
+                            }
+                          />
+                        </CardActions>
+                      }
+                    >
+                      {isTopUsersLoading ? (
+                        <SkeletonList />
+                      ) : topUsersBySessions.length === 0 ? (
+                        <EmptyState message="No session activity recorded" />
+                      ) : (
+                        <ul className="divide-border divide-y">
+                          {topUsersBySessions.map((user, i) => (
+                            <li
+                              key={user.userId}
+                              className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
+                            >
+                              <Avatar className="size-8 shrink-0">
+                                <AvatarFallback
+                                  className={cn(
+                                    "text-xs font-medium",
+                                    avatarColor(i),
+                                  )}
+                                >
+                                  {emailInitials(user.initialsSource)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium">
+                                  {user.name}
+                                </p>
+                                <p className="text-muted-foreground text-xs">
+                                  {user.sessions.toLocaleString()}{" "}
+                                  {user.sessions === 1 ? "session" : "sessions"}
+                                </p>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </DashboardCard>
 
-                <DashboardCard
-                  title="Most Used LLM Clients"
-                  tooltip="LLM clients (e.g. Claude, Cursor, Windsurf) ranked by activity volume in the selected period, identified from client metadata sent with each call."
-                  action={
-                    <CardActions>
-                      <ExploreWithAIButton
-                        onClick={() =>
-                          exploreWithAI({
-                            title: "Analyze LLM client usage",
-                            subtitle:
-                              "Compare how different LLM clients exercise your tools.",
-                            contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Most Used LLM Clients chart.`,
-                            suggestions: [
-                              {
-                                title: "LLM clients & reliability",
-                                label: rangeLabel,
-                                prompt: `Break down tool-call activity by LLM client in the ${rangeLabel} and highlight any clients with unusually high error rates or latency.`,
-                              },
-                            ],
-                          })
-                        }
-                      />
-                      <ViewAllLink to={routes.insights.tools.href()} />
-                    </CardActions>
-                  }
-                >
-                  {isOverviewPending ? (
-                    <SkeletonList />
-                  ) : (overview?.summary.llmClientBreakdown.length ?? 0) ===
-                    0 ? (
-                    <EmptyState message="No LLM activity recorded" />
-                  ) : (
-                    <RankedBarList
-                      items={(overview?.summary.llmClientBreakdown ?? [])
-                        .slice(0, 5)
-                        .map((m) => ({
-                          key: m.clientName,
-                          label: m.clientName,
-                          value: m.activityCount,
-                        }))}
-                    />
-                  )}
-                </DashboardCard>
+                    <DashboardCard
+                      title="Most Used Agents"
+                      tooltip="Agents (e.g. Claude, Cursor, Codex) ranked by activity volume in the selected period, identified from client metadata sent with each call."
+                      action={
+                        <CardActions>
+                          <ExploreWithAIButton
+                            onClick={() =>
+                              exploreWithAI({
+                                title: "Analyze LLM client usage",
+                                subtitle:
+                                  "Compare how different LLM clients exercise your tools.",
+                                contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Most Used LLM Clients chart.`,
+                                suggestions:
+                                  INSIGHTS_SUGGESTIONS["home#llm-clients"](
+                                    rangeLabel,
+                                  ),
+                              })
+                            }
+                          />
+                          <ViewAllLink to={routes.insights.href()} />
+                        </CardActions>
+                      }
+                    >
+                      {isTopUsersLoading ? (
+                        <SkeletonList />
+                      ) : mostUsedAgents.length === 0 ? (
+                        <EmptyState message="No agent activity recorded" />
+                      ) : (
+                        <RankedBarList items={mostUsedAgents} />
+                      )}
+                    </DashboardCard>
+                  </>
+                ) : (
+                  <>
+                    <DashboardCard
+                      title="Most Used Tools"
+                      tooltip="Tools ranked by the number of MCP calls they served in the selected period."
+                      action={
+                        <CardActions>
+                          <ViewAllLink to={routes.insights.href()} />
+                        </CardActions>
+                      }
+                    >
+                      {modePending || mcpUsersPending ? (
+                        <SkeletonList />
+                      ) : mostUsedTools.length === 0 ? (
+                        <EmptyState message="No tool activity recorded" />
+                      ) : (
+                        <RankedBarList items={mostUsedTools} />
+                      )}
+                    </DashboardCard>
+
+                    <DashboardCard
+                      title="Top Tools by Failure Rate"
+                      tooltip="Tools with the highest share of failed MCP calls (HTTP 4xx/5xx) in the selected period. Only tools with at least one failure are shown."
+                      action={
+                        <CardActions>
+                          <ViewAllLink to={routes.insights.href()} />
+                        </CardActions>
+                      }
+                    >
+                      {modePending || mcpUsersPending ? (
+                        <SkeletonList />
+                      ) : topToolsByFailureRate.length === 0 ? (
+                        <EmptyState message="No tool failures recorded" />
+                      ) : (
+                        <RankedBarList items={topToolsByFailureRate} />
+                      )}
+                    </DashboardCard>
+                  </>
+                )}
               </div>
             </>
           )}
@@ -495,7 +746,13 @@ function LoggingDisabledBanner({ settingsHref }: { settingsHref: string }) {
   );
 }
 
-type RankedBarListItem = { key: string; label: string; value: number };
+type RankedBarListItem = {
+  key: string;
+  label: string;
+  value: number;
+  // Optional display override for the value (e.g. "42%"); bar width still uses `value`.
+  valueLabel?: string;
+};
 
 function RankedBarList({ items }: { items: RankedBarListItem[] }) {
   const max = items[0]?.value || 1;
@@ -510,7 +767,7 @@ function RankedBarList({ items }: { items: RankedBarListItem[] }) {
             <div className="mb-1 flex items-center justify-between">
               <span className="truncate text-sm">{item.label}</span>
               <span className="text-muted-foreground ml-2 shrink-0 text-xs">
-                {item.value.toLocaleString()}
+                {item.valueLabel ?? item.value.toLocaleString()}
               </span>
             </div>
             <div className="bg-muted h-1 w-full rounded-full">
@@ -550,6 +807,41 @@ const AVATAR_COLORS = [
 
 function avatarColor(index: number): string {
   return AVATAR_COLORS[index % AVATAR_COLORS.length]!;
+}
+
+// Fetch every page of telemetrySearchUsers for the given filter, following the
+// pagination cursor. Shared by the overview's hook / spend / external queries.
+async function fetchAllUsers(
+  client: Parameters<typeof telemetrySearchUsers>[0],
+  filter: SearchUsersFilter,
+  userType: "internal" | "external",
+): Promise<UserSummary[]> {
+  const users: UserSummary[] = [];
+  let cursor: string | undefined;
+  for (;;) {
+    const result = await unwrapAsync(
+      telemetrySearchUsers(client, {
+        searchUsersPayload: {
+          cursor,
+          filter,
+          limit: 1000,
+          sort: "desc",
+          userType,
+        },
+      }),
+    );
+    users.push(...result.users);
+    if (!result.nextCursor) break;
+    cursor = result.nextCursor;
+  }
+  return users;
+}
+
+// Tool URNs look like `tools:externalmcp:<server>:<tool>`; show the trailing
+// tool segment, falling back to the full URN.
+function toolLabelFromUrn(urn: string): string {
+  const parts = urn.split(":");
+  return parts[parts.length - 1] || urn;
 }
 
 function emailInitials(email: string): string {

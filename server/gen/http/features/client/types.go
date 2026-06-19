@@ -9,7 +9,6 @@ package client
 
 import (
 	features "github.com/speakeasy-api/gram/server/gen/features"
-	featuresviews "github.com/speakeasy-api/gram/server/gen/features/views"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -33,6 +32,12 @@ type GetProductFeaturesResponseBody struct {
 	SessionCaptureEnabled *bool `form:"session_capture_enabled,omitempty" json:"session_capture_enabled,omitempty" xml:"session_capture_enabled,omitempty"`
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled *bool `form:"authz_challenge_logging_enabled,omitempty" json:"authz_challenge_logging_enabled,omitempty" xml:"authz_challenge_logging_enabled,omitempty"`
+	// Whether webhooks are enabled
+	Webhooks *bool `form:"webhooks,omitempty" json:"webhooks,omitempty" xml:"webhooks,omitempty"`
+	// Whether SSO setup is enabled for the organization
+	SsoEnabled *bool `form:"sso_enabled,omitempty" json:"sso_enabled,omitempty" xml:"sso_enabled,omitempty"`
+	// Whether SCIM/directory sync setup is enabled for the organization
+	ScimEnabled *bool `form:"scim_enabled,omitempty" json:"scim_enabled,omitempty" xml:"scim_enabled,omitempty"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -418,14 +423,17 @@ func NewSetProductFeatureRequestBody(p *features.SetProductFeaturePayload) *SetP
 	return body
 }
 
-// NewGetProductFeaturesGramProductFeaturesOK builds a "features" service
+// NewGetProductFeaturesResultOK builds a "features" service
 // "getProductFeatures" endpoint result from a HTTP "OK" response.
-func NewGetProductFeaturesGramProductFeaturesOK(body *GetProductFeaturesResponseBody) *featuresviews.GramProductFeaturesView {
-	v := &featuresviews.GramProductFeaturesView{
-		LogsEnabled:                  body.LogsEnabled,
-		ToolIoLogsEnabled:            body.ToolIoLogsEnabled,
-		SessionCaptureEnabled:        body.SessionCaptureEnabled,
-		AuthzChallengeLoggingEnabled: body.AuthzChallengeLoggingEnabled,
+func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *features.GetProductFeaturesResult {
+	v := &features.GetProductFeaturesResult{
+		LogsEnabled:                  *body.LogsEnabled,
+		ToolIoLogsEnabled:            *body.ToolIoLogsEnabled,
+		SessionCaptureEnabled:        *body.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled: *body.AuthzChallengeLoggingEnabled,
+		Webhooks:                     *body.Webhooks,
+		SsoEnabled:                   *body.SsoEnabled,
+		ScimEnabled:                  *body.ScimEnabled,
 	}
 
 	return v
@@ -729,6 +737,33 @@ func NewSetProductFeatureGatewayError(body *SetProductFeatureGatewayErrorRespons
 	}
 
 	return v
+}
+
+// ValidateGetProductFeaturesResponseBody runs the validations defined on
+// GetProductFeaturesResponseBody
+func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody) (err error) {
+	if body.LogsEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("logs_enabled", "body"))
+	}
+	if body.ToolIoLogsEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_io_logs_enabled", "body"))
+	}
+	if body.SessionCaptureEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_capture_enabled", "body"))
+	}
+	if body.AuthzChallengeLoggingEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authz_challenge_logging_enabled", "body"))
+	}
+	if body.Webhooks == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("webhooks", "body"))
+	}
+	if body.SsoEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sso_enabled", "body"))
+	}
+	if body.ScimEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scim_enabled", "body"))
+	}
+	return
 }
 
 // ValidateGetProductFeaturesUnauthorizedResponseBody runs the validations

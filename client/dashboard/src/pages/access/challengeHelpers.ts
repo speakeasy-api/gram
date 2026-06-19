@@ -1,10 +1,25 @@
 import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
+import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 
 type Reason = AuthzChallenge["reason"];
+
+/** Keep only buckets that have a scope and a fully-specified resource. */
+export function isDisplayableBucket(b: ChallengeBucket): boolean {
+  return !!b.scope && !!b.resourceKind && !!b.resourceId;
+}
 
 export function getInitials(identifier: string): string {
   const name = identifier.split("@")[0] ?? identifier;
   return name.slice(0, 2).toUpperCase();
+}
+
+export function principalDisplayName(
+  userEmail: string | undefined,
+  principalUrn: string,
+): string {
+  if (userEmail) return userEmail;
+  if (principalUrn === "user:all") return "All users";
+  return principalUrn;
 }
 
 export function reasonLabel(reason: Reason): string {
@@ -15,6 +30,8 @@ export function reasonLabel(reason: Reason): string {
       return "No permissions configured for this identity.";
     case "scope_unsatisfied":
       return "The identity's roles don't include this permission.";
+    case "deny_grant":
+      return "Access denied — a deny grant explicitly blocks this permission.";
     case "invalid_check":
       return "The authorization check was malformed or invalid.";
     case "rbac_skipped_apikey":
@@ -22,6 +39,7 @@ export function reasonLabel(reason: Reason): string {
     case "dev_override":
       return "Access allowed via a development override.";
   }
+  return "Authorization status unavailable.";
 }
 
 /**

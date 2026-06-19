@@ -2,12 +2,44 @@ import { cn } from "@/lib/utils";
 import { Button, Theme, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Check, Copy } from "lucide-react";
 import React, { useEffect } from "react";
-import { BuiltinTheme, codeToHtml } from "shiki";
+import {
+  BuiltinTheme,
+  type BundledLanguage,
+  codeToHtml,
+  codeToTokens,
+  type ThemedToken,
+} from "shiki";
 
 const DEFAULT_THEME_PER_MODE: Record<Theme, BuiltinTheme> = {
   light: "github-light-default",
   dark: "github-dark-default",
 };
+
+/**
+ * A slot lets the caller host an interactive React node inline inside the
+ * highlighted code, in place of a sentinel string. Keyed by the exact token
+ * text shiki produces for the sentinel — for a JSON value that's the quoted
+ * form, e.g. `"\"__SLOT_orgToken__\""`. Used opt-in: passing `slots` switches
+ * CodeBlock to a token-rendered path (real React nodes) instead of the default
+ * dangerouslySetInnerHTML path, so existing usages are unaffected.
+ */
+export type CodeBlockSlot = {
+  /** React node rendered inline where the sentinel token was. */
+  node: React.ReactNode;
+  /** Text substituted for the sentinel when copying, so the clipboard stays
+   *  valid while the slot is unfilled. Defaults to "". */
+  copyText?: string;
+};
+
+// shiki FontStyle is a bitmask: Italic=1, Bold=2, Underline=4 (None=0/-1).
+function fontStyleProps(fs?: number): React.CSSProperties {
+  if (!fs || fs < 0) return {};
+  return {
+    fontStyle: fs & 1 ? "italic" : undefined,
+    fontWeight: fs & 2 ? "bold" : undefined,
+    textDecoration: fs & 4 ? "underline" : undefined,
+  };
+}
 
 export function CodeBlock({
   children: code,
@@ -17,6 +49,7 @@ export function CodeBlock({
   copyable = true,
   onCopy,
   preClassName,
+  slots,
 }: {
   children: string;
   language?: string;
@@ -25,15 +58,31 @@ export function CodeBlock({
   copyable?: boolean;
   onCopy?: () => void;
   preClassName?: string;
-}) {
+  slots?: Record<string, CodeBlockSlot>;
+}): React.JSX.Element {
   const { theme } = useMoonshineConfig();
+  const hasSlots = !!slots && Object.keys(slots).length > 0;
   const [highlightedCode, setHighlightedCode] = React.useState<string | null>(
     null,
   );
+  const [tokenResult, setTokenResult] = React.useState<Awaited<
+    ReturnType<typeof codeToTokens>
+  > | null>(null);
   const [copied, setCopied] = React.useState(false);
 
+  // What the copy button actually writes: with slots, substitute each sentinel
+  // with its copyText so an unfilled inline action never leaks the sentinel.
+  const copyText = React.useMemo(() => {
+    if (!slots) return code;
+    let out = code;
+    for (const [sentinel, slot] of Object.entries(slots)) {
+      out = out.split(sentinel).join(slot.copyText ?? "");
+    }
+    return out;
+  }, [code, slots]);
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(code);
+    void navigator.clipboard.writeText(copyText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     onCopy?.();
@@ -41,39 +90,115 @@ export function CodeBlock({
 
   useEffect(() => {
     if (!language) return;
+    let cancelled = false;
 
-    codeToHtml(code, {
-      lang: language,
-      theme: DEFAULT_THEME_PER_MODE[theme],
-      transformers: [
-        {
-          pre(node) {
-            // the github shiki themes come with a pre-defined background color, we don't want that
-            node.properties.class = cn(
-              "!bg-transparent",
-              preClassName,
-              theme === "dark" ? "dark" : "light",
-            );
+    if (hasSlots) {
+      // codeToTokens types `lang` stricter than codeToHtml's loose string; the
+      // prop is a free-form string, so narrow it the same way callers expect.
+      void codeToTokens(code, {
+        lang: language as BundledLanguage,
+        theme: DEFAULT_THEME_PER_MODE[theme],
+      }).then((res) => {
+        if (!cancelled) setTokenResult(res);
+      });
+    } else {
+      void codeToHtml(code, {
+        lang: language,
+        theme: DEFAULT_THEME_PER_MODE[theme],
+        transformers: [
+          {
+            pre(node) {
+              // the github shiki themes come with a pre-defined background color, we don't want that
+              node.properties.class = cn(
+                "!bg-transparent",
+                preClassName,
+                theme === "dark" ? "dark" : "light",
+              );
+            },
           },
-        },
-      ],
-    }).then(setHighlightedCode);
-  }, [code, language, preClassName, theme]);
+        ],
+      }).then((html) => {
+        if (!cancelled) setHighlightedCode(html);
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [code, language, preClassName, theme, hasSlots]);
 
   const baseClasses =
     "rounded-md font-mono text-sm text-wrap overflow-x-auto border break-all whitespace-pre-wrap truncate";
+  const innerClasses = cn(baseClasses, "p-4 pr-12", innerClassName);
+  // Shown until the async highlight resolves (and as the slot-path placeholder).
+  const fallback = <div className={innerClasses}>{code}</div>;
+
+  // Token-rendered path: shiki tokens as real React nodes so a slot can host an
+  // interactive element inline. Mirrors shiki's <pre><code> structure so the
+  // visual matches the default path.
+  const renderTokens = (result: Awaited<ReturnType<typeof codeToTokens>>) => {
+    const lines = result.tokens as ThemedToken[][];
+    return (
+      <pre
+        className={cn(
+          "!bg-transparent break-all whitespace-pre-wrap",
+          preClassName,
+        )}
+        style={{ color: result.fg }}
+      >
+        <code>
+          {lines.map((line, li) => (
+            <React.Fragment key={li}>
+              {line.map((tok, ti) => {
+                // Match by substring rather than exact token text: the caller
+                // keys slots by a plain sentinel (e.g. "__SLOT_orgToken__") and
+                // shiki may wrap it (quotes, etc.) in the token it emits, so the
+                // page doesn't have to know shiki's exact tokenization.
+                const slotKey =
+                  slots &&
+                  Object.keys(slots).find((k) => tok.content.includes(k));
+                if (slotKey) {
+                  return (
+                    <React.Fragment key={ti}>
+                      {slots[slotKey]!.node}
+                    </React.Fragment>
+                  );
+                }
+                return (
+                  <span
+                    key={ti}
+                    style={{
+                      color: tok.color,
+                      ...fontStyleProps(tok.fontStyle),
+                    }}
+                  >
+                    {tok.content}
+                  </span>
+                );
+              })}
+              {li < lines.length - 1 ? "\n" : null}
+            </React.Fragment>
+          ))}
+        </code>
+      </pre>
+    );
+  };
 
   return (
     <div className={cn("group relative", className)}>
-      {highlightedCode ? (
+      {hasSlots ? (
+        tokenResult ? (
+          <div className={innerClasses}>{renderTokens(tokenResult)}</div>
+        ) : (
+          fallback
+        )
+      ) : highlightedCode ? (
         <div
-          className={cn(baseClasses, "p-4 pr-12", innerClassName)}
+          className={innerClasses}
           dangerouslySetInnerHTML={{ __html: highlightedCode ?? "" }}
         />
       ) : (
-        <div className={cn(baseClasses, "p-4 pr-12", innerClassName)}>
-          {code}
-        </div>
+        fallback
       )}
       {copyable && (
         <Button

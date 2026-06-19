@@ -39,12 +39,17 @@ type UpdatePluginRequestBody struct {
 // "addPluginServer" endpoint HTTP request body.
 type AddPluginServerRequestBody struct {
 	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
-	// Gram toolset ID for the MCP server.
-	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
-	// Display name for the server.
-	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
-	Policy      string `form:"policy" json:"policy" xml:"policy"`
-	SortOrder   int32  `form:"sort_order" json:"sort_order" xml:"sort_order"`
+	// Gram toolset ID for a toolset-backed MCP server. Provide exactly one of
+	// toolset_id or mcp_server_id.
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of
+	// toolset_id or mcp_server_id.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Display name for the server. Defaults to the backing toolset or mcp_server
+	// name when omitted.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	Policy      string  `form:"policy" json:"policy" xml:"policy"`
+	SortOrder   int32   `form:"sort_order" json:"sort_order" xml:"sort_order"`
 }
 
 // UpdatePluginServerRequestBody is the type of the "plugins" service
@@ -70,6 +75,15 @@ type SetPluginAssignmentsRequestBody struct {
 type PublishPluginsRequestBody struct {
 	// GitHub usernames to add as collaborators on the repo.
 	GithubUsernames []string `form:"github_usernames,omitempty" json:"github_usernames,omitempty" xml:"github_usernames,omitempty"`
+}
+
+// UpdateMarketplaceSettingsRequestBody is the type of the "plugins" service
+// "updateMarketplaceSettings" endpoint HTTP request body.
+type UpdateMarketplaceSettingsRequestBody struct {
+	// Override for the marketplace name (the identifier users type as
+	// `<plugin>@<marketplace>`). Pass an empty string or omit to clear the
+	// override and fall back to the default.
+	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
 }
 
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
@@ -153,8 +167,12 @@ type UpdatePluginResponseBody struct {
 type AddPluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram toolset ID.
+	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
+	// toolset_id / mcp_server_id is set).
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
+	// of toolset_id / mcp_server_id is set).
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Display name shown in generated plugin config.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Whether this server is required or optional.
@@ -169,8 +187,12 @@ type AddPluginServerResponseBody struct {
 type UpdatePluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram toolset ID.
+	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
+	// toolset_id / mcp_server_id is set).
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
+	// of toolset_id / mcp_server_id is set).
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Display name shown in generated plugin config.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Whether this server is required or optional.
@@ -212,6 +234,29 @@ type GetPublishStatusResponseBody struct {
 type PublishPluginsResponseBody struct {
 	// The URL of the published GitHub repository.
 	RepoURL *string `form:"repo_url,omitempty" json:"repo_url,omitempty" xml:"repo_url,omitempty"`
+}
+
+// GetMarketplaceSettingsResponseBody is the type of the "plugins" service
+// "getMarketplaceSettings" endpoint HTTP response body.
+type GetMarketplaceSettingsResponseBody struct {
+	// User-provided override for the marketplace name. Absent when no override is
+	// configured.
+	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+	// The default marketplace name used when no override is configured.
+	DefaultName *string `form:"default_name,omitempty" json:"default_name,omitempty" xml:"default_name,omitempty"`
+	// The marketplace name that will be used at publish time (override if set,
+	// otherwise default).
+	EffectiveName *string `form:"effective_name,omitempty" json:"effective_name,omitempty" xml:"effective_name,omitempty"`
+}
+
+// UpdateMarketplaceSettingsResponseBody is the type of the "plugins" service
+// "updateMarketplaceSettings" endpoint HTTP response body.
+type UpdateMarketplaceSettingsResponseBody struct {
+	// The updated marketplace settings.
+	Settings *MarketplaceSettingsResultResponseBody `form:"settings,omitempty" json:"settings,omitempty" xml:"settings,omitempty"`
+	// Whether the marketplace was automatically republished to GitHub as part of
+	// this update.
+	Republished *bool `form:"republished,omitempty" json:"republished,omitempty" xml:"republished,omitempty"`
 }
 
 // ListPluginsUnauthorizedResponseBody is the type of the "plugins" service
@@ -2800,6 +2845,386 @@ type PublishPluginsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetMarketplaceSettingsUnauthorizedResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetMarketplaceSettingsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMarketplaceSettingsForbiddenResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "forbidden" error.
+type GetMarketplaceSettingsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMarketplaceSettingsBadRequestResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "bad_request" error.
+type GetMarketplaceSettingsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMarketplaceSettingsNotFoundResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "not_found" error.
+type GetMarketplaceSettingsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMarketplaceSettingsConflictResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "conflict" error.
+type GetMarketplaceSettingsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMarketplaceSettingsUnsupportedMediaResponseBody is the type of the
+// "plugins" service "getMarketplaceSettings" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetMarketplaceSettingsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMarketplaceSettingsInvalidResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "invalid" error.
+type GetMarketplaceSettingsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMarketplaceSettingsInvariantViolationResponseBody is the type of the
+// "plugins" service "getMarketplaceSettings" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetMarketplaceSettingsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMarketplaceSettingsUnexpectedResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "unexpected" error.
+type GetMarketplaceSettingsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMarketplaceSettingsGatewayErrorResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetMarketplaceSettingsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateMarketplaceSettingsUnauthorizedResponseBody is the type of the
+// "plugins" service "updateMarketplaceSettings" endpoint HTTP response body
+// for the "unauthorized" error.
+type UpdateMarketplaceSettingsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateMarketplaceSettingsForbiddenResponseBody is the type of the "plugins"
+// service "updateMarketplaceSettings" endpoint HTTP response body for the
+// "forbidden" error.
+type UpdateMarketplaceSettingsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateMarketplaceSettingsBadRequestResponseBody is the type of the "plugins"
+// service "updateMarketplaceSettings" endpoint HTTP response body for the
+// "bad_request" error.
+type UpdateMarketplaceSettingsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateMarketplaceSettingsNotFoundResponseBody is the type of the "plugins"
+// service "updateMarketplaceSettings" endpoint HTTP response body for the
+// "not_found" error.
+type UpdateMarketplaceSettingsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateMarketplaceSettingsConflictResponseBody is the type of the "plugins"
+// service "updateMarketplaceSettings" endpoint HTTP response body for the
+// "conflict" error.
+type UpdateMarketplaceSettingsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateMarketplaceSettingsUnsupportedMediaResponseBody is the type of the
+// "plugins" service "updateMarketplaceSettings" endpoint HTTP response body
+// for the "unsupported_media" error.
+type UpdateMarketplaceSettingsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateMarketplaceSettingsInvalidResponseBody is the type of the "plugins"
+// service "updateMarketplaceSettings" endpoint HTTP response body for the
+// "invalid" error.
+type UpdateMarketplaceSettingsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateMarketplaceSettingsInvariantViolationResponseBody is the type of the
+// "plugins" service "updateMarketplaceSettings" endpoint HTTP response body
+// for the "invariant_violation" error.
+type UpdateMarketplaceSettingsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateMarketplaceSettingsUnexpectedResponseBody is the type of the "plugins"
+// service "updateMarketplaceSettings" endpoint HTTP response body for the
+// "unexpected" error.
+type UpdateMarketplaceSettingsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateMarketplaceSettingsGatewayErrorResponseBody is the type of the
+// "plugins" service "updateMarketplaceSettings" endpoint HTTP response body
+// for the "gateway_error" error.
+type UpdateMarketplaceSettingsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // PluginResponseBody is used to define fields on response body types.
 type PluginResponseBody struct {
 	// Unique plugin identifier.
@@ -2826,8 +3251,12 @@ type PluginResponseBody struct {
 type PluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram toolset ID.
+	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
+	// toolset_id / mcp_server_id is set).
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
+	// of toolset_id / mcp_server_id is set).
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Display name shown in generated plugin config.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Whether this server is required or optional.
@@ -2844,6 +3273,19 @@ type PluginAssignmentResponseBody struct {
 	// Principal URN (e.g. role:engineering, user:id, or *).
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	CreatedAt    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+}
+
+// MarketplaceSettingsResultResponseBody is used to define fields on response
+// body types.
+type MarketplaceSettingsResultResponseBody struct {
+	// User-provided override for the marketplace name. Absent when no override is
+	// configured.
+	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+	// The default marketplace name used when no override is configured.
+	DefaultName *string `form:"default_name,omitempty" json:"default_name,omitempty" xml:"default_name,omitempty"`
+	// The marketplace name that will be used at publish time (override if set,
+	// otherwise default).
+	EffectiveName *string `form:"effective_name,omitempty" json:"effective_name,omitempty" xml:"effective_name,omitempty"`
 }
 
 // NewCreatePluginRequestBody builds the HTTP request body from the payload of
@@ -2875,6 +3317,7 @@ func NewAddPluginServerRequestBody(p *plugins.AddPluginServerPayload) *AddPlugin
 	body := &AddPluginServerRequestBody{
 		PluginID:    p.PluginID,
 		ToolsetID:   p.ToolsetID,
+		McpServerID: p.McpServerID,
 		DisplayName: p.DisplayName,
 		Policy:      p.Policy,
 		SortOrder:   p.SortOrder,
@@ -2945,6 +3388,16 @@ func NewPublishPluginsRequestBody(p *plugins.PublishPluginsPayload) *PublishPlug
 		for i, val := range p.GithubUsernames {
 			body.GithubUsernames[i] = val
 		}
+	}
+	return body
+}
+
+// NewUpdateMarketplaceSettingsRequestBody builds the HTTP request body from
+// the payload of the "updateMarketplaceSettings" endpoint of the "plugins"
+// service.
+func NewUpdateMarketplaceSettingsRequestBody(p *plugins.UpdateMarketplaceSettingsPayload) *UpdateMarketplaceSettingsRequestBody {
+	body := &UpdateMarketplaceSettingsRequestBody{
+		MarketplaceName: p.MarketplaceName,
 	}
 	return body
 }
@@ -3831,7 +4284,8 @@ func NewDeletePluginGatewayError(body *DeletePluginGatewayErrorResponseBody) *go
 func NewAddPluginServerPluginServerCreated(body *AddPluginServerResponseBody) *plugins.PluginServer {
 	v := &plugins.PluginServer{
 		ID:          *body.ID,
-		ToolsetID:   *body.ToolsetID,
+		ToolsetID:   body.ToolsetID,
+		McpServerID: body.McpServerID,
 		DisplayName: *body.DisplayName,
 		Policy:      *body.Policy,
 		SortOrder:   *body.SortOrder,
@@ -3996,7 +4450,8 @@ func NewAddPluginServerGatewayError(body *AddPluginServerGatewayErrorResponseBod
 func NewUpdatePluginServerPluginServerOK(body *UpdatePluginServerResponseBody) *plugins.PluginServer {
 	v := &plugins.PluginServer{
 		ID:          *body.ID,
-		ToolsetID:   *body.ToolsetID,
+		ToolsetID:   body.ToolsetID,
+		McpServerID: body.McpServerID,
 		DisplayName: *body.DisplayName,
 		Policy:      *body.Policy,
 		SortOrder:   *body.SortOrder,
@@ -5277,6 +5732,329 @@ func NewPublishPluginsGatewayError(body *PublishPluginsGatewayErrorResponseBody)
 	return v
 }
 
+// NewGetMarketplaceSettingsMarketplaceSettingsResultOK builds a "plugins"
+// service "getMarketplaceSettings" endpoint result from a HTTP "OK" response.
+func NewGetMarketplaceSettingsMarketplaceSettingsResultOK(body *GetMarketplaceSettingsResponseBody) *plugins.MarketplaceSettingsResult {
+	v := &plugins.MarketplaceSettingsResult{
+		MarketplaceName: body.MarketplaceName,
+		DefaultName:     *body.DefaultName,
+		EffectiveName:   *body.EffectiveName,
+	}
+
+	return v
+}
+
+// NewGetMarketplaceSettingsUnauthorized builds a plugins service
+// getMarketplaceSettings endpoint unauthorized error.
+func NewGetMarketplaceSettingsUnauthorized(body *GetMarketplaceSettingsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMarketplaceSettingsForbidden builds a plugins service
+// getMarketplaceSettings endpoint forbidden error.
+func NewGetMarketplaceSettingsForbidden(body *GetMarketplaceSettingsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMarketplaceSettingsBadRequest builds a plugins service
+// getMarketplaceSettings endpoint bad_request error.
+func NewGetMarketplaceSettingsBadRequest(body *GetMarketplaceSettingsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMarketplaceSettingsNotFound builds a plugins service
+// getMarketplaceSettings endpoint not_found error.
+func NewGetMarketplaceSettingsNotFound(body *GetMarketplaceSettingsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMarketplaceSettingsConflict builds a plugins service
+// getMarketplaceSettings endpoint conflict error.
+func NewGetMarketplaceSettingsConflict(body *GetMarketplaceSettingsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMarketplaceSettingsUnsupportedMedia builds a plugins service
+// getMarketplaceSettings endpoint unsupported_media error.
+func NewGetMarketplaceSettingsUnsupportedMedia(body *GetMarketplaceSettingsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMarketplaceSettingsInvalid builds a plugins service
+// getMarketplaceSettings endpoint invalid error.
+func NewGetMarketplaceSettingsInvalid(body *GetMarketplaceSettingsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMarketplaceSettingsInvariantViolation builds a plugins service
+// getMarketplaceSettings endpoint invariant_violation error.
+func NewGetMarketplaceSettingsInvariantViolation(body *GetMarketplaceSettingsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMarketplaceSettingsUnexpected builds a plugins service
+// getMarketplaceSettings endpoint unexpected error.
+func NewGetMarketplaceSettingsUnexpected(body *GetMarketplaceSettingsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMarketplaceSettingsGatewayError builds a plugins service
+// getMarketplaceSettings endpoint gateway_error error.
+func NewGetMarketplaceSettingsGatewayError(body *GetMarketplaceSettingsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateMarketplaceSettingsResultOK builds a "plugins" service
+// "updateMarketplaceSettings" endpoint result from a HTTP "OK" response.
+func NewUpdateMarketplaceSettingsResultOK(body *UpdateMarketplaceSettingsResponseBody) *plugins.UpdateMarketplaceSettingsResult {
+	v := &plugins.UpdateMarketplaceSettingsResult{
+		Republished: *body.Republished,
+	}
+	v.Settings = unmarshalMarketplaceSettingsResultResponseBodyToPluginsMarketplaceSettingsResult(body.Settings)
+
+	return v
+}
+
+// NewUpdateMarketplaceSettingsUnauthorized builds a plugins service
+// updateMarketplaceSettings endpoint unauthorized error.
+func NewUpdateMarketplaceSettingsUnauthorized(body *UpdateMarketplaceSettingsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateMarketplaceSettingsForbidden builds a plugins service
+// updateMarketplaceSettings endpoint forbidden error.
+func NewUpdateMarketplaceSettingsForbidden(body *UpdateMarketplaceSettingsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateMarketplaceSettingsBadRequest builds a plugins service
+// updateMarketplaceSettings endpoint bad_request error.
+func NewUpdateMarketplaceSettingsBadRequest(body *UpdateMarketplaceSettingsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateMarketplaceSettingsNotFound builds a plugins service
+// updateMarketplaceSettings endpoint not_found error.
+func NewUpdateMarketplaceSettingsNotFound(body *UpdateMarketplaceSettingsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateMarketplaceSettingsConflict builds a plugins service
+// updateMarketplaceSettings endpoint conflict error.
+func NewUpdateMarketplaceSettingsConflict(body *UpdateMarketplaceSettingsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateMarketplaceSettingsUnsupportedMedia builds a plugins service
+// updateMarketplaceSettings endpoint unsupported_media error.
+func NewUpdateMarketplaceSettingsUnsupportedMedia(body *UpdateMarketplaceSettingsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateMarketplaceSettingsInvalid builds a plugins service
+// updateMarketplaceSettings endpoint invalid error.
+func NewUpdateMarketplaceSettingsInvalid(body *UpdateMarketplaceSettingsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateMarketplaceSettingsInvariantViolation builds a plugins service
+// updateMarketplaceSettings endpoint invariant_violation error.
+func NewUpdateMarketplaceSettingsInvariantViolation(body *UpdateMarketplaceSettingsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateMarketplaceSettingsUnexpected builds a plugins service
+// updateMarketplaceSettings endpoint unexpected error.
+func NewUpdateMarketplaceSettingsUnexpected(body *UpdateMarketplaceSettingsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateMarketplaceSettingsGatewayError builds a plugins service
+// updateMarketplaceSettings endpoint gateway_error error.
+func NewUpdateMarketplaceSettingsGatewayError(body *UpdateMarketplaceSettingsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateListPluginsResponseBody runs the validations defined on
 // ListPluginsResponseBody
 func ValidateListPluginsResponseBody(body *ListPluginsResponseBody) (err error) {
@@ -5431,9 +6209,6 @@ func ValidateAddPluginServerResponseBody(body *AddPluginServerResponseBody) (err
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.ToolsetID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
-	}
 	if body.DisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
@@ -5451,6 +6226,9 @@ func ValidateAddPluginServerResponseBody(body *AddPluginServerResponseBody) (err
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	if body.Policy != nil {
 		if !(*body.Policy == "required" || *body.Policy == "optional") {
@@ -5469,9 +6247,6 @@ func ValidateUpdatePluginServerResponseBody(body *UpdatePluginServerResponseBody
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.ToolsetID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
-	}
 	if body.DisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
@@ -5489,6 +6264,9 @@ func ValidateUpdatePluginServerResponseBody(body *UpdatePluginServerResponseBody
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	if body.Policy != nil {
 		if !(*body.Policy == "required" || *body.Policy == "optional") {
@@ -5534,6 +6312,35 @@ func ValidateGetPublishStatusResponseBody(body *GetPublishStatusResponseBody) (e
 func ValidatePublishPluginsResponseBody(body *PublishPluginsResponseBody) (err error) {
 	if body.RepoURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("repo_url", "body"))
+	}
+	return
+}
+
+// ValidateGetMarketplaceSettingsResponseBody runs the validations defined on
+// GetMarketplaceSettingsResponseBody
+func ValidateGetMarketplaceSettingsResponseBody(body *GetMarketplaceSettingsResponseBody) (err error) {
+	if body.DefaultName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("default_name", "body"))
+	}
+	if body.EffectiveName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effective_name", "body"))
+	}
+	return
+}
+
+// ValidateUpdateMarketplaceSettingsResponseBody runs the validations defined
+// on UpdateMarketplaceSettingsResponseBody
+func ValidateUpdateMarketplaceSettingsResponseBody(body *UpdateMarketplaceSettingsResponseBody) (err error) {
+	if body.Settings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("settings", "body"))
+	}
+	if body.Republished == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("republished", "body"))
+	}
+	if body.Settings != nil {
+		if err2 := ValidateMarketplaceSettingsResultResponseBody(body.Settings); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }
@@ -8904,6 +9711,489 @@ func ValidatePublishPluginsGatewayErrorResponseBody(body *PublishPluginsGatewayE
 	return
 }
 
+// ValidateGetMarketplaceSettingsUnauthorizedResponseBody runs the validations
+// defined on getMarketplaceSettings_unauthorized_response_body
+func ValidateGetMarketplaceSettingsUnauthorizedResponseBody(body *GetMarketplaceSettingsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMarketplaceSettingsForbiddenResponseBody runs the validations
+// defined on getMarketplaceSettings_forbidden_response_body
+func ValidateGetMarketplaceSettingsForbiddenResponseBody(body *GetMarketplaceSettingsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMarketplaceSettingsBadRequestResponseBody runs the validations
+// defined on getMarketplaceSettings_bad_request_response_body
+func ValidateGetMarketplaceSettingsBadRequestResponseBody(body *GetMarketplaceSettingsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMarketplaceSettingsNotFoundResponseBody runs the validations
+// defined on getMarketplaceSettings_not_found_response_body
+func ValidateGetMarketplaceSettingsNotFoundResponseBody(body *GetMarketplaceSettingsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMarketplaceSettingsConflictResponseBody runs the validations
+// defined on getMarketplaceSettings_conflict_response_body
+func ValidateGetMarketplaceSettingsConflictResponseBody(body *GetMarketplaceSettingsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMarketplaceSettingsUnsupportedMediaResponseBody runs the
+// validations defined on getMarketplaceSettings_unsupported_media_response_body
+func ValidateGetMarketplaceSettingsUnsupportedMediaResponseBody(body *GetMarketplaceSettingsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMarketplaceSettingsInvalidResponseBody runs the validations
+// defined on getMarketplaceSettings_invalid_response_body
+func ValidateGetMarketplaceSettingsInvalidResponseBody(body *GetMarketplaceSettingsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMarketplaceSettingsInvariantViolationResponseBody runs the
+// validations defined on
+// getMarketplaceSettings_invariant_violation_response_body
+func ValidateGetMarketplaceSettingsInvariantViolationResponseBody(body *GetMarketplaceSettingsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMarketplaceSettingsUnexpectedResponseBody runs the validations
+// defined on getMarketplaceSettings_unexpected_response_body
+func ValidateGetMarketplaceSettingsUnexpectedResponseBody(body *GetMarketplaceSettingsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMarketplaceSettingsGatewayErrorResponseBody runs the validations
+// defined on getMarketplaceSettings_gateway_error_response_body
+func ValidateGetMarketplaceSettingsGatewayErrorResponseBody(body *GetMarketplaceSettingsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateMarketplaceSettingsUnauthorizedResponseBody runs the
+// validations defined on updateMarketplaceSettings_unauthorized_response_body
+func ValidateUpdateMarketplaceSettingsUnauthorizedResponseBody(body *UpdateMarketplaceSettingsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateMarketplaceSettingsForbiddenResponseBody runs the validations
+// defined on updateMarketplaceSettings_forbidden_response_body
+func ValidateUpdateMarketplaceSettingsForbiddenResponseBody(body *UpdateMarketplaceSettingsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateMarketplaceSettingsBadRequestResponseBody runs the validations
+// defined on updateMarketplaceSettings_bad_request_response_body
+func ValidateUpdateMarketplaceSettingsBadRequestResponseBody(body *UpdateMarketplaceSettingsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateMarketplaceSettingsNotFoundResponseBody runs the validations
+// defined on updateMarketplaceSettings_not_found_response_body
+func ValidateUpdateMarketplaceSettingsNotFoundResponseBody(body *UpdateMarketplaceSettingsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateMarketplaceSettingsConflictResponseBody runs the validations
+// defined on updateMarketplaceSettings_conflict_response_body
+func ValidateUpdateMarketplaceSettingsConflictResponseBody(body *UpdateMarketplaceSettingsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateMarketplaceSettingsUnsupportedMediaResponseBody runs the
+// validations defined on
+// updateMarketplaceSettings_unsupported_media_response_body
+func ValidateUpdateMarketplaceSettingsUnsupportedMediaResponseBody(body *UpdateMarketplaceSettingsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateMarketplaceSettingsInvalidResponseBody runs the validations
+// defined on updateMarketplaceSettings_invalid_response_body
+func ValidateUpdateMarketplaceSettingsInvalidResponseBody(body *UpdateMarketplaceSettingsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateMarketplaceSettingsInvariantViolationResponseBody runs the
+// validations defined on
+// updateMarketplaceSettings_invariant_violation_response_body
+func ValidateUpdateMarketplaceSettingsInvariantViolationResponseBody(body *UpdateMarketplaceSettingsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateMarketplaceSettingsUnexpectedResponseBody runs the validations
+// defined on updateMarketplaceSettings_unexpected_response_body
+func ValidateUpdateMarketplaceSettingsUnexpectedResponseBody(body *UpdateMarketplaceSettingsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateMarketplaceSettingsGatewayErrorResponseBody runs the
+// validations defined on updateMarketplaceSettings_gateway_error_response_body
+func ValidateUpdateMarketplaceSettingsGatewayErrorResponseBody(body *UpdateMarketplaceSettingsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidatePluginResponseBody runs the validations defined on PluginResponseBody
 func ValidatePluginResponseBody(body *PluginResponseBody) (err error) {
 	if body.ID == nil {
@@ -8953,9 +10243,6 @@ func ValidatePluginServerResponseBody(body *PluginServerResponseBody) (err error
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.ToolsetID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
-	}
 	if body.DisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
@@ -8973,6 +10260,9 @@ func ValidatePluginServerResponseBody(body *PluginServerResponseBody) (err error
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	if body.Policy != nil {
 		if !(*body.Policy == "required" || *body.Policy == "optional") {
@@ -9002,6 +10292,18 @@ func ValidatePluginAssignmentResponseBody(body *PluginAssignmentResponseBody) (e
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateMarketplaceSettingsResultResponseBody runs the validations defined
+// on MarketplaceSettingsResultResponseBody
+func ValidateMarketplaceSettingsResultResponseBody(body *MarketplaceSettingsResultResponseBody) (err error) {
+	if body.DefaultName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("default_name", "body"))
+	}
+	if body.EffectiveName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effective_name", "body"))
 	}
 	return
 }

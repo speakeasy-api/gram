@@ -38,6 +38,10 @@ export type { FrontendTool } from "./lib/tools";
 // Error Tracking
 export { trackError } from "./lib/errorTracking";
 export type { ErrorContext } from "./lib/errorTracking";
+export {
+  CREDITS_EXHAUSTED_MESSAGE,
+  describeStreamError,
+} from "./lib/streamErrorMessage";
 
 // Types
 export type {
@@ -52,6 +56,8 @@ export type {
   Dimension,
   Dimensions,
   ElementsConfig,
+  ElementsTransportContext,
+  ElementsTransportFactory,
   ErrorTrackingConfigOption,
   GetSessionFn,
   HistoryConfig,
@@ -75,6 +81,20 @@ export type {
 } from "./types";
 
 export { MODELS } from "./lib/models";
+
+// Chat-message conversion — for consumers building a custom transport against
+// the Gram chat service (e.g. the dashboard's server-assistant transport).
+export {
+  convertGramMessagesToUIMessages,
+  convertGramMessagesToExported,
+} from "@/lib/messageConverter";
+
+export { sleep } from "@/lib/utils";
+export type {
+  GramChat,
+  GramChatMessage,
+  GramChatOverview,
+} from "@/lib/messageConverter";
 
 export type { Plugin } from "./types/plugins";
 

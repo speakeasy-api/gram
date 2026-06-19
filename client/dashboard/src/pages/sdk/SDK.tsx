@@ -16,22 +16,31 @@ import {
   SdkLanguage,
 } from "./examples";
 
-export default function SDK() {
+export default function SDK(): JSX.Element {
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <AgentifyProvider>
-          <SdkContent />
-        </AgentifyProvider>
+        <Page.Section>
+          <Page.Section.Title>SDKs</Page.Section.Title>
+          <Page.Section.Description>
+            Generate client code that calls your toolsets from the language and
+            framework of your choice.
+          </Page.Section.Description>
+          <Page.Section.Body>
+            <AgentifyProvider>
+              <SdkContent />
+            </AgentifyProvider>
+          </Page.Section.Body>
+        </Page.Section>
       </Page.Body>
     </Page>
   );
 }
 
-export const SdkContent = ({
+const SdkContent = ({
   projectSlug,
   toolset = "my-toolset",
   environment = "default",
@@ -103,7 +112,7 @@ export const SdkContent = ({
   let heading = (
     <div className="flex items-end justify-between gap-4">
       <Type variant="subheading">
-        Use Gram MCP servers to build agentic workflows in many popular
+        Use platform MCP servers to build agentic workflows in many popular
         frameworks
       </Type>
       {langFrameworkDropdowns}
@@ -130,7 +139,9 @@ export const SdkContent = ({
           <Stack gap={2}>
             {langFrameworkDropdowns}
             <Button
-              onClick={() => agentify(toolset, environment)}
+              onClick={() => {
+                void agentify(toolset, environment);
+              }}
               variant={outdated || inProgress ? "primary" : "secondary"}
               disabled={inProgress}
             >
@@ -164,7 +175,7 @@ export const SdkContent = ({
   );
 };
 
-export const SdkLanguageDropdown = ({
+const SdkLanguageDropdown = ({
   lang,
   setLang,
 }: {

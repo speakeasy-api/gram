@@ -2,19 +2,16 @@ package logs
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/gen/telemetry"
-	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"io"
 	"reflect"
-)
 
-type TelemetryService interface {
-	SearchLogs(ctx context.Context, payload *telemetry.SearchLogsPayload) (*telemetry.SearchLogsResult, error)
-}
+	"github.com/speakeasy-api/gram/server/gen/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+)
 
 type SearchLogs struct {
 	telemetry TelemetryService
@@ -35,11 +32,6 @@ func NewSearchLogsTool(telemetrySvc TelemetryService) *SearchLogs {
 }
 
 func (s *SearchLogs) Descriptor() core.ToolDescriptor {
-	readOnly := true
-	destructive := false
-	idempotent := true
-	openWorld := false
-
 	return core.ToolDescriptor{
 		SourceSlug:  "logs",
 		HandlerName: "search_logs",
@@ -53,17 +45,11 @@ func (s *SearchLogs) Descriptor() core.ToolDescriptor {
 			core.WithPropertyEnum("sort", "asc", "desc"),
 			core.WithPropertyNumberRange("limit", 1, 1000),
 		),
-		Variables: nil,
-		Annotations: &types.ToolAnnotations{
-			Title:           nil,
-			ReadOnlyHint:    &readOnly,
-			DestructiveHint: &destructive,
-			IdempotentHint:  &idempotent,
-			OpenWorldHint:   &openWorld,
-		},
-		Managed:   true,
-		OwnerKind: nil,
-		OwnerID:   nil,
+		Variables:   nil,
+		Annotations: core.ReadOnlyAnnotations(),
+		Managed:     true,
+		OwnerKind:   nil,
+		OwnerID:     nil,
 	}
 }
 
@@ -81,15 +67,8 @@ func (s *SearchLogs) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload
 		Sort:    "desc",
 		Limit:   50,
 	}
-
-	body, err := io.ReadAll(payload)
-	if err != nil {
-		return fmt.Errorf("read request body: %w", err)
-	}
-	if len(body) > 0 {
-		if err := json.Unmarshal(body, &input); err != nil { //nolint:musttag // telemetry filter types are Goa generated
-			return fmt.Errorf("decode request body: %w", err)
-		}
+	if err := core.DecodeInput(payload, &input); err != nil {
+		return err
 	}
 	if input.Limit == 0 {
 		input.Limit = 50
@@ -111,12 +90,11 @@ func (s *SearchLogs) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload
 		Sort:             input.Sort,
 	})
 	if err != nil {
+		if errors.Is(err, telemetryerrs.ErrLogsDisabled) {
+			return writeLogsDisabledResponse(wr)
+		}
 		return fmt.Errorf("search logs: %w", err)
 	}
 
-	if err := json.NewEncoder(wr).Encode(result); err != nil { //nolint:musttag // result is a Goa generated type
-		return fmt.Errorf("encode response: %w", err)
-	}
-
-	return nil
+	return core.EncodeResult(wr, result)
 }

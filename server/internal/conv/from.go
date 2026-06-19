@@ -85,6 +85,11 @@ func PtrToNullUUID(s *string) (uuid.NullUUID, error) {
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }
 
+// ToNullUUID converts a required UUID into a valid uuid.NullUUID.
+func ToNullUUID(id uuid.UUID) uuid.NullUUID {
+	return uuid.NullUUID{UUID: id, Valid: true}
+}
+
 // FromNullableUUID converts a uuid.NullUUID to a *string. If the NullUUID is
 // not valid, it returns nil.
 func FromNullableUUID(u uuid.NullUUID) *string {
@@ -148,6 +153,18 @@ func PtrToPGTextEmpty(t *string) pgtype.Text {
 	return pgtype.Text{String: *t, Valid: *t != ""}
 }
 
+// PtrToPGTextTrimmed converts a string pointer to a pgtype.Text, trimming
+// surrounding whitespace and setting Valid to true only if the trimmed result
+// is not empty. A nil pointer or a whitespace-only value yields an invalid
+// (NULL) Text.
+func PtrToPGTextTrimmed(t *string) pgtype.Text {
+	if t == nil {
+		return pgtype.Text{Valid: false, String: ""}
+	}
+
+	return ToPGTextEmpty(strings.TrimSpace(*t))
+}
+
 // ToPGTimestamptz converts a time.Time to a pgtype.Timestamptz with Valid set
 // to true and InfinityModifier set to Finite.
 func ToPGTimestamptz(t time.Time) pgtype.Timestamptz {
@@ -161,6 +178,16 @@ func PtrToPGTimestamptz(t *time.Time) pgtype.Timestamptz {
 		return pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite}
 	}
 	return pgtype.Timestamptz{Time: *t, Valid: true, InfinityModifier: pgtype.Finite}
+}
+
+// FromPGTimestamptz converts a pgtype.Timestamptz to an RFC3339 UTC string. If
+// the value is not valid, it returns an empty string.
+func FromPGTimestamptz(t pgtype.Timestamptz) string {
+	if !t.Valid {
+		return ""
+	}
+
+	return t.Time.UTC().Format(time.RFC3339)
 }
 
 // PtrToPGInterval converts a *time.Duration to a pgtype.Interval. If the

@@ -107,6 +107,74 @@ func TestDeploymentsService_CreateDeployment(t *testing.T) {
 	})
 }
 
+func TestDeploymentsService_CreateDeployment_PersistsOperationTags(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-with-tags.yaml"))
+
+	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs.Len()),
+	}, io.NopCloser(bs))
+	require.NoError(t, err, "upload openapi v3 asset")
+
+	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-tagged-deployment",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares.Asset.ID,
+				Name:    "test-doc",
+				Slug:    "test-doc",
+			},
+		},
+		Functions:        []*gen.AddFunctionsForm{},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment")
+	require.Equal(t, "completed", dep.Deployment.Status, "deployment status is not completed")
+
+	repo := testrepo.New(ti.conn)
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment tools")
+	require.Len(t, tools, 3, "expected 3 tools")
+
+	tagsByName := make(map[string][]string, len(tools))
+	for _, tool := range tools {
+		tagsByName[tool.Name] = tool.Tags
+	}
+
+	// Operation with multiple tags persists every tag in source order.
+	require.Equal(t, []string{"todos", "admin"}, tagsByName["test_doc_get_todos"],
+		"multi-tagged operation should persist both tags in source order")
+
+	// Operation with a single tag persists that one tag.
+	require.Equal(t, []string{"todos"}, tagsByName["test_doc_get_todo_by_id"],
+		"single-tagged operation should persist its one tag")
+
+	// Operation without tags must remain untagged even though the document
+	// declares root-level tag metadata. The column is NOT NULL, so the value
+	// should be an empty slice, not nil.
+	require.NotNil(t, tagsByName["test_doc_delete_todo"],
+		"untagged operation should receive a non-nil empty slice (the column is NOT NULL)")
+	require.Empty(t, tagsByName["test_doc_delete_todo"],
+		"root-level document tags must not propagate onto an operation that declares no tags")
+}
+
 func TestDeploymentsService_CreateDeployment_NonBlocking(t *testing.T) {
 	t.Parallel()
 

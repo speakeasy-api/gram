@@ -14,7 +14,7 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 		return nil, fmt.Errorf("organization id is required")
 	}
 
-	principalURNs, err := parsePrincipalURNs(principals)
+	principalURNs, err := principalURNStrings(principals)
 	if err != nil {
 		return nil, err
 	}
@@ -36,35 +36,10 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 		grantRows = append(grantRows, Grant{
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
+			Effect:       policyEffectFromText(row.Effect),
 			Selector:     selectors,
 		})
 	}
 
 	return grantRows, nil
-}
-
-func parsePrincipalURNs(principals []urn.Principal) ([]string, error) {
-	if len(principals) == 0 {
-		return nil, fmt.Errorf("no principals provided")
-	}
-
-	seen := make(map[string]struct{}, len(principals))
-	principalURNs := make([]string, 0, len(principals))
-	for _, principal := range principals {
-		text, err := principal.MarshalText()
-		if err != nil {
-			return nil, fmt.Errorf("marshal principal urn %q: %w", principal.String(), err)
-		}
-
-		principalURN := string(text)
-
-		if _, ok := seen[principalURN]; ok {
-			continue
-		}
-
-		seen[principalURN] = struct{}{}
-		principalURNs = append(principalURNs, principalURN)
-	}
-
-	return principalURNs, nil
 }

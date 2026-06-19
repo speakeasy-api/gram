@@ -4,8 +4,10 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { MoreActions } from "@/components/ui/more-actions";
 import { TextArea } from "@/components/ui/textarea";
+import { TagsVariationEditor } from "@/components/tool-variation-tags-editor";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useLatestDeployment } from "@/hooks/toolTypes";
+import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool, Toolset, isHttpTool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
@@ -28,20 +30,15 @@ import { Type } from "../ui/type";
 import { MethodBadge } from "./MethodBadge";
 import { SubtoolsBadge } from "./SubtoolsBadge";
 
-export type ToolListUpdateFields = {
-  name?: string;
-  description?: string;
-  title?: string;
-  readOnlyHint?: boolean;
-  destructiveHint?: boolean;
-  idempotentHint?: boolean;
-  openWorldHint?: boolean;
-};
-
 interface ToolListProps {
   tools: Tool[]; // Accepts all tool types, filters to Tool internally
   toolset?: Toolset; // Optionally specificy the toolset to provide rows with additional context
-  onToolUpdate?: (tool: Tool, updates: ToolListUpdateFields) => void;
+  onToolUpdate?: (
+    tool: Tool,
+    updates: ToolUpdateFields,
+  ) => void | Promise<void>;
+  /** True while a tool update is in flight; disables Save in the edit dialog. */
+  isToolUpdating?: boolean;
   onToolsRemove?: (toolUrns: string[]) => void;
   onAddToToolset?: (toolUrns: string[]) => void;
   onCreateToolset?: (toolUrns: string[]) => void;
@@ -262,6 +259,7 @@ function ToolRow({
   availableToolUrns, // Context for the subtools badge
   groupName,
   onUpdate,
+  isUpdating,
   isSelected,
   isFocused,
   onCheckboxChange,
@@ -273,7 +271,8 @@ function ToolRow({
   tool: Tool;
   availableToolUrns?: string[];
   groupName: string;
-  onUpdate?: (updates: ToolListUpdateFields) => void;
+  onUpdate?: (updates: ToolUpdateFields) => void | Promise<void>;
+  isUpdating?: boolean;
   isSelected: boolean;
   isFocused: boolean;
   onCheckboxChange: (checked: boolean) => void;
@@ -285,7 +284,7 @@ function ToolRow({
   const isDisabled = false;
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editType, setEditType] = useState<
-    "name" | "description" | "annotations"
+    "name" | "description" | "annotations" | "tags"
   >("name");
   const [editValue, setEditValue] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -297,9 +296,23 @@ function ToolRow({
   const [annotIdempotent, setAnnotIdempotent] = useState(false);
   const [annotOpenWorld, setAnnotOpenWorld] = useState(false);
 
-  const hasAnnotations = tool.type === "http" || tool.type === "function";
+  // Tags editing state (HTTP and function tools)
+  const [tagsValue, setTagsValue] = useState<string[] | undefined>(undefined);
 
-  const openEditDialog = (type: "name" | "description" | "annotations") => {
+  const hasAnnotations = tool.type === "http" || tool.type === "function";
+  // TODO: extend tag variations to prompt tools once they support tags.
+  const supportsTags = tool.type === "http" || tool.type === "function";
+  // Memoize: the inline `[]` fallback would produce a fresh reference per
+  // render and invalidate downstream memoization in TagsVariationEditor.
+  const baseTags = useMemo(
+    () => (tool.type === "http" || tool.type === "function" ? tool.tags : []),
+    [tool],
+  );
+  const origTags = supportsTags ? tool.variation?.tags : undefined;
+
+  const openEditDialog = (
+    type: "name" | "description" | "annotations" | "tags",
+  ) => {
     setEditType(type);
     if (type === "annotations") {
       setAnnotTitle(tool.variation?.title ?? tool.annotations?.title ?? "");
@@ -321,6 +334,8 @@ function ToolRow({
           tool.annotations?.openWorldHint ??
           false,
       );
+    } else if (type === "tags") {
+      setTagsValue(origTags);
     } else {
       setEditValue(type === "name" ? tool.name : tool.description);
     }
@@ -328,24 +343,38 @@ function ToolRow({
     setEditDialogOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (editType === "name" && !TOOL_NAME_REGEX.test(editValue)) {
       setError("Tool name may only contain letters, numbers, and underscores");
       return;
     }
 
+    let updates: ToolUpdateFields;
     if (editType === "annotations") {
-      onUpdate?.({
+      updates = {
         title: annotTitle || undefined,
         readOnlyHint: annotReadOnly,
         destructiveHint: annotDestructive,
         idempotentHint: annotIdempotent,
         openWorldHint: annotOpenWorld,
-      });
+      };
+    } else if (editType === "tags") {
+      // tags key must always be present so the upsert form spread correctly
+      // overwrites any prior variation tags (sending undefined drops the key
+      // from the wire body, signalling no override).
+      updates = { tags: tagsValue };
     } else {
-      onUpdate?.({ [editType]: editValue });
+      updates = { [editType]: editValue };
     }
-    setEditDialogOpen(false);
+
+    try {
+      await onUpdate?.(updates);
+      setEditDialogOpen(false);
+    } catch (err) {
+      // Toast is surfaced by useToolUpdate's onError; keep inline message for
+      // dialog visibility.
+      setError(err instanceof Error ? err.message : "Unknown error");
+    }
   };
 
   const handleCopyName = async () => {
@@ -369,6 +398,15 @@ function ToolRow({
           {
             label: "Edit annotations",
             onClick: () => openEditDialog("annotations"),
+            icon: "pencil" as const,
+          },
+        ]
+      : []),
+    ...(supportsTags
+      ? [
+          {
+            label: "Edit tags",
+            onClick: () => openEditDialog("tags"),
             icon: "pencil" as const,
           },
         ]
@@ -466,16 +504,20 @@ function ToolRow({
             <Dialog.Title>
               {editType === "annotations"
                 ? "Edit annotations"
-                : editType === "name"
-                  ? "Edit tool name"
-                  : "Edit description"}
+                : editType === "tags"
+                  ? "Edit tags"
+                  : editType === "name"
+                    ? "Edit tool name"
+                    : "Edit description"}
             </Dialog.Title>
             <Dialog.Description>
               {editType === "annotations"
                 ? `Override behavior hints for '${tool.name}'`
-                : editType === "name"
-                  ? `Update the name of tool '${tool.name}'`
-                  : `Update the description of tool '${tool.name}'`}
+                : editType === "tags"
+                  ? `Override tags for '${tool.name}'`
+                  : editType === "name"
+                    ? `Update the name of tool '${tool.name}'`
+                    : `Update the description of tool '${tool.name}'`}
             </Dialog.Description>
           </Dialog.Header>
           <div className="space-y-4 py-4">
@@ -548,6 +590,12 @@ function ToolRow({
                   </div>
                 </div>
               </Stack>
+            ) : editType === "tags" ? (
+              <TagsVariationEditor
+                baseTags={baseTags}
+                value={tagsValue}
+                onChange={setTagsValue}
+              />
             ) : editType === "name" ? (
               <Stack gap={2}>
                 <Input
@@ -602,10 +650,16 @@ function ToolRow({
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
           <Dialog.Footer>
-            <Button variant="ghost" onClick={() => setEditDialogOpen(false)}>
+            <Button
+              variant="ghost"
+              onClick={() => setEditDialogOpen(false)}
+              disabled={isUpdating}
+            >
               Cancel
             </Button>
-            <Button onClick={handleSave}>Save</Button>
+            <Button onClick={() => void handleSave()} disabled={isUpdating}>
+              Save
+            </Button>
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
@@ -696,6 +750,7 @@ export function ToolList({
   tools,
   toolset,
   onToolUpdate,
+  isToolUpdating,
   onToolsRemove,
   onAddToToolset,
   onCreateToolset,
@@ -706,7 +761,7 @@ export function ToolList({
   selectedUrns = [],
   onSelectionChange,
   onToolClick,
-}: ToolListProps) {
+}: ToolListProps): JSX.Element {
   const { data: deployment } = useLatestDeployment();
 
   const documentIdToName = useMemo(() => {
@@ -983,10 +1038,14 @@ export function ToolList({
       const next = new Set(selectedUrns);
       if (allSelected) {
         // Deselect all in group
-        groupToolIds.forEach((id) => next.delete(id));
+        groupToolIds.forEach((id) => {
+          void next.delete(id);
+        });
       } else {
         // Select all in group
-        groupToolIds.forEach((id) => next.add(id));
+        groupToolIds.forEach((id) => {
+          void next.add(id);
+        });
       }
       onSelectionChange(Array.from(next));
     } else {
@@ -995,10 +1054,14 @@ export function ToolList({
         const next = new Set(prev);
         if (allSelected) {
           // Deselect all in group
-          groupToolIds.forEach((id) => next.delete(id));
+          groupToolIds.forEach((id) => {
+            void next.delete(id);
+          });
         } else {
           // Select all in group
-          groupToolIds.forEach((id) => next.add(id));
+          groupToolIds.forEach((id) => {
+            void next.add(id);
+          });
         }
         return next;
       });
@@ -1051,6 +1114,7 @@ export function ToolList({
                           .filter((urn) => !selectedForRemoval.has(urn))}
                         tool={tool}
                         onUpdate={(updates) => onToolUpdate?.(tool, updates)}
+                        isUpdating={isToolUpdating}
                         isSelected={
                           selectionMode === "add"
                             ? selectedSet.has(toolId)

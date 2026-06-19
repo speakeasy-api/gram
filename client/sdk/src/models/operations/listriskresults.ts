@@ -30,6 +30,30 @@ export type ListRiskResultsRequest = {
    */
   chatId?: string | undefined;
   /**
+   * Optional rule category key to filter by (e.g. secrets, pii, financial).
+   */
+  category?: string | undefined;
+  /**
+   * Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).
+   */
+  ruleId?: string | undefined;
+  /**
+   * Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).
+   */
+  userId?: string | undefined;
+  /**
+   * If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
+   */
+  uniqueMatch?: boolean | undefined;
+  /**
+   * Filter results to messages created at or after this timestamp (ISO 8601).
+   */
+  from?: Date | undefined;
+  /**
+   * Filter results to messages created strictly before this timestamp (ISO 8601).
+   */
+  to?: Date | undefined;
+  /**
    * Cursor to fetch the next page of results.
    */
   cursor?: string | undefined;
@@ -156,6 +180,12 @@ export function listRiskResultsSecurityToJSON(
 export type ListRiskResultsRequest$Outbound = {
   policy_id?: string | undefined;
   chat_id?: string | undefined;
+  category?: string | undefined;
+  rule_id?: string | undefined;
+  user_id?: string | undefined;
+  unique_match?: boolean | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
   cursor?: string | undefined;
   limit?: number | undefined;
   "Gram-Key"?: string | undefined;
@@ -171,6 +201,12 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     policyId: z.optional(z.string()),
     chatId: z.optional(z.string()),
+    category: z.optional(z.string()),
+    ruleId: z.optional(z.string()),
+    userId: z.optional(z.string()),
+    uniqueMatch: z.optional(z.boolean()),
+    from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     gramKey: z.optional(z.string()),
@@ -181,6 +217,9 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       policyId: "policy_id",
       chatId: "chat_id",
+      ruleId: "rule_id",
+      userId: "user_id",
+      uniqueMatch: "unique_match",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",

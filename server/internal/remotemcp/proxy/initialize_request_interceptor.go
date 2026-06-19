@@ -14,10 +14,10 @@ import "context"
 // returning a plain error falls back to a generic mapping (see
 // [RejectErrorFromCause]).
 //
-// Payload mutation is not yet supported — changes to init.UserRequest or
-// init.Params are silent no-ops and the request body is forwarded verbatim.
-// Typed setters for payload modification will be introduced when modification
-// becomes a requirement.
+// Payload mutation has no typed setter on this view today — changes to
+// init.UserRequest or init.Params are silent no-ops and the request body
+// is forwarded verbatim. Typed setters will be introduced when a concrete
+// consumer needs to rewrite initialize payloads.
 //
 // Non-"initialize" requests are not routed to this interface; implement
 // [UserRequestInterceptor] for RPC-agnostic hooks.

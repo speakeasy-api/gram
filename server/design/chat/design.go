@@ -21,12 +21,53 @@ var _ = Service("chat", func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 			security.ChatSessionsTokenPayload()
+			Attribute("search", String, "Search query (searches chat ID, user ID, and title)")
+			Attribute("external_user_id", String, "Filter by external user ID")
+			Attribute("assistant_id", String, "Filter to chats produced by this assistant", func() {
+				Format(FormatUUID)
+			})
+			Attribute("has_risk", String, "Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.", func() {
+				Enum("", "true", "false")
+			})
+			Attribute("from", String, "Filter chats last active after this timestamp (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Filter chats last active before this timestamp (ISO 8601)", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("limit", Int, "Number of results per page", func() {
+				Default(50)
+				Minimum(1)
+				Maximum(100)
+			})
+			Attribute("offset", Int, "Pagination offset", func() {
+				Default(0)
+				Minimum(0)
+			})
+			Attribute("sort_by", String, "Field to sort by", func() {
+				Enum("last_message_timestamp", "num_messages")
+				Default("last_message_timestamp")
+			})
+			Attribute("sort_order", String, "Sort order", func() {
+				Enum("asc", "desc")
+				Default("desc")
+			})
 		})
 
 		Result(ListChatsResult)
 
 		HTTP(func() {
 			GET("/rpc/chat.list")
+			Param("search")
+			Param("external_user_id")
+			Param("assistant_id")
+			Param("has_risk")
+			Param("from")
+			Param("to")
+			Param("limit")
+			Param("offset")
+			Param("sort_by")
+			Param("sort_order")
 			security.SessionHeader()
 			security.ProjectHeader()
 			security.ChatSessionsTokenHeader()
@@ -35,17 +76,20 @@ var _ = Service("chat", func() {
 
 		Meta("openapi:operationId", "listChats")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChats"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChats", "type": "query"}`)
 	})
 
 	Method("loadChat", func() {
-		Description("Load a chat by its ID")
+		Description("Load a chat by its ID. Messages are paginated one generation per request; omit `generation` to receive the latest generation.")
 
 		Payload(func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 			security.ChatSessionsTokenPayload()
 			Attribute("id", String, "The ID of the chat")
+			Attribute("generation", Int, "Generation to load. A generation is an immutable snapshot of the chat transcript: a new one is opened whenever the conversation is compacted or an earlier message is edited, while normal turns append to the current generation. Generations are numbered from 0 (oldest) up to `max_generation` (latest). Omit this attribute to receive the latest generation, or page through history by walking from `max_generation` down to 0.", func() {
+				Minimum(0)
+			})
 			Required("id")
 		})
 
@@ -54,6 +98,7 @@ var _ = Service("chat", func() {
 		HTTP(func() {
 			GET("/rpc/chat.load")
 			Param("id")
+			Param("generation")
 			security.SessionHeader()
 			security.ProjectHeader()
 			security.ChatSessionsTokenHeader()
@@ -120,66 +165,6 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetCreditUsage"}`)
 	})
 
-	Method("listChatsWithResolutions", func() {
-		Description("List all chats for a project with their resolutions")
-
-		Payload(func() {
-			security.SessionPayload()
-			security.ProjectPayload()
-			security.ChatSessionsTokenPayload()
-
-			Attribute("search", String, "Search query (searches chat ID, user ID, and title)")
-			Attribute("external_user_id", String, "Filter by external user ID")
-			Attribute("resolution_status", String, "Filter by resolution status")
-			Attribute("from", String, "Filter chats created after this timestamp (ISO 8601)", func() {
-				Format(FormatDateTime)
-			})
-			Attribute("to", String, "Filter chats created before this timestamp (ISO 8601)", func() {
-				Format(FormatDateTime)
-			})
-			Attribute("limit", Int, "Number of results per page", func() {
-				Default(50)
-				Minimum(1)
-				Maximum(100)
-			})
-			Attribute("offset", Int, "Pagination offset", func() {
-				Default(0)
-				Minimum(0)
-			})
-			Attribute("sort_by", String, "Field to sort by", func() {
-				Enum("created_at", "num_messages", "score")
-				Default("created_at")
-			})
-			Attribute("sort_order", String, "Sort order", func() {
-				Enum("asc", "desc")
-				Default("desc")
-			})
-		})
-
-		Result(ListChatsWithResolutionsResult)
-
-		HTTP(func() {
-			GET("/rpc/chat.listChatsWithResolutions")
-			Param("search")
-			Param("external_user_id")
-			Param("resolution_status")
-			Param("from")
-			Param("to")
-			Param("limit")
-			Param("offset")
-			Param("sort_by")
-			Param("sort_order")
-			security.SessionHeader()
-			security.ProjectHeader()
-			security.ChatSessionsTokenHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "listChatsWithResolutions")
-		Meta("openapi:extension:x-speakeasy-name-override", "listChatsWithResolutions")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChatsWithResolutions", "type": "query"}`)
-	})
-
 	Method("deleteChat", func() {
 		Description("Soft-delete a chat by its ID")
 		Security(security.Session, security.ProjectSlug)
@@ -237,7 +222,8 @@ var _ = Service("chat", func() {
 
 var ListChatsResult = Type("ListChatsResult", func() {
 	Attribute("chats", ArrayOf(ChatOverview), "The list of chats")
-	Required("chats")
+	Attribute("total", Int, "Total number of chats (before pagination)")
+	Required("chats", "total")
 })
 
 var ChatOverview = Type("ChatOverview", func() {
@@ -263,15 +249,19 @@ var ChatOverview = Type("ChatOverview", func() {
 		Description("When the last message in the chat was created.")
 		Format(FormatDateTime)
 	})
+	Attribute("risk_findings_count", Int, "Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.")
 
 	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp")
 })
 
 var Chat = Type("Chat", func() {
 	Extend(ChatOverview)
-	Attribute("messages", ArrayOf(ChatMessage), "The list of messages in the chat")
+	Attribute("messages", ArrayOf(ChatMessage), "The list of messages in the chat for the returned generation")
+	Attribute("generation", Int, "The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.")
+	Attribute("max_generation", Int, "The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.")
+	Attribute("agent_usage", AgentUsage, "Agent-specific usage enrichment for the chat, when available.")
 
-	Required("messages")
+	Required("messages", "generation", "max_generation")
 })
 
 var ChatMessage = Type("ChatMessage", func() {
@@ -284,6 +274,7 @@ var ChatMessage = Type("ChatMessage", func() {
 	Attribute("tool_call_id", String, "The tool call ID of the message")
 	Attribute("tool_calls", String, "The tool calls in the message as a JSON blob")
 	Attribute("finish_reason", String, "The finish reason of the message")
+	Attribute("prompt_id", String, "The agent prompt/turn ID associated with this message, when available.")
 	Attribute("user_id", String, "The ID of the user who created the message")
 	Attribute("external_user_id", String, "The ID of the external user who created the message")
 	Attribute("created_at", String, func() {
@@ -295,41 +286,46 @@ var ChatMessage = Type("ChatMessage", func() {
 	Required("id", "role", "model", "created_at", "generation")
 })
 
-var ChatResolution = Type("ChatResolution", func() {
-	Description("Resolution information for a chat")
+var AgentUsage = Type("AgentUsage", func() {
+	Attribute("type", String, "The agent usage payload discriminator.", func() {
+		Enum("claude")
+	})
+	Attribute("claude", ClaudeAgentUsage, "Claude Code usage details.")
 
-	Attribute("id", String, "Resolution ID", func() {
-		Format(FormatUUID)
-	})
-	Attribute("user_goal", String, "User's intended goal")
-	Attribute("resolution", String, "Resolution status")
-	Attribute("resolution_notes", String, "Notes about the resolution")
-	Attribute("score", Int, "Score 0-100")
-	Attribute("created_at", String, "When resolution was created", func() {
-		Format(FormatDateTime)
-	})
-	Attribute("message_ids", ArrayOf(String), "Message IDs associated with this resolution", func() {
-		Example([]string{"abc-123", "def-456"})
-	})
-
-	Required("id", "user_goal", "resolution", "resolution_notes", "score", "created_at", "message_ids")
+	Required("type")
 })
 
-var ChatOverviewWithResolutions = Type("ChatOverviewWithResolutions", func() {
-	Description("Chat overview with embedded resolution data")
+var ClaudeAgentUsage = Type("ClaudeAgentUsage", func() {
+	Attribute("turns", ArrayOf(ClaudeTurnUsage), "Per-prompt Claude usage turns ordered by start time.")
+	Attribute("tools", ArrayOf(ClaudeToolUsage), "Per-tool Claude usage keyed by tool_use_id.")
 
-	Extend(ChatOverview)
-
-	Attribute("resolutions", ArrayOf(ChatResolution), "List of resolutions for this chat")
-
-	Required("resolutions")
+	Required("turns", "tools")
 })
 
-var ListChatsWithResolutionsResult = Type("ListChatsWithResolutionsResult", func() {
-	Description("Result of listing chats with resolutions")
+var ClaudeTurnUsage = Type("ClaudeTurnUsage", func() {
+	Attribute("prompt_id", String, "Claude prompt.id that correlates events for one user turn.")
+	Attribute("start_time_unix_nano", String, "Earliest OTEL log timestamp in this turn, as Unix nanoseconds.")
+	Attribute("end_time_unix_nano", String, "Latest OTEL log timestamp in this turn, as Unix nanoseconds.")
+	Attribute("request_count", Int64, "Number of Claude API request events in this turn.")
+	Attribute("input_tokens", Int64, "Input tokens used by this turn.")
+	Attribute("output_tokens", Int64, "Output tokens used by this turn.")
+	Attribute("cache_read_tokens", Int64, "Cache read tokens used by this turn.")
+	Attribute("cache_creation_tokens", Int64, "Cache creation tokens used by this turn.")
+	Attribute("total_tokens", Int64, "Total tokens used by this turn.")
+	Attribute("cost_usd", Float64, "Total USD cost for this turn.")
+	Attribute("cost_micros", Int64, "Total cost for this turn in micros of a USD.")
+	Attribute("models", ArrayOf(String), "Distinct model names used by this turn.")
+	Attribute("query_sources", ArrayOf(String), "Distinct Claude query sources used by this turn.")
 
-	Attribute("chats", ArrayOf(ChatOverviewWithResolutions), "List of chats with resolutions")
-	Attribute("total", Int, "Total number of chats (before pagination)")
+	Required("prompt_id", "start_time_unix_nano", "end_time_unix_nano", "request_count", "input_tokens", "output_tokens", "cache_read_tokens", "cache_creation_tokens", "total_tokens", "cost_usd", "cost_micros", "models", "query_sources")
+})
 
-	Required("chats", "total")
+var ClaudeToolUsage = Type("ClaudeToolUsage", func() {
+	Attribute("tool_use_id", String, "Claude tool_use_id that correlates the tool call and result.")
+	Attribute("prompt_id", String, "Claude prompt.id for the turn that used this tool.")
+	Attribute("tool_name", String, "Tool name reported by Claude Code.")
+	Attribute("input_size_bytes", Int64, "Serialized tool input size in bytes.")
+	Attribute("result_size_bytes", Int64, "Serialized tool result size in bytes.")
+
+	Required("tool_use_id", "prompt_id", "tool_name", "input_size_bytes", "result_size_bytes")
 })

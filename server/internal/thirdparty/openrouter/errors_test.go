@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
@@ -127,6 +128,84 @@ func TestChatClient_GetCompletion_WrapsHistoryCorruptionForBadRequest(t *testing
 	}
 }
 
+func TestChatClient_GetCompletion_EmptyChoices_EmbedsResponseBody(t *testing.T) {
+	t.Parallel()
+
+	const body = `{"id":"gen-abc123","model":"anthropic/claude","choices":[],"error":{"code":429,"message":"provider rate limited"}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(server.Close)
+
+	client := newTestClientForServer(t, server)
+	_, err := client.GetCompletion(t.Context(), CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   uuid.New().String(),
+		Messages:    []or.ChatMessages{CreateMessageUser("hi")},
+		ChatID:      uuid.New(),
+		UsageSource: billing.ModelUsageSourcePlayground,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "gen-abc123")            // generation id surfaced for OpenRouter lookup
+	require.Contains(t, err.Error(), "provider rate limited") // embedded upstream error surfaced verbatim
+}
+
+func TestChatClient_GetCompletion_RetriesEmptyChoicesThenSucceeds(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if calls.Add(1) == 1 {
+			_, _ = w.Write([]byte(`{"id":"gen-empty","choices":[]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"gen-ok","model":"m","choices":[{"message":{"role":"assistant","content":"recovered"},"finish_reason":"stop"}]}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client := newTestClientForServer(t, server)
+	resp, err := client.GetCompletion(t.Context(), CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   uuid.New().String(),
+		Messages:    []or.ChatMessages{CreateMessageUser("hi")},
+		ChatID:      uuid.New(),
+		UsageSource: billing.ModelUsageSourcePlayground,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int32(2), calls.Load()) // retried once after the empty response
+	require.Equal(t, "recovered", resp.Content)
+}
+
+func TestChatClient_GetCompletion_RetriesExhaustedReturnsError(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"gen-empty","choices":[]}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client := newTestClientForServer(t, server)
+	_, err := client.GetCompletion(t.Context(), CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   uuid.New().String(),
+		Messages:    []or.ChatMessages{CreateMessageUser("hi")},
+		ChatID:      uuid.New(),
+		UsageSource: billing.ModelUsageSourcePlayground,
+	})
+	require.Error(t, err)
+	require.Equal(t, int32(2), calls.Load()) // both attempts exhausted
+	require.Contains(t, err.Error(), "after 2 attempts")
+	require.Contains(t, err.Error(), "gen-empty")
+}
+
 func newTestClientForServer(t *testing.T, server *httptest.Server) *ChatClient {
 	t.Helper()
 
@@ -141,7 +220,6 @@ func newTestClientForServer(t *testing.T, server *httptest.Server) *ChatClient {
 		&mockMessageCaptureStrategy{},
 		&mockUsageTrackingStrategy{},
 		&mockChatTitleGenerator{},
-		&mockChatResolutionAnalyzer{},
 		&mockTelemetryLogger{},
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}

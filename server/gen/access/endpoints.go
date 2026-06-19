@@ -16,21 +16,29 @@ import (
 
 // Endpoints wraps the "access" service endpoints.
 type Endpoints struct {
-	ListRoles            goa.Endpoint
-	GetRole              goa.Endpoint
-	CreateRole           goa.Endpoint
-	UpdateRole           goa.Endpoint
-	DeleteRole           goa.Endpoint
-	ListScopes           goa.Endpoint
-	ListMembers          goa.Endpoint
-	ListGrants           goa.Endpoint
-	UpdateMemberRole     goa.Endpoint
-	GetRBACStatus        goa.Endpoint
-	EnableRBAC           goa.Endpoint
-	DisableRBAC          goa.Endpoint
-	ListChallenges       goa.Endpoint
-	ListChallengeBuckets goa.Endpoint
-	ResolveChallenge     goa.Endpoint
+	ListRoles                       goa.Endpoint
+	GetRole                         goa.Endpoint
+	CreateRole                      goa.Endpoint
+	UpdateRole                      goa.Endpoint
+	DeleteRole                      goa.Endpoint
+	ListScopes                      goa.Endpoint
+	ListMembers                     goa.Endpoint
+	ListGrants                      goa.Endpoint
+	UpdateMemberRoles               goa.Endpoint
+	ListShadowMCPApprovalRequests   goa.Endpoint
+	CreateShadowMCPApprovalRequest  goa.Endpoint
+	ApproveShadowMCPApprovalRequest goa.Endpoint
+	DenyShadowMCPApprovalRequest    goa.Endpoint
+	ListShadowMCPAccessRules        goa.Endpoint
+	CreateShadowMCPAccessRule       goa.Endpoint
+	UpdateShadowMCPAccessRule       goa.Endpoint
+	DeleteShadowMCPAccessRule       goa.Endpoint
+	GetRBACStatus                   goa.Endpoint
+	EnableRBAC                      goa.Endpoint
+	DisableRBAC                     goa.Endpoint
+	ListChallenges                  goa.Endpoint
+	ListChallengeBuckets            goa.Endpoint
+	ResolveChallenge                goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "access" service with endpoints.
@@ -38,21 +46,29 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListRoles:            NewListRolesEndpoint(s, a.APIKeyAuth),
-		GetRole:              NewGetRoleEndpoint(s, a.APIKeyAuth),
-		CreateRole:           NewCreateRoleEndpoint(s, a.APIKeyAuth),
-		UpdateRole:           NewUpdateRoleEndpoint(s, a.APIKeyAuth),
-		DeleteRole:           NewDeleteRoleEndpoint(s, a.APIKeyAuth),
-		ListScopes:           NewListScopesEndpoint(s, a.APIKeyAuth),
-		ListMembers:          NewListMembersEndpoint(s, a.APIKeyAuth),
-		ListGrants:           NewListGrantsEndpoint(s, a.APIKeyAuth),
-		UpdateMemberRole:     NewUpdateMemberRoleEndpoint(s, a.APIKeyAuth),
-		GetRBACStatus:        NewGetRBACStatusEndpoint(s, a.APIKeyAuth),
-		EnableRBAC:           NewEnableRBACEndpoint(s, a.APIKeyAuth),
-		DisableRBAC:          NewDisableRBACEndpoint(s, a.APIKeyAuth),
-		ListChallenges:       NewListChallengesEndpoint(s, a.APIKeyAuth),
-		ListChallengeBuckets: NewListChallengeBucketsEndpoint(s, a.APIKeyAuth),
-		ResolveChallenge:     NewResolveChallengeEndpoint(s, a.APIKeyAuth),
+		ListRoles:                       NewListRolesEndpoint(s, a.APIKeyAuth),
+		GetRole:                         NewGetRoleEndpoint(s, a.APIKeyAuth),
+		CreateRole:                      NewCreateRoleEndpoint(s, a.APIKeyAuth),
+		UpdateRole:                      NewUpdateRoleEndpoint(s, a.APIKeyAuth),
+		DeleteRole:                      NewDeleteRoleEndpoint(s, a.APIKeyAuth),
+		ListScopes:                      NewListScopesEndpoint(s, a.APIKeyAuth),
+		ListMembers:                     NewListMembersEndpoint(s, a.APIKeyAuth),
+		ListGrants:                      NewListGrantsEndpoint(s, a.APIKeyAuth),
+		UpdateMemberRoles:               NewUpdateMemberRolesEndpoint(s, a.APIKeyAuth),
+		ListShadowMCPApprovalRequests:   NewListShadowMCPApprovalRequestsEndpoint(s, a.APIKeyAuth),
+		CreateShadowMCPApprovalRequest:  NewCreateShadowMCPApprovalRequestEndpoint(s, a.APIKeyAuth),
+		ApproveShadowMCPApprovalRequest: NewApproveShadowMCPApprovalRequestEndpoint(s, a.APIKeyAuth),
+		DenyShadowMCPApprovalRequest:    NewDenyShadowMCPApprovalRequestEndpoint(s, a.APIKeyAuth),
+		ListShadowMCPAccessRules:        NewListShadowMCPAccessRulesEndpoint(s, a.APIKeyAuth),
+		CreateShadowMCPAccessRule:       NewCreateShadowMCPAccessRuleEndpoint(s, a.APIKeyAuth),
+		UpdateShadowMCPAccessRule:       NewUpdateShadowMCPAccessRuleEndpoint(s, a.APIKeyAuth),
+		DeleteShadowMCPAccessRule:       NewDeleteShadowMCPAccessRuleEndpoint(s, a.APIKeyAuth),
+		GetRBACStatus:                   NewGetRBACStatusEndpoint(s, a.APIKeyAuth),
+		EnableRBAC:                      NewEnableRBACEndpoint(s, a.APIKeyAuth),
+		DisableRBAC:                     NewDisableRBACEndpoint(s, a.APIKeyAuth),
+		ListChallenges:                  NewListChallengesEndpoint(s, a.APIKeyAuth),
+		ListChallengeBuckets:            NewListChallengeBucketsEndpoint(s, a.APIKeyAuth),
+		ResolveChallenge:                NewResolveChallengeEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -66,7 +82,15 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListScopes = m(e.ListScopes)
 	e.ListMembers = m(e.ListMembers)
 	e.ListGrants = m(e.ListGrants)
-	e.UpdateMemberRole = m(e.UpdateMemberRole)
+	e.UpdateMemberRoles = m(e.UpdateMemberRoles)
+	e.ListShadowMCPApprovalRequests = m(e.ListShadowMCPApprovalRequests)
+	e.CreateShadowMCPApprovalRequest = m(e.CreateShadowMCPApprovalRequest)
+	e.ApproveShadowMCPApprovalRequest = m(e.ApproveShadowMCPApprovalRequest)
+	e.DenyShadowMCPApprovalRequest = m(e.DenyShadowMCPApprovalRequest)
+	e.ListShadowMCPAccessRules = m(e.ListShadowMCPAccessRules)
+	e.CreateShadowMCPAccessRule = m(e.CreateShadowMCPAccessRule)
+	e.UpdateShadowMCPAccessRule = m(e.UpdateShadowMCPAccessRule)
+	e.DeleteShadowMCPAccessRule = m(e.DeleteShadowMCPAccessRule)
 	e.GetRBACStatus = m(e.GetRBACStatus)
 	e.EnableRBAC = m(e.EnableRBAC)
 	e.DisableRBAC = m(e.DisableRBAC)
@@ -83,7 +107,7 @@ func NewListRolesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -118,7 +142,7 @@ func NewGetRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -153,7 +177,7 @@ func NewCreateRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -188,7 +212,7 @@ func NewUpdateRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -223,7 +247,7 @@ func NewDeleteRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -258,7 +282,7 @@ func NewListScopesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -293,7 +317,7 @@ func NewListMembersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -328,7 +352,7 @@ func NewListGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -355,15 +379,15 @@ func NewListGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 	}
 }
 
-// NewUpdateMemberRoleEndpoint returns an endpoint function that calls the
-// method "updateMemberRole" of service "access".
-func NewUpdateMemberRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewUpdateMemberRolesEndpoint returns an endpoint function that calls the
+// method "updateMemberRoles" of service "access".
+func NewUpdateMemberRolesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*UpdateMemberRolePayload)
+		p := req.(*UpdateMemberRolesPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -386,7 +410,191 @@ func NewUpdateMemberRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		if err != nil {
 			return nil, err
 		}
-		return s.UpdateMemberRole(ctx, p)
+		return s.UpdateMemberRoles(ctx, p)
+	}
+}
+
+// NewListShadowMCPApprovalRequestsEndpoint returns an endpoint function that
+// calls the method "listShadowMCPApprovalRequests" of service "access".
+func NewListShadowMCPApprovalRequestsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListShadowMCPApprovalRequestsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListShadowMCPApprovalRequests(ctx, p)
+	}
+}
+
+// NewCreateShadowMCPApprovalRequestEndpoint returns an endpoint function that
+// calls the method "createShadowMCPApprovalRequest" of service "access".
+func NewCreateShadowMCPApprovalRequestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateShadowMCPApprovalRequestPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateShadowMCPApprovalRequest(ctx, p)
+	}
+}
+
+// NewApproveShadowMCPApprovalRequestEndpoint returns an endpoint function that
+// calls the method "approveShadowMCPApprovalRequest" of service "access".
+func NewApproveShadowMCPApprovalRequestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ApproveShadowMCPApprovalRequestPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ApproveShadowMCPApprovalRequest(ctx, p)
+	}
+}
+
+// NewDenyShadowMCPApprovalRequestEndpoint returns an endpoint function that
+// calls the method "denyShadowMCPApprovalRequest" of service "access".
+func NewDenyShadowMCPApprovalRequestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DenyShadowMCPApprovalRequestPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DenyShadowMCPApprovalRequest(ctx, p)
+	}
+}
+
+// NewListShadowMCPAccessRulesEndpoint returns an endpoint function that calls
+// the method "listShadowMCPAccessRules" of service "access".
+func NewListShadowMCPAccessRulesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListShadowMCPAccessRulesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListShadowMCPAccessRules(ctx, p)
+	}
+}
+
+// NewCreateShadowMCPAccessRuleEndpoint returns an endpoint function that calls
+// the method "createShadowMCPAccessRule" of service "access".
+func NewCreateShadowMCPAccessRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateShadowMCPAccessRulePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateShadowMCPAccessRule(ctx, p)
+	}
+}
+
+// NewUpdateShadowMCPAccessRuleEndpoint returns an endpoint function that calls
+// the method "updateShadowMCPAccessRule" of service "access".
+func NewUpdateShadowMCPAccessRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateShadowMCPAccessRulePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateShadowMCPAccessRule(ctx, p)
+	}
+}
+
+// NewDeleteShadowMCPAccessRuleEndpoint returns an endpoint function that calls
+// the method "deleteShadowMCPAccessRule" of service "access".
+func NewDeleteShadowMCPAccessRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteShadowMCPAccessRulePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteShadowMCPAccessRule(ctx, p)
 	}
 }
 
@@ -467,7 +675,7 @@ func NewListChallengesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -502,7 +710,7 @@ func NewListChallengeBucketsEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"consumer"},
 		}
 		var key string
@@ -537,7 +745,7 @@ func NewResolveChallengeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string

@@ -204,6 +204,8 @@ func (c *Client) AgentChat(
 			HTTPMetadata:              nil,
 			APIKeyID:                  "",
 			JSONSchema:                nil,
+			Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
+			CacheControl:              nil,
 			NormalizeOutboundMessages: false,
 		}
 
@@ -257,7 +259,7 @@ func (c *Client) LoadToolsetTools(
 	toolsetSlug string,
 ) ([]AgentTool, error) {
 	// Get default environment for the toolset
-	toolset, err := mv.DescribeToolset(ctx, c.logger, c.db, mv.ProjectID(projectID), mv.ToolsetSlug(toolsetSlug), &c.toolsetCache)
+	toolset, err := mv.DescribeToolset(ctx, c.logger, c.db, mv.ProjectID(projectID), mv.ToolsetSlug(toolsetSlug), &c.toolsetCache, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -303,6 +305,7 @@ func (c *Client) LoadToolsetTools(
 					Description: mcpTool.Description,
 					Parameters:  mcpTool.InputSchema,
 				},
+				CacheControl: nil,
 			},
 			Executor: executor,
 		})

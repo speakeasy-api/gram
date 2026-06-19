@@ -135,7 +135,7 @@ func (p *ToolExtractor) doSpeakeasy(
 
 	doc, err := parseSpeakeasy(ctx, tracer, bytes.NewReader(data))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document.\n%s", err.Error()).Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document.\n%s", err.Error()).LogError(ctx, logger)
 	}
 
 	upgradeStart := time.Now()
@@ -167,13 +167,13 @@ func (p *ToolExtractor) doSpeakeasy(
 
 	globalSecurity, err := serializeSecuritySpeakeasy(doc.GetSecurity())
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error serializing global security").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error serializing global security").LogError(ctx, logger)
 	}
 
 	securitySchemesParams, errs := extractSecuritySchemesSpeakeasy(ctx, logger, docInfo, doc, task)
 	if len(errs) > 0 {
 		for _, err := range errs {
-			_ = oops.E(oops.CodeUnexpected, err, "%s: error parsing security schemes: %s", docInfo.Name, err.Error()).Log(ctx, logger)
+			_ = oops.E(oops.CodeUnexpected, err, "%s: error parsing security schemes: %s", docInfo.Name, err.Error()).LogError(ctx, logger)
 		}
 	}
 
@@ -183,7 +183,7 @@ func (p *ToolExtractor) doSpeakeasy(
 	for key, scheme := range securitySchemesParams {
 		sec, err := tx.CreateHTTPSecurity(ctx, *scheme)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "%s: error writing security scheme: %s", docInfo.Name, err.Error()).Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "%s: error writing security scheme: %s", docInfo.Name, err.Error()).LogError(ctx, logger)
 		}
 
 		securitySchemes[key] = sec
@@ -384,7 +384,7 @@ func (p *ToolExtractor) doSpeakeasy(
 
 	if writeErrCount > 0 {
 		err := oops.Permanent(fmt.Errorf("%s: error writing tools definitions: %w", docInfo.Name, writeErr))
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save %d tool definitions", writeErrCount).Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save %d tool definitions", writeErrCount).LogError(ctx, logger)
 	}
 
 	logger.InfoContext(ctx, fmt.Sprintf("[%s] processed OpenAPI source: %d tools created, %d tools skipped", docInfo.Name, toolCount, toolSkippedCount))
@@ -546,7 +546,7 @@ func extractDefaultServerSpeakeasy(ctx context.Context, logger *slog.Logger, doc
 
 			u, err := url.Parse(server.URL)
 			if err != nil {
-				_ = oops.E(oops.CodeUnauthorized, err, "%s: %s: skipping server due to malformed url [%d:%d]: %s", docInfo.Name, server.URL, line, col, err.Error()).Log(ctx, logger)
+				_ = oops.E(oops.CodeUnauthorized, err, "%s: %s: skipping server due to malformed url [%d:%d]: %s", docInfo.Name, server.URL, line, col, err.Error()).LogError(ctx, logger)
 				continue
 			}
 
@@ -763,6 +763,9 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 	}
 
 	toolURN := urn.NewTool(urn.ToolKindHTTP, string(docInfo.Slug), descriptor.name)
+	if err := toolURN.Validate(); err != nil {
+		return empty, deploymentEvents, fmt.Errorf("invalid tool urn: %w", err)
+	}
 
 	return repo.CreateOpenAPIv3ToolDefinitionParams{
 		ProjectID:           projectID,
@@ -1017,7 +1020,7 @@ func mergeDefs(ctx context.Context, logger *slog.Logger, a, b Defs) Defs {
 			aHash := hashing.Hash(a.GetOrZero(key))
 			bHash := hashing.Hash(val)
 			if aHash != bHash {
-				_ = oops.E(oops.CodeUnexpected, oops.Permanent(fmt.Errorf("hash mismatch for defs schema %s", key)), "hash mismatch for defs schema %s", key).Log(ctx, logger)
+				_ = oops.E(oops.CodeUnexpected, oops.Permanent(fmt.Errorf("hash mismatch for defs schema %s", key)), "hash mismatch for defs schema %s", key).LogError(ctx, logger)
 				continue
 			}
 		} else {

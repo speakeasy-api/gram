@@ -17,7 +17,7 @@ export function Grid({
   gap = "md",
   className,
   ...props
-}: GridProps) {
+}: GridProps): React.JSX.Element {
   return (
     <div
       data-slot="grid"

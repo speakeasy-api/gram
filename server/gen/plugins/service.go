@@ -61,6 +61,13 @@ type Service interface {
 	GetPublishStatus(context.Context, *GetPublishStatusPayload) (res *PublishStatusResult, err error)
 	// Generate and publish all plugin packages to a GitHub repository.
 	PublishPlugins(context.Context, *PublishPluginsPayload) (res *PublishPluginsResult, err error)
+	// Get the marketplace settings for the current project, including the
+	// effective marketplace name and the server-side default.
+	GetMarketplaceSettings(context.Context, *GetMarketplaceSettingsPayload) (res *MarketplaceSettingsResult, err error)
+	// Update the marketplace settings for the current project. If a marketplace is
+	// already published, the updated settings are pushed to GitHub before the call
+	// returns.
+	UpdateMarketplaceSettings(context.Context, *UpdateMarketplaceSettingsPayload) (res *UpdateMarketplaceSettingsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -83,7 +90,7 @@ const ServiceName = "plugins"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "downloadPluginPackage", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPublishStatus", "publishPlugins"}
+var MethodNames = [16]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "downloadPluginPackage", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPublishStatus", "publishPlugins", "getMarketplaceSettings", "updateMarketplaceSettings"}
 
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
@@ -91,10 +98,15 @@ type AddPluginServerPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	PluginID         string
-	// Gram toolset ID for the MCP server.
-	ToolsetID string
-	// Display name for the server.
-	DisplayName string
+	// Gram toolset ID for a toolset-backed MCP server. Provide exactly one of
+	// toolset_id or mcp_server_id.
+	ToolsetID *string
+	// Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of
+	// toolset_id or mcp_server_id.
+	McpServerID *string
+	// Display name for the server. Defaults to the backing toolset or mcp_server
+	// name when omitted.
+	DisplayName *string
 	Policy      string
 	SortOrder   int32
 }
@@ -168,6 +180,13 @@ type DownloadPluginPackageResult struct {
 	ContentDisposition string
 }
 
+// GetMarketplaceSettingsPayload is the payload type of the plugins service
+// getMarketplaceSettings method.
+type GetMarketplaceSettingsPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // GetPluginPayload is the payload type of the plugins service getPlugin method.
 type GetPluginPayload struct {
 	ID               string
@@ -194,6 +213,19 @@ type ListPluginsPayload struct {
 type ListPluginsResult struct {
 	// The plugins in the organization.
 	Plugins []*Plugin
+}
+
+// MarketplaceSettingsResult is the result type of the plugins service
+// getMarketplaceSettings method.
+type MarketplaceSettingsResult struct {
+	// User-provided override for the marketplace name. Absent when no override is
+	// configured.
+	MarketplaceName *string
+	// The default marketplace name used when no override is configured.
+	DefaultName string
+	// The marketplace name that will be used at publish time (override if set,
+	// otherwise default).
+	EffectiveName string
 }
 
 // Plugin is the result type of the plugins service getPlugin method.
@@ -231,8 +263,12 @@ type PluginAssignment struct {
 type PluginServer struct {
 	// Unique plugin server identifier.
 	ID string
-	// Gram toolset ID.
-	ToolsetID string
+	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
+	// toolset_id / mcp_server_id is set).
+	ToolsetID *string
+	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
+	// of toolset_id / mcp_server_id is set).
+	McpServerID *string
 	// Display name shown in generated plugin config.
 	DisplayName string
 	// Whether this server is required or optional.
@@ -303,6 +339,27 @@ type SetPluginAssignmentsPayload struct {
 type SetPluginAssignmentsResult struct {
 	// The updated assignments.
 	Assignments []*PluginAssignment
+}
+
+// UpdateMarketplaceSettingsPayload is the payload type of the plugins service
+// updateMarketplaceSettings method.
+type UpdateMarketplaceSettingsPayload struct {
+	// Override for the marketplace name (the identifier users type as
+	// `<plugin>@<marketplace>`). Pass an empty string or omit to clear the
+	// override and fall back to the default.
+	MarketplaceName  *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// UpdateMarketplaceSettingsResult is the result type of the plugins service
+// updateMarketplaceSettings method.
+type UpdateMarketplaceSettingsResult struct {
+	// The updated marketplace settings.
+	Settings *MarketplaceSettingsResult
+	// Whether the marketplace was automatically republished to GitHub as part of
+	// this update.
+	Republished bool
 }
 
 // UpdatePluginPayload is the payload type of the plugins service updatePlugin

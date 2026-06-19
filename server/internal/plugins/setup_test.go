@@ -22,7 +22,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -74,12 +75,9 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
-
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -97,7 +95,7 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache), auditLogger, nil, "local", "https://app.getgram.ai")
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai")
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -114,9 +112,6 @@ func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublis
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
-
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
@@ -125,7 +120,7 @@ func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublis
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -154,7 +149,7 @@ func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublis
 		tracerProvider,
 		conn,
 		sessionManager,
-		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache),
+		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		auditLogger,
 		ghConfig,
 		"local",
@@ -197,6 +192,67 @@ func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, na
 	})
 	require.NoError(t, err)
 	return ts
+}
+
+// mcpServerFixture is an mcp_server with (optionally) a single endpoint,
+// created directly via the repos. The plugin publishing path only reads the
+// mcp_server's id/name/slug/visibility and its endpoints, so a toolset-backed
+// server stands in for a Remote MCP-backed one without the remote_mcp_server /
+// user_session_issuer fixture weight.
+type mcpServerFixture struct {
+	id           uuid.UUID
+	idStr        string
+	name         string
+	slug         string
+	endpointSlug string
+}
+
+// createTestMcpServer creates an mcp_server in the active project with a single
+// platform endpoint (no custom domain). visibility controls publishability.
+func createTestMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name, visibility string) mcpServerFixture {
+	t.Helper()
+	return createTestMcpServerWithEndpoint(t, ctx, conn, name, visibility, true)
+}
+
+func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name, visibility string, withEndpoint bool) mcpServerFixture {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// Back the mcp_server with a toolset to satisfy the backend-exclusivity
+	// check; the plugin path does not distinguish remote- vs toolset-backed.
+	backing := createTestToolset(t, ctx, conn, name+"-backing")
+
+	slug := fmt.Sprintf("mcp-%s-%s", name, uuid.New().String()[:8])
+	serverID := uuid.New()
+	_, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                serverID,
+		ProjectID:         *authCtx.ProjectID,
+		Name:              pgtype.Text{String: name, Valid: true},
+		Slug:              pgtype.Text{String: slug, Valid: true},
+		ToolsetID:         uuid.NullUUID{UUID: backing.ID, Valid: true},
+		RemoteMcpServerID: uuid.NullUUID{},
+		Visibility:        visibility,
+	})
+	require.NoError(t, err)
+
+	fixture := mcpServerFixture{id: serverID, idStr: serverID.String(), name: name, slug: slug}
+
+	if withEndpoint {
+		endpointSlug := slug + "-endpoint"
+		_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+			ProjectID:      *authCtx.ProjectID,
+			CustomDomainID: uuid.NullUUID{},
+			McpServerID:    serverID,
+			Slug:           endpointSlug,
+		})
+		require.NoError(t, err)
+		fixture.endpointSlug = endpointSlug
+	}
+
+	return fixture
 }
 
 func withauthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {

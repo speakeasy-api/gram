@@ -21,6 +21,14 @@ type Client struct {
 	// listUserSessions endpoint.
 	ListUserSessionsDoer goahttp.Doer
 
+	// ListFacets Doer is the HTTP client used to make requests to the listFacets
+	// endpoint.
+	ListFacetsDoer goahttp.Doer
+
+	// MintUserSession Doer is the HTTP client used to make requests to the
+	// mintUserSession endpoint.
+	MintUserSessionDoer goahttp.Doer
+
 	// RevokeUserSession Doer is the HTTP client used to make requests to the
 	// revokeUserSession endpoint.
 	RevokeUserSessionDoer goahttp.Doer
@@ -46,6 +54,8 @@ func NewClient(
 ) *Client {
 	return &Client{
 		ListUserSessionsDoer:  doer,
+		ListFacetsDoer:        doer,
+		MintUserSessionDoer:   doer,
 		RevokeUserSessionDoer: doer,
 		RestoreResponseBody:   restoreBody,
 		scheme:                scheme,
@@ -74,6 +84,54 @@ func (c *Client) ListUserSessions() goa.Endpoint {
 		resp, err := c.ListUserSessionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("userSessions", "listUserSessions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListFacets returns an endpoint that makes HTTP requests to the userSessions
+// service listFacets server.
+func (c *Client) ListFacets() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListFacetsRequest(c.encoder)
+		decodeResponse = DecodeListFacetsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListFacetsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListFacetsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("userSessions", "listFacets", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MintUserSession returns an endpoint that makes HTTP requests to the
+// userSessions service mintUserSession server.
+func (c *Client) MintUserSession() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMintUserSessionRequest(c.encoder)
+		decodeResponse = DecodeMintUserSessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMintUserSessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MintUserSessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("userSessions", "mintUserSession", err)
 		}
 		return decodeResponse(resp)
 	}

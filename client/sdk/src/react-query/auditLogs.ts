@@ -198,6 +198,8 @@ export function setAuditLogsData(
       projectSlug?: string | undefined;
       actorId?: string | undefined;
       action?: string | undefined;
+      subjectType?: string | undefined;
+      subjectId?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     },
@@ -217,6 +219,8 @@ export function invalidateAuditLogs(
       projectSlug?: string | undefined;
       actorId?: string | undefined;
       action?: string | undefined;
+      subjectType?: string | undefined;
+      subjectId?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     }]

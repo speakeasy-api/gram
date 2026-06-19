@@ -9,32 +9,51 @@ name = "gram-assistant-runner"
 path = "src/main.rs"
 
 [dependencies]
-agentkit-adapter-completions = "0.6.0"
-agentkit-compaction = "0.6.0"
-agentkit-core = "0.6.0"
-agentkit-http = { version = "0.6.0", features = ["reqwest-middleware-client"] }
-agentkit-loop = "0.6.0"
-agentkit-mcp = "0.6.0"
-agentkit-provider-openrouter = "0.6.0"
-agentkit-reporting = { version = "0.6.0", features = ["tracing"] }
-agentkit-tool-fs = "0.6.0"
-agentkit-tools-core = { version = "0.6.0", features = ["schemars"] }
-agentkit-tools-derive = "0.6.0"
+agentkit-adapter-completions = "0.9.1"
+agentkit-compaction = "0.9.1"
+agentkit-core = "0.9.1"
+agentkit-http = { version = "0.9.1", features = ["reqwest-middleware-client"] }
+agentkit-loop = "0.9.1"
+agentkit-mcp = "0.9.1"
+agentkit-provider-openrouter = "0.9.1"
+agentkit-reporting = { version = "0.9.1", features = ["tracing"] }
+agentkit-tool-compose = "0.9.1"
+agentkit-tool-fs = "0.9.1"
+agentkit-tools-core = { version = "0.9.1", features = ["schemars"] }
+agentkit-tools-derive = "0.9.1"
+opentelemetry = "0.32"
+opentelemetry-otlp = { version = "0.32", default-features = false, features = [
+  "grpc-tonic",
+  "http-json",
+  "http-proto",
+  "internal-logs",
+  "reqwest-blocking-client",
+  "reqwest-rustls",
+  "tls-aws-lc",
+  "tls-webpki-roots",
+  "trace",
+] }
+opentelemetry_sdk = { version = "0.32", default-features = false, features = [
+  "trace",
+] }
 rmcp = { version = "1.5.0", default-features = false, features = [
   "client",
   "transport-streamable-http-client-reqwest",
   "reqwest",
 ] }
 tracing = "0.1"
+tracing-opentelemetry = "0.33"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 async-trait = "0.1"
 axum = { version = "0.8", features = ["http1", "json"] }
 chrono = "0.4"
 clap = { version = "4", features = ["derive", "env"] }
+dashmap = "6"
+futures = "0.3"
 http = "1"
-reqwest = "0.13.2"
-reqwest-middleware = "0.5"
+reqwest = { version = "0.13.2", features = ["json"] }
+reqwest-middleware = { version = "0.5", features = ["json"] }
 reqwest-retry = "0.9.1"
 schemars = { version = "1", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
@@ -51,3 +70,22 @@ tokio = { version = "1", features = [
   "sync",
   "time",
 ] }
+
+[lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+
+await_holding_lock = "warn"
+await_holding_refcell_ref = "warn"

@@ -13,8 +13,12 @@
     "/client/sdk/**",
     "/elements/docs/**",
     "/elements/examples/tanstack-start/src/routeTree.gen.ts",
+    "/infra/gen/**",
+    "/infra/gen/**/*",
+    "/pnpm-lock.yaml",
     "/server/**/fixtures/**",
-    "/server/gen/**"
+    "/server/gen/**",
+    "/server/**/*_gen.yaml"
   ],
   "overrides": [
     {

@@ -3,9 +3,10 @@ package authz
 import (
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/cache"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -30,9 +31,81 @@ func TestLoadGrants_loadsUserAndRoleGrants(t *testing.T) {
 	ctx = GrantsToContext(ctx, grants)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj:123"}))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolA"}))
+}
+
+func TestSeedSystemRoleGrantsBootstrapsGlobalRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_seed_system_roles"
+	seedOrganization(t, ctx, conn, organizationID)
+
+	err := SeedSystemRoleGrants(ctx, conn, organizationID)
+	require.NoError(t, err)
+
+	adminRole, err := accessrepo.New(conn).GetGlobalRoleBySlug(ctx, SystemRoleAdmin)
+	require.NoError(t, err)
+	require.Equal(t, "Admin", adminRole.WorkosName)
+
+	grants, err := GrantsForRole(ctx, testenv.NewLogger(t), conn, organizationID, SystemRoleAdmin, "role:global:"+adminRole.ID.String())
+	require.NoError(t, err)
+	require.NotEmpty(t, grants)
+
+	q := accessrepo.New(conn)
+	adminPrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+adminRole.ID.String())
+	adminRows, err := q.ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   adminPrincipal.String(),
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, adminRows)
+	_, err = q.DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{
+		ID:             adminRows[0].ID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+
+	seedGrant(t, ctx, conn, organizationID, adminPrincipal, ScopeRiskPolicyEvaluate, "policy-1")
+	rowsBeforeReseed, err := q.ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   adminPrincipal.String(),
+	})
+	require.NoError(t, err)
+
+	err = SeedSystemRoleGrants(ctx, conn, organizationID)
+	require.NoError(t, err)
+
+	rows, err := q.ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   adminPrincipal.String(),
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, len(rowsBeforeReseed))
+
+	scopes := make([]string, 0, len(rows))
+	for _, row := range rows {
+		scopes = append(scopes, row.Scope)
+	}
+	require.Contains(t, scopes, string(ScopeRiskPolicyEvaluate))
+}
+
+func TestSeedSystemRoleGrantsRollsBackOnGrantFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+
+	err := SeedSystemRoleGrants(ctx, conn, "org_missing")
+	require.Error(t, err)
+
+	for _, slug := range []string{SystemRoleAdmin, SystemRoleMember} {
+		_, err = accessrepo.New(conn).GetGlobalRoleBySlug(ctx, slug)
+		require.ErrorIs(t, err, pgx.ErrNoRows)
+	}
 }
 
 func TestLoadGrants_rejectsEmptyOrganizationID(t *testing.T) {
@@ -93,7 +166,7 @@ func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
 	ctx = GrantsToContext(ctx, grants)
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 	projectIDs, err := engine.Filter(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj:123"},
 	})

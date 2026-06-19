@@ -30,7 +30,12 @@ describe("ChartCard", () => {
   it("calls onExpand with chartId when the expand button is clicked", () => {
     const onExpand = vi.fn();
     render(
-      <ChartCard {...defaultProps} onExpand={onExpand}>
+      <ChartCard
+        {...defaultProps}
+        onExpand={(value) => {
+          onExpand(value);
+        }}
+      >
         -
       </ChartCard>,
     );
@@ -44,7 +49,9 @@ describe("ChartCard", () => {
       <ChartCard
         {...defaultProps}
         expandedChart="server-usage"
-        onExpand={onExpand}
+        onExpand={(value) => {
+          onExpand(value);
+        }}
       >
         -
       </ChartCard>,
@@ -53,6 +60,42 @@ describe("ChartCard", () => {
     expect(btn).toBeTruthy();
     fireEvent.click(btn);
     expect(onExpand).toHaveBeenCalledWith(null);
+  });
+
+  it("calls onResetZoom when the reset zoom button is clicked", () => {
+    const onResetZoom = vi.fn();
+    render(
+      <ChartCard
+        {...defaultProps}
+        isZoomed
+        onResetZoom={() => {
+          onResetZoom();
+        }}
+      >
+        -
+      </ChartCard>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset zoom" }));
+
+    expect(onResetZoom).toHaveBeenCalledOnce();
+  });
+
+  it("does not show the reset zoom button when the chart is not zoomed", () => {
+    const onResetZoom = vi.fn();
+    render(
+      <ChartCard
+        {...defaultProps}
+        isZoomed={false}
+        onResetZoom={() => {
+          onResetZoom();
+        }}
+      >
+        -
+      </ChartCard>,
+    );
+
+    expect(screen.queryByRole("button", { name: "Reset zoom" })).toBeNull();
   });
 
   it("hides the expand button when hasData is false", () => {

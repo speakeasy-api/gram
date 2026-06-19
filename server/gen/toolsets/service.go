@@ -29,6 +29,12 @@ type Service interface {
 	DeleteToolset(context.Context, *DeleteToolsetPayload) (err error)
 	// Get detailed information about a toolset including full HTTP tool definitions
 	GetToolset(context.Context, *GetToolsetPayload) (res *types.Toolset, err error)
+	// List the tool filter scopes (tags) available on a toolset-backed MCP server
+	// and the tools under each, including tools excluded from all filters.
+	// Read-only; reflects the explicit tool variations group configured on the
+	// toolset, deriving effective tags with the same logic as the runtime ?tags=
+	// filter. Returns filtering disabled when no explicit group is set.
+	ListToolFilters(context.Context, *ListToolFiltersPayload) (res *types.ListToolFiltersResult, err error)
 	// Check if a MCP slug is available
 	CheckMCPSlugAvailability(context.Context, *CheckMCPSlugAvailabilityPayload) (res bool, err error)
 	// Clone an existing toolset with a new name
@@ -41,6 +47,12 @@ type Service interface {
 	AddOAuthProxyServer(context.Context, *AddOAuthProxyServerPayload) (res *types.Toolset, err error)
 	// Update an existing OAuth proxy server associated with a toolset
 	UpdateOAuthProxyServer(context.Context, *UpdateOAuthProxyServerPayload) (res *types.Toolset, err error)
+	// Link a toolset to a user_session_issuer (or pass null to unlink). The
+	// user_session_issuer must already exist in the caller's project.
+	SetUserSessionIssuer(context.Context, *SetUserSessionIssuerPayload) (res *types.Toolset, err error)
+	// Assign a tool variations group to a toolset to enable MCP tool filtering (or
+	// pass null to disable). The group must already exist in the caller's project.
+	SetToolVariationsGroup(context.Context, *SetToolVariationsGroupPayload) (res *types.Toolset, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -63,7 +75,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer", "updateOAuthProxyServer"}
+var MethodNames = [15]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "listToolFilters", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "addOAuthProxyServer", "updateOAuthProxyServer", "setUserSessionIssuer", "setToolVariationsGroup"}
 
 // AddExternalOAuthServerPayload is the payload type of the toolsets service
 // addExternalOAuthServer method.
@@ -149,6 +161,16 @@ type GetToolsetPayload struct {
 	ProjectSlugInput *string
 }
 
+// ListToolFiltersPayload is the payload type of the toolsets service
+// listToolFilters method.
+type ListToolFiltersPayload struct {
+	// The slug of the toolset
+	Slug             types.Slug
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // ListToolsetSummariesResult is the result type of the toolsets service
 // listToolsetsForOrg method.
 type ListToolsetSummariesResult struct {
@@ -186,6 +208,30 @@ type RemoveOAuthServerPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// SetToolVariationsGroupPayload is the payload type of the toolsets service
+// setToolVariationsGroup method.
+type SetToolVariationsGroupPayload struct {
+	SessionToken *string
+	ApikeyToken  *string
+	// The slug of the toolset to configure
+	Slug types.Slug
+	// The tool variations group id to assign, or null to disable filtering.
+	ToolVariationsGroupID *string
+	ProjectSlugInput      *string
+}
+
+// SetUserSessionIssuerPayload is the payload type of the toolsets service
+// setUserSessionIssuer method.
+type SetUserSessionIssuerPayload struct {
+	SessionToken *string
+	ApikeyToken  *string
+	// The slug of the toolset to link
+	Slug types.Slug
+	// The user_session_issuer id to link, or null to unlink.
+	UserSessionIssuerID *string
+	ProjectSlugInput    *string
 }
 
 // UpdateOAuthProxyServerPayload is the payload type of the toolsets service

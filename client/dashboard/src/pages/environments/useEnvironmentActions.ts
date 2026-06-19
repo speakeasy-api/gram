@@ -13,7 +13,10 @@ export type CloneEnvironmentInput = {
 
 export function useCloneEnvironment({
   onSuccess,
-}: { onSuccess?: () => void } = {}) {
+}: { onSuccess?: () => void } = {}): {
+  clone: (input: CloneEnvironmentInput) => void;
+  isPending: boolean;
+} {
   const environments = useEnvironments();
   const telemetry = useTelemetry();
   const routes = useRoutes();

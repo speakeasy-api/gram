@@ -1,10 +1,12 @@
-import { Button } from "@/components/ui/button";
 import { useSessionData } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useCaptureEnterpriseGateViewed } from "@/contexts/Telemetry";
+import { AuthLayout } from "@/pages/login/components/login-section";
+import { JourneyDemo } from "@/pages/login/components/journey-demo";
+import { DemoBookingFlow } from "@/pages/demo/components/DemoBookingFlow";
 import { LogOutIcon } from "lucide-react";
 
-export default function BookDemo() {
+export default function BookDemo(): JSX.Element {
   const client = useSdkClient();
   const { session } = useSessionData();
 
@@ -21,34 +23,23 @@ export default function BookDemo() {
   };
 
   return (
-    <div className="bg-background flex min-h-screen items-center justify-center">
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={handleLogout}
-        className="absolute top-4 right-4"
-      >
-        <LogOutIcon className="mr-2 h-4 w-4" />
-        Log out
-      </Button>
-      <div className="mx-auto max-w-md space-y-6 text-center">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Book a Demo to Access the Speakeasy MCP Platform
-        </h1>
-        <p className="text-muted-foreground">
-          To access the Speakeasy MCP Platform, please book a demo with our
-          team.
-        </p>
-        <Button asChild size="lg">
-          <a
-            href="https://www.speakeasy.com/book-demo"
-            target="_blank"
-            rel="noopener noreferrer"
+    <main className="flex min-h-screen flex-col md:flex-row">
+      <JourneyDemo />
+
+      <AuthLayout
+        contentClassName="max-w-2xl"
+        topRight={
+          <button
+            onClick={() => void handleLogout()}
+            className="flex items-center gap-1.5 text-xs text-[#8B8684] transition-colors hover:text-slate-600"
           >
-            Book a Demo
-          </a>
-        </Button>
-      </div>
-    </div>
+            <LogOutIcon className="h-3.5 w-3.5" />
+            Log out
+          </button>
+        }
+      >
+        <DemoBookingFlow />
+      </AuthLayout>
+    </main>
   );
 }

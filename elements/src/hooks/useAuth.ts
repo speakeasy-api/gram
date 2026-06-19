@@ -125,6 +125,15 @@ export const useAuth = ({
 
   const shouldRefresh = !isAnyStaticSession(auth) && !isReplay;
 
+  // `api.headers` from ElementsConfig flows here untouched and is merged into
+  // every header set the hook returns, so it reaches both /chat/completions
+  // (via the OpenRouter model in ElementsProvider) AND /mcp/{slug} (via
+  // useMCPTools). Today the dashboard uses this to forward
+  // `Authorization: Bearer <user-session JWT>` so the runtime gateway can
+  // resolve the user's upstream credentials for issuer-gated toolsets.
+  const authHeaders = auth?.headers;
+  const extraHeaders = useMemo(() => authHeaders ?? {}, [authHeaders]);
+
   const ensureValidHeaders = useCallback(async (): Promise<
     Record<string, string>
   > => {
@@ -133,6 +142,7 @@ export const useAuth = ({
 
     if (!shouldRefresh || !getSession) {
       return {
+        ...extraHeaders,
         "Gram-Project": projectSlug,
         ...(cachedToken && { "Gram-Chat-Session": cachedToken }),
       };
@@ -151,16 +161,18 @@ export const useAuth = ({
         staleTime,
       });
       return {
+        ...extraHeaders,
         "Gram-Project": projectSlug,
         ...(token && { "Gram-Chat-Session": token }),
       };
     } catch {
       return {
+        ...extraHeaders,
         "Gram-Project": projectSlug,
         ...(cachedToken && { "Gram-Chat-Session": cachedToken }),
       };
     }
-  }, [shouldRefresh, getSession, projectSlug, queryClient]);
+  }, [shouldRefresh, getSession, projectSlug, queryClient, extraHeaders]);
 
   // In replay mode, return immediately without waiting for session
   if (isReplay) {
@@ -178,6 +190,7 @@ export const useAuth = ({
       }
     : {
         headers: {
+          ...extraHeaders,
           "Gram-Project": projectSlug,
           "Gram-Chat-Session": session,
         },

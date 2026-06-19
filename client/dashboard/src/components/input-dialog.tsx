@@ -47,7 +47,7 @@ export function InputDialog({
   inputs: InputProps[] | InputProps;
   description?: string;
   submitButtonText?: string;
-}) {
+}): JSX.Element {
   const inputsArray = Array.isArray(inputs) ? inputs : [inputs];
   inputsArray.sort((a, b) => (a.optional ? 1 : b.optional ? -1 : 0));
   const [pending, setPending] = useState(false);
@@ -109,7 +109,7 @@ export function InputDialog({
                   placeholder={input.placeholder}
                   value={input.value}
                   onChange={input.onChange}
-                  onEnter={submit}
+                  onEnter={() => void submit()}
                   disabled={input.disabled || pending}
                   validate={input.validate}
                   lines={input.lines}
@@ -139,7 +139,10 @@ export function InputDialog({
           >
             Back
           </Button>
-          <Button onClick={submit} disabled={!formValid || pending}>
+          <Button
+            onClick={() => void submit()}
+            disabled={!formValid || pending}
+          >
             {pending ? "Submitting\u2026" : submitButtonText}
           </Button>
         </Dialog.Footer>

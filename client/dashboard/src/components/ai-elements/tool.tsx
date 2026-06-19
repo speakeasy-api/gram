@@ -17,19 +17,19 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { isValidElement } from "react";
+import { isValidElement, ReactElement } from "react";
 import { CodeBlock } from "./code-block";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
-export const Tool = ({ className, ...props }: ToolProps) => (
+export const Tool = ({ className, ...props }: ToolProps): ReactElement => (
   <Collapsible
     className={cn("not-prose mb-4 w-full rounded-md border", className)}
     {...props}
   />
 );
 
-export type ToolAnnotations = {
+type ToolAnnotations = {
   title?: string;
   readOnlyHint?: boolean;
   destructiveHint?: boolean;
@@ -75,7 +75,7 @@ export const ToolHeader = ({
   state,
   annotations,
   ...props
-}: ToolHeaderProps) => (
+}: ToolHeaderProps): ReactElement => (
   <CollapsibleTrigger
     className={cn(
       "flex w-full items-center justify-between gap-4 p-3",
@@ -111,7 +111,10 @@ export const ToolHeader = ({
 
 export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 
-export const ToolContent = ({ className, ...props }: ToolContentProps) => (
+export const ToolContent = ({
+  className,
+  ...props
+}: ToolContentProps): ReactElement => (
   <CollapsibleContent
     className={cn(
       "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground data-[state=closed]:animate-out data-[state=open]:animate-in outline-none",
@@ -125,7 +128,11 @@ export type ToolInputProps = ComponentProps<"div"> & {
   input: ToolUIPart["input"];
 };
 
-export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
+export const ToolInput = ({
+  className,
+  input,
+  ...props
+}: ToolInputProps): ReactElement => (
   <div className={cn("space-y-2 p-4", className)} {...props}>
     <h4 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
       Parameters
@@ -146,7 +153,7 @@ export const ToolOutput = ({
   output,
   errorText,
   ...props
-}: ToolOutputProps) => {
+}: ToolOutputProps): ReactElement | null => {
   if (!(output || errorText)) {
     return null;
   }

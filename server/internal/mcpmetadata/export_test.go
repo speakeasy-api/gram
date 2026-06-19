@@ -125,7 +125,7 @@ func TestService_ExportMcpMetadata_WithMetadata(t *testing.T) {
 
 	// Set MCP metadata (uses toolset slug)
 	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
-		ToolsetSlug:              types.Slug(toolset.Slug),
+		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
 		ExternalDocumentationURL: new("https://docs.example.com"),
 		Instructions:             new("Use this server to interact with our API."),
 	})
@@ -161,6 +161,7 @@ func TestService_ExportMcpMetadata_WithCustomDomain(t *testing.T) {
 		Domain:         "mcp.example.com",
 		IngressName:    pgtype.Text{String: "test-ingress", Valid: true},
 		CertSecretName: pgtype.Text{String: "test-cert", Valid: true},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err, "create custom domain")
 

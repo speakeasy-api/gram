@@ -20,7 +20,7 @@ export function PromptsTabContent({
 }: {
   toolset: Toolset;
   updateToolsetMutation: ReturnType<typeof useUpdateToolsetMutation>;
-}) {
+}): JSX.Element {
   const { prompts: allPrompts } = usePrompts();
   const toolsetPrompts = toolset.promptTemplates;
   const [promptSelectPopoverOpen, setPromptSelectPopoverOpen] = useState(false);

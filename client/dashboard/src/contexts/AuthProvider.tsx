@@ -4,19 +4,12 @@ import { PageHeader } from "@/components/page-header";
 import {
   Sidebar,
   SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
 import BookDemo from "@/pages/demo/BookDemo";
-import { Icon } from "@speakeasy-api/moonshine";
+import SwitchOrg from "@/pages/demo/SwitchOrg";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useIsAdminRef } from "@/contexts/Sdk";
@@ -44,16 +37,32 @@ import {
   useSessionData,
   useUser,
   usePylonInAppChat,
+  useFermatPixel,
 } from "./Auth";
 import type { ProjectEntry } from "@gram/client/models/components";
 
 const PREFERRED_PROJECT_KEY = "preferredProject";
 
-const UNAUTHENTICATED_PATHS = ["/login", "/register", "/invite", "/book-demo"];
+const UNAUTHENTICATED_PATHS = [
+  "/login",
+  "/register",
+  "/invite",
+  "/book-demo",
+  "/shadow-mcp/request",
+  "/risk-policy-bypass/request",
+];
 
-const SLUG_EXEMPT_PATHS = ["/slack/register"];
+const SLUG_EXEMPT_PATHS = [
+  "/switch-org",
+  "/shadow-mcp/request",
+  "/risk-policy-bypass/request",
+];
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+export const AuthProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}): JSX.Element => {
   return (
     <ErrorBoundary FallbackComponent={FullPageError}>
       <AuthHandler>{children}</AuthHandler>
@@ -72,6 +81,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   useIdentifyUserForTelemetry(session?.user);
   usePylonInAppChat(session?.user);
+  useFermatPixel(session?.user, session?.activeOrganizationId ?? "");
 
   // Sync isAdmin into the SDK fetcher so it can attach X-Gram-Scope-Override in production.
   isAdminRef.current = session?.user.isAdmin ?? false;
@@ -85,7 +95,8 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     // skeleton flash for logged-out users before the redirect to /login fires.
     if (
       location.pathname === "/" ||
-      UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p))
+      UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p)) ||
+      location.pathname.endsWith("/setup")
     ) {
       return null;
     }
@@ -103,6 +114,9 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // Show book demo page if organization is not whitelisted
   // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
   if (session.activeOrganizationId && !session.whitelisted) {
+    if (session.organizations.length > 1) {
+      return <SwitchOrg gate />;
+    }
     return <BookDemo />;
   }
 
@@ -129,7 +143,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const isProjectSlug = session.organization?.projects.some(
     (p) => p.slug === pathParts[1],
   );
-  const isOrgRoutePath = ORG_ROUTE_PATHS.includes(pathParts[1]);
+  const isOrgRoutePath = ORG_ROUTE_PATHS.includes(pathParts[1] ?? "");
   // Redirect if: (1) it's a project slug and not an org route, OR
   // (2) it's both a project slug and an org route but has sub-paths (org routes don't have sub-paths)
   // Never redirect if pathParts[1] is "projects" to avoid infinite redirect loops
@@ -194,7 +208,7 @@ export const ProjectProvider = ({
   children,
 }: {
   children: React.ReactNode;
-}) => {
+}): JSX.Element => {
   const organization = useOrganization();
   const user = useUser();
   const navigate = useNavigate();
@@ -251,7 +265,7 @@ export const ProjectProvider = ({
 
   const switchProject = async (slug: string) => {
     client.clear();
-    navigate(`/${organization.slug}/projects/${slug}`);
+    void navigate(`/${organization.slug}/projects/${slug}`);
   };
 
   const value = Object.assign(currentProject, {
@@ -264,28 +278,23 @@ export const ProjectProvider = ({
   );
 };
 
-/** Static nav items matching the real sidebar groups — no auth context needed. */
-const LOADING_NAV = {
-  project: [{ label: "Home", icon: "house" as const }],
-  connect: [
-    { label: "Sources", icon: "file-code" as const },
-    { label: "Catalog", icon: "store" as const },
-    { label: "Playground", icon: "message-circle" as const },
-  ],
-  build: [
-    { label: "Chat Elements", icon: "message-circle" as const },
-    { label: "MCP", icon: "network" as const },
-    { label: "Assistants", icon: "bot" as const },
-    { label: "Skills", icon: "terminal" as const },
-  ],
-  observe: [
-    { label: "Insights", icon: "layout-dashboard" as const },
-    { label: "MCP Logs", icon: "file-text" as const },
-    { label: "Agent Sessions", icon: "messages-square" as const },
-    { label: "Hooks", icon: "webhook" as const },
-  ],
-  settings: [{ label: "Settings", icon: "settings" as const }],
-};
+/** Skeleton nav group matching the new collapsible sidebar style. */
+const SkeletonNavItem = ({ width = "w-20" }: { width?: string }) => (
+  <div className="flex items-center gap-2 px-2 py-2">
+    <Skeleton className="h-4 w-4 shrink-0 rounded" />
+    <Skeleton className={`h-3.5 ${width}`} />
+  </div>
+);
+
+const SkeletonNavGroup = () => (
+  <div className="border-border mt-1 ml-4 border-l pl-2">
+    <div className="flex flex-col gap-0.5 py-0.5">
+      <Skeleton className="mx-2 my-1.5 h-3 w-16" />
+      <Skeleton className="mx-2 my-1.5 h-3 w-20" />
+      <Skeleton className="mx-2 my-1.5 h-3 w-14" />
+    </div>
+  </div>
+);
 
 /**
  * Lightweight shell that mirrors the real AppLayout structure,
@@ -317,29 +326,20 @@ const AppLoadingShell = () => (
       {/* Body */}
       <div className="flex w-full flex-1 overflow-hidden pt-2">
         <Sidebar collapsible="offcanvas" variant="inset">
-          <SidebarContent className="pt-2">
-            {Object.entries(LOADING_NAV).map(([group, items]) => (
-              <SidebarGroup key={group}>
-                <SidebarGroupLabel className="text-sidebar-foreground">
-                  {group}
-                </SidebarGroupLabel>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {items.map((item) => (
-                      <SidebarMenuItem key={item.label}>
-                        <SidebarMenuButton>
-                          <Icon
-                            name={item.icon}
-                            className="text-muted-foreground"
-                          />
-                          <Type variant="small">{item.label}</Type>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            ))}
+          <SidebarContent className="pt-5">
+            <div className="flex flex-col gap-1 px-2">
+              {/* Home */}
+              <SkeletonNavItem width="w-16" />
+              {/* Connect group */}
+              <SkeletonNavItem width="w-20" />
+              <SkeletonNavGroup />
+              {/* Build group */}
+              <SkeletonNavItem width="w-14" />
+              {/* Observe group */}
+              <SkeletonNavItem width="w-20" />
+              {/* Security group */}
+              <SkeletonNavItem width="w-18" />
+            </div>
           </SidebarContent>
         </Sidebar>
         <SidebarInset>

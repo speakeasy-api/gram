@@ -2,11 +2,48 @@ package conv_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/stretchr/testify/require"
 )
+
+func TestPtrToPGTextTrimmed_Trims(t *testing.T) {
+	t.Parallel()
+
+	input := "  My IdP  "
+	result := conv.PtrToPGTextTrimmed(&input)
+
+	require.True(t, result.Valid)
+	require.Equal(t, "My IdP", result.String)
+}
+
+func TestPtrToPGTextTrimmed_WhitespaceOnlyIsInvalid(t *testing.T) {
+	t.Parallel()
+
+	input := "   "
+	result := conv.PtrToPGTextTrimmed(&input)
+
+	require.False(t, result.Valid)
+}
+
+func TestPtrToPGTextTrimmed_EmptyIsInvalid(t *testing.T) {
+	t.Parallel()
+
+	input := ""
+	result := conv.PtrToPGTextTrimmed(&input)
+
+	require.False(t, result.Valid)
+}
+
+func TestPtrToPGTextTrimmed_NilIsInvalid(t *testing.T) {
+	t.Parallel()
+
+	result := conv.PtrToPGTextTrimmed(nil)
+
+	require.False(t, result.Valid)
+}
 
 func TestFromPGInt4_Valid(t *testing.T) {
 	t.Parallel()
@@ -43,6 +80,20 @@ func TestPtrInt32ToInt_Nil(t *testing.T) {
 	result := conv.PtrInt32ToInt(nil)
 
 	require.Nil(t, result)
+}
+
+func TestFromPGTimestamptz_Valid(t *testing.T) {
+	t.Parallel()
+
+	input := pgtype.Timestamptz{Time: time.Date(2024, 11, 15, 15, 4, 5, 0, time.FixedZone("test", 2*60*60)), Valid: true}
+
+	require.Equal(t, "2024-11-15T13:04:05Z", conv.FromPGTimestamptz(input))
+}
+
+func TestFromPGTimestamptz_Invalid(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, conv.FromPGTimestamptz(pgtype.Timestamptz{}))
 }
 
 func TestURLToSlug_HostAndPath(t *testing.T) {

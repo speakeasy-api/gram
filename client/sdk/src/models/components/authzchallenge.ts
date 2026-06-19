@@ -44,6 +44,7 @@ export const AuthzChallengeReason = {
   GrantMatched: "grant_matched",
   NoGrants: "no_grants",
   ScopeUnsatisfied: "scope_unsatisfied",
+  DenyGrant: "deny_grant",
   InvalidCheck: "invalid_check",
   RbacSkippedApikey: "rbac_skipped_apikey",
   DevOverride: "dev_override",

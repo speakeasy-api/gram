@@ -16,19 +16,25 @@ import (
 
 // Endpoints wraps the "telemetry" service endpoints.
 type Endpoints struct {
-	SearchLogs               goa.Endpoint
-	SearchToolCalls          goa.Endpoint
-	SearchChats              goa.Endpoint
-	SearchUsers              goa.Endpoint
-	CaptureEvent             goa.Endpoint
-	GetProjectMetricsSummary goa.Endpoint
-	GetUserMetricsSummary    goa.Endpoint
-	GetObservabilityOverview goa.Endpoint
-	GetProjectOverview       goa.Endpoint
-	ListFilterOptions        goa.Endpoint
-	ListAttributeKeys        goa.Endpoint
-	GetHooksSummary          goa.Endpoint
-	ListHooksTraces          goa.Endpoint
+	SearchLogs                goa.Endpoint
+	SearchToolCalls           goa.Endpoint
+	SearchChats               goa.Endpoint
+	SearchUsers               goa.Endpoint
+	CaptureEvent              goa.Endpoint
+	GetProjectMetricsSummary  goa.Endpoint
+	GetUserMetricsSummary     goa.Endpoint
+	GetEmployeeDataFlowGraph  goa.Endpoint
+	GetObservabilityOverview  goa.Endpoint
+	GetProjectOverview        goa.Endpoint
+	Query                     goa.Endpoint
+	ListSessions              goa.Endpoint
+	ListFilterOptions         goa.Endpoint
+	ListAttributeKeys         goa.Endpoint
+	GetHooksSummary           goa.Endpoint
+	GetToolUsageSummary       goa.Endpoint
+	ListToolUsageTraces       goa.Endpoint
+	GetToolUsageFilterOptions goa.Endpoint
+	ListHooksTraces           goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "telemetry" service with endpoints.
@@ -36,19 +42,25 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		SearchLogs:               NewSearchLogsEndpoint(s, a.APIKeyAuth),
-		SearchToolCalls:          NewSearchToolCallsEndpoint(s, a.APIKeyAuth),
-		SearchChats:              NewSearchChatsEndpoint(s, a.APIKeyAuth),
-		SearchUsers:              NewSearchUsersEndpoint(s, a.APIKeyAuth),
-		CaptureEvent:             NewCaptureEventEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		GetProjectMetricsSummary: NewGetProjectMetricsSummaryEndpoint(s, a.APIKeyAuth),
-		GetUserMetricsSummary:    NewGetUserMetricsSummaryEndpoint(s, a.APIKeyAuth),
-		GetObservabilityOverview: NewGetObservabilityOverviewEndpoint(s, a.APIKeyAuth),
-		GetProjectOverview:       NewGetProjectOverviewEndpoint(s, a.APIKeyAuth),
-		ListFilterOptions:        NewListFilterOptionsEndpoint(s, a.APIKeyAuth),
-		ListAttributeKeys:        NewListAttributeKeysEndpoint(s, a.APIKeyAuth),
-		GetHooksSummary:          NewGetHooksSummaryEndpoint(s, a.APIKeyAuth),
-		ListHooksTraces:          NewListHooksTracesEndpoint(s, a.APIKeyAuth),
+		SearchLogs:                NewSearchLogsEndpoint(s, a.APIKeyAuth),
+		SearchToolCalls:           NewSearchToolCallsEndpoint(s, a.APIKeyAuth),
+		SearchChats:               NewSearchChatsEndpoint(s, a.APIKeyAuth),
+		SearchUsers:               NewSearchUsersEndpoint(s, a.APIKeyAuth),
+		CaptureEvent:              NewCaptureEventEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		GetProjectMetricsSummary:  NewGetProjectMetricsSummaryEndpoint(s, a.APIKeyAuth),
+		GetUserMetricsSummary:     NewGetUserMetricsSummaryEndpoint(s, a.APIKeyAuth),
+		GetEmployeeDataFlowGraph:  NewGetEmployeeDataFlowGraphEndpoint(s, a.APIKeyAuth),
+		GetObservabilityOverview:  NewGetObservabilityOverviewEndpoint(s, a.APIKeyAuth),
+		GetProjectOverview:        NewGetProjectOverviewEndpoint(s, a.APIKeyAuth),
+		Query:                     NewQueryEndpoint(s, a.APIKeyAuth),
+		ListSessions:              NewListSessionsEndpoint(s, a.APIKeyAuth),
+		ListFilterOptions:         NewListFilterOptionsEndpoint(s, a.APIKeyAuth),
+		ListAttributeKeys:         NewListAttributeKeysEndpoint(s, a.APIKeyAuth),
+		GetHooksSummary:           NewGetHooksSummaryEndpoint(s, a.APIKeyAuth),
+		GetToolUsageSummary:       NewGetToolUsageSummaryEndpoint(s, a.APIKeyAuth),
+		ListToolUsageTraces:       NewListToolUsageTracesEndpoint(s, a.APIKeyAuth),
+		GetToolUsageFilterOptions: NewGetToolUsageFilterOptionsEndpoint(s, a.APIKeyAuth),
+		ListHooksTraces:           NewListHooksTracesEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -61,11 +73,17 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CaptureEvent = m(e.CaptureEvent)
 	e.GetProjectMetricsSummary = m(e.GetProjectMetricsSummary)
 	e.GetUserMetricsSummary = m(e.GetUserMetricsSummary)
+	e.GetEmployeeDataFlowGraph = m(e.GetEmployeeDataFlowGraph)
 	e.GetObservabilityOverview = m(e.GetObservabilityOverview)
 	e.GetProjectOverview = m(e.GetProjectOverview)
+	e.Query = m(e.Query)
+	e.ListSessions = m(e.ListSessions)
 	e.ListFilterOptions = m(e.ListFilterOptions)
 	e.ListAttributeKeys = m(e.ListAttributeKeys)
 	e.GetHooksSummary = m(e.GetHooksSummary)
+	e.GetToolUsageSummary = m(e.GetToolUsageSummary)
+	e.ListToolUsageTraces = m(e.ListToolUsageTraces)
+	e.GetToolUsageFilterOptions = m(e.GetToolUsageFilterOptions)
 	e.ListHooksTraces = m(e.ListHooksTraces)
 }
 
@@ -77,7 +95,7 @@ func NewSearchLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -136,7 +154,7 @@ func NewSearchToolCallsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -195,7 +213,7 @@ func NewSearchChatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -254,7 +272,7 @@ func NewSearchUsersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -313,7 +331,7 @@ func NewCaptureEventEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, au
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -384,7 +402,7 @@ func NewGetProjectMetricsSummaryEndpoint(s Service, authAPIKeyFn security.AuthAP
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -443,7 +461,7 @@ func NewGetUserMetricsSummaryEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -494,6 +512,65 @@ func NewGetUserMetricsSummaryEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 	}
 }
 
+// NewGetEmployeeDataFlowGraphEndpoint returns an endpoint function that calls
+// the method "getEmployeeDataFlowGraph" of service "telemetry".
+func NewGetEmployeeDataFlowGraphEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetEmployeeDataFlowGraphPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetEmployeeDataFlowGraph(ctx, p)
+	}
+}
+
 // NewGetObservabilityOverviewEndpoint returns an endpoint function that calls
 // the method "getObservabilityOverview" of service "telemetry".
 func NewGetObservabilityOverviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -502,7 +579,7 @@ func NewGetObservabilityOverviewEndpoint(s Service, authAPIKeyFn security.AuthAP
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -561,7 +638,7 @@ func NewGetProjectOverviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -612,6 +689,52 @@ func NewGetProjectOverviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 	}
 }
 
+// NewQueryEndpoint returns an endpoint function that calls the method "query"
+// of service "telemetry".
+func NewQueryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*QueryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.Query(ctx, p)
+	}
+}
+
+// NewListSessionsEndpoint returns an endpoint function that calls the method
+// "listSessions" of service "telemetry".
+func NewListSessionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSessionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSessions(ctx, p)
+	}
+}
+
 // NewListFilterOptionsEndpoint returns an endpoint function that calls the
 // method "listFilterOptions" of service "telemetry".
 func NewListFilterOptionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -620,7 +743,7 @@ func NewListFilterOptionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -679,7 +802,7 @@ func NewListAttributeKeysEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -738,7 +861,7 @@ func NewGetHooksSummaryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -789,6 +912,183 @@ func NewGetHooksSummaryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 	}
 }
 
+// NewGetToolUsageSummaryEndpoint returns an endpoint function that calls the
+// method "getToolUsageSummary" of service "telemetry".
+func NewGetToolUsageSummaryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetToolUsageSummaryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetToolUsageSummary(ctx, p)
+	}
+}
+
+// NewListToolUsageTracesEndpoint returns an endpoint function that calls the
+// method "listToolUsageTraces" of service "telemetry".
+func NewListToolUsageTracesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListToolUsageTracesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListToolUsageTraces(ctx, p)
+	}
+}
+
+// NewGetToolUsageFilterOptionsEndpoint returns an endpoint function that calls
+// the method "getToolUsageFilterOptions" of service "telemetry".
+func NewGetToolUsageFilterOptionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetToolUsageFilterOptionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetToolUsageFilterOptions(ctx, p)
+	}
+}
+
 // NewListHooksTracesEndpoint returns an endpoint function that calls the
 // method "listHooksTraces" of service "telemetry".
 func NewListHooksTracesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -797,7 +1097,7 @@ func NewListHooksTracesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string

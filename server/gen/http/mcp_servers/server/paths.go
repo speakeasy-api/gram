@@ -27,6 +27,11 @@ func UpdateMcpServerMcpServersPath() string {
 	return "/rpc/mcpServers.update"
 }
 
+// ListToolFiltersMcpServersPath returns the URL path to the mcpServers service listToolFilters HTTP endpoint.
+func ListToolFiltersMcpServersPath() string {
+	return "/rpc/mcpServers.listToolFilters"
+}
+
 // DeleteMcpServerMcpServersPath returns the URL path to the mcpServers service deleteMcpServer HTTP endpoint.
 func DeleteMcpServerMcpServersPath() string {
 	return "/rpc/mcpServers.delete"

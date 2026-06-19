@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	telem_srv "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
@@ -26,20 +28,24 @@ import (
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
+	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 	"golang.org/x/sync/errgroup"
 )
 
-const logsDisabledMsg = "logs are not enabled for this organization"
-
 type Service struct {
 	auth                  *auth.Auth
 	db                    *pgxpool.Pool
 	chatRepo              *chatRepo.Queries
 	hooksRepo             *hooksRepo.Queries
+	orgsRepo              *orgsRepo.Queries
+	projectsRepo          *projectsRepo.Queries
 	chConn                clickhouse.Conn
 	chRepo                *repo.Queries
 	logger                *slog.Logger
@@ -83,6 +89,8 @@ func NewService(
 		db:                    db,
 		chatRepo:              chatRepo.New(db),
 		hooksRepo:             hooksRepo.New(db),
+		orgsRepo:              orgsRepo.New(db),
+		projectsRepo:          projectsRepo.New(db),
 		chConn:                chConn,
 		chRepo:                chRepo,
 		logger:                logger,
@@ -129,7 +137,7 @@ func (s *Service) CheckLogsEnabled(ctx context.Context, organizationID string) e
 		return oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
 	}
 	if !enabled {
-		return oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 	return nil
 }
@@ -360,7 +368,15 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 }
 
 // SearchUsers retrieves user usage summaries grouped by user_id or external_user_id.
+// When group_by=role, it aggregates per-user costs by RBAC role.
 func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUsersPayload) (res *telem_gen.SearchUsersResult, err error) {
+	if payload.GroupBy == "role" {
+		return s.searchUsersByRole(ctx, payload)
+	}
+	return s.searchUsersByEmployee(ctx, payload)
+}
+
+func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.SearchUsersPayload) (*telem_gen.SearchUsersResult, error) {
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.Filter.From, &payload.Filter.To)
 	if err != nil {
 		return nil, err
@@ -444,8 +460,143 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 
 	return &telem_gen.SearchUsersResult{
 		Users:      users,
+		Roles:      nil,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// searchUsersByRole fetches all per-user costs from ClickHouse, joins with role
+// assignments from Postgres, and returns aggregates grouped by role.
+func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.SearchUsersPayload) (*telem_gen.SearchUsersResult, error) {
+	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.Filter.From, &payload.Filter.To)
+	if err != nil {
+		return nil, err
+	}
+
+	deploymentID := conv.PtrValOr(payload.Filter.DeploymentID, "")
+
+	// Fetch per-user costs from ClickHouse and role assignments from Postgres
+	// concurrently — the two queries are independent.
+	var items []repo.UserSummary
+	var assignments []orgsRepo.ListActiveRoleAssignmentsByOrganizationRow
+
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		var fetchErr error
+		items, fetchErr = s.chRepo.SearchUsers(egCtx, repo.SearchUsersParams{
+			GramProjectID:    params.projectID,
+			TimeStart:        params.timeStart,
+			TimeEnd:          params.timeEnd,
+			GramDeploymentID: deploymentID,
+			EventSource:      conv.PtrValOr(payload.Filter.EventSource, ""),
+			HookSource:       conv.PtrValOr(payload.Filter.HookSource, ""),
+			GroupBy:          "user_id",
+			UserIDs:          payload.Filter.UserIds,
+			SortOrder:        "desc",
+			Cursor:           "",
+			Limit:            10001, // Upper bound; orgs rarely have >10k users
+		})
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error searching users for role aggregation")
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var fetchErr error
+		assignments, fetchErr = s.orgsRepo.ListActiveRoleAssignmentsByOrganization(egCtx, params.organizationID)
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error fetching role assignments")
+		}
+		return nil
+	})
+	if err := eg.Wait(); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching role usage data")
+	}
+
+	// Build user_id → (role_id, role_name) map. A user may have multiple role
+	// assignments; we take the first one encountered.
+	type roleInfo struct {
+		id   string
+		name string
+	}
+	userToRole := make(map[string]roleInfo, len(assignments))
+	for _, a := range assignments {
+		if a.UserID.Valid {
+			if _, exists := userToRole[a.UserID.String]; !exists {
+				userToRole[a.UserID.String] = roleInfo{
+					id:   roleIDFromURN(a.RoleUrn),
+					name: a.RoleName,
+				}
+			}
+		}
+	}
+
+	// Single pass: aggregate per-user costs by role and build the response.
+	type roleAgg struct {
+		summary *telem_gen.RoleSummary
+	}
+	aggByRole := make(map[string]*roleAgg, len(userToRole))
+
+	const unassignedRoleID = "unassigned"
+	for _, item := range items {
+		ri := roleInfo{id: unassignedRoleID, name: "Unassigned"}
+		if r, ok := userToRole[item.UserID]; ok {
+			ri = r
+		}
+		agg, exists := aggByRole[ri.id]
+		if !exists {
+			agg = &roleAgg{summary: &telem_gen.RoleSummary{
+				RoleID:            ri.id,
+				RoleName:          ri.name,
+				UserCount:         0,
+				TotalCost:         0,
+				CostPerUser:       0,
+				TotalInputTokens:  0,
+				TotalOutputTokens: 0,
+				TotalTokens:       0,
+				TotalChats:        0,
+			}}
+			aggByRole[ri.id] = agg
+		}
+		s := agg.summary
+		s.UserCount++
+		s.TotalCost += item.TotalCost
+		s.TotalInputTokens += item.TotalInputTokens
+		s.TotalOutputTokens += item.TotalOutputTokens
+		s.TotalTokens += item.TotalTokens
+		s.TotalChats += int64(item.TotalChats) //nolint:gosec // Bounded count
+	}
+
+	roles := make([]*telem_gen.RoleSummary, 0, len(aggByRole))
+	for _, agg := range aggByRole {
+		rs := agg.summary
+		if rs.UserCount > 0 {
+			rs.CostPerUser = sanitizeFloat64(rs.TotalCost / float64(rs.UserCount))
+		}
+		rs.TotalCost = sanitizeFloat64(rs.TotalCost)
+		roles = append(roles, rs)
+	}
+
+	// Sort by total cost descending.
+	sort.Slice(roles, func(i, j int) bool {
+		return roles[i].TotalCost > roles[j].TotalCost
+	})
+
+	return &telem_gen.SearchUsersResult{
+		Users:      []*telem_gen.UserSummary{},
+		Roles:      roles,
+		NextCursor: nil,
+	}, nil
+}
+
+// roleIDFromURN extracts the role ID from a role URN like "role:organization:<id>"
+// or "role:global:<id>".
+func roleIDFromURN(urn string) string {
+	parts := strings.SplitN(urn, ":", 3)
+	if len(parts) == 3 {
+		return parts[2]
+	}
+	return urn
 }
 
 // GetProjectMetricsSummary retrieves aggregated metrics for an entire project.
@@ -465,7 +616,7 @@ func (s *Service) GetProjectMetricsSummary(ctx context.Context, payload *telem_g
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
@@ -558,7 +709,7 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	// Validate that exactly one of user_id or external_user_id is provided
@@ -596,6 +747,267 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 	}, nil
 }
 
+// GetEmployeeDataFlowGraph retrieves an employee's MCP data-flow graph.
+func (s *Service) GetEmployeeDataFlowGraph(ctx context.Context, payload *telem_gen.GetEmployeeDataFlowGraphPayload) (res *telem_gen.GetEmployeeDataFlowGraphResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	userID := conv.PtrValOr(payload.UserID, "")
+	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
+	if userID == "" && externalUserID == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "either user_id or external_user_id is required")
+	}
+	if userID != "" && externalUserID != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "only one of user_id or external_user_id can be provided")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.chRepo.GetEmployeeDataFlowGraph(ctx, repo.GetEmployeeDataFlowGraphParams{
+		GramProjectID:  authCtx.ProjectID.String(),
+		TimeStart:      timeStart,
+		TimeEnd:        timeEnd,
+		UserID:         userID,
+		ExternalUserID: externalUserID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving employee data flow graph")
+	}
+
+	nodes, edges := buildEmployeeDataFlowGraph(rows)
+	return &telem_gen.GetEmployeeDataFlowGraphResult{
+		Nodes: nodes,
+		Edges: edges,
+	}, nil
+}
+
+type employeeGraphTupleNode struct {
+	tier        string
+	label       string
+	serverClass string
+}
+
+type employeeGraphNodeAccumulator struct {
+	node       *telem_gen.EmployeeDataFlowNode
+	totalCalls uint64
+}
+
+type employeeGraphEdgeAccumulator struct {
+	edge         *telem_gen.EmployeeDataFlowEdge
+	callCount    uint64
+	successCount uint64
+	failureCount uint64
+}
+
+type employeeGraphEdgeKey struct {
+	sourceID string
+	targetID string
+}
+
+var employeeDataFlowTierOrder = map[string]int{
+	"origin": 0,
+	"client": 1,
+	"server": 2,
+	"tool":   3,
+}
+
+func buildEmployeeDataFlowGraph(rows []repo.EmployeeDataFlowRow) ([]*telem_gen.EmployeeDataFlowNode, []*telem_gen.EmployeeDataFlowEdge) {
+	nodeAccs := make(map[string]*employeeGraphNodeAccumulator)
+	edgeAccs := make(map[employeeGraphEdgeKey]*employeeGraphEdgeAccumulator)
+
+	for _, row := range rows {
+		callCount := row.CallCount
+		if callCount == 0 {
+			continue
+		}
+
+		path := employeeDataFlowPath(row)
+		for _, pathNode := range path {
+			nodeID := employeeDataFlowNodeID(pathNode)
+			acc, ok := nodeAccs[nodeID]
+			if !ok {
+				acc = &employeeGraphNodeAccumulator{
+					node: &telem_gen.EmployeeDataFlowNode{
+						ID:          nodeID,
+						Tier:        pathNode.tier,
+						Label:       pathNode.label,
+						TotalCalls:  0,
+						ServerClass: nil,
+					},
+					totalCalls: 0,
+				}
+				if pathNode.tier == "server" && pathNode.serverClass != "" {
+					serverClass := pathNode.serverClass
+					acc.node.ServerClass = &serverClass
+				}
+				nodeAccs[nodeID] = acc
+			}
+			acc.totalCalls += callCount
+		}
+
+		for i := 0; i < len(path)-1; i++ {
+			sourceID := employeeDataFlowNodeID(path[i])
+			targetID := employeeDataFlowNodeID(path[i+1])
+			edgeKey := employeeGraphEdgeKey{sourceID: sourceID, targetID: targetID}
+			acc, ok := edgeAccs[edgeKey]
+			if !ok {
+				acc = &employeeGraphEdgeAccumulator{
+					edge: &telem_gen.EmployeeDataFlowEdge{
+						ID:           employeeDataFlowEdgeID(sourceID, targetID),
+						Source:       sourceID,
+						Target:       targetID,
+						CallCount:    0,
+						SuccessCount: 0,
+						FailureCount: 0,
+					},
+					callCount:    0,
+					successCount: 0,
+					failureCount: 0,
+				}
+				edgeAccs[edgeKey] = acc
+			}
+			acc.callCount += row.CallCount
+			acc.successCount += row.SuccessCount
+			acc.failureCount += row.FailureCount
+		}
+	}
+
+	nodes := make([]*telem_gen.EmployeeDataFlowNode, 0, len(nodeAccs))
+	for _, acc := range nodeAccs {
+		acc.node.TotalCalls = uint64ToInt64(acc.totalCalls)
+		nodes = append(nodes, acc.node)
+	}
+	sort.Slice(nodes, func(i, j int) bool {
+		leftTier := employeeDataFlowTierOrder[nodes[i].Tier]
+		rightTier := employeeDataFlowTierOrder[nodes[j].Tier]
+		if leftTier != rightTier {
+			return leftTier < rightTier
+		}
+		if nodes[i].TotalCalls != nodes[j].TotalCalls {
+			return nodes[i].TotalCalls > nodes[j].TotalCalls
+		}
+		return nodes[i].Label < nodes[j].Label
+	})
+
+	edges := make([]*telem_gen.EmployeeDataFlowEdge, 0, len(edgeAccs))
+	for _, acc := range edgeAccs {
+		acc.edge.CallCount = uint64ToInt64(acc.callCount)
+		acc.edge.SuccessCount = uint64ToInt64(acc.successCount)
+		acc.edge.FailureCount = uint64ToInt64(acc.failureCount)
+		edges = append(edges, acc.edge)
+	}
+	sort.Slice(edges, func(i, j int) bool {
+		if edges[i].CallCount != edges[j].CallCount {
+			return edges[i].CallCount > edges[j].CallCount
+		}
+		return edges[i].ID < edges[j].ID
+	})
+
+	return pruneUnreachableEmployeeDataFlowGraph(nodes, edges)
+}
+
+// pruneUnreachableEmployeeDataFlowGraph keeps only the nodes reachable forward
+// from an origin-tier node (and the edges between them). This drops dangling
+// nodes such as an MCP client with no inbound connection, and anything that
+// hangs off them. When there are no origin nodes the result is empty.
+func pruneUnreachableEmployeeDataFlowGraph(nodes []*telem_gen.EmployeeDataFlowNode, edges []*telem_gen.EmployeeDataFlowEdge) ([]*telem_gen.EmployeeDataFlowNode, []*telem_gen.EmployeeDataFlowEdge) {
+	adjacency := make(map[string][]string)
+	for _, edge := range edges {
+		adjacency[edge.Source] = append(adjacency[edge.Source], edge.Target)
+	}
+
+	reachable := make(map[string]struct{})
+	queue := make([]string, 0)
+	for _, node := range nodes {
+		if node.Tier == "origin" {
+			reachable[node.ID] = struct{}{}
+			queue = append(queue, node.ID)
+		}
+	}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		for _, target := range adjacency[id] {
+			if _, ok := reachable[target]; !ok {
+				reachable[target] = struct{}{}
+				queue = append(queue, target)
+			}
+		}
+	}
+
+	prunedNodes := make([]*telem_gen.EmployeeDataFlowNode, 0, len(nodes))
+	for _, node := range nodes {
+		if _, ok := reachable[node.ID]; ok {
+			prunedNodes = append(prunedNodes, node)
+		}
+	}
+
+	prunedEdges := make([]*telem_gen.EmployeeDataFlowEdge, 0, len(edges))
+	for _, edge := range edges {
+		_, sourceOK := reachable[edge.Source]
+		_, targetOK := reachable[edge.Target]
+		if sourceOK && targetOK {
+			prunedEdges = append(prunedEdges, edge)
+		}
+	}
+
+	return prunedNodes, prunedEdges
+}
+
+func employeeDataFlowPath(row repo.EmployeeDataFlowRow) []employeeGraphTupleNode {
+	candidates := []employeeGraphTupleNode{
+		{tier: "origin", label: strings.TrimSpace(row.Origin), serverClass: ""},
+		{tier: "client", label: strings.TrimSpace(row.Client), serverClass: ""},
+		{tier: "server", label: strings.TrimSpace(row.Server), serverClass: strings.TrimSpace(row.ServerClass)},
+		{tier: "tool", label: strings.TrimSpace(row.Tool), serverClass: ""},
+	}
+
+	path := make([]employeeGraphTupleNode, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.label == "" {
+			continue
+		}
+		path = append(path, candidate)
+	}
+	return path
+}
+
+func employeeDataFlowNodeID(node employeeGraphTupleNode) string {
+	if node.tier == "server" && node.serverClass != "" {
+		return node.tier + ":" + node.serverClass + ":" + node.label
+	}
+	return node.tier + ":" + node.label
+}
+
+func employeeDataFlowEdgeID(sourceID, targetID string) string {
+	return strconv.Itoa(len(sourceID)) + ":" + sourceID + "->" + strconv.Itoa(len(targetID)) + ":" + targetID
+}
+
+func uint64ToInt64(v uint64) int64 {
+	const maxInt64 = uint64(1<<63 - 1)
+	if v > maxInt64 {
+		return int64(maxInt64)
+	}
+	return int64(v)
+}
+
 // searchParams contains common validated parameters for telemetry search endpoints.
 type searchParams struct {
 	projectID      string
@@ -623,7 +1035,7 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, limit int, sort st
 		return nil, oops.E(oops.CodeUnexpected, err, "checking if logs enabled")
 	}
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	if limit < 1 || limit > 1000 {
@@ -792,7 +1204,7 @@ func (s *Service) CaptureEvent(ctx context.Context, payload *telem_gen.CaptureEv
 	// Capture event in PostHog
 	if err := s.posthog.CaptureEvent(ctx, payload.Event, distinctID, properties); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to capture event").
-			Log(ctx, s.logger,
+			LogError(ctx, s.logger,
 				attr.SlogEvent(payload.Event),
 			)
 	}
@@ -823,7 +1235,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
@@ -836,6 +1248,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
 	apiKeyID := conv.PtrValOr(payload.APIKeyID, "")
 	toolsetSlug := conv.PtrValOr(payload.ToolsetSlug, "")
+	remoteMCPServerID := conv.PtrValOr(payload.RemoteMcpServerID, "")
 	eventSource := conv.PtrValOr(payload.EventSource, "")
 	hookSource := conv.PtrValOr(payload.HookSource, "")
 
@@ -853,30 +1266,32 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 
 	// Fetch all data sequentially to avoid ClickHouse concurrent query limits
 	summary, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
-		GramProjectID:  projectID,
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		UserID:         userID,
-		ExternalUserID: externalUserID,
-		APIKeyID:       apiKeyID,
-		ToolsetSlug:    toolsetSlug,
-		EventSource:    eventSource,
-		HookSource:     hookSource,
+		GramProjectID:     projectID,
+		TimeStart:         timeStart,
+		TimeEnd:           timeEnd,
+		UserID:            userID,
+		ExternalUserID:    externalUserID,
+		APIKeyID:          apiKeyID,
+		ToolsetSlug:       toolsetSlug,
+		RemoteMCPServerID: remoteMCPServerID,
+		EventSource:       eventSource,
+		HookSource:        hookSource,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
 	}
 
 	comparison, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
-		GramProjectID:  projectID,
-		TimeStart:      comparisonStart,
-		TimeEnd:        comparisonEnd,
-		UserID:         userID,
-		ExternalUserID: externalUserID,
-		APIKeyID:       apiKeyID,
-		ToolsetSlug:    toolsetSlug,
-		EventSource:    eventSource,
-		HookSource:     hookSource,
+		GramProjectID:     projectID,
+		TimeStart:         comparisonStart,
+		TimeEnd:           comparisonEnd,
+		UserID:            userID,
+		ExternalUserID:    externalUserID,
+		APIKeyID:          apiKeyID,
+		ToolsetSlug:       toolsetSlug,
+		RemoteMCPServerID: remoteMCPServerID,
+		EventSource:       eventSource,
+		HookSource:        hookSource,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
@@ -885,16 +1300,17 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	var timeSeries []repo.TimeSeriesBucket
 	if payload.IncludeTimeSeries {
 		timeSeries, err = s.chRepo.GetTimeSeriesMetrics(ctx, repo.GetTimeSeriesMetricsParams{
-			GramProjectID:   projectID,
-			TimeStart:       timeStart,
-			TimeEnd:         timeEnd,
-			IntervalSeconds: intervalSeconds,
-			UserID:          userID,
-			ExternalUserID:  externalUserID,
-			APIKeyID:        apiKeyID,
-			ToolsetSlug:     toolsetSlug,
-			EventSource:     eventSource,
-			HookSource:      hookSource,
+			GramProjectID:     projectID,
+			TimeStart:         timeStart,
+			TimeEnd:           timeEnd,
+			IntervalSeconds:   intervalSeconds,
+			UserID:            userID,
+			ExternalUserID:    externalUserID,
+			APIKeyID:          apiKeyID,
+			ToolsetSlug:       toolsetSlug,
+			RemoteMCPServerID: remoteMCPServerID,
+			EventSource:       eventSource,
+			HookSource:        hookSource,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
@@ -902,34 +1318,36 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	}
 
 	toolsByCount, err := s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
-		GramProjectID:  projectID,
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		UserID:         userID,
-		ExternalUserID: externalUserID,
-		APIKeyID:       apiKeyID,
-		ToolsetSlug:    toolsetSlug,
-		EventSource:    eventSource,
-		HookSource:     hookSource,
-		Limit:          10,
-		SortBy:         "count",
+		GramProjectID:     projectID,
+		TimeStart:         timeStart,
+		TimeEnd:           timeEnd,
+		UserID:            userID,
+		ExternalUserID:    externalUserID,
+		APIKeyID:          apiKeyID,
+		ToolsetSlug:       toolsetSlug,
+		RemoteMCPServerID: remoteMCPServerID,
+		EventSource:       eventSource,
+		HookSource:        hookSource,
+		Limit:             10,
+		SortBy:            "count",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by count")
 	}
 
 	toolsByFailure, err := s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
-		GramProjectID:  projectID,
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		UserID:         userID,
-		ExternalUserID: externalUserID,
-		APIKeyID:       apiKeyID,
-		ToolsetSlug:    toolsetSlug,
-		EventSource:    eventSource,
-		HookSource:     hookSource,
-		Limit:          10,
-		SortBy:         "failure_rate",
+		GramProjectID:     projectID,
+		TimeStart:         timeStart,
+		TimeEnd:           timeEnd,
+		UserID:            userID,
+		ExternalUserID:    externalUserID,
+		APIKeyID:          apiKeyID,
+		ToolsetSlug:       toolsetSlug,
+		RemoteMCPServerID: remoteMCPServerID,
+		EventSource:       eventSource,
+		HookSource:        hookSource,
+		Limit:             10,
+		SortBy:            "failure_rate",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by failure rate")
@@ -964,7 +1382,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
@@ -1009,15 +1427,16 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 
 	// Fetch tool call metrics from ClickHouse for current period (no filters)
 	toolMetrics, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
-		GramProjectID:  projectID,
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		UserID:         "",
-		ExternalUserID: "",
-		APIKeyID:       "",
-		ToolsetSlug:    "",
-		EventSource:    "",
-		HookSource:     "",
+		GramProjectID:     projectID,
+		TimeStart:         timeStart,
+		TimeEnd:           timeEnd,
+		UserID:            "",
+		ExternalUserID:    "",
+		APIKeyID:          "",
+		ToolsetSlug:       "",
+		RemoteMCPServerID: "",
+		EventSource:       "",
+		HookSource:        "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tool call metrics")
@@ -1035,15 +1454,16 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 
 	// Fetch comparison period tool metrics from ClickHouse
 	toolMetricsComparison, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
-		GramProjectID:  projectID,
-		TimeStart:      comparisonStart,
-		TimeEnd:        comparisonEnd,
-		UserID:         "",
-		ExternalUserID: "",
-		APIKeyID:       "",
-		ToolsetSlug:    "",
-		EventSource:    "",
-		HookSource:     "",
+		GramProjectID:     projectID,
+		TimeStart:         comparisonStart,
+		TimeEnd:           comparisonEnd,
+		UserID:            "",
+		ExternalUserID:    "",
+		APIKeyID:          "",
+		ToolsetSlug:       "",
+		RemoteMCPServerID: "",
+		EventSource:       "",
+		HookSource:        "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison tool call metrics")
@@ -1445,7 +1865,7 @@ func (s *Service) ListFilterOptions(ctx context.Context, payload *telem_gen.List
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
@@ -1498,7 +1918,7 @@ func (s *Service) ListAttributeKeys(ctx context.Context, payload *telem_gen.List
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
@@ -1550,7 +1970,7 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	}
 
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, nil, logsDisabledMsg)
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
 	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
@@ -1796,6 +2216,470 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	}, nil
 }
 
+// GetToolUsageSummary returns target-aware MCP and tool usage metrics.
+func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.GetToolUsageSummaryPayload) (res *telem_gen.GetToolUsageSummaryResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	const fiveMinNs = int64(5 * 60 * 1e9)
+	const sixtyMinNs = int64(60 * 60 * 1e9)
+	bucketSizeNs := sixtyMinNs
+	if timeEnd-timeStart <= int64(24*60*60*1e9) {
+		bucketSizeNs = fiveMinNs
+	}
+
+	targetTypes := make([]string, 0, len(payload.TargetTypes))
+	for _, targetType := range payload.TargetTypes {
+		targetTypes = append(targetTypes, string(targetType))
+	}
+
+	userFilters := make([]repo.ToolUsageUserFilter, 0, len(payload.UserFilters))
+	for _, filter := range payload.UserFilters {
+		if filter == nil {
+			continue
+		}
+		userFilters = append(userFilters, repo.ToolUsageUserFilter{
+			Kind: string(filter.Kind),
+			Key:  filter.Key,
+		})
+	}
+
+	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
+	}
+
+	summary, err := s.chRepo.GetToolUsageSummary(ctx, repo.GetToolUsageSummaryParams{
+		GramProjectID:      authCtx.ProjectID.String(),
+		TimeStart:          timeStart,
+		TimeEnd:            timeEnd,
+		BucketSizeNs:       bucketSizeNs,
+		HostedMCPMatchers:  hostedMCPMatchers,
+		TargetTypes:        targetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		ShadowServerNames:  payload.ShadowServerNames,
+		UserFilters:        userFilters,
+		HookSources:        payload.HookSources,
+		TargetLimit:        25,
+		UserLimit:          25,
+		UsersByTargetLimit: 100,
+		TargetToolRowLimit: 100,
+		TimeSeriesRowLimit: 10000,
+		UserSeriesRowLimit: 10000,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage summary data")
+	}
+
+	return toToolUsageSummaryResult(summary), nil
+}
+
+func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.ListToolUsageTracesPayload) (res *telem_gen.ListToolUsageTracesResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	targetTypes := make([]string, 0, len(payload.TargetTypes))
+	for _, targetType := range payload.TargetTypes {
+		targetTypes = append(targetTypes, string(targetType))
+	}
+
+	userFilters := make([]repo.ToolUsageUserFilter, 0, len(payload.UserFilters))
+	for _, filter := range payload.UserFilters {
+		if filter == nil {
+			continue
+		}
+		userFilters = append(userFilters, repo.ToolUsageUserFilter{
+			Kind: string(filter.Kind),
+			Key:  filter.Key,
+		})
+	}
+
+	cursorTimeUnixNano := int64(0)
+	cursorID := ""
+	if params.cursor != "" {
+		cursorTimeUnixNano, cursorID, err = decodeToolUsageTraceCursor(params.cursor)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor")
+		}
+	}
+
+	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
+	}
+
+	rows, err := s.chRepo.ListToolUsageTraces(ctx, repo.ListToolUsageTracesParams{
+		GramProjectID:      params.projectID,
+		TimeStart:          params.timeStart,
+		TimeEnd:            params.timeEnd,
+		HostedMCPMatchers:  hostedMCPMatchers,
+		TargetTypes:        targetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		ShadowServerNames:  payload.ShadowServerNames,
+		UserFilters:        userFilters,
+		HookSources:        payload.HookSources,
+		Query:              conv.PtrValOr(payload.Query, ""),
+		Filters:            toRepoAttributeFilters(payload.Filters),
+		SortOrder:          params.sortOrder,
+		CursorTimeUnixNano: cursorTimeUnixNano,
+		CursorID:           cursorID,
+		Limit:              params.limit + 1,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage traces")
+	}
+
+	nextCursor := ""
+	if len(rows) > params.limit {
+		nextCursor = encodeToolUsageTraceCursor(rows[params.limit-1].StartTimeUnixNano, rows[params.limit-1].ID)
+		rows = rows[:params.limit]
+	}
+
+	return toToolUsageTracesResult(rows, nextCursor), nil
+}
+
+// GetToolUsageFilterOptions returns selectable filter options for target-aware MCP and tool usage metrics.
+func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_gen.GetToolUsageFilterOptionsPayload) (res *telem_gen.GetToolUsageFilterOptionsResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
+	}
+
+	options, err := s.chRepo.GetToolUsageFilterOptions(ctx, repo.GetToolUsageFilterOptionsParams{
+		GramProjectID:     authCtx.ProjectID.String(),
+		TimeStart:         timeStart,
+		TimeEnd:           timeEnd,
+		HostedMCPMatchers: hostedMCPMatchers,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage filter options")
+	}
+
+	return toToolUsageFilterOptionsResult(options, payload.OptionTypes), nil
+}
+
+func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid.UUID) ([]repo.HostedMCPMatcher, error) {
+	toolsets, err := toolsetsRepo.New(s.db).ListToolsetsByProject(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list project toolsets: %w", err)
+	}
+
+	matchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
+	for _, toolset := range toolsets {
+		if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
+			continue
+		}
+		matchers = append(matchers, repo.HostedMCPMatcher{
+			ToolsetSlug: toolset.Slug,
+			McpSlug:     toolset.McpSlug.String,
+		})
+	}
+	return matchers, nil
+}
+
+func encodeToolUsageTraceCursor(startTimeUnixNano int64, id string) string {
+	payload := fmt.Sprintf("%d:%s", startTimeUnixNano, id)
+	return base64.RawURLEncoding.EncodeToString([]byte(payload))
+}
+
+func decodeToolUsageTraceCursor(cursor string) (int64, string, error) {
+	decoded, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return 0, "", fmt.Errorf("decode tool usage trace cursor: %w", err)
+	}
+	parts := strings.SplitN(string(decoded), ":", 2)
+	if len(parts) != 2 || parts[1] == "" {
+		return 0, "", fmt.Errorf("invalid tool usage trace cursor")
+	}
+	startTimeUnixNano, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, "", fmt.Errorf("parse tool usage trace cursor timestamp: %w", err)
+	}
+	return startTimeUnixNano, parts[1], nil
+}
+
+func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor string) *telem_gen.ListToolUsageTracesResult {
+	traces := make([]*telem_gen.ToolUsageTraceSummary, 0, len(rows))
+	for _, row := range rows {
+		trace := &telem_gen.ToolUsageTraceSummary{
+			ID:      row.ID,
+			TraceID: conv.PtrEmpty(row.TraceID),
+			LogGroup: &telem_gen.ToolUsageTraceLogGroup{
+				Kind:  telem_gen.ToolUsageTraceLogGroupKind(row.LogGroupKind),
+				Value: row.LogGroupValue,
+			},
+			StartTimeUnixNano: strconv.FormatInt(row.StartTimeUnixNano, 10),
+			LogCount:          row.LogCount,
+			GramUrn:           row.GramURN,
+			ToolName:          row.ToolName,
+			TargetType:        telem_gen.ToolUsageTargetType(row.TargetType),
+			TargetKind:        telem_gen.ToolUsageTargetKind(row.TargetKind),
+			TargetID:          row.TargetID,
+			TargetLabel:       row.TargetLabel,
+			UserKey:           row.UserKey,
+			UserLabel:         row.UserLabel,
+			UserKind:          telem_gen.ToolUsageUserKind(row.UserKind),
+			HookSource:        row.HookSource,
+			EventSource:       row.EventSource,
+			HTTPStatusCode:    row.HTTPStatusCode,
+			HookStatus:        row.HookStatus,
+			BlockReason:       row.BlockReason,
+		}
+		traces = append(traces, trace)
+	}
+
+	return &telem_gen.ListToolUsageTracesResult{
+		Traces:     traces,
+		NextCursor: conv.PtrEmpty(nextCursor),
+	}
+}
+
+func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, optionTypes []telem_gen.ToolUsageFilterOptionType) *telem_gen.GetToolUsageFilterOptionsResult {
+	includeHostedServers, includeShadowServers, includeUsers := toolUsageFilterOptionTypeSet(optionTypes)
+	if options == nil {
+		return &telem_gen.GetToolUsageFilterOptionsResult{
+			HostedServers: []*telem_gen.ToolUsageHostedServerFilterOption{},
+			ShadowServers: []*telem_gen.ToolUsageShadowServerFilterOption{},
+			Users:         []*telem_gen.ToolUsageUserFilterOption{},
+		}
+	}
+
+	hostedServers := make([]*telem_gen.ToolUsageHostedServerFilterOption, 0, len(options.HostedServers))
+	if includeHostedServers {
+		for _, row := range options.HostedServers {
+			hostedServers = append(hostedServers, &telem_gen.ToolUsageHostedServerFilterOption{
+				ToolsetSlug: row.ToolsetSlug,
+				EventCount:  uint64ToInt64(row.EventCount),
+			})
+		}
+	}
+
+	shadowServers := make([]*telem_gen.ToolUsageShadowServerFilterOption, 0, len(options.ShadowServers))
+	if includeShadowServers {
+		for _, row := range options.ShadowServers {
+			shadowServers = append(shadowServers, &telem_gen.ToolUsageShadowServerFilterOption{
+				ServerName: row.ServerName,
+				EventCount: uint64ToInt64(row.EventCount),
+			})
+		}
+	}
+
+	users := make([]*telem_gen.ToolUsageUserFilterOption, 0, len(options.Users))
+	if includeUsers {
+		for _, row := range options.Users {
+			users = append(users, &telem_gen.ToolUsageUserFilterOption{
+				UserKey:    row.UserKey,
+				UserLabel:  row.UserLabel,
+				UserKind:   telem_gen.ToolUsageUserKind(row.UserKind),
+				EventCount: uint64ToInt64(row.EventCount),
+			})
+		}
+	}
+
+	return &telem_gen.GetToolUsageFilterOptionsResult{
+		HostedServers: hostedServers,
+		ShadowServers: shadowServers,
+		Users:         users,
+	}
+}
+
+func toolUsageFilterOptionTypeSet(optionTypes []telem_gen.ToolUsageFilterOptionType) (includeHostedServers bool, includeShadowServers bool, includeUsers bool) {
+	if len(optionTypes) == 0 {
+		return true, true, true
+	}
+
+	for _, optionType := range optionTypes {
+		switch string(optionType) {
+		case "hosted_servers":
+			includeHostedServers = true
+		case "shadow_servers":
+			includeShadowServers = true
+		case "users":
+			includeUsers = true
+		}
+	}
+
+	return includeHostedServers, includeShadowServers, includeUsers
+}
+
+func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetToolUsageSummaryResult {
+	if summary == nil {
+		return emptyToolUsageSummaryResult()
+	}
+
+	targets := make([]*telem_gen.ToolUsageTargetSummary, 0, len(summary.Targets))
+	for _, row := range summary.Targets {
+		targets = append(targets, &telem_gen.ToolUsageTargetSummary{
+			TargetType:   telem_gen.ToolUsageTargetType(row.TargetType),
+			TargetKind:   telem_gen.ToolUsageTargetKind(row.TargetKind),
+			TargetID:     row.TargetID,
+			TargetLabel:  row.TargetLabel,
+			EventCount:   uint64ToInt64(row.EventCount),
+			UniqueTools:  uint64ToInt64(row.UniqueTools),
+			SuccessCount: uint64ToInt64(row.SuccessCount),
+			FailureCount: uint64ToInt64(row.FailureCount),
+			FailureRate:  row.FailureRate,
+		})
+	}
+
+	users := make([]*telem_gen.ToolUsageUserSummary, 0, len(summary.Users))
+	for _, row := range summary.Users {
+		users = append(users, &telem_gen.ToolUsageUserSummary{
+			UserKey:      row.UserKey,
+			UserLabel:    row.UserLabel,
+			UserKind:     telem_gen.ToolUsageUserKind(row.UserKind),
+			EventCount:   uint64ToInt64(row.EventCount),
+			UniqueTools:  uint64ToInt64(row.UniqueTools),
+			SuccessCount: uint64ToInt64(row.SuccessCount),
+			FailureCount: uint64ToInt64(row.FailureCount),
+			FailureRate:  row.FailureRate,
+		})
+	}
+
+	targetTimeSeries := make([]*telem_gen.ToolUsageTargetTimeSeriesPoint, 0, len(summary.TargetTimeSeries))
+	for _, row := range summary.TargetTimeSeries {
+		targetTimeSeries = append(targetTimeSeries, &telem_gen.ToolUsageTargetTimeSeriesPoint{
+			BucketStartNs: strconv.FormatInt(row.BucketStartNs, 10),
+			TargetType:    telem_gen.ToolUsageTargetType(row.TargetType),
+			TargetKind:    telem_gen.ToolUsageTargetKind(row.TargetKind),
+			TargetID:      row.TargetID,
+			TargetLabel:   row.TargetLabel,
+			EventCount:    uint64ToInt64(row.EventCount),
+			FailureCount:  uint64ToInt64(row.FailureCount),
+		})
+	}
+
+	userTimeSeries := make([]*telem_gen.ToolUsageUserTimeSeriesPoint, 0, len(summary.UserTimeSeries))
+	for _, row := range summary.UserTimeSeries {
+		userTimeSeries = append(userTimeSeries, &telem_gen.ToolUsageUserTimeSeriesPoint{
+			BucketStartNs: strconv.FormatInt(row.BucketStartNs, 10),
+			UserKey:       row.UserKey,
+			UserLabel:     row.UserLabel,
+			UserKind:      telem_gen.ToolUsageUserKind(row.UserKind),
+			EventCount:    uint64ToInt64(row.EventCount),
+			FailureCount:  uint64ToInt64(row.FailureCount),
+		})
+	}
+
+	usersByTarget := make([]*telem_gen.ToolUsageUsersByTargetRow, 0, len(summary.UsersByTarget))
+	for _, row := range summary.UsersByTarget {
+		usersByTarget = append(usersByTarget, &telem_gen.ToolUsageUsersByTargetRow{
+			TargetType:   telem_gen.ToolUsageTargetType(row.TargetType),
+			TargetKind:   telem_gen.ToolUsageTargetKind(row.TargetKind),
+			TargetID:     row.TargetID,
+			TargetLabel:  row.TargetLabel,
+			UserKey:      row.UserKey,
+			UserLabel:    row.UserLabel,
+			UserKind:     telem_gen.ToolUsageUserKind(row.UserKind),
+			EventCount:   uint64ToInt64(row.EventCount),
+			FailureCount: uint64ToInt64(row.FailureCount),
+		})
+	}
+
+	targetToolBreakdown := make([]*telem_gen.ToolUsageTargetToolBreakdownRow, 0, len(summary.TargetToolBreakdown))
+	for _, row := range summary.TargetToolBreakdown {
+		targetToolBreakdown = append(targetToolBreakdown, &telem_gen.ToolUsageTargetToolBreakdownRow{
+			TargetType:   telem_gen.ToolUsageTargetType(row.TargetType),
+			TargetKind:   telem_gen.ToolUsageTargetKind(row.TargetKind),
+			TargetID:     row.TargetID,
+			TargetLabel:  row.TargetLabel,
+			ToolName:     row.ToolName,
+			EventCount:   uint64ToInt64(row.EventCount),
+			SuccessCount: uint64ToInt64(row.SuccessCount),
+			FailureCount: uint64ToInt64(row.FailureCount),
+			FailureRate:  row.FailureRate,
+		})
+	}
+
+	return &telem_gen.GetToolUsageSummaryResult{
+		Totals: &telem_gen.ToolUsageTotals{
+			EventCount:    uint64ToInt64(summary.Totals.EventCount),
+			SuccessCount:  uint64ToInt64(summary.Totals.SuccessCount),
+			FailureCount:  uint64ToInt64(summary.Totals.FailureCount),
+			FailureRate:   summary.Totals.FailureRate,
+			UniqueTools:   uint64ToInt64(summary.Totals.UniqueTools),
+			UniqueUsers:   uint64ToInt64(summary.Totals.UniqueUsers),
+			UniqueTargets: uint64ToInt64(summary.Totals.UniqueTargets),
+		},
+		Targets:             targets,
+		Users:               users,
+		TargetTimeSeries:    targetTimeSeries,
+		UserTimeSeries:      userTimeSeries,
+		UsersByTarget:       usersByTarget,
+		TargetToolBreakdown: targetToolBreakdown,
+	}
+}
+
+func emptyToolUsageSummaryResult() *telem_gen.GetToolUsageSummaryResult {
+	return &telem_gen.GetToolUsageSummaryResult{
+		Totals: &telem_gen.ToolUsageTotals{
+			EventCount:    0,
+			SuccessCount:  0,
+			FailureCount:  0,
+			FailureRate:   0,
+			UniqueTools:   0,
+			UniqueUsers:   0,
+			UniqueTargets: 0,
+		},
+		Targets:             []*telem_gen.ToolUsageTargetSummary{},
+		Users:               []*telem_gen.ToolUsageUserSummary{},
+		TargetTimeSeries:    []*telem_gen.ToolUsageTargetTimeSeriesPoint{},
+		UserTimeSeries:      []*telem_gen.ToolUsageUserTimeSeriesPoint{},
+		UsersByTarget:       []*telem_gen.ToolUsageUsersByTargetRow{},
+		TargetToolBreakdown: []*telem_gen.ToolUsageTargetToolBreakdownRow{},
+	}
+}
+
 // ListHooksTraces retrieves hook trace summaries with pagination and filtering.
 // Uses materialized columns for efficient querying while accessing user_email from JSON.
 func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHooksTracesPayload) (res *telem_gen.ListHooksTracesResult, err error) {
@@ -1868,6 +2752,48 @@ func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, cha
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get chat metrics by ids: %w", err)
+	}
+	return result, nil
+}
+
+// GetClaudeTurnUsageByChatIDs retrieves per-turn Claude Code usage for specific chat IDs.
+// This is used by the chat service to enrich chat detail responses from ClickHouse.
+func (s *Service) GetClaudeTurnUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string) (map[string][]repo.ClaudeTurnUsageRow, error) {
+	if s.chRepo == nil {
+		usageByChatID := make(map[string][]repo.ClaudeTurnUsageRow, len(chatIDs))
+		for _, chatID := range chatIDs {
+			usageByChatID[chatID] = []repo.ClaudeTurnUsageRow{}
+		}
+		return usageByChatID, nil
+	}
+
+	result, err := s.chRepo.GetClaudeTurnUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
+		GramProjectID: projectID,
+		ChatIDs:       chatIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get Claude turn usage by chat ids: %w", err)
+	}
+	return result, nil
+}
+
+// GetClaudeToolUsageByChatIDs retrieves per-tool Claude Code input/result byte sizes for specific chat IDs.
+// This is used by the chat service to enrich chat detail rows from ClickHouse.
+func (s *Service) GetClaudeToolUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string) (map[string][]repo.ClaudeToolUsageRow, error) {
+	if s.chRepo == nil {
+		usageByChatID := make(map[string][]repo.ClaudeToolUsageRow, len(chatIDs))
+		for _, chatID := range chatIDs {
+			usageByChatID[chatID] = []repo.ClaudeToolUsageRow{}
+		}
+		return usageByChatID, nil
+	}
+
+	result, err := s.chRepo.GetClaudeToolUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
+		GramProjectID: projectID,
+		ChatIDs:       chatIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get Claude tool usage by chat ids: %w", err)
 	}
 	return result, nil
 }

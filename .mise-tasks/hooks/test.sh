@@ -4,7 +4,7 @@
 #MISE dir="{{ config_root }}"
 
 #USAGE flag "--local" help="Always use local plugin directory instead of published plugin"
-#USAGE flag "--project <slug>" help="Project slug for OTEL session validation (enables blocking)" default="ecommerce-api"
+#USAGE flag "--project <slug>" help="Project slug for OTEL session validation (enables blocking)" default="default"
 
 set -euo pipefail
 
@@ -36,13 +36,23 @@ else
   project_id="${project_row%%|*}"
   org_id="${project_row##*|}"
 
+  # Enable the session_capture product feature for the org. Without it,
+  # persistHook silently drops chat messages (enforcement still works, but no
+  # agent sessions are stored and no risk analysis runs), so sessions + risk
+  # events never appear locally. Idempotent and race-safe: ON CONFLICT targets
+  # the partial unique index (organization_id, feature_name) WHERE deleted IS
+  # FALSE, so a concurrent run can't trip a unique-constraint violation, while a
+  # previously-disabled (soft-deleted) feature is still re-enabled.
+  db_query -v org_id="$org_id" >/dev/null <<<"INSERT INTO organization_features (organization_id, feature_name) VALUES (:'org_id', 'session_capture') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING"
+  echo "Enabled session_capture for org: ${org_id}"
+
   user_id=$(db_query <<<"SELECT id FROM users LIMIT 1" 2>/dev/null || true)
   if [ -z "$user_id" ]; then
     echo "Warning: no users in DB — skipping API key provisioning."
   else
-    # Soft-delete any prior dev key for this project so we can stash a
-    # new plaintext we know.
-    db_query -v project_id="$project_id" >/dev/null <<<"UPDATE api_keys SET deleted_at = NOW() WHERE project_id = :'project_id' AND name = 'dev-hooks-test' AND deleted IS FALSE"
+    # API key names are unique per organization, so clear any prior local
+    # fixture for this org before stashing a new plaintext we know.
+    db_query -v org_id="$org_id" >/dev/null <<<"UPDATE api_keys SET deleted_at = NOW() WHERE organization_id = :'org_id' AND name = 'dev-hooks-test' AND deleted IS FALSE"
 
     token_hex=$(openssl rand -hex 32)
     api_key="gram_local_${token_hex}"
@@ -64,17 +74,19 @@ else
     export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="${GRAM_SERVER_URL}/rpc/hooks.otel/v1/logs"
     export OTEL_EXPORTER_OTLP_METRICS_ENDPOINT="${GRAM_SERVER_URL}/rpc/hooks.otel/v1/metrics"
     export OTEL_EXPORTER_OTLP_HEADERS="Gram-Key=${api_key},Gram-Project=${project_slug}"
+    export GRAM_HOOKS_API_KEY="${api_key}"
+    export GRAM_HOOKS_PROJECT_SLUG="${project_slug}"
     echo "OTEL configured (key: ${api_key:0:20}...)"
   fi
 fi
 echo ""
 
-if [ "${usage_local:-}" = "true" ] || ! git diff --quiet HEAD -- hooks/; then
+if [ "${usage_local:-}" = "true" ] || ! git diff --quiet main -- hooks/; then
   echo "Using local plugin directory: ./hooks/plugin-claude-test"
   echo ""
-  exec claude --plugin-dir ./hooks/plugin-claude-test --debug
+  exec claude --setting-sources project,local --plugin-dir ./hooks/plugin-claude-test --debug
 else
-  echo "No local changes in hooks/ — using published plugin"
+  echo "No branch changes in hooks/ vs main — using published plugin"
   echo ""
-  exec claude --debug
+  exec claude --setting-sources project,local --debug
 fi

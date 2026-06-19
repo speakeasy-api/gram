@@ -16,12 +16,13 @@ import (
 
 // Endpoints wraps the "remoteMcp" service endpoints.
 type Endpoints struct {
-	CreateServer goa.Endpoint
-	ListServers  goa.Endpoint
-	GetServer    goa.Endpoint
-	UpdateServer goa.Endpoint
-	VerifyURL    goa.Endpoint
-	DeleteServer goa.Endpoint
+	CreateServer                      goa.Endpoint
+	ListServers                       goa.Endpoint
+	GetServer                         goa.Endpoint
+	UpdateServer                      goa.Endpoint
+	DiscoverProtectedResourceMetadata goa.Endpoint
+	VerifyURL                         goa.Endpoint
+	DeleteServer                      goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "remoteMcp" service with endpoints.
@@ -29,12 +30,13 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateServer: NewCreateServerEndpoint(s, a.APIKeyAuth),
-		ListServers:  NewListServersEndpoint(s, a.APIKeyAuth),
-		GetServer:    NewGetServerEndpoint(s, a.APIKeyAuth),
-		UpdateServer: NewUpdateServerEndpoint(s, a.APIKeyAuth),
-		VerifyURL:    NewVerifyURLEndpoint(s, a.APIKeyAuth),
-		DeleteServer: NewDeleteServerEndpoint(s, a.APIKeyAuth),
+		CreateServer:                      NewCreateServerEndpoint(s, a.APIKeyAuth),
+		ListServers:                       NewListServersEndpoint(s, a.APIKeyAuth),
+		GetServer:                         NewGetServerEndpoint(s, a.APIKeyAuth),
+		UpdateServer:                      NewUpdateServerEndpoint(s, a.APIKeyAuth),
+		DiscoverProtectedResourceMetadata: NewDiscoverProtectedResourceMetadataEndpoint(s, a.APIKeyAuth),
+		VerifyURL:                         NewVerifyURLEndpoint(s, a.APIKeyAuth),
+		DeleteServer:                      NewDeleteServerEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -44,6 +46,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListServers = m(e.ListServers)
 	e.GetServer = m(e.GetServer)
 	e.UpdateServer = m(e.UpdateServer)
+	e.DiscoverProtectedResourceMetadata = m(e.DiscoverProtectedResourceMetadata)
 	e.VerifyURL = m(e.VerifyURL)
 	e.DeleteServer = m(e.DeleteServer)
 }
@@ -79,7 +82,7 @@ func NewCreateServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -138,7 +141,7 @@ func NewListServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -197,7 +200,7 @@ func NewGetServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -256,7 +259,7 @@ func NewUpdateServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -281,6 +284,66 @@ func NewUpdateServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.UpdateServer(ctx, p)
+	}
+}
+
+// NewDiscoverProtectedResourceMetadataEndpoint returns an endpoint function
+// that calls the method "discoverProtectedResourceMetadata" of service
+// "remoteMcp".
+func NewDiscoverProtectedResourceMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DiscoverProtectedResourceMetadataPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.DiscoverProtectedResourceMetadata(ctx, p)
 	}
 }
 
@@ -315,7 +378,7 @@ func NewVerifyURLEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -374,7 +437,7 @@ func NewDeleteServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string

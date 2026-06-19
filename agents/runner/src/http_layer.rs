@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use agentkit_http::Http;
 use agentkit_mcp::{
@@ -8,7 +9,7 @@ use agentkit_mcp::{
 };
 use async_trait::async_trait;
 use http::{HeaderMap, HeaderName, HeaderValue};
-use reqwest_middleware::{ClientBuilder, Middleware, Next};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
 use reqwest_retry::RetryTransientMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use rmcp::transport::streamable_http_client::StreamableHttpClient as RmcpStreamableHttpClient;
@@ -16,7 +17,14 @@ use thiserror::Error;
 
 use crate::errors::RunnerError;
 
-const HTTP_MAX_RETRIES: u32 = 3;
+// Liberal retry bounds for every runner-originated request: chat
+// completions, MCP, /threads/turn, bootstrap. A turn that bubbles a
+// transient gateway blip back to the user is more painful than waiting
+// up to ~30s for recovery, so we cap at 7 attempts with 250ms→30s
+// exponential bounds across the board.
+const HTTP_MAX_RETRIES: u32 = 7;
+const HTTP_RETRY_MIN: Duration = Duration::from_millis(250);
+const HTTP_RETRY_MAX: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Error)]
 enum MiddlewareError {
@@ -27,6 +35,10 @@ enum MiddlewareError {
     InvalidTokenHeader(#[from] http::header::InvalidHeaderValue),
 }
 
+/// Bearer slot for one assistant thread. Every outbound request the thread
+/// makes (chat completions, MCP, bootstrap fetch) authenticates against
+/// this slot, so the ThreadID claim minted on `/threads/turn` propagates
+/// to platform tools that key off `principal.ThreadID`.
 #[derive(Clone, Debug)]
 pub struct TokenRegistry {
     inner: Arc<RwLock<String>>,
@@ -48,7 +60,7 @@ impl TokenRegistry {
         Ok(())
     }
 
-    fn current(&self) -> Result<String, RunnerError> {
+    pub fn current(&self) -> Result<String, RunnerError> {
         Ok(self
             .inner
             .read()
@@ -66,10 +78,8 @@ impl Middleware for TokenRegistry {
         next: Next<'_>,
     ) -> reqwest_middleware::Result<reqwest::Response> {
         let token = self
-            .inner
-            .read()
-            .map_err(|_| reqwest_middleware::Error::middleware(MiddlewareError::LockPoisoned))?
-            .clone();
+            .current()
+            .map_err(|_| reqwest_middleware::Error::middleware(MiddlewareError::LockPoisoned))?;
         let value = http::HeaderValue::try_from(format!("Bearer {token}"))
             .map_err(|e| reqwest_middleware::Error::middleware(MiddlewareError::from(e)))?;
         req.headers_mut().insert(http::header::AUTHORIZATION, value);
@@ -86,8 +96,17 @@ pub fn build_http(client: reqwest::Client, registry: TokenRegistry) -> Http {
 }
 
 fn retry_middleware() -> RetryTransientMiddleware<ExponentialBackoff> {
-    let policy = ExponentialBackoff::builder().build_with_max_retries(HTTP_MAX_RETRIES);
+    let policy = ExponentialBackoff::builder()
+        .retry_bounds(HTTP_RETRY_MIN, HTTP_RETRY_MAX)
+        .build_with_max_retries(HTTP_MAX_RETRIES);
     RetryTransientMiddleware::new_with_policy(policy).with_retry_log_level(tracing::Level::INFO)
+}
+
+/// Wraps a base reqwest client with the shared liberal retry policy. Used by
+/// the management-API bootstrap call so a transient 5xx or network blip does
+/// not strand the VM's first turn for an assistant.
+pub fn build_bootstrap_client(client: reqwest::Client) -> ClientWithMiddleware {
+    ClientBuilder::new(client).with(retry_middleware()).build()
 }
 
 /// `McpHttpClient` impl that mints a fresh bearer token per request from a
@@ -120,7 +139,7 @@ impl McpRotatingClient {
     }
 
     fn current_token(&self) -> Option<String> {
-        self.tokens.current().ok()
+        self.tokens.current().ok().filter(|t| !t.is_empty())
     }
 }
 

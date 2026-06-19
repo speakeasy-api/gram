@@ -30,9 +30,13 @@ export type AccessMember = {
    */
   photoUrl?: string | undefined;
   /**
-   * Currently assigned role ID.
+   * Canonical principal URN for this member.
    */
-  roleId: string;
+  principalUrn: string;
+  /**
+   * All role IDs assigned to this member.
+   */
+  roleIds: Array<string>;
 };
 
 /** @internal */
@@ -47,13 +51,15 @@ export const AccessMember$inboundSchema: z.ZodMiniType<AccessMember, unknown> =
       ),
       name: z.string(),
       photo_url: z.optional(z.string()),
-      role_id: z.string(),
+      principal_urn: z.string(),
+      role_ids: z.array(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
         "joined_at": "joinedAt",
         "photo_url": "photoUrl",
-        "role_id": "roleId",
+        "principal_urn": "principalUrn",
+        "role_ids": "roleIds",
       });
     }),
   );

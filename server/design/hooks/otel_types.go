@@ -40,6 +40,8 @@ var OTELLogRecord = Type("OTELLogRecord", func() {
 	Description("Individual OTEL log record")
 	Attribute("timeUnixNano", String, "Timestamp in nanoseconds since Unix epoch")
 	Attribute("observedTimeUnixNano", String, "Observed timestamp in nanoseconds")
+	Attribute("traceId", String, "Trace ID")
+	Attribute("spanId", String, "Span ID")
 	Attribute("body", OTELLogBody, "Log body content")
 	Attribute("attributes", ArrayOf(OTELAttribute), "Log attributes")
 	Attribute("droppedAttributesCount", Int, "Number of dropped attributes")

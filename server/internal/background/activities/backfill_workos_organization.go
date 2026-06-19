@@ -31,6 +31,7 @@ type WorkOSClient interface {
 	ListGlobalRoles(ctx context.Context) ([]workos.Role, error)
 	ListEvents(ctx context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error)
 	UpdateUserExternalID(ctx context.Context, workosUserID, externalID string) error
+	UpdateOrganizationExternalID(ctx context.Context, workosOrgID, externalID string) error
 }
 
 type BackfillWorkOSOrganizationParams struct {
@@ -61,21 +62,21 @@ func (b *BackfillWorkOSOrganization) Do(ctx context.Context, params BackfillWork
 
 	workosOrg, err := b.workos.GetOrganization(ctx, params.WorkOSOrganizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "get WorkOS organization").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "get WorkOS organization").LogError(ctx, logger)
 	}
 	orgUpdatedAt, err := parseWorkOSTime(workosOrg.UpdatedAt)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "parse WorkOS organization updated_at").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "parse WorkOS organization updated_at").LogError(ctx, logger)
 	}
 
 	roles, err := b.workos.ListRoles(ctx, params.WorkOSOrganizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list WorkOS organization roles").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "list WorkOS organization roles").LogError(ctx, logger)
 	}
 
 	members, err := b.workos.ListOrgMemberships(ctx, params.WorkOSOrganizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list WorkOS organization memberships").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "list WorkOS organization memberships").LogError(ctx, logger)
 	}
 	parsedMembers := make([]backfillWorkOSMember, 0, len(members))
 	for _, member := range members {
@@ -195,7 +196,7 @@ func backfillOrganizationRoles(ctx context.Context, logger *slog.Logger, dbtx pg
 			continue
 		}
 
-		if err := repo.UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+		if _, err := repo.UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
 			OrganizationID:    organizationID,
 			WorkosSlug:        role.Slug,
 			WorkosName:        role.Name,
@@ -267,22 +268,17 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 		return nil
 	}
 
-	if gramUserID != "" {
-		if err := orgQueries.UpsertOrganizationUserRelationshipFromWorkOS(ctx, orgrepo.UpsertOrganizationUserRelationshipFromWorkOSParams{
-			OrganizationID:     organizationID,
-			UserID:             conv.ToPGText(gramUserID),
-			WorkosMembershipID: conv.ToPGText(member.ID),
-			WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
-			WorkosLastEventID:  conv.ToPGText(""),
-		}); err != nil {
-			return fmt.Errorf("upsert organization membership %q: %w", member.ID, err)
-		}
+	if err := orgQueries.UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+		OrganizationID:     organizationID,
+		UserID:             conv.ToPGTextEmpty(gramUserID),
+		WorkosUserID:       conv.ToPGText(member.UserID),
+		WorkosMembershipID: conv.ToPGText(member.ID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
+		WorkosLastEventID:  conv.ToPGText(""),
+	}); err != nil {
+		return fmt.Errorf("upsert organization membership %q: %w", member.ID, err)
 	}
 
-	roleSlugs := []string{}
-	if member.RoleSlug != "" {
-		roleSlugs = []string{member.RoleSlug}
-	}
 	if err := orgQueries.SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
 		OrganizationID:     organizationID,
 		WorkosUserID:       member.UserID,
@@ -290,7 +286,7 @@ func backfillOrganizationMember(ctx context.Context, dbtx pgx.Tx, organizationID
 		WorkosMembershipID: conv.ToPGText(member.ID),
 		WorkosUpdatedAt:    conv.ToPGTimestamptz(parsed.updatedAt),
 		WorkosLastEventID:  conv.ToPGText(""),
-		WorkosRoleSlugs:    roleSlugs,
+		WorkosRoleSlugs:    member.RoleSlugs,
 	}); err != nil {
 		return fmt.Errorf("sync organization role assignments for membership %q: %w", member.ID, err)
 	}

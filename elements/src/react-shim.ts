@@ -10,10 +10,15 @@ import { createShims } from "./compat-shims";
 
 const Shimmed = { ...ReactOriginal, ...createShims(ReactOriginal) };
 
-// React internals required by react-dom
-export const __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED =
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (ReactOriginal as any).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+// React internals required by react-dom. Not part of React's public types;
+// declared here as an opaque escape hatch so consuming code can re-export the
+// same symbol react-dom looks up at runtime.
+interface ReactInternals {
+  __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED?: unknown;
+}
+export const __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = (
+  ReactOriginal as ReactInternals
+).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
 
 export const {
   Children,

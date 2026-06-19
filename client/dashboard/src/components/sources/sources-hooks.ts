@@ -8,7 +8,7 @@ import {
 import { useLatestDeployment } from "@gram/client/react-query/index.js";
 import { useMemo } from "react";
 
-export const useCatalogIconMap = () => {
+export const useCatalogIconMap = (): Map<string, string> => {
   const { data: catalogData } = useInfiniteListMCPCatalog();
   return useMemo(() => {
     if (!catalogData?.pages) {
@@ -22,7 +22,7 @@ export const useCatalogIconMap = () => {
   }, [catalogData]);
 };
 
-export const useCatalogAuthMap = (): Map<string, PulseMcpAuthType> => {
+const useCatalogAuthMap = (): Map<string, PulseMcpAuthType> => {
   const { data: catalogData } = useInfiniteListMCPCatalog();
 
   return useMemo(() => {
@@ -41,13 +41,6 @@ export const useCatalogAuthMap = (): Map<string, PulseMcpAuthType> => {
     }
     return result;
   }, [catalogData]);
-};
-
-export const useCatalogServerAuthType = (
-  registrySpecifier: string,
-): PulseMcpAuthType | null => {
-  const authMap = useCatalogAuthMap();
-  return authMap.get(registrySpecifier) ?? null;
 };
 
 export type ExternalMcpOAuthConfigStatus =
@@ -83,7 +76,9 @@ export const useExternalMcpOAuthConfigStatus = (
 
     if (authType !== "oauth") return "not-required";
 
-    return toolset.externalOauthServer || toolset.oauthProxyServer
+    return toolset.externalOauthServer ||
+      toolset.oauthProxyServer ||
+      toolset.userSessionIssuerSlug
       ? "configured"
       : "required-unconfigured";
   }, [toolset, deploymentResult, serverAuthMap]);

@@ -21,8 +21,6 @@ type Service interface {
 	CreateRiskPolicy(context.Context, *CreateRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// List all risk analysis policies for the current project.
 	ListRiskPolicies(context.Context, *ListRiskPoliciesPayload) (res *ListRiskPoliciesResult, err error)
-	// Get server-side risk analysis capabilities for the current project.
-	GetRiskCapabilities(context.Context, *GetRiskCapabilitiesPayload) (res *RiskCapabilitiesResult, err error)
 	// Get a risk analysis policy by ID.
 	GetRiskPolicy(context.Context, *GetRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// Update a risk analysis policy.
@@ -31,14 +29,77 @@ type Service interface {
 	DeleteRiskPolicy(context.Context, *DeleteRiskPolicyPayload) (err error)
 	// List risk analysis results for the current project.
 	ListRiskResults(context.Context, *ListRiskResultsPayload) (res *ListRiskResultsResult, err error)
+	// List risk analysis results with the `match` field redacted to an opaque
+	// length+sha256-prefix fingerprint. Matches the payload and pagination
+	// semantics of listRiskResults. Designed for AI assistant / MCP consumption so
+	// secret content (gitleaks captures, presidio entities, prompt-injection
+	// payloads) never reaches the model context. For shadow_mcp findings the
+	// `match` value — a non-sensitive server URL or command identifier — is passed
+	// through verbatim.
+	ListRiskResultsForAgent(context.Context, *ListRiskResultsForAgentPayload) (res *ListRiskResultsForAgentResult, err error)
 	// List risk results grouped by chat session for the current project.
 	ListRiskResultsByChat(context.Context, *ListRiskResultsByChatPayload) (res *ListRiskResultsByChatResult, err error)
+	// Get risk overview metrics and trend data for the current project.
+	GetRiskOverview(context.Context, *GetRiskOverviewPayload) (res *RiskOverviewResult, err error)
+	// Return the canonical risk category definitions: metadata
+	// (label/description/icon) plus the classification (source / rule_id list /
+	// rule_id prefix) used to bucket findings. Dashboards and CLIs should call
+	// this instead of maintaining their own copy of the mapping.
+	ListRiskCategories(context.Context, *ListRiskCategoriesPayload) (res *RiskCategoriesResult, err error)
+	// Per-user breakdowns of findings by category and by rule_id within a time
+	// window. Powers the user drill-down on /risk-overview.
+	GetRiskUserBreakdown(context.Context, *GetRiskUserBreakdownPayload) (res *RiskUserBreakdownResult, err error)
+	// Get per-rule_id finding counts for a category within a time window. Powers
+	// the per-category drill-down chart on /risk-overview.
+	GetRiskRuleBreakdown(context.Context, *GetRiskRuleBreakdownPayload) (res *RiskRuleBreakdownResult, err error)
 	// Get the analysis status of a risk policy including progress and workflow
 	// state.
 	GetRiskPolicyStatus(context.Context, *GetRiskPolicyStatusPayload) (res *types.RiskPolicyStatus, err error)
+	// Create or refresh a risk policy bypass request from a signed request URL
+	// token.
+	CreateRiskPolicyBypassRequest(context.Context, *CreateRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
+	// List current risk policy bypass request workflow records.
+	ListRiskPolicyBypassRequests(context.Context, *ListRiskPolicyBypassRequestsPayload) (res *ListRiskPolicyBypassRequestsResult, err error)
+	// Approve a risk policy bypass request for the requested policy target.
+	ApproveRiskPolicyBypassRequest(context.Context, *ApproveRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
+	// Deny a risk policy bypass request, updating workflow state.
+	DenyRiskPolicyBypassRequest(context.Context, *DenyRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
+	// Revoke a previously approved risk policy bypass request.
+	RevokeRiskPolicyBypassRequest(context.Context, *RevokeRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
 	// Manually trigger risk analysis for a policy, starting or signaling the drain
-	// workflow.
+	// workflow. Defaults to the most recent 100 unanalyzed messages; pass
+	// `limit=0` to backfill every unanalyzed message.
 	TriggerRiskAnalysis(context.Context, *TriggerRiskAnalysisPayload) (err error)
+	// Create a custom regex-backed detection rule for the current project.
+	CreateCustomDetectionRule(context.Context, *CreateCustomDetectionRulePayload) (res *types.RiskCustomDetectionRule, err error)
+	// List custom detection rules for the current project.
+	ListCustomDetectionRules(context.Context, *ListCustomDetectionRulesPayload) (res *ListCustomDetectionRulesResult, err error)
+	// Get a custom detection rule by ID.
+	GetCustomDetectionRule(context.Context, *GetCustomDetectionRulePayload) (res *types.RiskCustomDetectionRule, err error)
+	// Update a custom detection rule.
+	UpdateCustomDetectionRule(context.Context, *UpdateCustomDetectionRulePayload) (res *types.RiskCustomDetectionRule, err error)
+	// Delete a custom detection rule.
+	DeleteCustomDetectionRule(context.Context, *DeleteCustomDetectionRulePayload) (err error)
+	// List risk exclusions for the current project. Optionally filter to a single
+	// policy.
+	ListRiskExclusions(context.Context, *ListRiskExclusionsPayload) (res *ListRiskExclusionsResult, err error)
+	// Create a risk exclusion. Omit risk_policy_id to create a global exclusion
+	// that applies to every policy in the project.
+	CreateRiskExclusion(context.Context, *CreateRiskExclusionPayload) (res *types.RiskExclusion, err error)
+	// Update a risk exclusion.
+	UpdateRiskExclusion(context.Context, *UpdateRiskExclusionPayload) (res *types.RiskExclusion, err error)
+	// Delete a risk exclusion. Previously suppressed findings are restored.
+	DeleteRiskExclusion(context.Context, *DeleteRiskExclusionPayload) (err error)
+	// Suggest a custom detection rule (rule_id, title, description, regex,
+	// severity) from a natural-language prompt. Calls the configured LLM with a
+	// JSON-schema constrained response so the dashboard can prefill the create
+	// form.
+	SuggestCustomDetectionRule(context.Context, *SuggestCustomDetectionRulePayload) (res *SuggestCustomDetectionRuleResult, err error)
+	// Run a single detection rule against pasted sample text and return any
+	// matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection,
+	// custom regex) that the analyzer runs in production so the playground match
+	// shape mirrors the chat-message path.
+	TestDetectionRule(context.Context, *TestDetectionRulePayload) (res *TestDetectionRuleResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -61,7 +122,67 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsByChat", "getRiskPolicyStatus", "triggerRiskAnalysis"}
+var MethodNames = [30]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
+
+// ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
+// service approveRiskPolicyBypassRequest method.
+type ApproveRiskPolicyBypassRequestPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The bypass request ID.
+	ID string
+	// Principal URNs to grant bypass access to. Defaults to the requester when
+	// omitted.
+	GrantedPrincipalUrns []string
+}
+
+// CreateCustomDetectionRulePayload is the payload type of the risk service
+// createCustomDetectionRule method.
+type CreateCustomDetectionRulePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Stable rule identifier, prefixed with `custom.`.
+	RuleID string
+	// Human-readable title for the rule.
+	Title string
+	// Description of what the rule detects.
+	Description *string
+	// RE2-compatible regex pattern.
+	Regex string
+	// Severity level for findings produced by this rule.
+	Severity string
+}
+
+// CreateRiskExclusionPayload is the payload type of the risk service
+// createRiskExclusion method.
+type CreateRiskExclusionPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Bind the exclusion to a single policy. Omit for a global (project-wide)
+	// exclusion.
+	RiskPolicyID *string
+	// How match_value is interpreted.
+	MatchType string
+	// The value matched against findings, interpreted per match_type.
+	MatchValue string
+	// Optional: only apply within this rule_id. Empty means any.
+	RuleIDFilter string
+	// Optional: only apply within this source. Empty means any.
+	SourceFilter string
+	// Whether the exclusion is active.
+	Enabled bool
+}
+
+// CreateRiskPolicyBypassRequestPayload is the payload type of the risk service
+// createRiskPolicyBypassRequest method.
+type CreateRiskPolicyBypassRequestPayload struct {
+	SessionToken *string
+	// Signed request token generated when a risk policy blocks an action.
+	RequestToken string
+}
 
 // CreateRiskPolicyPayload is the payload type of the risk service
 // createRiskPolicy method.
@@ -71,22 +192,63 @@ type CreateRiskPolicyPayload struct {
 	ProjectSlugInput *string
 	// The policy name. If omitted, a name will be auto-generated.
 	Name *string
+	// Policy type: standard (regex/presidio/custom detection) or prompt_based
+	// (LLM-judge). Defaults to standard.
+	PolicyType string
 	// Detection sources to enable.
 	Sources []string
 	// Presidio entity types to detect.
 	PresidioEntities []string
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
-	// baseline (e.g. 'deberta-v3-classifier').
+	// baseline.
 	PromptInjectionRules []string
+	// Canonical rule_ids the user has unchecked within otherwise-enabled
+	// categories. Matching findings are dropped at scan time.
+	DisabledRules []string
+	// Custom detection rule ids to enable for this policy.
+	CustomRuleIds []string
+	// Message types this policy applies to. When empty or omitted, the policy
+	// scans all supported types.
+	MessageTypes []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
 	Action string
+	// Policy audience type: everyone or targeted.
+	AudienceType string
+	// Principal URNs this policy applies to. For audience_type=everyone, the
+	// server stores user:all.
+	AudiencePrincipalUrns []string
 	// Whether the policy name should be auto-generated.
 	AutoName *bool
 	// Optional message shown to end users when this policy blocks an action or
 	// surfaces a flagged finding.
 	UserMessage *string
+	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
+	// in-scope message against. Required when policy_type is prompt_based.
+	Prompt *string
+	// For prompt_based policies: per-policy LLM-judge model configuration.
+	ModelConfig *types.RiskPolicyModelConfig
+}
+
+// DeleteCustomDetectionRulePayload is the payload type of the risk service
+// deleteCustomDetectionRule method.
+type DeleteCustomDetectionRulePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The custom detection rule ID.
+	ID string
+}
+
+// DeleteRiskExclusionPayload is the payload type of the risk service
+// deleteRiskExclusion method.
+type DeleteRiskExclusionPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The exclusion ID.
+	ID string
 }
 
 // DeleteRiskPolicyPayload is the payload type of the risk service
@@ -99,12 +261,37 @@ type DeleteRiskPolicyPayload struct {
 	ID string
 }
 
-// GetRiskCapabilitiesPayload is the payload type of the risk service
-// getRiskCapabilities method.
-type GetRiskCapabilitiesPayload struct {
+// DenyRiskPolicyBypassRequestPayload is the payload type of the risk service
+// denyRiskPolicyBypassRequest method.
+type DenyRiskPolicyBypassRequestPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
+	// The bypass request ID.
+	ID string
+}
+
+// GetCustomDetectionRulePayload is the payload type of the risk service
+// getCustomDetectionRule method.
+type GetCustomDetectionRulePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The custom detection rule ID.
+	ID string
+}
+
+// GetRiskOverviewPayload is the payload type of the risk service
+// getRiskOverview method.
+type GetRiskOverviewPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Inclusive start of the overview window. Defaults to the start of the 7-day
+	// calendar window ending at to.
+	From *string
+	// Exclusive end of the overview window. Defaults to now.
+	To *string
 }
 
 // GetRiskPolicyPayload is the payload type of the risk service getRiskPolicy
@@ -127,6 +314,77 @@ type GetRiskPolicyStatusPayload struct {
 	ID string
 }
 
+// GetRiskRuleBreakdownPayload is the payload type of the risk service
+// getRiskRuleBreakdown method.
+type GetRiskRuleBreakdownPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Required category key to break down by rule_id (e.g. secrets, pii).
+	Category string
+	// Inclusive start of the window. Defaults to the same 7-day window as the
+	// overview.
+	From *string
+	// Exclusive end of the window. Defaults to now.
+	To *string
+}
+
+// GetRiskUserBreakdownPayload is the payload type of the risk service
+// getRiskUserBreakdown method.
+type GetRiskUserBreakdownPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// External user identifier to scope the breakdown to.
+	ExternalUserID string
+	// Inclusive start of the window. Defaults to the same 7-day window as the
+	// overview.
+	From *string
+	// Exclusive end of the window. Defaults to now.
+	To *string
+}
+
+// ListCustomDetectionRulesPayload is the payload type of the risk service
+// listCustomDetectionRules method.
+type ListCustomDetectionRulesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListCustomDetectionRulesResult is the result type of the risk service
+// listCustomDetectionRules method.
+type ListCustomDetectionRulesResult struct {
+	// The list of custom detection rules.
+	Rules []*types.RiskCustomDetectionRule
+}
+
+// ListRiskCategoriesPayload is the payload type of the risk service
+// listRiskCategories method.
+type ListRiskCategoriesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListRiskExclusionsPayload is the payload type of the risk service
+// listRiskExclusions method.
+type ListRiskExclusionsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Filter to exclusions bound to this policy. Omit to return all exclusions
+	// (global plus every policy).
+	RiskPolicyID *string
+}
+
+// ListRiskExclusionsResult is the result type of the risk service
+// listRiskExclusions method.
+type ListRiskExclusionsResult struct {
+	// The list of risk exclusions.
+	Exclusions []*types.RiskExclusion
+}
+
 // ListRiskPoliciesPayload is the payload type of the risk service
 // listRiskPolicies method.
 type ListRiskPoliciesPayload struct {
@@ -140,6 +398,25 @@ type ListRiskPoliciesPayload struct {
 type ListRiskPoliciesResult struct {
 	// The list of risk policies.
 	Policies []*types.RiskPolicy
+}
+
+// ListRiskPolicyBypassRequestsPayload is the payload type of the risk service
+// listRiskPolicyBypassRequests method.
+type ListRiskPolicyBypassRequestsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Optional risk policy ID filter.
+	PolicyID *string
+	// Optional request status filter.
+	Status *string
+}
+
+// ListRiskPolicyBypassRequestsResult is the result type of the risk service
+// listRiskPolicyBypassRequests method.
+type ListRiskPolicyBypassRequestsResult struct {
+	// Current risk policy bypass request records.
+	Requests []*RiskPolicyBypassRequest
 }
 
 // ListRiskResultsByChatPayload is the payload type of the risk service
@@ -163,6 +440,49 @@ type ListRiskResultsByChatResult struct {
 	NextCursor *string
 }
 
+// ListRiskResultsForAgentPayload is the payload type of the risk service
+// listRiskResultsForAgent method.
+type ListRiskResultsForAgentPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Optional policy ID to filter by.
+	PolicyID *string
+	// Optional chat ID to filter by.
+	ChatID *string
+	// Optional rule category key to filter by (e.g. secrets, pii, financial).
+	Category *string
+	// Optional rule identifier substring to filter by (case-insensitive, e.g.
+	// 'secret' matches all 'secret.*' rules).
+	RuleID *string
+	// Optional user identifier substring to filter by (case-insensitive, matched
+	// against the chat's external user id).
+	UserID *string
+	// If true, collapse results to one row per (policy_id, rule_id, match),
+	// keeping the most recent occurrence. Useful when the same secret is detected
+	// many times within a single message body.
+	UniqueMatch *bool
+	// Filter results to messages created at or after this timestamp (ISO 8601).
+	From *string
+	// Filter results to messages created strictly before this timestamp (ISO 8601).
+	To *string
+	// Cursor to fetch the next page of results.
+	Cursor *string
+	// Maximum number of results to return per page.
+	Limit *int
+}
+
+// ListRiskResultsForAgentResult is the result type of the risk service
+// listRiskResultsForAgent method.
+type ListRiskResultsForAgentResult struct {
+	// The list of risk results with match content redacted to opaque fingerprints.
+	Results []*types.RiskResultRedacted
+	// Total number of findings across all enabled policies.
+	TotalCount int64
+	// Cursor for the next page of results.
+	NextCursor *string
+}
+
 // ListRiskResultsPayload is the payload type of the risk service
 // listRiskResults method.
 type ListRiskResultsPayload struct {
@@ -173,6 +493,22 @@ type ListRiskResultsPayload struct {
 	PolicyID *string
 	// Optional chat ID to filter by.
 	ChatID *string
+	// Optional rule category key to filter by (e.g. secrets, pii, financial).
+	Category *string
+	// Optional rule identifier substring to filter by (case-insensitive, e.g.
+	// 'secret' matches all 'secret.*' rules).
+	RuleID *string
+	// Optional user identifier substring to filter by (case-insensitive, matched
+	// against the chat's external user id).
+	UserID *string
+	// If true, collapse results to one row per (policy_id, rule_id, match),
+	// keeping the most recent occurrence. Useful when the same secret is detected
+	// many times within a single message body.
+	UniqueMatch *bool
+	// Filter results to messages created at or after this timestamp (ISO 8601).
+	From *string
+	// Filter results to messages created strictly before this timestamp (ISO 8601).
+	To *string
 	// Cursor to fetch the next page of results.
 	Cursor *string
 	// Maximum number of results to return per page.
@@ -190,11 +526,248 @@ type ListRiskResultsResult struct {
 	NextCursor *string
 }
 
-// RiskCapabilitiesResult is the result type of the risk service
-// getRiskCapabilities method.
-type RiskCapabilitiesResult struct {
-	// Whether the prompt-injection ML classifier is configured on this server.
-	PiClassifierEnabled bool
+// RevokeRiskPolicyBypassRequestPayload is the payload type of the risk service
+// revokeRiskPolicyBypassRequest method.
+type RevokeRiskPolicyBypassRequestPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The bypass request ID.
+	ID string
+}
+
+// RiskCategoriesResult is the result type of the risk service
+// listRiskCategories method.
+type RiskCategoriesResult struct {
+	// Categories in classification-priority order. The last entry is the 'custom'
+	// fallback for findings that match none of the others.
+	Categories []*RiskCategoryDefinition
+}
+
+// One canonical risk category and how findings are classified into it.
+type RiskCategoryDefinition struct {
+	// Canonical category key (e.g. 'secrets', 'pii', 'shadow_mcp').
+	Key string
+	// Human-readable category label for UI rendering.
+	Label string
+	// Plain-English description of what this category covers.
+	Description string
+	// Lucide icon name suggested for this category.
+	Icon string
+	// When non-empty, findings whose source equals this value belong to this
+	// category.
+	Source string
+	// When non-empty, findings whose rule_id is in this exact list belong to this
+	// category. Checked before rule_id_prefix.
+	RuleIds []string
+	// When non-empty, findings whose rule_id starts with this prefix belong to
+	// this category. The catch-all for a family (e.g. 'pii.').
+	RuleIDPrefix string
+}
+
+type RiskOverviewCategory struct {
+	// Policy category key.
+	Category string
+	// Finding count for this category.
+	Findings int64
+}
+
+// RiskOverviewResult is the result type of the risk service getRiskOverview
+// method.
+type RiskOverviewResult struct {
+	// Inclusive start of the overview window.
+	From string
+	// Exclusive end of the overview window.
+	To string
+	// Messages analyzed by risk policies in the window.
+	MessagesScanned int64
+	// Policy findings in the window.
+	Findings int64
+	// Chat sessions with at least one finding in the window.
+	FlaggedSessions int64
+	// Enabled risk policies for the current project.
+	ActivePolicies int64
+	// Top policy categories by finding count.
+	TopCategories []*RiskOverviewCategory
+	// Top users by finding count.
+	TopUsers []*RiskOverviewUser
+	// Top rule_ids by finding count.
+	TopRules []*RiskRuleBreakdownEntry
+	// Time-series finding counts by category in the window.
+	TimeSeriesFindings []*RiskOverviewTimeSeriesFinding
+}
+
+type RiskOverviewTimeSeriesFinding struct {
+	// Time bucket start.
+	BucketStart string
+	// Policy category key.
+	Category string
+	// Finding count for this category and time bucket.
+	Findings int64
+}
+
+type RiskOverviewUser struct {
+	// User email, or Unknown user when unavailable.
+	Email string
+	// External user identifier as recorded on chats, when known. Empty when the
+	// finding cannot be attributed to an external user.
+	ExternalUserID string
+	// Finding count for this user.
+	Findings int64
+}
+
+// RiskPolicyBypassRequest is the result type of the risk service
+// createRiskPolicyBypassRequest method.
+type RiskPolicyBypassRequest struct {
+	// The bypass request ID.
+	ID string
+	// The risk policy ID.
+	PolicyID string
+	// Optional target namespace for the request, such as server_url.
+	TargetKind *string
+	// Optional display label for the target.
+	TargetLabel *string
+	// Canonical key for the target.
+	TargetKey *string
+	// Selector dimensions for the request target.
+	TargetDimensions map[string]string
+	// Requester user ID.
+	RequesterUserID string
+	// Requester email when known.
+	RequesterEmail *string
+	// Requester note.
+	Note *string
+	// Current request status.
+	Status string
+	// User ID that approved, denied, or revoked the request.
+	DecidedBy *string
+	// Principal URNs granted when approved.
+	GrantedPrincipalUrns []string
+	// Decision timestamp.
+	DecidedAt *string
+	// Creation timestamp.
+	CreatedAt string
+	// Last update timestamp.
+	UpdatedAt string
+}
+
+type RiskRuleBreakdownEntry struct {
+	// Rule identifier (e.g. 'secret.aws-access-key'). Empty when the finding has
+	// no rule_id (treat as 'unspecified').
+	RuleID string
+	// Source bucket the rule belongs to (gitleaks, presidio, etc.) for label/icon
+	// resolution on the dashboard.
+	Source string
+	// Finding count for this rule within the window.
+	Findings int64
+}
+
+// RiskRuleBreakdownResult is the result type of the risk service
+// getRiskRuleBreakdown method.
+type RiskRuleBreakdownResult struct {
+	// Inclusive start of the window used.
+	From string
+	// Exclusive end of the window used.
+	To string
+	// Category the breakdown is scoped to.
+	Category string
+	// Rules in this category, ordered by finding count descending.
+	Rules []*RiskRuleBreakdownEntry
+	// Total findings across all rules in this category and window.
+	Total int64
+}
+
+// RiskUserBreakdownResult is the result type of the risk service
+// getRiskUserBreakdown method.
+type RiskUserBreakdownResult struct {
+	// Inclusive start of the window used.
+	From string
+	// Exclusive end of the window used.
+	To string
+	// External user the breakdown is scoped to.
+	ExternalUserID string
+	// Total findings for this user in the window.
+	Findings int64
+	// Category breakdown for this user, ordered by finding count descending.
+	Categories []*RiskOverviewCategory
+	// Rule_id breakdown for this user, ordered by finding count descending.
+	Rules []*RiskRuleBreakdownEntry
+}
+
+// SuggestCustomDetectionRulePayload is the payload type of the risk service
+// suggestCustomDetectionRule method.
+type SuggestCustomDetectionRulePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Natural-language description of what the rule should detect.
+	Prompt string
+	// Existing built-in and custom rule ids the suggested id must avoid colliding
+	// with.
+	ExistingRuleIds []string
+}
+
+// SuggestCustomDetectionRuleResult is the result type of the risk service
+// suggestCustomDetectionRule method.
+type SuggestCustomDetectionRuleResult struct {
+	// Suggested stable identifier, prefixed with `custom.`.
+	RuleID string
+	// Short, human-friendly title for the rule.
+	Title string
+	// Description of what the rule detects and why it matters.
+	Description string
+	// RE2-compatible regex pattern the rule should match against.
+	Regex string
+	// Suggested severity level.
+	Severity string
+}
+
+type TestDetectionRuleMatch struct {
+	// Canonical rule id of the match (may differ from the requested rule id when
+	// one input matches multiple rules).
+	RuleID string
+	// Human-readable description of why this match was flagged.
+	Description *string
+	// Matched substring of the sample.
+	Match string
+	// Inclusive start byte offset of the match in the sample.
+	StartPos int
+	// Exclusive end byte offset of the match in the sample.
+	EndPos int
+	// Detection source (e.g. `gitleaks`, `presidio`, `prompt_injection`, `custom`).
+	Source string
+	// Confidence score in the range 0.0 to 1.0.
+	Confidence float64
+	// Tags from the underlying rule.
+	Tags []string
+}
+
+// TestDetectionRulePayload is the payload type of the risk service
+// testDetectionRule method.
+type TestDetectionRulePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Rule identifier to evaluate (e.g. `secret.aws_access_token`,
+	// `pii.email_address`, `custom.acme_token`).
+	RuleID string
+	// Sample text to scan.
+	Text string
+	// Regex pattern. Required for `custom.*` rule ids since the server doesn't
+	// persist custom rules yet; ignored for built-in rules.
+	Regex *string
+}
+
+// TestDetectionRuleResult is the result type of the risk service
+// testDetectionRule method.
+type TestDetectionRuleResult struct {
+	// Matches the rule found in the sample.
+	Matches []*TestDetectionRuleMatch
+	// False when the rule has no text-only detector (e.g. `shadow_mcp`,
+	// `destructive_tool`).
+	Supported bool
+	// Why the rule isn't supported when `supported` is false.
+	Reason *string
 }
 
 // TriggerRiskAnalysisPayload is the payload type of the risk service
@@ -205,6 +778,51 @@ type TriggerRiskAnalysisPayload struct {
 	ProjectSlugInput *string
 	// The policy ID.
 	ID string
+	// Cap the backfill at the most recent N unanalyzed messages. Defaults to 100
+	// (the recent-N drain budget). Pass 0 to request a full backfill of every
+	// unanalyzed message.
+	Limit int32
+}
+
+// UpdateCustomDetectionRulePayload is the payload type of the risk service
+// updateCustomDetectionRule method.
+type UpdateCustomDetectionRulePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The custom detection rule ID.
+	ID string
+	// Human-readable title for the rule.
+	Title string
+	// Description of what the rule detects.
+	Description *string
+	// RE2-compatible regex pattern.
+	Regex string
+	// Severity level for findings produced by this rule.
+	Severity string
+}
+
+// UpdateRiskExclusionPayload is the payload type of the risk service
+// updateRiskExclusion method.
+type UpdateRiskExclusionPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The exclusion ID.
+	ID string
+	// Bind the exclusion to a single policy. Omit for a global (project-wide)
+	// exclusion.
+	RiskPolicyID *string
+	// How match_value is interpreted.
+	MatchType string
+	// The value matched against findings, interpreted per match_type.
+	MatchValue string
+	// Optional: only apply within this rule_id. Empty means any.
+	RuleIDFilter string
+	// Optional: only apply within this source. Empty means any.
+	SourceFilter string
+	// Whether the exclusion is active. Omit to leave unchanged.
+	Enabled *bool
 }
 
 // UpdateRiskPolicyPayload is the payload type of the risk service
@@ -222,17 +840,38 @@ type UpdateRiskPolicyPayload struct {
 	// Presidio entity types to detect.
 	PresidioEntities []string
 	// Prompt-injection detection rule ids to enable in addition to the heuristic
-	// baseline (e.g. 'deberta-v3-classifier').
+	// baseline.
 	PromptInjectionRules []string
+	// Canonical rule_ids the user has unchecked within otherwise-enabled
+	// categories. Matching findings are dropped at scan time.
+	DisabledRules []string
+	// Custom detection rule ids to enable for this policy. Omit to preserve the
+	// current selection.
+	CustomRuleIds []string
+	// Message types this policy applies to. Omit to preserve the current
+	// selection; send an empty array to apply to all types.
+	MessageTypes []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
 	Action *string
+	// Policy audience type: everyone or targeted. Omit to preserve the current
+	// audience type.
+	AudienceType *string
+	// Principal URNs this policy applies to. Omit to preserve the current target
+	// principals.
+	AudiencePrincipalUrns []string
 	// Whether the policy name should be auto-generated.
 	AutoName *bool
 	// Optional message shown to end users when this policy blocks an action or
 	// surfaces a flagged finding. Send an empty string to clear.
 	UserMessage *string
+	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
+	// in-scope message against. Omit to preserve the current value.
+	Prompt *string
+	// For prompt_based policies: per-policy LLM-judge model configuration. Omit to
+	// preserve the current value.
+	ModelConfig *types.RiskPolicyModelConfig
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

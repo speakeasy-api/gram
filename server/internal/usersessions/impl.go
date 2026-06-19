@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // Service implements all four Goa services. The split into four design
@@ -44,6 +45,19 @@ type Service struct {
 	authz        *authz.Engine
 	chatSessions *chatsessions.Manager
 	audit        *audit.Logger
+	// signer mints the user-session JWT returned by mintUserSession. Same
+	// signer the /mcp/{slug}/token handler uses, so the resulting JWTs
+	// validate through the runtime gateway by the existing user-session
+	// path with no special casing.
+	signer *Signer
+	// serverURL is the public base URL used to stamp the JWT issuer claim
+	// on mintUserSession output. Matches the issuer URL /token would emit.
+	serverURL string
+	// remoteSessions backs the migrateLegacyGramRegistrations handler: the
+	// legacy Redis-registration migration lives in remotesessions (alongside
+	// its custom-clone counterpart) and is reached directly here. Removed with
+	// the legacy OAuth proxy.
+	remoteSessions *remotesessions.Service
 }
 
 var (
@@ -60,17 +74,23 @@ var (
 // NewService constructs a Service ready to be Attached against each of the
 // four user_session* Goa services. chatSessionsManager is used by the
 // userSessions revoke handler to push revoked jtis into the revocation cache.
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager *chatsessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger) *Service {
+// signer + serverURL drive mintUserSession; pass an empty serverURL to
+// disable that handler (it will 503 on call — used in tests that don't
+// need the surface).
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager *chatsessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger, signer *Signer, serverURL string, remoteSessions *remotesessions.Service) *Service {
 	logger = logger.With(attr.SlogComponent("usersessions"))
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usersessions"),
-		logger:       logger,
-		db:           db,
-		auth:         auth.New(logger, db, sessionManager, authzEngine),
-		authz:        authzEngine,
-		chatSessions: chatSessionsManager,
-		audit:        auditLogger,
+		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usersessions"),
+		logger:         logger,
+		db:             db,
+		auth:           auth.New(logger, db, sessionManager, authzEngine),
+		authz:          authzEngine,
+		chatSessions:   chatSessionsManager,
+		audit:          auditLogger,
+		signer:         signer,
+		serverURL:      serverURL,
+		remoteSessions: remoteSessions,
 	}
 }
 

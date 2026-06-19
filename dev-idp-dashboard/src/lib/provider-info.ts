@@ -6,15 +6,15 @@ export interface ProviderInfo {
 }
 
 export const PROVIDER_INFO: Record<Mode, ProviderInfo> = {
-  "local-speakeasy": {
-    capabilities: ["Gram Login Provider", "WorkOS Emulator"],
+  "mock-workos": {
+    capabilities: ["WorkOS Emulator"],
     longDescription:
-      "Stands in for the Speakeasy provider that backs Gram management-API login, and emulates the WorkOS REST surface so user/org/membership lookups resolve locally without an external dependency. Use this when you want a fully offline auth setup keyed off the dev-idp's own database.",
+      "Emulates the WorkOS REST surface (users, orgs, memberships, roles, invitations) backed by the dev-idp's own SQLite database. Use this for fully offline development where Gram resolves all WorkOS API calls locally.",
   },
   workos: {
-    capabilities: ["Gram Login Provider", "WorkOS Emulator"],
+    capabilities: ["WorkOS Proxy"],
     longDescription:
-      "Speakeasy login still flows through the dev-idp, but user / org / membership lookups proxy to your real WorkOS environment. Use this when you want Gram exercised against actual WorkOS data — invitations, organization roles, real seats.",
+      "Proxies WorkOS REST calls to your real WorkOS dev environment. Use this when you want Gram exercised against actual WorkOS data — invitations, organization roles, real seats.",
   },
   "oauth2-1": {
     capabilities: ["MCP OAuth Issuer"],
@@ -29,8 +29,8 @@ export const PROVIDER_INFO: Record<Mode, ProviderInfo> = {
 };
 
 /** Modes that the dashboard can flip Gram between via env-var rewrites. */
-export type ActivatableMode = Extract<Mode, "local-speakeasy" | "workos">;
+export type ActivatableMode = Extract<Mode, "mock-workos" | "workos">;
 
 export function isActivatable(mode: Mode): mode is ActivatableMode {
-  return mode === "local-speakeasy" || mode === "workos";
+  return mode === "mock-workos" || mode === "workos";
 }

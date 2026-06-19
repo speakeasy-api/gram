@@ -469,6 +469,240 @@ func DecodeCreateDomainResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildUpdateDomainRequest instantiates a HTTP request object with method and
+// path set to call the "domains" service "updateDomain" endpoint
+func (c *Client) BuildUpdateDomainRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateDomainDomainsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("domains", "updateDomain", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateDomainRequest returns an encoder for requests sent to the
+// domains updateDomain server.
+func EncodeUpdateDomainRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*domains.UpdateDomainPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("domains", "updateDomain", "*domains.UpdateDomainPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewUpdateDomainRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("domains", "updateDomain", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateDomainResponse returns a decoder for responses returned by the
+// domains updateDomain endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeUpdateDomainResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateDomainResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateDomainResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "updateDomain", err)
+			}
+			err = ValidateUpdateDomainResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "updateDomain", err)
+			}
+			res := NewUpdateDomainCustomDomainOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateDomainUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "updateDomain", err)
+			}
+			err = ValidateUpdateDomainUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "updateDomain", err)
+			}
+			return nil, NewUpdateDomainUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateDomainForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "updateDomain", err)
+			}
+			err = ValidateUpdateDomainForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "updateDomain", err)
+			}
+			return nil, NewUpdateDomainForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateDomainBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "updateDomain", err)
+			}
+			err = ValidateUpdateDomainBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "updateDomain", err)
+			}
+			return nil, NewUpdateDomainBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateDomainNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "updateDomain", err)
+			}
+			err = ValidateUpdateDomainNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "updateDomain", err)
+			}
+			return nil, NewUpdateDomainNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateDomainConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "updateDomain", err)
+			}
+			err = ValidateUpdateDomainConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "updateDomain", err)
+			}
+			return nil, NewUpdateDomainConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateDomainUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "updateDomain", err)
+			}
+			err = ValidateUpdateDomainUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "updateDomain", err)
+			}
+			return nil, NewUpdateDomainUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateDomainInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "updateDomain", err)
+			}
+			err = ValidateUpdateDomainInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "updateDomain", err)
+			}
+			return nil, NewUpdateDomainInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateDomainInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("domains", "updateDomain", err)
+				}
+				err = ValidateUpdateDomainInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("domains", "updateDomain", err)
+				}
+				return nil, NewUpdateDomainInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateDomainUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("domains", "updateDomain", err)
+				}
+				err = ValidateUpdateDomainUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("domains", "updateDomain", err)
+				}
+				return nil, NewUpdateDomainUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("domains", "updateDomain", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateDomainGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "updateDomain", err)
+			}
+			err = ValidateUpdateDomainGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "updateDomain", err)
+			}
+			return nil, NewUpdateDomainGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("domains", "updateDomain", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteDomainRequest instantiates a HTTP request object with method and
 // path set to call the "domains" service "deleteDomain" endpoint
 func (c *Client) BuildDeleteDomainRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -684,4 +918,252 @@ func DecodeDeleteDomainResponse(decoder func(*http.Response) goahttp.Decoder, re
 			return nil, goahttp.ErrInvalidResponse("domains", "deleteDomain", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// BuildListMcpEndpointsRequest instantiates a HTTP request object with method
+// and path set to call the "domains" service "listMcpEndpoints" endpoint
+func (c *Client) BuildListMcpEndpointsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListMcpEndpointsDomainsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("domains", "listMcpEndpoints", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListMcpEndpointsRequest returns an encoder for requests sent to the
+// domains listMcpEndpoints server.
+func EncodeListMcpEndpointsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*domains.ListMcpEndpointsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("domains", "listMcpEndpoints", "*domains.ListMcpEndpointsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListMcpEndpointsResponse returns a decoder for responses returned by
+// the domains listMcpEndpoints endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListMcpEndpointsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListMcpEndpointsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListMcpEndpointsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listMcpEndpoints", err)
+			}
+			err = ValidateListMcpEndpointsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listMcpEndpoints", err)
+			}
+			res := NewListMcpEndpointsListCustomDomainMcpEndpointsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListMcpEndpointsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listMcpEndpoints", err)
+			}
+			err = ValidateListMcpEndpointsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listMcpEndpoints", err)
+			}
+			return nil, NewListMcpEndpointsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListMcpEndpointsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listMcpEndpoints", err)
+			}
+			err = ValidateListMcpEndpointsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listMcpEndpoints", err)
+			}
+			return nil, NewListMcpEndpointsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListMcpEndpointsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listMcpEndpoints", err)
+			}
+			err = ValidateListMcpEndpointsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listMcpEndpoints", err)
+			}
+			return nil, NewListMcpEndpointsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListMcpEndpointsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listMcpEndpoints", err)
+			}
+			err = ValidateListMcpEndpointsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listMcpEndpoints", err)
+			}
+			return nil, NewListMcpEndpointsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListMcpEndpointsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listMcpEndpoints", err)
+			}
+			err = ValidateListMcpEndpointsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listMcpEndpoints", err)
+			}
+			return nil, NewListMcpEndpointsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListMcpEndpointsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listMcpEndpoints", err)
+			}
+			err = ValidateListMcpEndpointsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listMcpEndpoints", err)
+			}
+			return nil, NewListMcpEndpointsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListMcpEndpointsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listMcpEndpoints", err)
+			}
+			err = ValidateListMcpEndpointsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listMcpEndpoints", err)
+			}
+			return nil, NewListMcpEndpointsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListMcpEndpointsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("domains", "listMcpEndpoints", err)
+				}
+				err = ValidateListMcpEndpointsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("domains", "listMcpEndpoints", err)
+				}
+				return nil, NewListMcpEndpointsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListMcpEndpointsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("domains", "listMcpEndpoints", err)
+				}
+				err = ValidateListMcpEndpointsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("domains", "listMcpEndpoints", err)
+				}
+				return nil, NewListMcpEndpointsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("domains", "listMcpEndpoints", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListMcpEndpointsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "listMcpEndpoints", err)
+			}
+			err = ValidateListMcpEndpointsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "listMcpEndpoints", err)
+			}
+			return nil, NewListMcpEndpointsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("domains", "listMcpEndpoints", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// unmarshalCustomDomainMcpEndpointResponseBodyToDomainsCustomDomainMcpEndpoint
+// builds a value of type *domains.CustomDomainMcpEndpoint from a value of type
+// *CustomDomainMcpEndpointResponseBody.
+func unmarshalCustomDomainMcpEndpointResponseBodyToDomainsCustomDomainMcpEndpoint(v *CustomDomainMcpEndpointResponseBody) *domains.CustomDomainMcpEndpoint {
+	res := &domains.CustomDomainMcpEndpoint{
+		ID:            *v.ID,
+		Slug:          *v.Slug,
+		ProjectID:     *v.ProjectID,
+		ProjectName:   *v.ProjectName,
+		ProjectSlug:   *v.ProjectSlug,
+		McpServerID:   *v.McpServerID,
+		McpServerName: v.McpServerName,
+		McpServerSlug: v.McpServerSlug,
+	}
+
+	return res
 }

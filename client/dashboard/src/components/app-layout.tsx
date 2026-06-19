@@ -7,14 +7,13 @@ import { ShieldAlert } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
-import { BrandGradientLine } from "./brand-gradient-line.tsx";
-import { InsightsProvider } from "./insights-sidebar.tsx";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
+import { InsightsProvider } from "./insights-dock.tsx";
 import { OrgSidebar } from "./org-sidebar.tsx";
-import { TopHeader } from "./top-header.tsx";
 import { SidebarInset, SidebarProvider } from "./ui/sidebar.tsx";
 
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
-export const LoginCheck = () => {
+export const LoginCheck = (): JSX.Element => {
   const session = useSession();
   const location = useLocation();
 
@@ -31,7 +30,7 @@ export const LoginCheck = () => {
   return <Outlet />;
 };
 
-export const AppLayout = () => {
+export const AppLayout = (): JSX.Element => {
   const isAdmin = useIsAdmin();
   const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
   const isImpersonating = isAdmin && !!overrideSlug;
@@ -40,13 +39,9 @@ export const AppLayout = () => {
     <SidebarProvider
       style={
         {
-          "--sidebar-width": "14rem",
-          ...(isImpersonating
-            ? {
-                "--header-offset": "5.75rem",
-                "--banner-offset": "2.25rem",
-              }
-            : undefined),
+          "--sidebar-width": "16rem",
+          "--header-offset": isImpersonating ? "2.25rem" : "0px",
+          ...(isImpersonating ? { "--banner-offset": "2.25rem" } : undefined),
         } as React.CSSProperties
       }
     >
@@ -79,10 +74,12 @@ const ImpersonationBanner = () => {
       <button
         type="button"
         className="ml-2 rounded bg-white/20 px-2 py-0.5 text-xs font-medium transition-colors hover:bg-white/30"
-        onClick={async () => {
-          document.cookie = "gram_admin_override=; path=/; max-age=0;";
-          await client.auth.logout();
-          window.location.href = "/login";
+        onClick={() => {
+          void (async () => {
+            document.cookie = "gram_admin_override=; path=/; max-age=0;";
+            await client.auth.logout();
+            window.location.href = "/login";
+          })();
         }}
       >
         Stop impersonating
@@ -99,9 +96,7 @@ const AppLayoutContent = ({
   return (
     <div className="flex h-screen w-full flex-col">
       {isImpersonating && <ImpersonationBanner />}
-      <TopHeader />
-      <BrandGradientLine />
-      <div className="flex w-full flex-1 overflow-hidden pt-2">
+      <div className="flex w-full flex-1 overflow-hidden">
         <AppSidebar variant="inset" />
         <SidebarInset>
           <GlobalInsightsWrapper>
@@ -122,9 +117,9 @@ const AppLayoutContent = ({
 
 /**
  * Wraps every project-scoped page in a single InsightsProvider so the
- * AI Insights trigger lives statically in the top breadcrumb bar across
- * the whole project app. Pages mount <InsightsConfig /> to override the
- * defaults (custom prompt/suggestions/MCP filter).
+ * docked Project Assistant composer floats at the bottom of the content
+ * area across the whole project app. Pages mount <InsightsConfig /> to
+ * override the defaults (custom prompt/suggestions/MCP filter).
  */
 const GlobalInsightsWrapper = ({ children }: { children: React.ReactNode }) => {
   // Default config: include all observability tools (no filter), so the
@@ -136,26 +131,9 @@ const GlobalInsightsWrapper = ({ children }: { children: React.ReactNode }) => {
   return (
     <InsightsProvider
       mcpConfig={mcpConfig}
-      title="Ask AI"
-      subtitle="Your assistant for exploring Gram — logs, traces, MCP servers, and more."
-      suggestions={[
-        {
-          title: "Summarize errors",
-          label: "Recent error trends",
-          prompt:
-            "Summarize the most common error patterns in the last 24 hours.",
-        },
-        {
-          title: "Top tool calls",
-          label: "Most-called tools",
-          prompt: "Which tools have been called most often this week?",
-        },
-        {
-          title: "Slow tools",
-          label: "Latency outliers",
-          prompt: "Find tools with the slowest p95 latency in the last day.",
-        },
-      ]}
+      title="How can I help you understand your AI usage?"
+      subtitle="Your assistant for exploring the platform — logs, traces, MCP servers, and more."
+      suggestions={INSIGHTS_SUGGESTIONS.default}
     >
       {children}
     </InsightsProvider>
@@ -186,9 +164,11 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
         <button
           type="button"
           className="bg-primary text-primary-foreground hover:bg-primary/90 mt-2 rounded-md px-4 py-2 text-sm font-medium"
-          onClick={async () => {
-            await client.auth.logout();
-            window.location.href = "/login";
+          onClick={() => {
+            void (async () => {
+              await client.auth.logout();
+              window.location.href = "/login";
+            })();
           }}
         >
           Log out
@@ -198,7 +178,7 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-export const OrgLayout = () => {
+export const OrgLayout = (): JSX.Element => {
   const isAdmin = useIsAdmin();
   const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
   const isImpersonating = isAdmin && !!overrideSlug;
@@ -207,22 +187,16 @@ export const OrgLayout = () => {
     <SidebarProvider
       style={
         {
-          "--sidebar-width": "14rem",
-          ...(isImpersonating
-            ? {
-                "--header-offset": "5.75rem",
-                "--banner-offset": "2.25rem",
-              }
-            : undefined),
+          "--sidebar-width": "16rem",
+          "--header-offset": isImpersonating ? "2.25rem" : "0px",
+          ...(isImpersonating ? { "--banner-offset": "2.25rem" } : undefined),
         } as React.CSSProperties
       }
     >
       <ModalProvider>
         <div className="flex h-screen w-full flex-col">
           {isImpersonating && <ImpersonationBanner />}
-          <TopHeader />
-          <BrandGradientLine />
-          <div className="flex w-full flex-1 overflow-hidden pt-2">
+          <div className="flex w-full flex-1 overflow-hidden">
             <OrgSidebar variant="inset" />
             <SidebarInset>
               <MembershipSyncGuard>

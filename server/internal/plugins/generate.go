@@ -2,13 +2,16 @@ package plugins
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"path"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 )
 
 // ServerEnvConfig represents a user-facing environment variable required by a server.
@@ -25,6 +28,9 @@ type PluginServerInfo struct {
 	MCPURL string
 	// IsPublic indicates whether the toolset is publicly accessible (no Gram API key needed).
 	IsPublic bool
+	// IsOAuth indicates the toolset uses OAuth (proxy or external). OAuth servers are emitted
+	// as stdio mcp-remote entries instead of HTTP-with-headers entries.
+	IsOAuth bool
 	// EnvConfigs are user-facing environment variables for public servers.
 	EnvConfigs []ServerEnvConfig
 }
@@ -51,13 +57,45 @@ type GenerateConfig struct {
 	// is omitted.
 	HooksAPIKey string
 	// ProjectSlug is the publishing project's slug. The Cursor hooks endpoint
-	// requires it via the Gram-Project header (Claude's does not).
+	// requires it via the Gram-Project header (Claude's does not), and it scopes
+	// the default marketplace name for non-default projects.
 	ProjectSlug string
+	// IsDefaultProject reports whether this is the org's default project (its
+	// oldest, by id ASC). The default project keeps the bare org-derived
+	// marketplace name; non-default projects get a project-scoped one. Must be
+	// resolved identically to the device-agent endpoint (see naming.MarketplaceName).
+	IsDefaultProject bool
 	// Version is stamped into every plugin.json. Callers should bump this on
 	// every publish so platform marketplaces (Claude Code, Cursor, Codex) treat
 	// the manifest as new and refresh installed copies. Empty falls back to
 	// the static default, preserving test ergonomics.
 	Version string
+	// MarketplaceName is the identifier users type into Claude Code or Codex
+	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
+	// marketplace.json. Empty falls back to DefaultMarketplaceName.
+	MarketplaceName string
+}
+
+// DefaultMarketplaceName returns the marketplace identifier used when no
+// per-project override is configured: the slugified org name with a
+// "-speakeasy" suffix. Shows up as the `name` field in the generated
+// Claude/Cursor/Codex marketplace.json and as the marketplace half of
+// `<plugin>@<marketplace>` install strings. Suffixing by org keeps the
+// default unique across customers so Claude Code installs from two Gram
+// orgs don't collide on the marketplace identifier.
+//
+// Delegates to naming.MarketplaceName so the publish path and the device-agent
+// endpoint stay on the identical formula — the cross-surface contract that
+// package documents. A per-project override (resolveMarketplaceName) layers on
+// top of this default. The default project keeps the bare org-derived name;
+// non-default projects are scoped by their slug so an org's projects don't
+// collide on a single marketplace identifier.
+func DefaultMarketplaceName(orgName, projectSlug string, isDefaultProject bool) string {
+	return naming.MarketplaceName(orgName, projectSlug, isDefaultProject)
+}
+
+func resolveMarketplaceName(cfg GenerateConfig) string {
+	return conv.Default(cfg.MarketplaceName, DefaultMarketplaceName(cfg.OrgName, cfg.ProjectSlug, cfg.IsDefaultProject))
 }
 
 // pluginManifestVersion returns the version to stamp into generated
@@ -68,13 +106,73 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 	return conv.Default(cfg.Version, "0.1.0")
 }
 
+// pluginGeneratorVersion is mixed into every plugin fingerprint. Bump it to
+// force the automated rollout to republish every connected project on the next
+// run, even when an individual project's generated output is byte-identical —
+// for generator changes that alter behaviour in ways the placeholder
+// fingerprint pass can't observe. The Plugin Generate Check CI workflow
+// requires this to change whenever generate.go does.
+const pluginGeneratorVersion = "3"
+
+// Fixed, non-empty sentinels substituted for the per-publish API keys when
+// computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
+// the observability plugin entirely (see GenerateConfig.HooksAPIKey), which
+// would make the fingerprint blind to it. Constant values keep the generated
+// bytes stable across publishes while the real keys rotate.
+const (
+	fingerprintAPIKeySentinel   = "gram_fingerprint_api_key"
+	fingerprintHooksKeySentinel = "gram_fingerprint_hooks_key"
+)
+
+// PluginFingerprint returns a stable content hash of the packages that would be
+// generated for the given plugins. It normalizes the per-publish fields
+// (manifest version and injected API keys) so two publishes with the same
+// plugin configuration and generator version produce the same fingerprint,
+// while any change to the plugin set, project/org config, or generator output
+// changes it. The automated rollout uses this to skip no-op republishes.
+func PluginFingerprint(plugins []PluginInfo, cfg GenerateConfig) (string, error) {
+	cfg.Version = ""
+	cfg.APIKey = fingerprintAPIKeySentinel
+	cfg.HooksAPIKey = fingerprintHooksKeySentinel
+
+	files, err := GeneratePluginPackages(plugins, cfg)
+	if err != nil {
+		return "", fmt.Errorf("generate plugin packages for fingerprint: %w", err)
+	}
+
+	paths := make([]string, 0, len(files))
+	for p := range files {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+
+	h := sha256.New()
+	// A NUL after each component disambiguates boundaries so no concatenation
+	// of distinct (path, content) sequences can collide.
+	_, _ = h.Write([]byte(pluginGeneratorVersion))
+	_, _ = h.Write([]byte{0})
+	for _, p := range paths {
+		_, _ = h.Write([]byte(p))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(files[p])
+		_, _ = h.Write([]byte{0})
+	}
+
+	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
+}
+
 // claudeHookAsyncFlag returns the async flag for a Claude hook event.
-// Blocking events (PreToolUse, UserPromptSubmit) return false so Claude
-// waits for the deny/allow decision. All others return true for
-// fire-and-forget telemetry so Claude is not held up.
+// PreToolUse and UserPromptSubmit are blocking so Claude waits for the
+// deny/allow decision. Stop must also be blocking: when async=true,
+// Cowork (Claude Code) appears to skip dispatching the Stop hook entirely
+// — an apparent bug on the client side. Marking it synchronous is the
+// only reliable way to get Stop events to fire. All other events
+// (including ConfigChange, which has no allow/deny decision to honor)
+// return true for fire-and-forget telemetry so Claude is not held up while
+// the MCP inventory is re-synced mid-session.
 func claudeHookAsyncFlag(event string) *bool {
 	switch event {
-	case "UserPromptSubmit", "PreToolUse":
+	case "UserPromptSubmit", "PreToolUse", "Stop":
 		f := false
 		return &f
 	default:
@@ -94,6 +192,7 @@ var ClaudeObservabilityHookEvents = []string{
 	"PostToolUse",
 	"PostToolUseFailure",
 	"SessionStart",
+	"ConfigChange",
 	"SessionEnd",
 	"UserPromptSubmit",
 	"Stop",
@@ -142,13 +241,13 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 		claudePlugins = append(claudePlugins, marketplaceEntry{
 			Name:        claudeObservability,
 			Source:      "./" + claudeObservability,
-			Description: "Required: Gram observability hooks for " + cfg.OrgName + ".",
+			Description: "Required: Speakeasy observability hooks for " + cfg.OrgName + ".",
 		})
 		cursorObservability := CursorObservabilitySlug(cfg)
 		cursorPlugins = append(cursorPlugins, marketplaceEntry{
 			Name:        cursorObservability,
 			Source:      "./" + cursorObservability,
-			Description: "Required: Gram observability hooks for " + cfg.OrgName + ".",
+			Description: "Required: Speakeasy observability hooks for " + cfg.OrgName + ".",
 		})
 		codexObservability := CodexObservabilitySlug(cfg)
 		codexPlugins = append(codexPlugins, codexMarketplaceEntry{
@@ -198,7 +297,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	}
 
 	owner := marketplaceOwner{Name: cfg.OrgName, Email: cfg.OrgEmail}
-	marketplaceName := conv.ToSlug(cfg.OrgName) + "-gram"
+	marketplaceName := resolveMarketplaceName(cfg)
 
 	claudeManifest, err := marshalJSON(marketplaceManifest{
 		Name:    marketplaceName,
@@ -256,14 +355,14 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	var b strings.Builder
 
 	b.WriteString("# " + cfg.OrgName + " Plugins\n\n")
-	b.WriteString("This repository contains plugin packages managed by [Gram](https://getgram.ai). ")
+	b.WriteString("This repository contains plugin packages managed by [Speakeasy](https://getgram.ai). ")
 	b.WriteString("Each plugin bundles MCP servers for distribution via Claude Code, Cursor, and Codex marketplaces.\n\n")
 	b.WriteString("## How this repo works\n\n")
 	b.WriteString("- **Read-only access.** Collaborators are granted pull permission only. You can clone and inspect the repository, but you cannot push to it.\n")
-	b.WriteString("- **Auto-managed by Gram.** Each publish from the Gram dashboard overwrites this repository's contents. Any manual edits, new branches, or local commits will be discarded on the next publish — make changes in Gram instead.\n\n")
+	b.WriteString("- **Auto-managed by Speakeasy.** Each publish from the Speakeasy dashboard overwrites this repository's contents. Any manual edits, new branches, or local commits will be discarded on the next publish — make changes in Speakeasy instead.\n\n")
 
 	if cfg.HooksAPIKey != "" {
-		fmt.Fprintf(&b, "> **Required:** install the `%s` plugin alongside any feature plugins to enable Gram observability. Without it, your team will install MCP servers but tool events will not be reported to your Gram dashboard.\n\n", ClaudeObservabilitySlug(cfg))
+		fmt.Fprintf(&b, "> **Required:** install the `%s` plugin alongside any feature plugins to enable Speakeasy observability. Without it, your team will install MCP servers but tool events will not be reported to your Speakeasy dashboard.\n\n", ClaudeObservabilitySlug(cfg))
 	}
 
 	if len(plugins) > 0 {
@@ -289,7 +388,7 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	if cfg.HooksAPIKey != "" {
 		obs := ClaudeObservabilitySlug(cfg)
 		fmt.Fprintf(&b, "\nMark the `%s` plugin as required so observability is on by default for all team members:\n\n", obs)
-		fmt.Fprintf(&b, "```json\n{\n  \"plugins\": {\n    \"required\": [\"%s@%s-gram\"]\n  }\n}\n```\n", obs, conv.ToSlug(cfg.OrgName))
+		fmt.Fprintf(&b, "```json\n{\n  \"plugins\": {\n    \"required\": [\"%s@%s\"]\n  }\n}\n```\n", obs, resolveMarketplaceName(cfg))
 	}
 	b.WriteString("\n### Cursor\n\n")
 	b.WriteString("1. Open your team's [Cursor dashboard](https://cursor.com/dashboard)\n")
@@ -405,9 +504,9 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 			EnvHTTPHeaders:    nil,
 		}
 
-		if s.IsPublic {
-			// User provides each variable in their shell env; Codex
-			// substitutes the value into the named header at runtime.
+		if s.IsOAuth {
+			// OAuth servers handle identity at the HTTP layer — no auth credential needed.
+		} else if s.IsPublic {
 			if len(s.EnvConfigs) > 0 {
 				entry.EnvHTTPHeaders = make(map[string]string, len(s.EnvConfigs))
 				for _, ec := range s.EnvConfigs {
@@ -415,12 +514,8 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 				}
 			}
 		} else if cfg.APIKey != "" {
-			// Private server: bake the Gram-issued key directly into the
-			// published config. Repo is private, so this matches the Cursor/Claude pattern.
 			entry.HTTPHeaders = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
 		} else {
-			// Private server, no key available: ask Codex to read GRAM_API_KEY
-			// from the user's environment at startup.
 			entry.BearerTokenEnvVar = "GRAM_API_KEY"
 		}
 
@@ -441,7 +536,7 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 // use slug "observability".
 // Exported because tests need to predict the published path.
 func ClaudeObservabilitySlug(cfg GenerateConfig) string {
-	return conv.ToSlug(cfg.OrgName) + "-observability"
+	return naming.ObservabilitySlug(cfg.OrgName)
 }
 func CursorObservabilitySlug(cfg GenerateConfig) string {
 	return conv.ToSlug(cfg.OrgName) + "-observability-cursor"
@@ -470,7 +565,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	}
 	pluginJSON, err := marshalJSON(claudePluginMeta{
 		Name:        name,
-		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
+		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		Version:     pluginManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
@@ -485,10 +580,23 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	// requires hooks at hooks/hooks.json, not at the plugin root. With the
 	// flat layout (hooks.json + hook.sh at root) Claude registers the plugin
 	// silently but never wires the hooks up.
+	//
+	// SessionStart and ConfigChange are routed to a separate script
+	// (mcp_inventory.sh) that enriches the payload with an MCP server
+	// inventory before forwarding to Gram, so the server can re-sync its
+	// cached inventory whenever Claude (re)loads the session or a settings
+	// file changes mid-session. The inventory is sourced from cmux's per-run
+	// local_<rid>.json in cowork environments, falling back to
+	// `claude mcp list` output when run under stock Claude Code. All other
+	// events use the standard hook.sh.
 	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeObservabilityHookEvents))
 	for _, event := range ClaudeObservabilityHookEvents {
+		script := "hook.sh"
+		if event == "SessionStart" || event == "ConfigChange" {
+			script = "mcp_inventory.sh"
+		}
 		hookEvents[event] = []claudeHookMatcher{
-			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/hook.sh"`, Async: claudeHookAsyncFlag(event)}}},
+			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + script + `"`, Async: claudeHookAsyncFlag(event)}}},
 		}
 	}
 	hooksJSON, err := marshalJSON(claudeHooksConfig{Hooks: hookEvents})
@@ -497,7 +605,9 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	}
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
+	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "claude")
+	files[path.Join(subdir, "hooks/mcp_inventory.sh")] = renderClaudeMCPInventoryScript(cfg)
 
 	return nil
 }
@@ -523,7 +633,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir stri
 	pluginJSON, err := marshalJSON(cursorPluginMeta{
 		Name:        name,
 		DisplayName: "Observability (Cursor)",
-		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
+		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		Version:     pluginManifestVersion(cfg),
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
@@ -546,6 +656,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir stri
 	}
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
+	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "cursor")
 
 	return nil
@@ -569,7 +680,7 @@ func generateCodexObservabilityPluginFlat(files map[string][]byte, cfg GenerateC
 	// marketplace root (containing .agents/plugins/marketplace.json), not a bare
 	// plugin root. path "." points back to the plugin at the ZIP root.
 	marketplaceJSON, err := marshalJSON(codexMarketplaceManifest{
-		Name:      conv.ToSlug(cfg.OrgName) + "-gram",
+		Name:      resolveMarketplaceName(cfg),
 		Interface: codexInterface{DisplayName: cfg.OrgName + " Plugins", ShortDescription: ""},
 		Plugins: []codexMarketplaceEntry{{
 			Name: CodexObservabilitySlug(cfg),
@@ -608,12 +719,12 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	pluginJSON, err := marshalJSON(codexPluginMeta{
 		Name:        name,
 		Version:     pluginManifestVersion(cfg),
-		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
+		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		MCPServers:  "",
 		Hooks:       "./hooks/hooks.json",
 		Interface: &codexInterface{
 			DisplayName:      "Observability (Codex)",
-			ShortDescription: "Gram observability hooks",
+			ShortDescription: "Speakeasy observability hooks",
 		},
 	})
 	if err != nil {
@@ -621,14 +732,13 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	}
 	files[path.Join(subdir, ".codex-plugin/plugin.json")] = pluginJSON
 
-	marketplace := conv.ToSlug(cfg.OrgName) + "-gram"
+	marketplace := resolveMarketplaceName(cfg)
 	plugin := CodexObservabilitySlug(cfg)
-	hookCmd := fmt.Sprintf(`bash "$HOME/.codex/.tmp/marketplaces/%s/%s/hooks/hook.sh"`, marketplace, plugin)
 	hookEvents := make(map[string][]codexMatcherGroup, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
 		hookEvents[event] = []codexMatcherGroup{{
 			Matcher: "",
-			Hooks:   []codexHookCommand{{Type: "command", Command: hookCmd}},
+			Hooks:   []codexHookCommand{{Type: "command", Command: codexHookCommandString(marketplace, plugin, codexHookScriptName(event))}},
 		}}
 	}
 	hooksJSON, err := marshalJSON(codexHooksConfig{Hooks: hookEvents})
@@ -637,7 +747,9 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	}
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
+	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "codex")
+	files[path.Join(subdir, "hooks/hook_async.sh")] = renderCodexAsyncHookScript()
 
 	return nil
 }
@@ -667,9 +779,130 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 	return files, nil
 }
 
+func renderDeviceAgentIdentityScript() []byte {
+	return []byte(`#!/usr/bin/env bash
+# Generated by Speakeasy. Do not edit - overwritten on every publish.
+
+gram_enrich_identity_payload() {
+  local payload="$1"
+  local email=""
+  local commands="${GRAM_DEVICE_AGENT_COMMANDS:-speakeasyd}"
+  local timeout_tenths="${GRAM_DEVICE_AGENT_TIMEOUT_TENTHS:-15}"
+  local old_ifs="$IFS"
+  local command output tmp pid elapsed prefix trimmed
+
+  IFS=,
+  for command in $commands; do
+    IFS="$old_ifs"
+    command="${command#"${command%%[![:space:]]*}"}"
+    command="${command%"${command##*[![:space:]]}"}"
+    if [ -z "$command" ] || ! command -v "$command" >/dev/null 2>&1; then
+      IFS=,
+      continue
+    fi
+
+    tmp="$(mktemp "${TMPDIR:-/tmp}/gram-device-agent-identity.XXXXXX")" || {
+      IFS=,
+      continue
+    }
+    ("$command" identity >"$tmp" 2>/dev/null) &
+    pid=$!
+    elapsed=0
+    while kill -0 "$pid" >/dev/null 2>&1 && [ "$elapsed" -lt "$timeout_tenths" ]; do
+      sleep 0.1
+      elapsed=$((elapsed + 1))
+    done
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      kill "$pid" >/dev/null 2>&1 || true
+      wait "$pid" >/dev/null 2>&1 || true
+      rm -f "$tmp"
+      IFS=,
+      continue
+    fi
+    wait "$pid" >/dev/null 2>&1 || true
+    output=$(cat "$tmp" 2>/dev/null || true)
+    rm -f "$tmp"
+
+    if [[ "$output" =~ ^[[:space:]]*([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})[[:space:]]*$ ]]; then
+      email="${BASH_REMATCH[1]}"
+    elif [[ "$output" =~ \"(email|user_email|userEmail|mail|preferred_username)\"[[:space:]]*:[[:space:]]*\"([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})\" ]]; then
+      email="${BASH_REMATCH[2]}"
+    fi
+    if [ -n "$email" ]; then
+      break
+    fi
+    IFS=,
+  done
+  IFS="$old_ifs"
+
+  if [ -z "$email" ]; then
+    printf '%s' "$payload"
+    return
+  fi
+
+  trimmed=$(printf '%s' "$payload" | sed 's/[[:space:]]*$//')
+  case "$trimmed" in
+    \{*\})
+      if [[ "$trimmed" =~ \"user_email\"[[:space:]]*: ]]; then
+        printf '%s' "$trimmed" | sed -E 's|"user_email"[[:space:]]*:[[:space:]]*"[^"]*"|"user_email":"'"$email"'"|g'
+        return
+      fi
+      prefix="${trimmed%\}}"
+      if [[ "$prefix" =~ ^\{[[:space:]]*$ ]]; then
+        printf '{"user_email":"%s"}' "$email"
+      else
+        printf '%s,"user_email":"%s"}' "$prefix" "$email"
+      fi
+      ;;
+    *)
+      printf '%s' "$payload"
+      ;;
+  esac
+}
+`)
+}
+
+func renderIdentitySourceSnippet() string {
+	return `script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$script_dir/identity.sh" ]; then
+  # shellcheck source=/dev/null
+  . "$script_dir/identity.sh"
+fi
+`
+}
+
+func renderCurlAuthConfigSnippet(cfg GenerateConfig, failureExit int) string {
+	var config strings.Builder
+	fmt.Fprintf(&config, "header = \"Gram-Key: %s\"\n", curlConfigQuote(cfg.HooksAPIKey))
+	if cfg.ProjectSlug != "" {
+		fmt.Fprintf(&config, "header = \"Gram-Project: %s\"\n", curlConfigQuote(cfg.ProjectSlug))
+	}
+
+	return fmt.Sprintf(`auth_config=""
+auth_config_arg=()
+cleanup_auth_config() {
+  if [ -n "$auth_config" ]; then
+    rm -f "$auth_config"
+  fi
+}
+trap cleanup_auth_config EXIT
+auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX") || exit %d
+chmod 600 "$auth_config" || true
+cat >"$auth_config" <<'GRAM_HOOKS_CURL_CONFIG'
+%sGRAM_HOOKS_CURL_CONFIG
+auth_config_arg=(--config "$auth_config")
+`, failureExit, config.String())
+}
+
+func curlConfigQuote(value string) string {
+	return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(value)
+}
+
 // renderHookScript produces the bash wrapper that forwards hook event JSON
-// from stdin to the appropriate Gram endpoint. Both platforms send
-// Gram-Key + Gram-Project headers:
+// from stdin to the appropriate Gram endpoint. Generated observability plugins
+// bake Gram-Key + Gram-Project into a protected curl config file; the
+// checked-in hooks/plugin-* scripts used for local development read equivalent
+// values from environment. Both paths send the same headers:
 //   - Cursor (design.go:129) requires them via Security(ByKey, ProjectSlug).
 //   - Claude (design.go:116) accepts them as optional headers; the handler
 //     uses them for plugin-driven org/project attribution when present and
@@ -684,10 +917,7 @@ func renderHookScript(cfg GenerateConfig, platform string) []byte {
 		keyPrefix = keyPrefix[:12]
 	}
 
-	authHeaders := fmt.Sprintf("  -H \"Gram-Key: %s\" \\\n", cfg.HooksAPIKey)
-	if cfg.ProjectSlug != "" {
-		authHeaders += fmt.Sprintf("  -H \"Gram-Project: %s\" \\\n", cfg.ProjectSlug)
-	}
+	authConfigSnippet := renderCurlAuthConfigSnippet(cfg, 2)
 
 	// %%{http_code} → %{http_code} in the emitted script (curl write-out format).
 	// %%s           → %s           in the emitted script (printf format).
@@ -699,10 +929,10 @@ func renderHookScript(cfg GenerateConfig, platform string) []byte {
 	// Both platforms treat exit 2 as a block; the reason goes to stderr.
 	if platform == "codex" {
 		return fmt.Appendf(nil, `#!/usr/bin/env bash
-# Generated by Gram. Do not edit — overwritten on every publish.
+# Generated by Speakeasy. Do not edit — overwritten on every publish.
 # Key prefix: %s (correlate with the dashboard's API Keys page).
 
-# Send a hook event to Gram. The server is the sole authority on whether to block:
+# Send a hook event to Speakeasy. The server is the sole authority on whether to block:
 #   HTTP 2xx -> allow (exit 0, no stdout — Codex allow = empty stdout).
 #   HTTP 4xx/5xx -> block (exit 2). Server message relayed to stderr.
 # The script never makes the allow/deny decision — only the server does.
@@ -710,10 +940,192 @@ func renderHookScript(cfg GenerateConfig, platform string) []byte {
 set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
+%s
+payload=$(cat)
 
-response=$(curl -s -w "\n%%{http_code}" -X POST \
-%s  -H "Content-Type: application/json" \
-  -d @- \
+%s
+if type gram_enrich_identity_payload >/dev/null 2>&1; then
+  payload=$(gram_enrich_identity_payload "$payload")
+fi
+
+if command -v python3 >/dev/null 2>&1; then
+	payload=$(printf '%%s' "$payload" | python3 -c '
+import base64
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import urllib.parse
+
+payload = sys.stdin.read()
+try:
+    data = json.loads(payload)
+except Exception:
+    print(payload, end="")
+    raise SystemExit
+
+if data.get("hook_event_name") == "SessionStart" and not data.get("user_email"):
+    email = ""
+    codex_home = os.environ.get("CODEX_HOME") or os.path.join(os.path.expanduser("~"), ".codex")
+    auth_path = os.path.join(codex_home, "auth.json")
+    try:
+        with open(auth_path, encoding="utf-8") as f:
+            token = (json.load(f).get("tokens") or {}).get("id_token") or ""
+        parts = token.split(".")
+        if len(parts) >= 2:
+            body = parts[1] + "=" * (-len(parts[1]) %% 4)
+            claims = json.loads(base64.urlsafe_b64decode(body.encode("ascii")))
+            email = str(claims.get("email") or "").strip()
+    except Exception:
+        email = ""
+
+    if email:
+        data["user_email"] = email
+
+# SessionStart only: collect the configured MCP server inventory so Gram can
+# apply shadow-MCP policy and visibility to servers it is not proxying. The
+# gate is a real JSON field check, so the blocking PreToolUse path never pays
+# for a codex invocation; SessionStart itself is routed through hook_async.sh
+# so the latency is invisible to Codex. The timeout caps wall time in case
+# the codex CLI misbehaves.
+#
+# Only the fields Gram consumes are shipped — the raw transport object also
+# carries env vars and HTTP headers, which often contain credentials and
+# must never leave the machine. Stdio launch args are kept for server
+# identity (e.g. npx package names) but credential-shaped values are
+# redacted: values following a secret-named flag (including the short -H
+# header alias), inline flag=value pairs, header-shaped values whose name
+# suggests credentials, and well-known token prefixes.
+secret_flag = re.compile(r"(key|token|secret|password|passwd|auth|credential|header)", re.I)
+secret_value = re.compile(r"^(sk-|pk-|ghp_|gho_|github_pat_|xox[a-z]-|ya29\.|AKIA|eyJ)")
+secret_header = re.compile(r"^(authorization|proxy-authorization|cookie|[a-z0-9_-]*(key|token|secret|auth)[a-z0-9_-]*)\s*:", re.I)
+
+def redact_args(args):
+    if not isinstance(args, list):
+        return None
+    out = []
+    redact_next = False
+    for a in args:
+        if not isinstance(a, str):
+            continue
+        if redact_next:
+            out.append("[REDACTED]")
+            redact_next = False
+        elif "=" in a and secret_flag.search(a.split("=", 1)[0]):
+            out.append(a.split("=", 1)[0] + "=[REDACTED]")
+        elif a == "-H":
+            out.append(a)
+            redact_next = True
+        elif a.startswith("-H") and secret_header.match(a[2:]):
+            out.append("-H" + a[2:].split(":", 1)[0] + ": [REDACTED]")
+        elif a.startswith("-") and secret_flag.search(a):
+            out.append(a)
+            redact_next = True
+        elif secret_header.match(a):
+            out.append(a.split(":", 1)[0] + ": [REDACTED]")
+        elif secret_value.match(a):
+            out.append("[REDACTED]")
+        else:
+            out.append(a)
+    return out
+
+# URLs are their own credential channel: strip userinfo and the fragment
+# (OAuth-style #access_token=... never identifies a server) and redact
+# secret-named query parameters while preserving scheme/host/path, which
+# the server needs for provenance checks.
+def redact_url(url):
+    if not isinstance(url, str) or not url:
+        return url
+    try:
+        parts = urllib.parse.urlsplit(url)
+        netloc = parts.netloc.rsplit("@", 1)[-1]
+        pairs = []
+        for k, v in urllib.parse.parse_qsl(parts.query, keep_blank_values=True):
+            if secret_flag.search(k):
+                v = "[REDACTED]"
+            pairs.append((k, v))
+        query = urllib.parse.urlencode(pairs)
+        return urllib.parse.urlunsplit((parts.scheme, netloc, parts.path, query, ""))
+    except Exception:
+        return url
+
+# PATH lookup alone misses real installs: hooks fired by the Codex desktop
+# app inherit the minimal GUI environment, and desktop-only users never have
+# codex on PATH at all — the app references its bundled binary by absolute
+# path. Probe the managed-install and app-bundle locations directly; paths
+# absent on this platform simply fail the probe. NB: this comment is inside
+# a bash single-quoted heredoc — apostrophes here break the script.
+def find_codex():
+    found = shutil.which("codex")
+    if found:
+        return found
+    home = os.path.expanduser("~")
+    codex_home = os.environ.get("CODEX_HOME") or os.path.join(home, ".codex")
+    candidates = [
+        os.path.join(codex_home, "packages", "standalone", "current", "bin", "codex"),
+        os.path.join(home, ".local", "bin", "codex"),
+        "/usr/local/bin/codex",
+        "/Applications/Codex.app/Contents/Resources/codex",
+    ]
+    for candidate in candidates:
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+codex_bin = find_codex() if data.get("hook_event_name") == "SessionStart" else None
+if codex_bin:
+    try:
+        out = subprocess.run(
+            [codex_bin, "mcp", "list", "--json"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=15,
+        ).stdout
+        inventory = json.loads(out)
+    except Exception:
+        inventory = None
+    if isinstance(inventory, list):
+        slim = []
+        for item in inventory:
+            if not isinstance(item, dict):
+                continue
+            transport = item.get("transport")
+            if not isinstance(transport, dict):
+                transport = {}
+            slim.append({
+                "name": item.get("name"),
+                "enabled": item.get("enabled"),
+                "auth_status": item.get("auth_status"),
+                "transport": {
+                    "type": transport.get("type"),
+                    "url": redact_url(transport.get("url")),
+                    "command": transport.get("command"),
+                    "args": redact_args(transport.get("args")),
+                },
+            })
+        additional = data.get("additional_data")
+        if not isinstance(additional, dict):
+            additional = {}
+        additional["mcp_inventory_codex"] = slim
+        data["additional_data"] = additional
+
+print(json.dumps(data, separators=(",", ":")), end="")
+' 2>/dev/null) || true
+fi
+
+hook_hostname=$(hostname 2>/dev/null || true)
+hook_hostname_header=()
+if [ -n "$hook_hostname" ]; then
+  hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
+fi
+
+response=$(printf '%%s' "$payload" | curl -s -w "\n%%{http_code}" -X POST \
+  -H "Content-Type: application/json" \
+  ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
+  --data-binary @- \
   --max-time 10 \
   "${server_url}/rpc/hooks.codex")
 
@@ -721,7 +1133,7 @@ http_code=$(echo "$response" | tail -1)
 body=$(echo "$response" | sed '$d')
 
 # curl returns 000 on connection failure — treat as block so an unreachable
-# Gram server cannot silently bypass blocking policies.
+# Speakeasy server cannot silently bypass blocking policies.
 if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
   exit 0
 fi
@@ -737,16 +1149,16 @@ except Exception:
 " 2>/dev/null) || true
 fi
 
-echo "${reason:-Gram hook returned HTTP ${http_code}}" >&2
+echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
 exit 2
-`, keyPrefix, cfg.ServerURL, authHeaders)
+`, keyPrefix, cfg.ServerURL, authConfigSnippet, renderIdentitySourceSnippet())
 	}
 
 	return fmt.Appendf(nil, `#!/usr/bin/env bash
-# Generated by Gram. Do not edit — overwritten on every publish.
+# Generated by Speakeasy. Do not edit — overwritten on every publish.
 # Key prefix: %s (correlate with the dashboard's API Keys page).
 
-# Send a hook event to Gram. The server is the sole authority on whether to block:
+# Send a hook event to Speakeasy. The server is the sole authority on whether to block:
 #   HTTP 2xx -> allow (exit 0). Body forwarded to stdout; for PreToolUse,
 #               Claude reads hookSpecificOutput.permissionDecision from it.
 #   HTTP 4xx/5xx -> block (exit 2). Server message relayed to stderr.
@@ -756,9 +1168,24 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 
-response=$(curl -s -w "\n%%{http_code}" -X POST \
-%s  -H "Content-Type: application/json" \
-  -d @- \
+%s
+%s
+payload=$(cat)
+if type gram_enrich_identity_payload >/dev/null 2>&1; then
+  payload=$(gram_enrich_identity_payload "$payload")
+fi
+
+hook_hostname=$(hostname 2>/dev/null || true)
+hook_hostname_header=()
+if [ -n "$hook_hostname" ]; then
+  hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
+fi
+
+response=$(printf '%%s' "$payload" | curl -s -w "\n%%{http_code}" -X POST \
+  -H "Content-Type: application/json" \
+  ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
+  --data-binary @- \
   --max-time 10 \
   "${server_url}/rpc/hooks.%s")
 
@@ -768,7 +1195,7 @@ body=$(echo "$response" | sed '$d')
 echo "$body"
 
 # curl returns 000 on connection failure — treat as block so an unreachable
-# Gram server cannot silently bypass blocking policies.
+# Speakeasy server cannot silently bypass blocking policies.
 if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
   exit 0
 fi
@@ -784,9 +1211,200 @@ except Exception:
 " 2>/dev/null) || true
 fi
 
-echo "${reason:-Gram hook returned HTTP ${http_code}}" >&2
+echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
 exit 2
-`, keyPrefix, cfg.ServerURL, authHeaders, platform)
+`, keyPrefix, cfg.ServerURL, authConfigSnippet, renderIdentitySourceSnippet(), platform)
+}
+
+func renderCodexAsyncHookScript() []byte {
+	return []byte(`#!/usr/bin/env bash
+# Generated by Gram. Do not edit - overwritten on every publish.
+#
+# Codex does not support hooks.json async=true yet. This wrapper keeps
+# telemetry-only events off the critical path by copying stdin before the
+# parent hook exits, then forwarding the payload in a background process.
+
+set -u
+
+tmp="$(mktemp "${TMPDIR:-/tmp}/gram-codex-hook.XXXXXX")" || exit 0
+if ! cat > "$tmp"; then
+  rm -f "$tmp"
+  exit 0
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+(
+  bash "$script_dir/hook.sh" < "$tmp" >/dev/null 2>&1
+  rm -f "$tmp"
+) >/dev/null 2>&1 &
+
+exit 0
+`)
+}
+
+// renderClaudeMCPInventoryScript produces the Claude hook script registered
+// against SessionStart and ConfigChange. It enriches the payload with an MCP
+// server inventory before forwarding to Gram, picking the source by what the
+// sandbox can see:
+//
+//   - cowork: when cmux's per-run config file (local_<rid>.json) is reachable
+//     via CLAUDE_PROJECT_DIR/.., we ship its remoteMcpServersConfig array
+//     verbatim as `additional_data.mcp_inventory_cowork`. This is the only
+//     host-side spot where the connector UUID is paired with the MCP URL.
+//   - Claude Code (default): shell out to `claude mcp list` and ship its raw
+//     output as `additional_data.mcp_inventory_claude_code`.
+//
+// The script is fire-and-forget: neither SessionStart nor ConfigChange has
+// an allow/deny decision to honor, so we always exit 0 and discard the
+// response body to keep latency invisible to Claude. Both events run async
+// so Claude is never held up while the inventory is gathered.
+//
+// Auth headers match renderHookScript so server-side attribution works:
+// Gram-Key always, Gram-Project when ProjectSlug is set.
+func renderClaudeMCPInventoryScript(cfg GenerateConfig) []byte {
+	keyPrefix := cfg.HooksAPIKey
+	if len(keyPrefix) > 12 {
+		keyPrefix = keyPrefix[:12]
+	}
+
+	authConfigSnippet := renderCurlAuthConfigSnippet(cfg, 0)
+
+	return fmt.Appendf(nil, `#!/usr/bin/env bash
+# Generated by Speakeasy. Do not edit — overwritten on every publish.
+# Key prefix: %s (correlate with the dashboard's API Keys page).
+#
+# MCP inventory hook: enriches the payload with the active MCP server list
+# and forwards it to Gram. Registered against both SessionStart and
+# ConfigChange so the server re-syncs its cached inventory whenever Claude
+# (re)loads the session or a settings file changes mid-session. Neither
+# event has an allow/deny decision to honor, so we always exit 0 and
+# fire-and-forget.
+#
+# Two execution environments are supported:
+#   - cowork: detected by the presence of cmux's per-run local_<rid>.json
+#     config file. We extract its remoteMcpServersConfig (connector UUID +
+#     URL pairs) and ship them as mcp_inventory_cowork.
+#   - Claude Code (default): shell out to `+"`claude mcp list`"+` and forward
+#     the human-readable output as mcp_inventory_claude_code.
+
+set -u
+
+server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
+
+%s
+hook_hostname=$(hostname 2>/dev/null || true)
+hook_hostname_header=()
+if [ -n "$hook_hostname" ]; then
+  hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
+fi
+
+payload=$(cat)
+%s
+if type gram_enrich_identity_payload >/dev/null 2>&1; then
+  payload=$(gram_enrich_identity_payload "$payload")
+fi
+
+mcp_inventory_claude_code=""
+mcp_inventory_cowork="null"
+
+# Locate cmux's per-run config file. CLAUDE_PROJECT_DIR is
+# .../local_<rid>/outputs; the config sits one directory up as
+# .../local_<rid>.json and lists the remote MCP connectors with their
+# connector UUIDs. That's the only spot on the host filesystem where the
+# UUID <-> URL pairing exists, so when we find it we ship it verbatim.
+local_run_json=""
+
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+  candidate_local_dir=$(dirname "$CLAUDE_PROJECT_DIR")
+  candidate_local_json="${candidate_local_dir}.json"
+  if [ -f "$candidate_local_json" ]; then
+    local_run_json="$candidate_local_json"
+  else
+    # SessionStart often fires before cmux writes the per-run config
+    # file. Fall back to the most-recent sibling local_*.json — the
+    # remoteMcpServersConfig block is account/org-scoped and identical
+    # across runs in the same subid directory, so any sibling is good
+    # enough for the UUID <-> URL mapping we care about.
+    parent_dir=$(dirname "$candidate_local_dir")
+    if [ -d "$parent_dir" ]; then
+      sibling=$(ls -t "$parent_dir"/local_*.json 2>/dev/null | head -1)
+      if [ -n "$sibling" ] && [ -f "$sibling" ]; then
+        local_run_json="$sibling"
+      fi
+    fi
+  fi
+fi
+
+if [ -n "$local_run_json" ] && command -v jq >/dev/null 2>&1; then
+  # Extract the connector UUID + URL pairs we actually care about.
+  # `+"`tools`"+` is dropped — it can be huge and we don't need it here.
+  # cmux's field naming has drifted across versions (snake_case vs
+  # camelCase, `+"`uuid`"+` vs `+"`id`"+` for the connector identifier) so we try
+  # multiple candidates per slot and keep the first non-null. This is
+  # the field that becomes the `+"`mcp__<server>__tool`"+` prefix server-side,
+  # so getting it wrong silently shows users a UUID instead of "Slack".
+  inv=$(jq -c '
+    [
+      (.remoteMcpServersConfig // [])[]
+      | {
+          connector_uuid: (.uuid // .connectorUuid // .connector_uuid // .id // .connectorId // .connector_id // null),
+          name:           (.name // .displayName // .display_name // null),
+          url:            (.url // .serverUrl // .server_url // null),
+          source:         "claude.ai"
+        }
+    ]
+  ' "$local_run_json" 2>/dev/null)
+  [ -n "$inv" ] && mcp_inventory_cowork="$inv"
+elif command -v claude >/dev/null 2>&1; then
+  # Claude Code: `+"`claude mcp list`"+` health-checks every server, which can
+  # take seconds for stdio servers. Hard-cap wall time so a misbehaving
+  # server can't keep this hook alive forever; since the hook is async
+  # the latency is invisible to Claude anyway. macOS doesn't ship GNU
+  # `+"`timeout`"+` — prefer it, fall back to coreutils' `+"`gtimeout`"+`, then to
+  # no timeout at all rather than failing.
+  if command -v timeout >/dev/null 2>&1; then
+    mcp_inventory_claude_code=$(timeout 15 claude mcp list 2>&1 || true)
+  elif command -v gtimeout >/dev/null 2>&1; then
+    mcp_inventory_claude_code=$(gtimeout 15 claude mcp list 2>&1 || true)
+  else
+    mcp_inventory_claude_code=$(claude mcp list 2>&1 || true)
+  fi
+fi
+
+enriched=$(MCP_CC="$mcp_inventory_claude_code" \
+           MCP_CW="$mcp_inventory_cowork" \
+           PAYLOAD="$payload" \
+           python3 -c '
+import json, os, sys
+try:
+    p = json.loads(os.environ["PAYLOAD"])
+except Exception:
+    sys.exit(1)
+ad = p.get("additional_data") or {}
+cc = os.environ.get("MCP_CC", "")
+if cc:
+    ad["mcp_inventory_claude_code"] = cc
+try:
+    cw = json.loads(os.environ.get("MCP_CW", "null"))
+except Exception:
+    cw = None
+if cw is not None:
+    ad["mcp_inventory_cowork"] = cw
+p["additional_data"] = ad
+print(json.dumps(p))
+') || enriched="$payload"
+
+curl -s -o /dev/null -X POST \
+  -H "Content-Type: application/json" \
+  ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
+  -d "$enriched" \
+  --max-time 30 \
+  "${server_url}/rpc/hooks.claude" >/dev/null 2>&1 || true
+
+exit 0
+`, keyPrefix, cfg.ServerURL, authConfigSnippet, renderIdentitySourceSnippet())
 }
 
 // codexHookApproval is a single [hooks.state] entry that pre-approves a Codex
@@ -828,8 +1446,9 @@ func codexEventSnakeCase(event string) string {
 //
 // The command uses the literal string "$HOME" (not expanded), so the hash is
 // deterministic for a given marketplace + plugin name pair.
-func computeCodexHookHash(eventSnake, marketplace, plugin string) (string, error) {
-	command := fmt.Sprintf(`bash "$HOME/.codex/.tmp/marketplaces/%s/%s/hooks/hook.sh"`, marketplace, plugin)
+func computeCodexHookHash(event, marketplace, plugin string) (string, error) {
+	eventSnake := codexEventSnakeCase(event)
+	command := codexHookCommandString(marketplace, plugin, codexHookScriptName(event))
 	hook := map[string]any{
 		"async":   false,
 		"command": command,
@@ -864,7 +1483,7 @@ func computeCodexHookApprovals(marketplace, plugin string) ([]codexHookApproval,
 	approvals := make([]codexHookApproval, 0, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
 		snake := codexEventSnakeCase(event)
-		hash, err := computeCodexHookHash(snake, marketplace, plugin)
+		hash, err := computeCodexHookHash(event, marketplace, plugin)
 		if err != nil {
 			return nil, fmt.Errorf("compute hash for %s: %w", event, err)
 		}
@@ -876,6 +1495,19 @@ func computeCodexHookApprovals(marketplace, plugin string) ([]codexHookApproval,
 	return approvals, nil
 }
 
+func codexHookScriptName(event string) string {
+	switch event {
+	case "SessionStart", "PostToolUse", "Stop":
+		return "hook_async.sh"
+	default:
+		return "hook.sh"
+	}
+}
+
+func codexHookCommandString(marketplace, plugin, script string) string {
+	return fmt.Sprintf(`bash "$HOME/.codex/.tmp/marketplaces/%s/%s/hooks/%s"`, marketplace, plugin, script)
+}
+
 // GenerateCodexInstallScript produces a bash install script that:
 //   - Registers the Gram marketplace with the Codex CLI
 //   - Patches ~/.codex/config.toml with feature flags and plugin entry
@@ -885,7 +1517,7 @@ func computeCodexHookApprovals(marketplace, plugin string) ([]codexHookApproval,
 // the marketplace source (suitable for the ZIP-bundled install.sh). When
 // marketplaceURL is non-empty the script registers the remote URL instead.
 func GenerateCodexInstallScript(marketplaceURL string, cfg GenerateConfig) ([]byte, error) {
-	marketplace := conv.ToSlug(cfg.OrgName) + "-gram"
+	marketplace := resolveMarketplaceName(cfg)
 	plugin := CodexObservabilitySlug(cfg)
 
 	approvals, err := computeCodexHookApprovals(marketplace, plugin)
@@ -900,23 +1532,49 @@ func renderCodexInstallScript(marketplaceURL, marketplace, plugin string, approv
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "#!/usr/bin/env bash\n")
-	fmt.Fprintf(&b, "# Gram Codex Observability Plugin — Install Script\n")
+	fmt.Fprintf(&b, "# Speakeasy Codex Observability Plugin — Install Script\n")
 	fmt.Fprintf(&b, "# Marketplace: %s\n\n", marketplace)
 	b.WriteString("set -euo pipefail\n\n")
 	fmt.Fprintf(&b, "MARKETPLACE_KEY=%q\n", marketplace)
 	fmt.Fprintf(&b, "PLUGIN_KEY=%q\n\n", plugin)
 
+	// Desktop-only and MDM-deployed machines run without codex on PATH; probe
+	// the managed-install and app-bundle locations. Candidate list mirrors
+	// find_codex in the generated hook script.
+	b.WriteString(`find_codex() {
+  if command -v codex >/dev/null 2>&1; then
+    command -v codex
+    return 0
+  fi
+  local codex_home="${CODEX_HOME:-$HOME/.codex}"
+  local candidate
+  for candidate in \
+    "${codex_home}/packages/standalone/current/bin/codex" \
+    "${HOME}/.local/bin/codex" \
+    /usr/local/bin/codex \
+    "/Applications/Codex.app/Contents/Resources/codex"; do
+    if [ -f "${candidate}" ] && [ -x "${candidate}" ]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+CODEX_BIN="$(find_codex || true)"
+
+`)
+
 	// Step 1: marketplace registration differs for remote vs local ZIP installs.
 	if marketplaceURL != "" {
 		fmt.Fprintf(&b, "MARKETPLACE_URL=%q\n\n", marketplaceURL)
 		b.WriteString(`# ── 1. Register & sync marketplace ──────────────────────────────────────────
-echo "→ Registering Gram marketplace..."
-if command -v codex >/dev/null 2>&1; then
+echo "→ Registering Speakeasy marketplace..."
+if [ -n "${CODEX_BIN}" ]; then
   # add is idempotent (no-ops if already registered); upgrade pulls any new commits.
-  codex plugin marketplace add "${MARKETPLACE_URL}" || true
-  codex plugin marketplace upgrade "${MARKETPLACE_KEY}"
+  "${CODEX_BIN}" plugin marketplace add "${MARKETPLACE_URL}" || true
+  "${CODEX_BIN}" plugin marketplace upgrade "${MARKETPLACE_KEY}"
 else
-  echo "  ⚠  'codex' not found in PATH."
+  echo "  ⚠  'codex' executable not found."
   echo "     Run manually: codex plugin marketplace add '${MARKETPLACE_URL}'"
 fi
 
@@ -924,11 +1582,11 @@ fi
 	} else {
 		b.WriteString(`# ── 1. Register marketplace (local ZIP install) ──────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-echo "→ Registering Gram marketplace from ${SCRIPT_DIR}..."
-if command -v codex >/dev/null 2>&1; then
-  codex plugin marketplace add "${SCRIPT_DIR}"
+echo "→ Registering Speakeasy marketplace from ${SCRIPT_DIR}..."
+if [ -n "${CODEX_BIN}" ]; then
+  "${CODEX_BIN}" plugin marketplace add "${SCRIPT_DIR}"
 else
-  echo "  ⚠  'codex' not found in PATH."
+  echo "  ⚠  'codex' executable not found."
   echo "     Run manually: codex plugin marketplace add '${SCRIPT_DIR}'"
 fi
 
@@ -947,16 +1605,14 @@ config_path = os.path.expanduser("~/.codex/config.toml")
 os.makedirs(os.path.dirname(config_path), exist_ok=True)
 content = open(config_path).read() if os.path.exists(config_path) else ""
 
-def ensure_dotted_key(text, key, value):
-    if re.search(r'(?m)^' + re.escape(key) + r'\s*=', text):
-        return text
-    # Insert before the first table header so the key stays at root scope.
-    # Appending after a [table] section would silently nest it inside that table.
+# A root-level dotted key implicitly defines its parent table and conflicts
+# with an explicit [table] header elsewhere in the file. Only the region
+# before the first table header is touched.
+def strip_root_dotted_key(text, key):
     m = re.search(r'(?m)^\[', text)
-    if m:
-        before = text[:m.start()].rstrip('\n')
-        return before + '\n' + key + ' = ' + value + '\n\n' + text[m.start():]
-    return text.rstrip('\n') + '\n' + key + ' = ' + value + '\n'
+    root, rest = (text[:m.start()], text[m.start():]) if m else (text, "")
+    root = re.sub(r'(?m)^' + re.escape(key) + r'\s*=.*\n?', '', root)
+    return root + rest
 
 def ensure_table_entry(text, table_header, key, value):
     if re.search(r'(?m)^' + re.escape(table_header) + r'\s*\n(?:[^\[]*\n)*' + re.escape(key) + r'\s*=', text):
@@ -972,8 +1628,10 @@ def ensure_table_entry(text, table_header, key, value):
 	fmt.Fprintf(&b, "PLUGIN_KEY = %q\n", plugin)
 	fmt.Fprintf(&b, "MARKETPLACE_KEY = %q\n\n", marketplace)
 
-	b.WriteString(`content = ensure_dotted_key(content, "features.hooks", "true")
-content = ensure_dotted_key(content, "features.plugin_hooks", "true")
+	b.WriteString(`content = strip_root_dotted_key(content, "features.hooks")
+content = strip_root_dotted_key(content, "features.plugin_hooks")
+content = ensure_table_entry(content, "[features]", "hooks", "true")
+content = ensure_table_entry(content, "[features]", "plugin_hooks", "true")
 
 if not re.search(r'(?m)^\[hooks\.state\]', content):
     content = content.rstrip('\n') + '\n\n[hooks.state]\n'
@@ -990,6 +1648,16 @@ for state_key, trusted_hash in [
     if section not in content:
         entry = f'\n{section}\nenabled = true\ntrusted_hash = "{trusted_hash}"\n'
         content = content.rstrip('\n') + '\n' + entry
+    else:
+        # The hook command (and therefore its trusted_hash) changes between
+        # plugin versions. Refresh the hash on this Gram-managed entry so an
+        # upgraded install does not get flagged as modified/untrusted.
+        content = re.sub(
+            re.escape(section) + r'([^\[]*?trusted_hash\s*=\s*")[^"]*(")',
+            lambda m: section + m.group(1) + trusted_hash + m.group(2),
+            content,
+            count=1,
+        )
 
 content = ensure_table_entry(content, f'[plugins."{PLUGIN_KEY}@{MARKETPLACE_KEY}"]', "enabled", "true")
 
@@ -999,7 +1667,7 @@ print("  ✓ Config updated.")
 PYTHON
 
 echo ""
-echo "✓ Gram observability plugin installed. Restart Codex to activate."
+echo "✓ Speakeasy observability plugin installed. Restart Codex to activate."
 `)
 
 	return []byte(b.String())
@@ -1012,10 +1680,10 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	// Determine if any private server needs a Gram API key prompt.
 	needsGramKeyPrompt := false
 	for _, s := range p.Servers {
-		if !s.IsPublic && cfg.APIKey == "" {
+		if !s.IsPublic && !s.IsOAuth && cfg.APIKey == "" {
 			needsGramKeyPrompt = true
 		}
-		// Public servers may need user-provided env vars.
+		// Public non-OAuth servers may need user-provided env vars.
 		for _, ec := range s.EnvConfigs {
 			userConfig[ec.VariableName] = userConfigEntry{
 				Description: ec.DisplayName,
@@ -1026,7 +1694,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 
 	if needsGramKeyPrompt {
 		userConfig["GRAM_API_KEY"] = userConfigEntry{
-			Description: "Your Gram API key for authenticating MCP server connections",
+			Description: "Your Speakeasy API key for authenticating MCP server connections",
 			Sensitive:   true,
 		}
 	}
@@ -1051,19 +1719,19 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 
 	mcpServers := make(map[string]claudeMCPServer)
 	for _, s := range p.Servers {
-		headers := make(map[string]string)
+		var headers map[string]string
 
-		if s.IsPublic {
-			// Public servers use env config variables for auth.
+		if s.IsOAuth {
+			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
+		} else if s.IsPublic {
+			headers = make(map[string]string)
 			for _, ec := range s.EnvConfigs {
 				headers[ec.DisplayName] = "${user_config." + ec.VariableName + "}"
 			}
 		} else if cfg.APIKey != "" {
-			// Private server with injected key.
-			headers["Authorization"] = "Bearer " + cfg.APIKey
+			headers = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
 		} else {
-			// Private server without key — prompt user.
-			headers["Authorization"] = "Bearer ${user_config.GRAM_API_KEY}"
+			headers = map[string]string{"Authorization": "Bearer ${user_config.GRAM_API_KEY}"}
 		}
 
 		mcpServers[s.DisplayName] = claudeMCPServer{
@@ -1102,16 +1770,19 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 
 	mcpServers := make(map[string]cursorMCPServer)
 	for _, s := range p.Servers {
-		headers := make(map[string]string)
+		var headers map[string]string
 
-		if s.IsPublic {
+		if s.IsOAuth {
+			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
+		} else if s.IsPublic {
+			headers = make(map[string]string)
 			for _, ec := range s.EnvConfigs {
 				headers[ec.DisplayName] = "${env:" + ec.VariableName + "}"
 			}
 		} else if cfg.APIKey != "" {
-			headers["Authorization"] = "Bearer " + cfg.APIKey
+			headers = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
 		} else {
-			headers["Authorization"] = "Bearer ${env:GRAM_API_KEY}"
+			headers = map[string]string{"Authorization": "Bearer ${env:GRAM_API_KEY}"}
 		}
 
 		mcpServers[s.DisplayName] = cursorMCPServer{

@@ -1,7 +1,7 @@
-export type Mode = "local-speakeasy" | "oauth2-1" | "oauth2" | "workos";
+export type Mode = "mock-workos" | "oauth2-1" | "oauth2" | "workos";
 
 export const MODES: readonly Mode[] = [
-  "local-speakeasy",
+  "mock-workos",
   "oauth2-1",
   "oauth2",
   "workos",

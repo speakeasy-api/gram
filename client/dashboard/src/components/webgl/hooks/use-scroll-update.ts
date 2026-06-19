@@ -5,7 +5,7 @@ import { useWebGLStore } from "../store";
 
 export const useScrollUpdate = (
   containerRef: RefObject<HTMLDivElement | null>,
-) => {
+): void => {
   const scrollOffset = useWebGLStore((state) => state.scrollOffset);
 
   const updateContainerPosition = useCallback(() => {

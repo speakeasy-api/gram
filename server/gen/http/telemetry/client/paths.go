@@ -42,6 +42,11 @@ func GetUserMetricsSummaryTelemetryPath() string {
 	return "/rpc/telemetry.getUserMetricsSummary"
 }
 
+// GetEmployeeDataFlowGraphTelemetryPath returns the URL path to the telemetry service getEmployeeDataFlowGraph HTTP endpoint.
+func GetEmployeeDataFlowGraphTelemetryPath() string {
+	return "/rpc/telemetry.getEmployeeDataFlowGraph"
+}
+
 // GetObservabilityOverviewTelemetryPath returns the URL path to the telemetry service getObservabilityOverview HTTP endpoint.
 func GetObservabilityOverviewTelemetryPath() string {
 	return "/rpc/telemetry.getObservabilityOverview"
@@ -50,6 +55,16 @@ func GetObservabilityOverviewTelemetryPath() string {
 // GetProjectOverviewTelemetryPath returns the URL path to the telemetry service getProjectOverview HTTP endpoint.
 func GetProjectOverviewTelemetryPath() string {
 	return "/rpc/telemetry.getProjectOverview"
+}
+
+// QueryTelemetryPath returns the URL path to the telemetry service query HTTP endpoint.
+func QueryTelemetryPath() string {
+	return "/rpc/telemetry.query"
+}
+
+// ListSessionsTelemetryPath returns the URL path to the telemetry service listSessions HTTP endpoint.
+func ListSessionsTelemetryPath() string {
+	return "/rpc/telemetry.listSessions"
 }
 
 // ListFilterOptionsTelemetryPath returns the URL path to the telemetry service listFilterOptions HTTP endpoint.
@@ -65,6 +80,21 @@ func ListAttributeKeysTelemetryPath() string {
 // GetHooksSummaryTelemetryPath returns the URL path to the telemetry service getHooksSummary HTTP endpoint.
 func GetHooksSummaryTelemetryPath() string {
 	return "/rpc/telemetry.getHooksSummary"
+}
+
+// GetToolUsageSummaryTelemetryPath returns the URL path to the telemetry service getToolUsageSummary HTTP endpoint.
+func GetToolUsageSummaryTelemetryPath() string {
+	return "/rpc/telemetry.getToolUsageSummary"
+}
+
+// ListToolUsageTracesTelemetryPath returns the URL path to the telemetry service listToolUsageTraces HTTP endpoint.
+func ListToolUsageTracesTelemetryPath() string {
+	return "/rpc/telemetry.listToolUsageTraces"
+}
+
+// GetToolUsageFilterOptionsTelemetryPath returns the URL path to the telemetry service getToolUsageFilterOptions HTTP endpoint.
+func GetToolUsageFilterOptionsTelemetryPath() string {
+	return "/rpc/telemetry.getToolUsageFilterOptions"
 }
 
 // ListHooksTracesTelemetryPath returns the URL path to the telemetry service listHooksTraces HTTP endpoint.

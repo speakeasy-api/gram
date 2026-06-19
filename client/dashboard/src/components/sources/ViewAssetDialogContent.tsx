@@ -93,7 +93,9 @@ function useFetchAssetContent(
   });
 }
 
-export function ViewAssetDialogContent({ asset }: ViewAssetDialogContentProps) {
+export function ViewAssetDialogContent({
+  asset,
+}: ViewAssetDialogContentProps): JSX.Element {
   const project = useProject();
   const { projectSlug } = useSlugs();
 
@@ -131,7 +133,9 @@ export function ViewAssetDialogContent({ asset }: ViewAssetDialogContentProps) {
               variant="secondary"
               size="sm"
               className="mt-4"
-              onClick={() => refetch()}
+              onClick={() => {
+                void refetch();
+              }}
             >
               Retry
             </Button>

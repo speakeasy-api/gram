@@ -43,19 +43,19 @@ func DescribePromptTemplate(
 			Name:      *pname,
 		})
 	} else {
-		return nil, oops.E(oops.CodeBadRequest, err, "id or name is required to lookup template").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "id or name is required to lookup template").LogError(ctx, logger)
 	}
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, nil, "template not found")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").LogError(ctx, logger)
 	}
 
 	pt := fromPromptTemplateRow(row)
-	err = ApplyVariations(ctx, logger, tx, pid, []*types.Tool{{PromptTemplate: pt}})
+	err = ApplyVariations(ctx, logger, tx, pid, nil, []*types.Tool{{PromptTemplate: pt}})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to prompt template").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to prompt template").LogError(ctx, logger)
 	}
 
 	return pt, nil
@@ -73,21 +73,21 @@ func DescribePromptTemplates(
 		"describe prompt template inputs",
 		"project id is set", pid != uuid.Nil,
 	); err != nil {
-		return nil, oops.E(oops.CodeInvariantViolation, err, "not enough information to get prompt template").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvariantViolation, err, "not enough information to get prompt template").LogError(ctx, logger)
 	}
 
 	r := repo.New(tx)
 	rows, err := r.ListTemplates(ctx, pid)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").LogError(ctx, logger)
 	}
 
 	templates := make([]*types.PromptTemplate, 0, len(rows))
 	for _, row := range rows {
 		pt := fromPromptTemplateRow(row)
-		err = ApplyVariations(ctx, logger, tx, pid, []*types.Tool{{PromptTemplate: pt}})
+		err = ApplyVariations(ctx, logger, tx, pid, nil, []*types.Tool{{PromptTemplate: pt}})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to prompt template").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to prompt template").LogError(ctx, logger)
 		}
 		templates = append(templates, pt)
 	}

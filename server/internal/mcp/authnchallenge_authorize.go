@@ -9,10 +9,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"slices"
 	"time"
 
@@ -21,8 +19,9 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -38,34 +37,28 @@ import (
 //   - branch on the toolset's privacy:
 //   - private (`!McpIsPublic`): 302 to the Speakeasy IDP login page; on
 //     return HandleIDPCallback stamps `user:<id>` onto the state
-//   - public (`McpIsPublic`): 302 directly to /connect; HandleConsent's
-//     POST stamps `anonymous:<prospective_mcp_session_id>`
+//   - public (`McpIsPublic`): stamp an anonymous subject, then 302 directly
+//     to /connect
 func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
-
-	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
-	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
-	}
-
-	if !toolset.UserSessionIssuerID.Valid {
-		return oops.E(oops.CodeNotFound, nil, "not found")
-	}
-	if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	if err != nil {
 		return err
 	}
+	return s.ServeAuthorize(w, r, endpoint)
+}
 
-	logger := s.logger.With(
-		attr.SlogToolsetID(toolset.ID.String()),
-		attr.SlogProjectID(toolset.ProjectID.String()),
-	)
+// ServeAuthorize is the post-resolution entry point for the OAuth 2.1
+// authorize endpoint, shared by /mcp's HandleAuthorize (toolset-keyed)
+// and /x/mcp's mcp_endpoint-keyed route registration.
+func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	ctx := r.Context()
+	logger := endpoint.LogWith(s.logger)
 
 	req := usersessions.AuthorizationRequestFromQuery(r.URL.Query())
 	req.SetDefaults()
@@ -79,14 +72,14 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	client, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		ClientID:            req.ClientID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return writeAuthorizeError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
 		}
-		return oops.E(oops.CodeUnexpected, err, "lookup user session client").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
 	if !slices.Contains(client.RedirectUris, req.RedirectURI) {
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "redirect_uri is not registered for this client")
@@ -103,50 +96,84 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	challengeID := uuid.NewString()
+	// flowID is the stable correlation key for this whole OAuth flow. It is
+	// minted once here and preserved across the idp_callback cache-key
+	// rotation and the consent→/token handoff, unlike challengeID which is
+	// the (rotating) Redis cache key. From here on the request logger carries
+	// it so every line in the flow shares one filterable value.
+	flowID := uuid.NewString()
+	logger = logger.With(attr.SlogOAuthFlowID(flowID))
 
+	csrfToken, err := generateOpaqueToken()
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "generate consent csrf token").LogError(ctx, logger)
+	}
+	// Ambient cookies / Bearer tokens MUST NOT identify the caller on
+	// this endpoint — /authorize is reachable cross-site, so honouring
+	// them turns it into a CSRF primitive against the resulting
+	// remote_sessions row. Public callers that want a user-bound
+	// session opt in via requireUserIdentity; HandleIDPCallback then
+	// stamps Subject from authoritative IDP claims.
+	forceIDP := !endpoint.IsPublic || req.RequireUserIdentity
+
+	var subject *urn.SessionSubject
+	if !forceIDP {
+		sub := urn.NewAnonymousSubject(uuid.NewString())
+		subject = &sub
+	}
+
+	baseURL := s.BaseURLForRequest(r)
 	challengeState := AuthnChallengeState{
 		ID:                  challengeID,
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		ToolsetID:           toolset.ID,
+		FlowID:              flowID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		Endpoint:            endpoint.EndpointRef(baseURL),
 		ClientID:            req.ClientID,
 		RedirectURI:         req.RedirectURI,
 		State:               req.State,
 		CodeChallenge:       req.CodeChallenge,
 		CodeChallengeMethod: req.CodeChallengeMethod,
-		// Subject is left nil — HandleIDPCallback (private path) and
-		// HandleConsent (public path) stamp it later in the flow.
-		Subject:   nil,
-		CreatedAt: time.Now(),
+		CSRFToken:           csrfToken,
+		Subject:             subject,
+		CreatedAt:           time.Now(),
 	}
 
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)
 	}
 
-	baseURL := s.serverURL.String()
-	if customDomainCtx != nil {
-		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
-	}
+	// Flow start: counted exactly once per minted challenge, the unit the
+	// companion completion-ratio monitor divides terminal outcomes against.
+	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
+	logger.InfoContext(ctx, "oauth flow started", attr.SlogOAuthClientID(req.ClientID))
 
-	if !toolset.McpIsPublic {
-		callbackURL := fmt.Sprintf("%s/mcp/%s/idp_callback", baseURL, mcpSlug)
-		idpURL, err := s.sessions.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
+	if forceIDP {
+		callbackURL, err := endpoint.IDPCallbackURL(s.serverURL.String())
+		if err != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, oauthFlowStageAuthorize)
+			return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
+		}
+		idpURL, err := s.identityResolver.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
 			CallbackURL:     callbackURL,
 			Scope:           "",
 			State:           challengeID,
-			ClientID:        "",
 			ScopesSupported: nil,
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").Log(ctx, logger)
+			// A failure to build the IDP authorization URL typically means the
+			// issuer's IDP wiring is misconfigured — a config-class flow failure.
+			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, oauthFlowStageAuthorize)
+			return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
 		}
 		http.Redirect(w, r, idpURL.String(), http.StatusFound)
 		return nil
 	}
 
-	// Public toolset: skip IDP, route straight to consent. The anonymous sub
-	// is minted on the consent POST (per plan).
-	consentURL := fmt.Sprintf("%s/mcp/%s/connect?state=%s", baseURL, mcpSlug, url.QueryEscape(challengeID))
+	consentURL, err := endpoint.ConsentURL(baseURL, challengeID)
+	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, oauthFlowStageAuthorize)
+		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
+	}
 	http.Redirect(w, r, consentURL, http.StatusFound)
 	return nil
 }
@@ -195,7 +222,7 @@ func writeAuthorizeError(ctx context.Context, w http.ResponseWriter, logger *slo
 		"error_description": description,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal authorize error").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal authorize error").LogError(ctx, logger)
 	}
 
 	logger.InfoContext(ctx, "authorize request rejected",
@@ -208,7 +235,7 @@ func writeAuthorizeError(ctx context.Context, w http.ResponseWriter, logger *slo
 	w.Header().Set("Pragma", "no-cache")
 	w.WriteHeader(status)
 	if _, werr := w.Write(body); werr != nil {
-		return oops.E(oops.CodeUnexpected, werr, "failed to write authorize error body").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, werr, "failed to write authorize error body").LogError(ctx, logger)
 	}
 	return nil
 }

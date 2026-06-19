@@ -15,6 +15,7 @@ var ToolVariation = Type("ToolVariation", func() {
 	Attribute("confirm_prompt", String, "The confirmation prompt for the tool variation")
 	Attribute("name", String, "The name of the tool variation")
 	Attribute("description", String, "The description of the tool variation")
+	Attribute("tags", ArrayOf(String), "The tags of the tool variation")
 	Attribute("summarizer", String, "The summarizer of the tool variation")
 	Attribute("title", String, "Display name override for the tool")
 	Attribute("read_only_hint", Boolean, "Override: if true, the tool does not modify its environment")
@@ -25,4 +26,16 @@ var ToolVariation = Type("ToolVariation", func() {
 	Attribute("updated_at", String, "The last update date of the tool variation")
 
 	Required("id", "group_id", "src_tool_name", "src_tool_urn", "created_at", "updated_at")
+})
+
+var ToolVariationGroup = Type("ToolVariationGroup", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("id", String, "The ID of the tool variation group")
+	Attribute("name", String, "The name of the tool variation group")
+	Attribute("description", String, "The description of the tool variation group")
+	Attribute("created_at", String, "The creation date of the tool variation group")
+	Attribute("updated_at", String, "The last update date of the tool variation group")
+
+	Required("id", "name", "created_at", "updated_at")
 })

@@ -4,8 +4,11 @@
 
 import { assistantsCreate } from "../funcs/assistantsCreate.js";
 import { assistantsDelete } from "../funcs/assistantsDelete.js";
+import { assistantsEnsureManaged } from "../funcs/assistantsEnsureManaged.js";
 import { assistantsGet } from "../funcs/assistantsGet.js";
+import { assistantsGetManaged } from "../funcs/assistantsGetManaged.js";
 import { assistantsList } from "../funcs/assistantsList.js";
+import { assistantsSendMessage } from "../funcs/assistantsSendMessage.js";
 import { assistantsUpdate } from "../funcs/assistantsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -52,6 +55,25 @@ export class Assistants extends ClientSDK {
   }
 
   /**
+   * ensureManagedAssistant assistants
+   *
+   * @remarks
+   * Get the project's built-in Project Assistant, provisioning it on first access. Idempotent — safe to call on every sidebar open.
+   */
+  async ensureManaged(
+    request?: operations.EnsureManagedAssistantRequest | undefined,
+    security?: operations.EnsureManagedAssistantSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Assistant> {
+    return unwrapAsync(assistantsEnsureManaged(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getAssistant assistants
    *
    * @remarks
@@ -71,6 +93,25 @@ export class Assistants extends ClientSDK {
   }
 
   /**
+   * getManagedAssistant assistants
+   *
+   * @remarks
+   * Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.
+   */
+  async getManaged(
+    request?: operations.GetManagedAssistantRequest | undefined,
+    security?: operations.GetManagedAssistantSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Assistant> {
+    return unwrapAsync(assistantsGetManaged(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listAssistants assistants
    *
    * @remarks
@@ -82,6 +123,25 @@ export class Assistants extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListAssistantsResult> {
     return unwrapAsync(assistantsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * sendMessage assistants
+   *
+   * @remarks
+   * Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.
+   */
+  async sendMessage(
+    request: operations.SendAssistantMessageRequest,
+    security?: operations.SendAssistantMessageSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.SendMessageResult> {
+    return unwrapAsync(assistantsSendMessage(
       this,
       request,
       security,

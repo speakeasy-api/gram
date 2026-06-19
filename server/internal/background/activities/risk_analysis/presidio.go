@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,20 +21,86 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/semaphore"
+	"gopkg.in/yaml.v3"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/risk/presidiofp"
 )
 
 // SourcePresidio is the source label written on every risk_results row
 // produced by the Presidio path, including dead-letter sentinels.
 const SourcePresidio = "presidio"
 
-// DeadLetterRuleID is set on the synthetic Finding emitted when a message
-// permanently fails analysis after exhausting the retry budget. buildRows
-// uses it as the rule_id for the dead-letter row.
-const DeadLetterRuleID = "presidio.dead_letter"
+// DeadLetterRuleID was moved to rules.go to live alongside the other
+// canonical rule id constants. Keep the comment here as a pointer for
+// callers grepping presidio.go.
+
+// DescribePresidioEntity returns the canonical (rule_id, description) for
+// a Presidio finding. rawEntityType is Presidio's UPPER_SNAKE entity name.
+func DescribePresidioEntity(rawEntityType string) (string, string) {
+	ruleID := CanonicalPresidioRuleID(rawEntityType)
+	desc, ok := presidioEntityDescriptions[ruleID]
+	if !ok {
+		desc = "Identified potentially sensitive personal information."
+	}
+	return guard(ruleID), desc
+}
+
+// DescribePresidioDeadLetter returns the canonical (rule_id, description)
+// for a Presidio dead-letter sentinel row.
+func DescribePresidioDeadLetter() (string, string) {
+	return guard(DeadLetterRuleID), "Presidio could not analyze this message after exhausting its retry budget."
+}
+
+// presidioEntityDescriptions maps canonical Presidio rule ids to their
+// human-readable, source-agnostic description. Lookup miss falls through
+// to a generic PII string in DescribePresidioEntity.
+var presidioEntityDescriptions = map[string]string{
+	// Financial.
+	prefixPII + "credit_card":    "Identified a credit card number, which may expose cardholder data.",
+	prefixPII + "iban_code":      "Identified an International Bank Account Number, which may expose financial account data.",
+	prefixPII + "us_bank_number": "Identified a US bank account number, which may expose financial account data.",
+	prefixPII + "crypto":         "Identified a cryptocurrency wallet address.",
+
+	// PII.
+	prefixPII + "email_address": "Identified an email address.",
+	prefixPII + "phone_number":  "Identified a telephone number.",
+	prefixPII + "ip_address":    "Identified an IP address.",
+	prefixPII + "mac_address":   "Identified a network interface (MAC) address.",
+	prefixPII + "person":        "Identified a person name.",
+	prefixPII + "location":      "Identified a location reference.",
+	prefixPII + "date_time":     "Identified a date or time reference that may correlate with a person.",
+	prefixPII + "nrp":           "Identified a nationality, religious, or political reference.",
+	prefixPII + "url":           "Identified a URL that may carry sensitive context.",
+
+	// Government identifiers.
+	prefixPII + "us_ssn":            "Identified a US Social Security Number.",
+	prefixPII + "us_passport":       "Identified a US passport number.",
+	prefixPII + "us_driver_license": "Identified a US driver license number.",
+	prefixPII + "us_itin":           "Identified a US Individual Taxpayer Identification Number.",
+	prefixPII + "uk_nhs":            "Identified a UK National Health Service number.",
+	prefixPII + "uk_nino":           "Identified a UK National Insurance Number.",
+	prefixPII + "uk_passport":       "Identified a UK passport number.",
+	prefixPII + "es_nif":            "Identified a Spanish personal tax identifier (NIF).",
+	prefixPII + "it_fiscal_code":    "Identified an Italian personal fiscal code.",
+	prefixPII + "au_tfn":            "Identified an Australian Tax File Number.",
+	prefixPII + "in_pan":            "Identified an Indian Permanent Account Number.",
+	prefixPII + "in_aadhaar":        "Identified an Indian Aadhaar identifier.",
+	prefixPII + "sg_nric_fin":       "Identified a Singapore NRIC or FIN identifier.",
+
+	// Healthcare.
+	prefixPII + "medical_license":               "Identified a medical license number, which may expose protected health information.",
+	prefixPII + "us_mbi":                        "Identified a US Medicare Beneficiary Identifier.",
+	prefixPII + "us_npi":                        "Identified a US National Provider Identifier.",
+	prefixPII + "medical_disease_disorder":      "Identified a disease or disorder reference that may expose protected health information.",
+	prefixPII + "medical_medication":            "Identified a medication or drug reference that may expose protected health information.",
+	prefixPII + "medical_therapeutic_procedure": "Identified a treatment or diagnostic procedure that may expose protected health information.",
+	prefixPII + "medical_clinical_event":        "Identified a clinical event that may expose protected health information.",
+	prefixPII + "medical_biological_attribute":  "Identified a biological attribute that may expose protected health information.",
+	prefixPII + "medical_family_history":        "Identified a family medical history reference that may expose protected health information.",
+}
 
 // PIIScanner detects personally identifiable information in text.
 type PIIScanner interface {
@@ -116,8 +183,14 @@ type presidioResult struct {
 //     identifiers, etc.) and would deny legitimate tool calls / pollute
 //     batch findings. Re-enable once we have a confidence threshold or a
 //     scoped allow-list.
+//   - US_DRIVER_LICENSE: Presidio's pattern is so broad it flags arbitrary
+//     1-letter + N-digit substrings inside base64 hashes, URL paths, UUIDs,
+//     and any text containing "lic" via substring context boosting (e.g.
+//     "public", "duplicate"). See microsoft/presidio#1063 — open since 2023.
+//     Re-enable once the upstream regex is tightened.
 var presidioEntityBlacklist = map[string]struct{}{
-	"PERSON": {},
+	"PERSON":            {},
+	"US_DRIVER_LICENSE": {},
 }
 
 // filterEntities removes blacklisted entity types from the caller's list.
@@ -328,6 +401,16 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 		onProgress()
 	}
 
+	// Reformat JSON payloads as YAML with literal block scalars for
+	// strings containing newlines. Presidio's recognizers (notably
+	// US_DRIVER_LICENSE, IBAN) trip on JSON-escaped multiline content
+	// where `\n`, `\uXXXX`, etc. produce digit-and-letter runs that look
+	// like license numbers or codes. The YAML literal form keeps the
+	// underlying characters but emits real newlines, so the surrounding
+	// markup no longer fabricates matches. Non-JSON payloads pass
+	// through unchanged.
+	text = reformatJSONAsYAML(text)
+
 	if originalSize := len(text); originalSize > presidioMaxMessageBytes {
 		text = truncateAtRuneBoundary(text, presidioMaxMessageBytes)
 		p.logger.WarnContext(ctx, "presidio: truncating oversized message",
@@ -388,16 +471,18 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 		p.deadLetters.Add(ctx, 1)
 	}
 
+	ruleID, description := DescribePresidioDeadLetter()
 	return []Finding{{
 		Source:           SourcePresidio,
-		RuleID:           DeadLetterRuleID,
-		Description:      "presidio could not analyze message after exhausting retry budget",
+		RuleID:           ruleID,
+		Description:      description,
 		Match:            "",
 		StartPos:         0,
 		EndPos:           0,
 		Tags:             nil,
 		Confidence:       0,
 		DeadLetterReason: lastErr.Error(),
+		toolCallID:       "",
 	}}, true
 }
 
@@ -522,23 +607,38 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 
 		match := string(runes[start:end])
 
+		if isPresidioFalsePositive(r.EntityType, match) {
+			continue
+		}
+
 		// Convert rune offsets to byte offsets for storage.
 		startByte := len(string(runes[:start]))
 		endByte := len(string(runes[:end]))
 
+		ruleID, description := DescribePresidioEntity(r.EntityType)
 		findings = append(findings, Finding{
-			RuleID:           r.EntityType,
-			Description:      "PII detected: " + r.EntityType,
+			RuleID:           ruleID,
+			Description:      description,
 			Match:            match,
 			StartPos:         startByte,
 			EndPos:           endByte,
-			Tags:             []string{"pii", strings.ToLower(r.EntityType)},
+			Tags:             []string{"pii"},
 			Source:           SourcePresidio,
 			Confidence:       r.Score,
 			DeadLetterReason: "",
+			toolCallID:       "",
 		})
 	}
 	return findings
+}
+
+// isPresidioFalsePositive reports whether a Presidio match of the given entity
+// type is noise the policy author would not want surfaced. The catalogs and
+// dispatch live in the leaf package internal/risk/presidiofp so they can be
+// reused outside the scanner (e.g. the offline sweep that re-evaluates stored
+// findings); see presidiofp.Reason for the per-entity coverage.
+func isPresidioFalsePositive(entityType, match string) bool {
+	return presidiofp.Reason(entityType, match) != ""
 }
 
 // computeRetryBackoff returns a full-jittered exponential backoff for the
@@ -557,6 +657,88 @@ func computeRetryBackoff(base time.Duration, attempt int) time.Duration {
 		}
 	}
 	return time.Duration(rand.Int64N(int64(backoff))) // #nosec G404 -- jitter, not security-sensitive
+}
+
+// reformatJSONAsYAML tries to parse text as a JSON value and re-emit it as
+// YAML where any string containing a newline is written as a literal block
+// scalar (`|`). The resulting text carries the same semantic content but
+// drops the JSON `\n` / `\uXXXX` escapes that lead Presidio's regex- and
+// pattern-based recognizers (US_DRIVER_LICENSE in particular) to fabricate
+// matches inside multiline string bodies.
+//
+// Returns text unchanged whenever it does not parse as a JSON value or
+// whenever YAML encoding fails, so non-JSON payloads continue to flow
+// through to Presidio as-is. Any bytes after the first JSON value (mixed
+// prefix-JSON-then-prose inputs) are appended verbatim so Presidio still
+// scans them.
+func reformatJSONAsYAML(text string) string {
+	if text == "" {
+		return text
+	}
+	dec := json.NewDecoder(strings.NewReader(text))
+	dec.UseNumber()
+	var data any
+	if err := dec.Decode(&data); err != nil {
+		return text
+	}
+
+	node := jsonValueToYAMLNode(data)
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(node); err != nil {
+		return text
+	}
+	if err := enc.Close(); err != nil {
+		return text
+	}
+	return buf.String() + text[dec.InputOffset():]
+}
+
+func jsonValueToYAMLNode(v any) *yaml.Node {
+	switch x := v.(type) {
+	case nil:
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}
+	case bool:
+		val := "false"
+		if x {
+			val = "true"
+		}
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: val}
+	case json.Number:
+		return &yaml.Node{Kind: yaml.ScalarNode, Value: x.String()}
+	case string:
+		return jsonStringToYAMLNode(x)
+	case []any:
+		seq := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		for _, item := range x {
+			seq.Content = append(seq.Content, jsonValueToYAMLNode(item))
+		}
+		return seq
+	case map[string]any:
+		m := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			m.Content = append(m.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k},
+				jsonValueToYAMLNode(x[k]),
+			)
+		}
+		return m
+	}
+	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fmt.Sprint(v)}
+}
+
+func jsonStringToYAMLNode(s string) *yaml.Node {
+	n := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: s}
+	if strings.Contains(s, "\n") {
+		n.Style = yaml.LiteralStyle
+	}
+	return n
 }
 
 // truncateAtRuneBoundary returns the longest prefix of s whose byte length is

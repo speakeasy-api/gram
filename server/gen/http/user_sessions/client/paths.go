@@ -12,6 +12,16 @@ func ListUserSessionsUserSessionsPath() string {
 	return "/rpc/userSessions.list"
 }
 
+// ListFacetsUserSessionsPath returns the URL path to the userSessions service listFacets HTTP endpoint.
+func ListFacetsUserSessionsPath() string {
+	return "/rpc/userSessions.listFacets"
+}
+
+// MintUserSessionUserSessionsPath returns the URL path to the userSessions service mintUserSession HTTP endpoint.
+func MintUserSessionUserSessionsPath() string {
+	return "/rpc/userSessions.mint"
+}
+
 // RevokeUserSessionUserSessionsPath returns the URL path to the userSessions service revokeUserSession HTTP endpoint.
 func RevokeUserSessionUserSessionsPath() string {
 	return "/rpc/userSessions.revoke"

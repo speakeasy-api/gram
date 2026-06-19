@@ -328,6 +328,70 @@ test("generates a manifest", () => {
   });
 });
 
+test("manifest emits tags when provided", () => {
+  const g = new Gram().tool({
+    name: "tagged",
+    description: "A tool with tags",
+    inputSchema: {},
+    tags: ["search", "web"],
+    async execute(ctx) {
+      return ctx.json({});
+    },
+  });
+
+  const manifest = g.manifest();
+  expect(manifest.tools).toBeDefined();
+  const tool = manifest.tools![0];
+  expect(tool).toBeDefined();
+  expect(tool!.tags).toEqual(["search", "web"]);
+});
+
+test("manifest omits tags when not provided", () => {
+  const g = new Gram().tool({
+    name: "untagged",
+    description: "A tool without tags",
+    inputSchema: {},
+    async execute(ctx) {
+      return ctx.json({});
+    },
+  });
+
+  const tool = g.manifest().tools![0];
+  expect(tool).toBeDefined();
+  expect(tool).not.toHaveProperty("tags");
+});
+
+test("manifest omits tags when empty array", () => {
+  const g = new Gram().tool({
+    name: "empty_tags",
+    description: "A tool with empty tags",
+    inputSchema: {},
+    tags: [],
+    async execute(ctx) {
+      return ctx.json({});
+    },
+  });
+
+  const tool = g.manifest().tools![0];
+  expect(tool).toBeDefined();
+  expect(tool).not.toHaveProperty("tags");
+});
+
+test("manifest throws when tags exceed maximum", () => {
+  const tooMany = Array.from({ length: 41 }, (_, i) => `tag${i}`);
+  const g = new Gram().tool({
+    name: "too_many",
+    description: "A tool with too many tags",
+    inputSchema: {},
+    tags: tooMany,
+    async execute(ctx) {
+      return ctx.json({});
+    },
+  });
+
+  expect(() => g.manifest()).toThrow(/maximum is 40/);
+});
+
 test("assert throws response with default status 500", () => {
   expect(() => {
     assert(false, { error: "Something went wrong" });
@@ -392,6 +456,7 @@ test("appends one Gram to another", () => {
 });
 
 test("assert throws response with custom status", async () => {
+  expect.hasAssertions();
   try {
     assert(false, { error: "Bad request" }, { status: 400 });
   } catch (err) {
@@ -401,8 +466,33 @@ test("assert throws response with custom status", async () => {
     expect(response.headers.get("Content-Type")).toBe("application/json");
 
     const data = await response.json();
-    expect(data).toMatchObject({ error: "Bad request" });
-    expect(data).toHaveProperty("stack");
+    // The response body must contain only the caller-supplied data — no stack
+    // trace is leaked into the user-facing error message (AGE-2779).
+    expect(data).toEqual({ error: "Bad request" });
+    expect(data).not.toHaveProperty("stack");
+  }
+});
+
+test("ctx.fail() body omits any stack trace", async () => {
+  expect.hasAssertions();
+  const g = new Gram().tool({
+    name: "boom",
+    description: "Always fails",
+    inputSchema: {},
+    async execute(ctx) {
+      return ctx.fail({ error: "nope" }, { status: 422 });
+    },
+  });
+
+  try {
+    await g.handleToolCall({ name: "boom", input: {} });
+  } catch (err) {
+    expect(err).toBeInstanceOf(Response);
+    const response = err as Response;
+    expect(response.status).toBe(422);
+    const data = await response.json();
+    expect(data).toEqual({ error: "nope" });
+    expect(data).not.toHaveProperty("stack");
   }
 });
 

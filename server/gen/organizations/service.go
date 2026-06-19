@@ -10,26 +10,48 @@ package organizations
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
 
 // Organization membership, invitations, and directory.
 type Service interface {
+	// Get the active organization from the session.
+	Get(context.Context, *GetPayload) (res *Organization, err error)
 	// Send a WorkOS invitation for the active organization.
 	SendInvite(context.Context, *SendInvitePayload) (res *OrganizationInvitation, err error)
 	// Revoke a pending WorkOS invitation.
 	RevokeInvite(context.Context, *RevokeInvitePayload) (err error)
+	// Change the role assigned to a pending WorkOS invitation.
+	UpdateInviteRole(context.Context, *UpdateInviteRolePayload) (res *OrganizationInvitation, err error)
 	// List pending WorkOS invitations for the active organization.
 	ListInvites(context.Context, *ListInvitesPayload) (res *ListInvitesResult, err error)
-	// Resolve a WorkOS invitation from its token (e.g. accept-flow).
-	GetInviteByToken(context.Context, *GetInviteByTokenPayload) (res *OrganizationInvitationAccept, err error)
 	// List users in the active organization from Gram
 	// organization_user_relationships.
 	ListUsers(context.Context, *ListUsersPayload) (res *ListUsersResult, err error)
 	// Remove a user from the active organization in Gram and delete their WorkOS
 	// organization membership.
 	RemoveUser(context.Context, *RemoveUserPayload) (err error)
+	// Enable  webhooks for the active organization.
+	EnableWebhooks(context.Context, *EnableWebhooksPayload) (err error)
+	// Disable  webhooks for the active organization.
+	DisableWebhooks(context.Context, *DisableWebhooksPayload) (err error)
+	// Create a webhook portal session.
+	CreatePortalSession(context.Context, *CreatePortalSessionPayload) (res *CreatePortalSessionResult, err error)
+	// Get the onboarding status for the active organization by checking WorkOS SSO
+	// connections and directory sync state.
+	GetOnboardingStatus(context.Context, *GetOnboardingStatusPayload) (res *OnboardingStatusResult, err error)
+	// Return recent hook events for the active organization so the onboarding
+	// wizard can confirm that Claude Code, Cursor, or Codex instrumentation is
+	// delivering events to Gram. Polled from the confirm-traffic step.
+	VerifyOnboardingHooksSetup(context.Context, *VerifyOnboardingHooksSetupPayload) (res *VerifyOnboardingHooksSetupResult, err error)
+	// Send the enterprise admin onboarding email to one or more recipients. The
+	// email links each recipient to the wizard for the active organization. Used
+	// by the super-admin Onboarding tab.
+	SendEnterpriseAdminOnboardingEmail(context.Context, *SendEnterpriseAdminOnboardingEmailPayload) (res *SendEnterpriseAdminOnboardingEmailResult, err error)
+	// Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).
+	GenerateWorkOSAdminPortalLink(context.Context, *GenerateWorkOSAdminPortalLinkPayload) (res *GenerateWorkOSAdminPortalLinkResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -52,13 +74,69 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"sendInvite", "revokeInvite", "listInvites", "getInviteByToken", "listUsers", "removeUser"}
+var MethodNames = [14]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink"}
 
-// GetInviteByTokenPayload is the payload type of the organizations service
-// getInviteByToken method.
-type GetInviteByTokenPayload struct {
-	// Invitation token from the invite link.
+// CreatePortalSessionPayload is the payload type of the organizations service
+// createPortalSession method.
+type CreatePortalSessionPayload struct {
+	SessionToken *string
+}
+
+// CreatePortalSessionResult is the result type of the organizations service
+// createPortalSession method.
+type CreatePortalSessionResult struct {
+	// URL for the webhook portal session.
+	URL string
+	// Front-end token for the webhook portal session.
 	Token string
+}
+
+// DisableWebhooksPayload is the payload type of the organizations service
+// disableWebhooks method.
+type DisableWebhooksPayload struct {
+	SessionToken *string
+}
+
+// EnableWebhooksPayload is the payload type of the organizations service
+// enableWebhooks method.
+type EnableWebhooksPayload struct {
+	SessionToken *string
+}
+
+// GenerateWorkOSAdminPortalLinkPayload is the payload type of the
+// organizations service generateWorkOSAdminPortalLink method.
+type GenerateWorkOSAdminPortalLinkPayload struct {
+	// WorkOS Admin Portal intent.
+	Intent string
+	// URL to redirect the user to after the Admin Portal session ends.
+	ReturnURL *string
+	// URL to redirect the user to on successful completion of the Admin Portal
+	// flow.
+	SuccessURL *string
+	// IT contact email addresses displayed in the Admin Portal for end-user
+	// support.
+	ItContactEmails []string
+	// Per-intent configuration for the Admin Portal flow.
+	IntentOptions *WorkOSIntentOptions
+	SessionToken  *string
+}
+
+// GenerateWorkOSAdminPortalLinkResult is the result type of the organizations
+// service generateWorkOSAdminPortalLink method.
+type GenerateWorkOSAdminPortalLinkResult struct {
+	// URL to the WorkOS Admin Portal flow.
+	URL string
+}
+
+// GetOnboardingStatusPayload is the payload type of the organizations service
+// getOnboardingStatus method.
+type GetOnboardingStatusPayload struct {
+	SessionToken *string
+}
+
+// GetPayload is the payload type of the organizations service get method.
+type GetPayload struct {
+	SessionToken *string
 }
 
 // ListInvitesPayload is the payload type of the organizations service
@@ -88,6 +166,56 @@ type ListUsersResult struct {
 	Users []*OrganizationUser
 }
 
+type OnboardingHookEvent struct {
+	// Event timestamp in nanoseconds since unix epoch. Stringified to preserve
+	// int64 precision.
+	TimeUnixNano string
+	// Hook source: claude_code, cursor, or codex.
+	Source string
+	// Tool invoked by the hook, if any.
+	ToolName *string
+	// Hook event name (e.g. PreToolUse, SessionStart).
+	EventName *string
+	// Slug of the Gram project that received the event.
+	ProjectSlug string
+	// Outcome status: allowed, blocked, failure, or pending.
+	Status *string
+	// Email of the user whose session produced the event, when present in hook
+	// attributes.
+	UserEmail *string
+	// Gram chat/session ID that owns this event, when present.
+	ChatID *string
+}
+
+// OnboardingStatusResult is the result type of the organizations service
+// getOnboardingStatus method.
+type OnboardingStatusResult struct {
+	// Whether the organization has at least one active SSO connection in WorkOS.
+	SsoConfigured bool
+	// Whether the organization has at least one linked directory sync in WorkOS.
+	DsyncConfigured bool
+}
+
+// Organization is the result type of the organizations service get method.
+type Organization struct {
+	// The ID of the organization
+	ID string
+	// The name of the organization
+	Name string
+	// The slug of the organization
+	Slug types.Slug
+	// The account type of the organization
+	AccountType string
+	// Whether webhooks support is initialized for the organization
+	WebhooksOnboarded bool
+	// Whether webhooks are enabled for the organization
+	WebhooksEnabled bool
+	// The creation date of the organization.
+	CreatedAt string
+	// The last update date of the organization.
+	UpdatedAt string
+}
+
 // OrganizationInvitation is the result type of the organizations service
 // sendInvite method.
 type OrganizationInvitation struct {
@@ -103,24 +231,12 @@ type OrganizationInvitation struct {
 	RevokedAt *string
 	// Gram user ID of the inviter, when known.
 	InviterUserID *string
+	// WorkOS role slug assigned when the invite is accepted.
+	RoleSlug *string
 	// When the invitation expires.
 	ExpiresAt *string
 	CreatedAt string
 	UpdatedAt string
-}
-
-// OrganizationInvitationAccept is the result type of the organizations service
-// getInviteByToken method.
-type OrganizationInvitationAccept struct {
-	// Invitee email address.
-	Email string
-	// Invitation lifecycle state.
-	State string
-	// Gram organization display name when the org is linked in Gram; empty if
-	// unknown.
-	OrganizationName string
-	// URL to complete acceptance in WorkOS (may be empty when not actionable).
-	AcceptInvitationURL string
 }
 
 type OrganizationUser struct {
@@ -140,6 +256,8 @@ type OrganizationUser struct {
 	WorkosMembershipID *string
 	CreatedAt          string
 	UpdatedAt          string
+	// Timestamp of the user's most recent login.
+	LastLogin *string
 }
 
 // RemoveUserPayload is the payload type of the organizations service
@@ -158,14 +276,84 @@ type RevokeInvitePayload struct {
 	SessionToken *string
 }
 
+// SendEnterpriseAdminOnboardingEmailPayload is the payload type of the
+// organizations service sendEnterpriseAdminOnboardingEmail method.
+type SendEnterpriseAdminOnboardingEmailPayload struct {
+	// Recipient email addresses.
+	Recipients   []string
+	SessionToken *string
+}
+
+// SendEnterpriseAdminOnboardingEmailResult is the result type of the
+// organizations service sendEnterpriseAdminOnboardingEmail method.
+type SendEnterpriseAdminOnboardingEmailResult struct {
+	// Number of recipients the email was dispatched to.
+	SentCount int
+	// The setup link embedded in the dispatched email.
+	SetupLink string
+}
+
 // SendInvitePayload is the payload type of the organizations service
 // sendInvite method.
 type SendInvitePayload struct {
 	// Email address to invite.
 	Email string
-	// Optional WorkOS role slug for the invitee.
-	RoleSlug     *string
+	// Optional role ID for the invitee.
+	RoleID       *string
 	SessionToken *string
+}
+
+// UpdateInviteRolePayload is the payload type of the organizations service
+// updateInviteRole method.
+type UpdateInviteRolePayload struct {
+	// WorkOS invitation ID.
+	InvitationID string
+	// Role ID to assign to the invitee.
+	RoleID       string
+	SessionToken *string
+}
+
+// VerifyOnboardingHooksSetupPayload is the payload type of the organizations
+// service verifyOnboardingHooksSetup method.
+type VerifyOnboardingHooksSetupPayload struct {
+	// Only return events with time_unix_nano greater than this value. Pass the
+	// previous response's latest_unix_nano to poll for new events. Stringified to
+	// preserve int64 precision.
+	SinceUnixNano *string
+	SessionToken  *string
+}
+
+// VerifyOnboardingHooksSetupResult is the result type of the organizations
+// service verifyOnboardingHooksSetup method.
+type VerifyOnboardingHooksSetupResult struct {
+	// Recent hook events, newest first. Truncated to a server-defined limit.
+	Events []*OnboardingHookEvent
+	// Highest time_unix_nano in this batch. Pass back as since_unix_nano on the
+	// next poll.
+	LatestUnixNano string
+	// Total events received with time_unix_nano greater than since_unix_nano. May
+	// exceed len(events) when truncated.
+	TotalCount int
+}
+
+type WorkOSDomainVerificationIntentOptions struct {
+	// Domain name to verify.
+	DomainName *string
+}
+
+type WorkOSIntentOptions struct {
+	// SSO-specific intent options.
+	Sso *WorkOSSSOIntentOptions
+	// Domain verification-specific intent options.
+	DomainVerification *WorkOSDomainVerificationIntentOptions
+}
+
+type WorkOSSSOIntentOptions struct {
+	// SSO bookmark slug to launch a specific app after authentication.
+	BookmarkSlug *string
+	// SSO provider type to shortcut into a specific setup flow (e.g. OktaSAML,
+	// GoogleSAML).
+	ProviderType *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

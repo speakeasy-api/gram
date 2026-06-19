@@ -15,7 +15,6 @@ import (
 	"net/url"
 
 	features "github.com/speakeasy-api/gram/server/gen/features"
-	featuresviews "github.com/speakeasy-api/gram/server/gen/features/views"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -90,13 +89,11 @@ func DecodeGetProductFeaturesResponse(decoder func(*http.Response) goahttp.Decod
 			if err != nil {
 				return nil, goahttp.ErrDecodingError("features", "getProductFeatures", err)
 			}
-			p := NewGetProductFeaturesGramProductFeaturesOK(&body)
-			view := "default"
-			vres := &featuresviews.GramProductFeatures{Projected: p, View: view}
-			if err = featuresviews.ValidateGramProductFeatures(vres); err != nil {
+			err = ValidateGetProductFeaturesResponseBody(&body)
+			if err != nil {
 				return nil, goahttp.ErrValidationError("features", "getProductFeatures", err)
 			}
-			res := features.NewGramProductFeatures(vres)
+			res := NewGetProductFeaturesResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (

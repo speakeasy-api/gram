@@ -19,6 +19,8 @@ type Endpoints struct {
 	UpsertGlobal goa.Endpoint
 	DeleteGlobal goa.Endpoint
 	ListGlobal   goa.Endpoint
+	ListGroups   goa.Endpoint
+	CreateGlobal goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "variations" service with endpoints.
@@ -29,6 +31,8 @@ func NewEndpoints(s Service) *Endpoints {
 		UpsertGlobal: NewUpsertGlobalEndpoint(s, a.APIKeyAuth),
 		DeleteGlobal: NewDeleteGlobalEndpoint(s, a.APIKeyAuth),
 		ListGlobal:   NewListGlobalEndpoint(s, a.APIKeyAuth),
+		ListGroups:   NewListGroupsEndpoint(s, a.APIKeyAuth),
+		CreateGlobal: NewCreateGlobalEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -37,6 +41,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpsertGlobal = m(e.UpsertGlobal)
 	e.DeleteGlobal = m(e.DeleteGlobal)
 	e.ListGlobal = m(e.ListGlobal)
+	e.ListGroups = m(e.ListGroups)
+	e.CreateGlobal = m(e.CreateGlobal)
 }
 
 // NewUpsertGlobalEndpoint returns an endpoint function that calls the method
@@ -70,7 +76,7 @@ func NewUpsertGlobalEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{},
 			}
 			var key string
@@ -129,7 +135,7 @@ func NewDeleteGlobalEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{},
 			}
 			var key string
@@ -188,7 +194,7 @@ func NewListGlobalEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{},
 			}
 			var key string
@@ -213,5 +219,123 @@ func NewListGlobalEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return s.ListGlobal(ctx, p)
+	}
+}
+
+// NewListGroupsEndpoint returns an endpoint function that calls the method
+// "listGroups" of service "variations".
+func NewListGroupsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListGroupsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListGroups(ctx, p)
+	}
+}
+
+// NewCreateGlobalEndpoint returns an endpoint function that calls the method
+// "createGlobal" of service "variations".
+func NewCreateGlobalEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateGlobalPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateGlobal(ctx, p)
 	}
 }

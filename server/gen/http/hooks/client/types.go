@@ -31,6 +31,8 @@ type ClaudeRequestBody struct {
 	IsInterrupt *bool `form:"is_interrupt,omitempty" json:"is_interrupt,omitempty" xml:"is_interrupt,omitempty"`
 	// The Claude Code session ID
 	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// Email of the authenticated user from the Speakeasy device agent, if available
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
 	// The working directory when the event fired
 	Cwd *string `form:"cwd,omitempty" json:"cwd,omitempty" xml:"cwd,omitempty"`
 	// Path to the conversation transcript file
@@ -134,6 +136,10 @@ type CodexRequestBody struct {
 	HookEventName string `form:"hook_event_name" json:"hook_event_name" xml:"hook_event_name"`
 	// The Codex session ID
 	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// Email of the authenticated Codex user, if available
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Additional hook-specific data
+	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
 	// Path to the conversation transcript file
 	TranscriptPath *string `form:"transcript_path,omitempty" json:"transcript_path,omitempty" xml:"transcript_path,omitempty"`
 	// The working directory when the event fired
@@ -150,6 +156,8 @@ type CodexRequestBody struct {
 	PermissionType *string `form:"permission_type,omitempty" json:"permission_type,omitempty" xml:"permission_type,omitempty"`
 	// The user's prompt text (UserPromptSubmit only)
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// The final assistant message text for the turn (Stop only)
+	LastAssistantMessage *string `form:"last_assistant_message,omitempty" json:"last_assistant_message,omitempty" xml:"last_assistant_message,omitempty"`
 }
 
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
@@ -179,6 +187,12 @@ type ClaudeResponseBody struct {
 	SystemMessage *string `form:"systemMessage,omitempty" json:"systemMessage,omitempty" xml:"systemMessage,omitempty"`
 	// Hook-specific output as JSON object
 	HookSpecificOutput any `form:"hookSpecificOutput,omitempty" json:"hookSpecificOutput,omitempty" xml:"hookSpecificOutput,omitempty"`
+	// Top-level block decision for UserPromptSubmit / PostToolUse / Stop /
+	// SubagentStop. Use 'block' to halt processing.
+	Decision *string `form:"decision,omitempty" json:"decision,omitempty" xml:"decision,omitempty"`
+	// Reason accompanying decision; shown to the user (UserPromptSubmit) or Claude
+	// (PostToolUse/Stop).
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
 // CursorResponseBody is the type of the "hooks" service "cursor" endpoint HTTP
@@ -1168,6 +1182,10 @@ type OTELLogRecordRequestBody struct {
 	TimeUnixNano *string `form:"timeUnixNano,omitempty" json:"timeUnixNano,omitempty" xml:"timeUnixNano,omitempty"`
 	// Observed timestamp in nanoseconds
 	ObservedTimeUnixNano *string `form:"observedTimeUnixNano,omitempty" json:"observedTimeUnixNano,omitempty" xml:"observedTimeUnixNano,omitempty"`
+	// Trace ID
+	TraceID *string `form:"traceId,omitempty" json:"traceId,omitempty" xml:"traceId,omitempty"`
+	// Span ID
+	SpanID *string `form:"spanId,omitempty" json:"spanId,omitempty" xml:"spanId,omitempty"`
 	// Log body content
 	Body *OTELLogBodyRequestBody `form:"body,omitempty" json:"body,omitempty" xml:"body,omitempty"`
 	// Log attributes
@@ -1264,6 +1282,7 @@ func NewClaudeRequestBody(p *hooks.ClaudePayload) *ClaudeRequestBody {
 		Error:                p.Error,
 		IsInterrupt:          p.IsInterrupt,
 		SessionID:            p.SessionID,
+		UserEmail:            p.UserEmail,
 		Cwd:                  p.Cwd,
 		TranscriptPath:       p.TranscriptPath,
 		Source:               p.Source,
@@ -1335,16 +1354,26 @@ func NewCursorRequestBody(p *hooks.CursorPayload) *CursorRequestBody {
 // "codex" endpoint of the "hooks" service.
 func NewCodexRequestBody(p *hooks.CodexPayload) *CodexRequestBody {
 	body := &CodexRequestBody{
-		HookEventName:  p.HookEventName,
-		SessionID:      p.SessionID,
-		TranscriptPath: p.TranscriptPath,
-		Cwd:            p.Cwd,
-		Model:          p.Model,
-		ToolName:       p.ToolName,
-		ToolInput:      p.ToolInput,
-		ToolOutput:     p.ToolOutput,
-		PermissionType: p.PermissionType,
-		Prompt:         p.Prompt,
+		HookEventName:        p.HookEventName,
+		SessionID:            p.SessionID,
+		UserEmail:            p.UserEmail,
+		TranscriptPath:       p.TranscriptPath,
+		Cwd:                  p.Cwd,
+		Model:                p.Model,
+		ToolName:             p.ToolName,
+		ToolInput:            p.ToolInput,
+		ToolOutput:           p.ToolOutput,
+		PermissionType:       p.PermissionType,
+		Prompt:               p.Prompt,
+		LastAssistantMessage: p.LastAssistantMessage,
+	}
+	if p.AdditionalData != nil {
+		body.AdditionalData = make(map[string]any, len(p.AdditionalData))
+		for key, val := range p.AdditionalData {
+			tk := key
+			tv := val
+			body.AdditionalData[tk] = tv
+		}
 	}
 	return body
 }
@@ -1392,6 +1421,8 @@ func NewClaudeHookResultOK(body *ClaudeResponseBody) *hooks.ClaudeHookResult {
 		SuppressOutput:     body.SuppressOutput,
 		SystemMessage:      body.SystemMessage,
 		HookSpecificOutput: body.HookSpecificOutput,
+		Decision:           body.Decision,
+		Reason:             body.Reason,
 	}
 
 	return v

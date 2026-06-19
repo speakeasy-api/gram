@@ -25,9 +25,17 @@ type Client struct {
 	// createDomain endpoint.
 	CreateDomainDoer goahttp.Doer
 
+	// UpdateDomain Doer is the HTTP client used to make requests to the
+	// updateDomain endpoint.
+	UpdateDomainDoer goahttp.Doer
+
 	// DeleteDomain Doer is the HTTP client used to make requests to the
 	// deleteDomain endpoint.
 	DeleteDomainDoer goahttp.Doer
+
+	// ListMcpEndpoints Doer is the HTTP client used to make requests to the
+	// listMcpEndpoints endpoint.
+	ListMcpEndpointsDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -49,14 +57,16 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetDomainDoer:       doer,
-		CreateDomainDoer:    doer,
-		DeleteDomainDoer:    doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		GetDomainDoer:        doer,
+		CreateDomainDoer:     doer,
+		UpdateDomainDoer:     doer,
+		DeleteDomainDoer:     doer,
+		ListMcpEndpointsDoer: doer,
+		RestoreResponseBody:  restoreBody,
+		scheme:               scheme,
+		host:                 host,
+		decoder:              dec,
+		encoder:              enc,
 	}
 }
 
@@ -108,6 +118,30 @@ func (c *Client) CreateDomain() goa.Endpoint {
 	}
 }
 
+// UpdateDomain returns an endpoint that makes HTTP requests to the domains
+// service updateDomain server.
+func (c *Client) UpdateDomain() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateDomainRequest(c.encoder)
+		decodeResponse = DecodeUpdateDomainResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateDomainRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateDomainDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("domains", "updateDomain", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // DeleteDomain returns an endpoint that makes HTTP requests to the domains
 // service deleteDomain server.
 func (c *Client) DeleteDomain() goa.Endpoint {
@@ -127,6 +161,30 @@ func (c *Client) DeleteDomain() goa.Endpoint {
 		resp, err := c.DeleteDomainDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("domains", "deleteDomain", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListMcpEndpoints returns an endpoint that makes HTTP requests to the domains
+// service listMcpEndpoints server.
+func (c *Client) ListMcpEndpoints() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListMcpEndpointsRequest(c.encoder)
+		decodeResponse = DecodeListMcpEndpointsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListMcpEndpointsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListMcpEndpointsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("domains", "listMcpEndpoints", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -18,7 +18,7 @@ export function AsciiStars({
   speed: _speed = 1,
   opacity = 0.3,
   centerExclusionRadius = 3,
-}: AsciiStarsProps) {
+}: AsciiStarsProps): JSX.Element | null {
   const meshRef = useRef<THREE.Points>(null);
   const fontTexture = useAsciiStore((state) => state.fontTexture);
   const asciiLength = useAsciiStore((state) => state.length);
@@ -231,7 +231,7 @@ export function AsciiStars({
     if (material) {
       // Pause time updates when dragging to freeze the background stars
       if (!isDraggingWindow) {
-        material.uniforms.time.value = state.clock.elapsedTime;
+        material.uniforms.time!.value = state.clock.elapsedTime;
       }
     }
   });

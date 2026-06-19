@@ -20,6 +20,11 @@ import {
 } from "@gram/client/react-query/publishStatus";
 import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
 import {
+  invalidateAllMarketplaceSettings,
+  useMarketplaceSettingsSuspense,
+} from "@gram/client/react-query/marketplaceSettings";
+import { useUpdateMarketplaceSettingsMutation } from "@gram/client/react-query/updateMarketplaceSettings";
+import {
   Button,
   DropdownMenu,
   DropdownMenuContent,
@@ -36,11 +41,11 @@ import { toast } from "sonner";
 import { PluginCard } from "./PluginCard";
 import { PublishDialog } from "./PublishDialog";
 
-export function PluginsRoot() {
+export function PluginsRoot(): JSX.Element {
   return <Outlet />;
 }
 
-export default function Plugins() {
+export default function Plugins(): JSX.Element {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [pluginToDelete, setPluginToDelete] = useState<Plugin | null>(null);
@@ -51,6 +56,7 @@ export default function Plugins() {
 
   const { data } = usePluginsSuspense();
   const { data: publishStatus } = usePublishStatusSuspense();
+  const { data: marketplaceSettings } = useMarketplaceSettingsSuspense();
   const { fetch: authFetch } = useFetcher();
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
@@ -93,13 +99,14 @@ export default function Plugins() {
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
       setIsPublishDialogOpen(false);
-      invalidateAllPublishStatus(queryClient);
+      void invalidateAllPublishStatus(queryClient);
       toast.success("Plugins published to GitHub", {
         description: data.repoUrl,
         action: {
           label: "Open",
-          onClick: () =>
-            window.open(data.repoUrl, "_blank", "noopener,noreferrer"),
+          onClick: () => {
+            void window.open(data.repoUrl, "_blank", "noopener,noreferrer");
+          },
         },
       });
     },
@@ -124,7 +131,7 @@ export default function Plugins() {
     onSuccess: async (data) => {
       setIsCreateDialogOpen(false);
       await invalidateAllPlugins(queryClient);
-      navigate(routes.plugins.detail.href(data.id));
+      void navigate(routes.plugins.detail.href(data.id));
     },
   });
 
@@ -177,6 +184,58 @@ export default function Plugins() {
     [publishMutate],
   );
 
+  const [marketplaceNameInput, setMarketplaceNameInput] = useState(
+    marketplaceSettings.marketplaceName ?? "",
+  );
+  const updateMarketplaceSettingsMutation =
+    useUpdateMarketplaceSettingsMutation({
+      onSuccess: async (data) => {
+        await Promise.all([
+          invalidateAllMarketplaceSettings(queryClient),
+          invalidateAllPublishStatus(queryClient),
+        ]);
+        setMarketplaceNameInput(data.settings.marketplaceName ?? "");
+        toast.success(
+          data.republished
+            ? "Marketplace name updated and republished"
+            : "Marketplace name saved",
+        );
+      },
+      onError: () => {
+        toast.error("Failed to update marketplace name");
+      },
+    });
+
+  const [isMarketplaceSettingsDialogOpen, setIsMarketplaceSettingsDialogOpen] =
+    useState(false);
+
+  const trimmedMarketplaceName = marketplaceNameInput.trim();
+  const currentMarketplaceName = marketplaceSettings.marketplaceName ?? "";
+  const marketplaceNameDirty =
+    trimmedMarketplaceName !== currentMarketplaceName.trim();
+
+  const handleOpenMarketplaceSettings = () => {
+    // Reset the input to the persisted value so reopening discards unsaved edits.
+    setMarketplaceNameInput(marketplaceSettings.marketplaceName ?? "");
+    setIsMarketplaceSettingsDialogOpen(true);
+  };
+
+  const handleSaveMarketplaceName = () => {
+    updateMarketplaceSettingsMutation.mutate(
+      {
+        security: { sessionHeaderGramSession: "" },
+        request: {
+          updateMarketplaceSettingsRequestBody: {
+            marketplaceName: trimmedMarketplaceName || undefined,
+          },
+        },
+      },
+      {
+        onSuccess: () => setIsMarketplaceSettingsDialogOpen(false),
+      },
+    );
+  };
+
   const createCard = (
     <CreateResourceCard
       title="New Plugin"
@@ -195,31 +254,43 @@ export default function Plugins() {
           <Page.Section.Title>Plugins</Page.Section.Title>
           <Page.Section.Description className={hasPlugins ? "w-3/4" : ""}>
             Create distributable plugin bundles that package MCP servers and
-            hooks together. Assign plugins to roles and publish them to Claude
+            skills together. Assign plugins to roles and publish them to Claude
             Code, Cursor, and Codex marketplaces via GitHub.
           </Page.Section.Description>
           <Page.Section.CTA>
-            {publishStatus?.configured && (
+            <Stack direction="horizontal" gap={2} align="center">
               <Button
-                variant="secondary"
-                onClick={() => setIsPublishDialogOpen(true)}
-                disabled={publishMutation.isPending}
+                variant="tertiary"
+                onClick={handleOpenMarketplaceSettings}
+                aria-label="Marketplace settings"
+                title="Marketplace settings"
               >
                 <Button.LeftIcon>
-                  <Icon
-                    name={publishStatus.connected ? "refresh-cw" : "upload"}
-                    className="h-4 w-4"
-                  />
+                  <Icon name="settings" className="h-4 w-4" />
                 </Button.LeftIcon>
-                <Button.Text>
-                  {publishMutation.isPending
-                    ? "Publishing..."
-                    : publishStatus.connected
-                      ? "Re-publish"
-                      : "Publish to GitHub"}
-                </Button.Text>
               </Button>
-            )}
+              {publishStatus?.configured && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsPublishDialogOpen(true)}
+                  disabled={publishMutation.isPending}
+                >
+                  <Button.LeftIcon>
+                    <Icon
+                      name={publishStatus.connected ? "refresh-cw" : "upload"}
+                      className="h-4 w-4"
+                    />
+                  </Button.LeftIcon>
+                  <Button.Text>
+                    {publishMutation.isPending
+                      ? "Publishing..."
+                      : publishStatus.connected
+                        ? "Re-publish"
+                        : "Publish Private Marketplace"}
+                  </Button.Text>
+                </Button>
+              )}
+            </Stack>
           </Page.Section.CTA>
           <Page.Section.Body>
             <Stack direction="vertical" gap={4}>
@@ -271,11 +342,11 @@ export default function Plugins() {
           <Page.Section.Title>Observability hooks</Page.Section.Title>
           <Page.Section.Description className="w-3/4">
             The observability plugin forwards tool events from your team's
-            Claude Code and Cursor installs to your Gram dashboard. When you
-            publish to GitHub, it ships first in your marketplace marked
-            Required. You can also download a single-plugin ZIP per platform
-            here for direct install — each download mints a fresh hooks-scoped
-            API key.
+            Claude Code, Cursor and Codex installs to your project dashboard.
+            When you publish to GitHub, it ships first in your marketplace
+            marked Required. You can also download a single-plugin ZIP per
+            platform here for direct install — each download mints a fresh
+            hooks-scoped API key.
           </Page.Section.Description>
           <Page.Section.Body>
             <Stack direction="horizontal" gap={3} align="center">
@@ -317,17 +388,23 @@ export default function Plugins() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
-                    onClick={() => handleObservabilityDownload("claude")}
+                    onClick={() => {
+                      void handleObservabilityDownload("claude");
+                    }}
                   >
                     Claude
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => handleObservabilityDownload("cursor")}
+                    onClick={() => {
+                      void handleObservabilityDownload("cursor");
+                    }}
                   >
                     Cursor
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => handleObservabilityDownload("codex")}
+                    onClick={() => {
+                      void handleObservabilityDownload("codex");
+                    }}
                   >
                     Codex
                   </DropdownMenuItem>
@@ -402,6 +479,77 @@ export default function Plugins() {
           onPublish={handlePublish}
           isPending={publishMutation.isPending}
         />
+
+        {/* Marketplace Settings Dialog */}
+        <Dialog
+          open={isMarketplaceSettingsDialogOpen}
+          onOpenChange={setIsMarketplaceSettingsDialogOpen}
+        >
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>Marketplace settings</Dialog.Title>
+              <Dialog.Description>
+                The marketplace name is the identifier your team types after the
+                plugin slug ({"<plugin>@<marketplace>"}) when installing from
+                Claude Code or Codex. Leave blank to use the default (
+                <code>{marketplaceSettings.defaultName}</code>
+                ). Applies to all plugins in this project.
+              </Dialog.Description>
+            </Dialog.Header>
+            <form
+              className="flex flex-col gap-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveMarketplaceName();
+              }}
+            >
+              <InputField
+                label="Marketplace name"
+                name="marketplace_name"
+                value={marketplaceNameInput}
+                onChange={(e) => setMarketplaceNameInput(e.target.value)}
+                placeholder={marketplaceSettings.defaultName}
+                pattern="^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$"
+                title="Lowercase letters, digits, and hyphens. May not start or end with a hyphen."
+                autoFocus
+              />
+              <Type small muted>
+                Will publish as{" "}
+                <code>
+                  {trimmedMarketplaceName || marketplaceSettings.defaultName}
+                </code>
+                .{" "}
+                {publishStatus?.connected
+                  ? "Saving will regenerate the marketplace and push to GitHub."
+                  : "Will take effect on your next publish."}
+              </Type>
+              <Dialog.Footer>
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={() => setIsMarketplaceSettingsDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={
+                    !marketplaceNameDirty ||
+                    updateMarketplaceSettingsMutation.isPending
+                  }
+                >
+                  <Button.Text>
+                    {updateMarketplaceSettingsMutation.isPending
+                      ? publishStatus?.connected
+                        ? "Republishing..."
+                        : "Saving..."
+                      : "Save"}
+                  </Button.Text>
+                </Button>
+              </Dialog.Footer>
+            </form>
+          </Dialog.Content>
+        </Dialog>
       </Page.Body>
     </Page>
   );

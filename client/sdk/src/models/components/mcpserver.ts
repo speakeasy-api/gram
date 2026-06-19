@@ -35,17 +35,13 @@ export type McpServer = {
    */
   environmentId?: string | undefined;
   /**
-   * The ID of the external OAuth server associated with the server
-   */
-  externalOauthServerId?: string | undefined;
-  /**
    * The ID of the MCP server
    */
   id: string;
   /**
-   * The ID of the OAuth proxy server associated with the server
+   * A human-readable display name for the server
    */
-  oauthProxyServerId?: string | undefined;
+  name?: string | undefined;
   /**
    * The project ID this MCP server belongs to
    */
@@ -55,6 +51,14 @@ export type McpServer = {
    */
   remoteMcpServerId?: string | undefined;
   /**
+   * A URL-safe, project-unique slug derived server-side from the name and ID
+   */
+  slug?: string | undefined;
+  /**
+   * The ID of the tool variations group enabling MCP tool filtering for this server, if any.
+   */
+  toolVariationsGroupId?: string | undefined;
+  /**
    * The ID of the toolset used as the backend
    */
   toolsetId?: string | undefined;
@@ -62,6 +66,10 @@ export type McpServer = {
    * When the MCP server was last updated
    */
   updatedAt: Date;
+  /**
+   * The ID of the user session issuer that gates OAuth-based MCP client authentication for this server, if any.
+   */
+  userSessionIssuerId?: string | undefined;
   /**
    * The visibility of an MCP server
    */
@@ -82,28 +90,30 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         z.transform(v => new Date(v)),
       ),
       environment_id: z.optional(z.string()),
-      external_oauth_server_id: z.optional(z.string()),
       id: z.string(),
-      oauth_proxy_server_id: z.optional(z.string()),
+      name: z.optional(z.string()),
       project_id: z.string(),
       remote_mcp_server_id: z.optional(z.string()),
+      slug: z.optional(z.string()),
+      tool_variations_group_id: z.optional(z.string()),
       toolset_id: z.optional(z.string()),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      user_session_issuer_id: z.optional(z.string()),
       visibility: McpServerVisibility$inboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {
         "created_at": "createdAt",
         "environment_id": "environmentId",
-        "external_oauth_server_id": "externalOauthServerId",
-        "oauth_proxy_server_id": "oauthProxyServerId",
         "project_id": "projectId",
         "remote_mcp_server_id": "remoteMcpServerId",
+        "tool_variations_group_id": "toolVariationsGroupId",
         "toolset_id": "toolsetId",
         "updated_at": "updatedAt",
+        "user_session_issuer_id": "userSessionIssuerId",
       });
     }),
   );

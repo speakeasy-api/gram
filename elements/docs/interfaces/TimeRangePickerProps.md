@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.32.0**](../README.md)
+[**@gram-ai/elements v1.37.1**](../README.md)
 
 ***
 
@@ -122,6 +122,14 @@ Called when LIVE mode changes
 
 ***
 
+### availablePresets?
+
+> `optional` **availablePresets**: readonly [`DateRangePreset`](../type-aliases/DateRangePreset.md)[]
+
+Presets to show in the dropdown
+
+***
+
 ### disabled?
 
 > `optional` **disabled**: `boolean`
@@ -151,6 +159,17 @@ API URL for AI parsing (defaults to window.location.origin)
 > `optional` **projectSlug**: `string`
 
 Project slug for API authentication
+
+***
+
+### authHeaders?
+
+> `optional` **authHeaders**: `Record`\<`string`, `string`\>
+
+Auth headers to send with the AI parsing request to /chat/completions
+(e.g. `{ "Gram-Session": token }`). The `/chat/completions` proxy
+authenticates from request headers, not cookies, so without these the
+request is rejected with 401 and natural-language parsing silently fails.
 
 ***
 

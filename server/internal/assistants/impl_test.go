@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -22,6 +21,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
+
+// stubWorkflowSignaler satisfies WorkflowSignaler for handler tests that
+// don't run Temporal. It records signalled threads so creation paths can
+// assert the eager runtime boot was kicked off.
+type stubWorkflowSignaler struct {
+	signalledThreads []uuid.UUID
+}
+
+func (s *stubWorkflowSignaler) SignalCoordinator(context.Context, uuid.UUID) error {
+	return nil
+}
+
+func (s *stubWorkflowSignaler) SignalThread(_ context.Context, threadID, _ uuid.UUID) error {
+	s.signalledThreads = append(s.signalledThreads, threadID)
+	return nil
+}
 
 func TestServiceRequiresProjectGrants(t *testing.T) {
 	t.Parallel()
@@ -82,6 +97,20 @@ func TestServiceRequiresProjectGrants(t *testing.T) {
 				ProjectSlugInput: nil,
 			})
 		},
+		"getManaged": func(ctx context.Context) error {
+			_, err := svc.GetManagedAssistant(ctx, &gen.GetManagedAssistantPayload{
+				SessionToken:     nil,
+				ProjectSlugInput: nil,
+			})
+			return err
+		},
+		"ensureManaged": func(ctx context.Context) error {
+			_, err := svc.EnsureManagedAssistant(ctx, &gen.EnsureManagedAssistantPayload{
+				SessionToken:     nil,
+				ProjectSlugInput: nil,
+			})
+			return err
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -98,6 +127,16 @@ func TestServiceRequiresProjectGrants(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
+
+	// getManaged is read-scoped — with project:read but no managed assistant
+	// provisioned yet, it must surface NotFound (so the dashboard can decide
+	// whether to call ensureManaged or show the viewer notice) rather than
+	// 403, which would conflate "missing" with "no permission".
+	_, err = svc.GetManagedAssistant(readCtx, &gen.GetManagedAssistantPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
 func TestServiceCreateAssistantMapsInvalidToolsetToBadRequest(t *testing.T) {
@@ -254,14 +293,14 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 	logger := testenv.NewLogger(t)
 	chConn, err := assistantsInfra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	service := &Service{
 		tracer:   testenv.NewTracerProvider(t).Tracer("test"),
 		logger:   logger,
 		auth:     nil,
 		authz:    authzEngine,
-		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendLocal, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil),
-		signaler: nil,
+		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil),
+		signaler: &stubWorkflowSignaler{signalledThreads: nil},
 	}
 
 	sessionID := "session-test"

@@ -137,6 +137,10 @@ export type Toolset = {
    */
   toolUrns: Array<string>;
   /**
+   * The id of the tool variations group enabling MCP tool filtering for this toolset. Set via toolsets.setToolVariationsGroup; null when filtering is disabled.
+   */
+  toolVariationsGroupId?: string | undefined;
+  /**
    * The tools in this toolset
    */
   tools: Array<Tool>;
@@ -148,6 +152,14 @@ export type Toolset = {
    * When the toolset was last updated.
    */
   updatedAt: Date;
+  /**
+   * The id of the user_session_issuer wired to this toolset. Set via toolsets.setUserSessionIssuer; null when no USI is linked.
+   */
+  userSessionIssuerId?: string | undefined;
+  /**
+   * A short url-friendly label that uniquely identifies a resource.
+   */
+  userSessionIssuerSlug?: string | undefined;
 };
 
 /** @internal */
@@ -186,12 +198,15 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
     slug: z.string(),
     tool_selection_mode: z.string(),
     tool_urns: z.array(z.string()),
+    tool_variations_group_id: z.optional(z.string()),
     tools: z.array(Tool$inboundSchema),
     toolset_version: z.int(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    user_session_issuer_id: z.optional(z.string()),
+    user_session_issuer_slug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -215,8 +230,11 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
       "server_variables": "serverVariables",
       "tool_selection_mode": "toolSelectionMode",
       "tool_urns": "toolUrns",
+      "tool_variations_group_id": "toolVariationsGroupId",
       "toolset_version": "toolsetVersion",
       "updated_at": "updatedAt",
+      "user_session_issuer_id": "userSessionIssuerId",
+      "user_session_issuer_slug": "userSessionIssuerSlug",
     });
   }),
 );

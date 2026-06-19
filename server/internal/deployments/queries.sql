@@ -318,8 +318,10 @@ INSERT INTO deployments_functions (
   , runtime
   , memory_mib
   , scale
+  , memory_mib_override
+  , scale_override
 )
-SELECT 
+SELECT
   @clone_deployment_id
   , current.asset_id
   , current.name
@@ -327,6 +329,10 @@ SELECT
   , current.runtime
   , COALESCE(current.memory_mib, @default_memory_mib::int)
   , COALESCE(current.scale, @default_scale::int)
+  -- Operator overrides are carried forward as-is (NULL or value) so they
+  -- survive a later customer deploy instead of being reset.
+  , current.memory_mib_override
+  , current.scale_override
 FROM deployments_functions as current
 WHERE current.deployment_id = @original_deployment_id
   AND current.asset_id <> ALL (@excluded_ids::uuid[])
@@ -345,6 +351,8 @@ INSERT INTO function_tool_definitions (
   , variables
   , auth_input
   , input_schema
+  , tags
+  , meta
   , read_only_hint
   , destructive_hint
   , idempotent_hint
@@ -361,6 +369,8 @@ SELECT
   , current.variables
   , current.auth_input
   , current.input_schema
+  , current.tags
+  , current.meta
   , current.read_only_hint
   , current.destructive_hint
   , current.idempotent_hint
@@ -595,6 +605,7 @@ INSERT INTO function_tool_definitions (
   , input_schema
   , variables
   , auth_input
+  , tags
   , meta
   , read_only_hint
   , destructive_hint
@@ -611,6 +622,7 @@ INSERT INTO function_tool_definitions (
   , @input_schema
   , @variables
   , @auth_input
+  , @tags
   , @meta
   , @read_only_hint
   , @destructive_hint

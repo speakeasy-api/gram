@@ -20,18 +20,26 @@ import (
 type Service interface {
 	// Create a new MCP server
 	CreateMcpServer(context.Context, *CreateMcpServerPayload) (res *types.McpServer, err error)
-	// Get an MCP server by ID
+	// Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
 	GetMcpServer(context.Context, *GetMcpServerPayload) (res *types.McpServer, err error)
 	// List MCP servers for a project. Accepts optional remote_mcp_server_id or
 	// toolset_id filters to scope the result to a single backend; at most one
 	// filter may be supplied since the two backends are mutually exclusive.
 	ListMcpServers(context.Context, *ListMcpServersPayload) (res *ListMcpServersResult, err error)
-	// Update an MCP server. This is a full-record replace: fields omitted from the
-	// request become null on the stored record. The id and visibility fields are
-	// required; exactly one of remote_mcp_server_id or toolset_id must be
-	// provided; at most one of external_oauth_server_id or oauth_proxy_server_id
-	// may be provided.
+	// Update an MCP server. This is a full-record replace for the optional UUID
+	// references: fields omitted from the request become null on the stored
+	// record. name is an exception — omitting it leaves the existing display name
+	// unchanged, while providing it requires a non-empty value and recomputes the
+	// server-side slug. The id and visibility fields are required; exactly one of
+	// remote_mcp_server_id or toolset_id must be provided.
 	UpdateMcpServer(context.Context, *UpdateMcpServerPayload) (res *types.McpServer, err error)
+	// List the tool filter scopes (tags) available on an MCP server and the tools
+	// under each, including tools excluded from all filters. Exactly one of id or
+	// slug must be provided. Read-only; reflects the explicit tool variations
+	// group resolved from the chain (mcp_servers then toolsets), deriving
+	// effective tags with the same logic as the runtime ?tags= filter. Returns
+	// filtering disabled when no explicit group is set.
+	ListToolFilters(context.Context, *ListToolFiltersPayload) (res *types.ListToolFiltersResult, err error)
 	// Delete an MCP server
 	DeleteMcpServer(context.Context, *DeleteMcpServerPayload) (err error)
 }
@@ -56,7 +64,7 @@ const ServiceName = "mcpServers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"createMcpServer", "getMcpServer", "listMcpServers", "updateMcpServer", "deleteMcpServer"}
+var MethodNames = [6]string{"createMcpServer", "getMcpServer", "listMcpServers", "updateMcpServer", "listToolFilters", "deleteMcpServer"}
 
 // CreateMcpServerPayload is the payload type of the mcpServers service
 // createMcpServer method.
@@ -64,16 +72,21 @@ type CreateMcpServerPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+	// A human-readable display name for the server
+	Name string
 	// The ID of the environment to associate with the server
 	EnvironmentID *string
-	// The ID of the external OAuth server to associate with the server
-	ExternalOauthServerID *string
-	// The ID of the OAuth proxy server to associate with the server
-	OauthProxyServerID *string
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication. When set, MCP clients are required to authenticate against
+	// this issuer before connecting.
+	UserSessionIssuerID *string
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string
 	// The ID of the toolset to use as the backend
 	ToolsetID *string
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server. Omit to leave filtering disabled.
+	ToolVariationsGroupID *string
 	// The visibility of the server
 	Visibility types.McpServerVisibility
 }
@@ -91,8 +104,10 @@ type DeleteMcpServerPayload struct {
 // GetMcpServerPayload is the payload type of the mcpServers service
 // getMcpServer method.
 type GetMcpServerPayload struct {
-	// The ID of the MCP server
-	ID               string
+	// The ID of the MCP server. Mutually exclusive with slug.
+	ID *string
+	// The slug of the MCP server. Mutually exclusive with id.
+	Slug             *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -116,6 +131,18 @@ type ListMcpServersResult struct {
 	McpServers []*types.McpServer
 }
 
+// ListToolFiltersPayload is the payload type of the mcpServers service
+// listToolFilters method.
+type ListToolFiltersPayload struct {
+	// The ID of the MCP server. Mutually exclusive with slug.
+	ID *string
+	// The slug of the MCP server. Mutually exclusive with id.
+	Slug             *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // UpdateMcpServerPayload is the payload type of the mcpServers service
 // updateMcpServer method.
 type UpdateMcpServerPayload struct {
@@ -124,16 +151,22 @@ type UpdateMcpServerPayload struct {
 	ProjectSlugInput *string
 	// The ID of the MCP server to update
 	ID string
+	// A human-readable display name for the server. Omit to leave the existing
+	// name unchanged; if provided, must be non-empty.
+	Name *string
 	// The ID of the environment to associate with the server
 	EnvironmentID *string
-	// The ID of the external OAuth server to associate with the server
-	ExternalOauthServerID *string
-	// The ID of the OAuth proxy server to associate with the server
-	OauthProxyServerID *string
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication. Omit to disable issuer-gated OAuth.
+	UserSessionIssuerID *string
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string
 	// The ID of the toolset to use as the backend
 	ToolsetID *string
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server. Omit to disable filtering (cleared to null, consistent with the
+	// full-record replace semantics of the other UUID references).
+	ToolVariationsGroupID *string
 	// The visibility of the server
 	Visibility types.McpServerVisibility
 }

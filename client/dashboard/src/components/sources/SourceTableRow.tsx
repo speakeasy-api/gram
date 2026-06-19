@@ -40,11 +40,15 @@ export function SourceTableRow({
   handleRemove: (assetId: string) => void;
   handleViewAsset: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
-}) {
+}): JSX.Element {
   const routes = useRoutes();
   const { hasScope } = useRBAC();
   const canWrite = hasScope("project:write");
   const config = sourceTypeConfig[asset.type];
+  const sourceTypeLabel =
+    asset.type === "externalmcp" && asset.organizationMcpCollectionRegistryId
+      ? "Collection"
+      : config.label;
   const sourceKind = sourceTypeToUrnKind(asset.type);
 
   const createdAt = "createdAt" in asset ? asset.createdAt : undefined;
@@ -128,7 +132,7 @@ export function SourceTableRow({
 
       {/* Type */}
       <td className="px-3 py-3">
-        <Badge variant="neutral">{config.label}</Badge>
+        <Badge variant="neutral">{sourceTypeLabel}</Badge>
       </td>
 
       {/* Tools */}

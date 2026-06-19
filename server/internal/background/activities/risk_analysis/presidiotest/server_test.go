@@ -41,16 +41,16 @@ func TestMockServer_DetectsEmail(t *testing.T) {
 	_, client := newClient(t)
 
 	results, err := client.AnalyzeBatch(t.Context(), []string{
-		"contact me at john.smith@acmecorp.com",
+		"contact me at john.smith@globex.com",
 	}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
 	ids := ruleIDs(results[0])
-	require.Contains(t, ids, "EMAIL_ADDRESS")
+	require.Contains(t, ids, "pii.email_address")
 	for _, f := range results[0] {
-		if f.RuleID == "EMAIL_ADDRESS" {
-			require.Equal(t, "john.smith@acmecorp.com", f.Match)
+		if f.RuleID == "pii.email_address" {
+			require.Equal(t, "john.smith@globex.com", f.Match)
 			require.Equal(t, "presidio", f.Source)
 		}
 	}
@@ -68,9 +68,9 @@ func TestMockServer_DetectsCreditCardWithLuhnCheck(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 
-	require.Contains(t, ruleIDs(results[0]), "CREDIT_CARD")
-	require.Contains(t, ruleIDs(results[1]), "CREDIT_CARD")
-	require.NotContains(t, ruleIDs(results[2]), "CREDIT_CARD")
+	require.Contains(t, ruleIDs(results[0]), "pii.credit_card")
+	require.Contains(t, ruleIDs(results[1]), "pii.credit_card")
+	require.NotContains(t, ruleIDs(results[2]), "pii.credit_card")
 }
 
 func TestMockServer_DetectsPhoneNumber(t *testing.T) {
@@ -82,7 +82,7 @@ func TestMockServer_DetectsPhoneNumber(t *testing.T) {
 	}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	require.Contains(t, ruleIDs(results[0]), "PHONE_NUMBER")
+	require.Contains(t, ruleIDs(results[0]), "pii.phone_number")
 }
 
 func TestMockServer_DetectsPersonName(t *testing.T) {
@@ -94,7 +94,7 @@ func TestMockServer_DetectsPersonName(t *testing.T) {
 	}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	require.Contains(t, ruleIDs(results[0]), "PERSON")
+	require.Contains(t, ruleIDs(results[0]), "pii.person")
 }
 
 func TestMockServer_NoFalsePositiveOnVersionString(t *testing.T) {
@@ -108,7 +108,7 @@ func TestMockServer_NoFalsePositiveOnVersionString(t *testing.T) {
 	require.Len(t, results, 1)
 
 	for _, f := range results[0] {
-		require.NotEqual(t, "PHONE_NUMBER", f.RuleID, "version string should not match phone regex")
+		require.NotEqual(t, "pii.phone_number", f.RuleID, "version string should not match phone regex")
 	}
 }
 
@@ -123,23 +123,26 @@ func TestMockServer_NoFalsePositiveOnUUID(t *testing.T) {
 	require.Len(t, results, 1)
 
 	for _, f := range results[0] {
-		require.NotEqual(t, "CREDIT_CARD", f.RuleID)
+		require.NotEqual(t, "pii.credit_card", f.RuleID)
 	}
 }
 
+// Note: the entity filter list on AnalyzeBatch is sent verbatim to Presidio,
+// which still speaks UPPER_SNAKE entity types. Only the rule_id written to
+// risk_results is normalized to snake_case by ConvertFindings.
 func TestMockServer_EntityFilterRespected(t *testing.T) {
 	t.Parallel()
 	_, client := newClient(t)
 
 	results, err := client.AnalyzeBatch(t.Context(), []string{
-		"call 425-882-8080 or email alice@example.com",
+		"call 425-882-8080 or email alice@globex.com",
 	}, []string{"EMAIL_ADDRESS"}, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
 	ids := ruleIDs(results[0])
-	require.Contains(t, ids, "EMAIL_ADDRESS")
-	require.NotContains(t, ids, "PHONE_NUMBER")
+	require.Contains(t, ids, "pii.email_address")
+	require.NotContains(t, ids, "pii.phone_number")
 }
 
 func TestMockServer_BatchResultsMapBackToInputIndexes(t *testing.T) {
@@ -150,7 +153,7 @@ func TestMockServer_BatchResultsMapBackToInputIndexes(t *testing.T) {
 	emails := make([]string, n)
 	messages := make([]string, n)
 	for i := range messages {
-		emails[i] = "user" + strconv.Itoa(i) + "@example.com"
+		emails[i] = "user" + strconv.Itoa(i) + "@globex.com"
 		messages[i] = "message " + strconv.Itoa(i) + " contact " + emails[i] + " end"
 	}
 
@@ -161,7 +164,7 @@ func TestMockServer_BatchResultsMapBackToInputIndexes(t *testing.T) {
 	for i, findings := range results {
 		var got string
 		for _, f := range findings {
-			if f.RuleID == "EMAIL_ADDRESS" {
+			if f.RuleID == "pii.email_address" {
 				got = f.Match
 				break
 			}
@@ -187,7 +190,7 @@ func TestMockServer_CustomDetectorOverride(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
-	require.Equal(t, "CUSTOM_ENTITY", results[0][0].RuleID)
+	require.Equal(t, "pii.custom_entity", results[0][0].RuleID)
 	require.Equal(t, "anything", results[0][0].Match)
 }
 

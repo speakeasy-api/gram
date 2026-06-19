@@ -3,6 +3,16 @@ INSERT INTO chat_messages (chat_id, project_id, role, content)
 VALUES (@chat_id, @project_id, @role, @content)
 RETURNING id;
 
+-- name: UpdateChatMessageCreatedAt :exec
+UPDATE chat_messages
+SET created_at = @created_at
+WHERE id = @id;
+
+-- name: UpdateRiskResultCreatedAt :exec
+UPDATE risk_results
+SET created_at = @created_at
+WHERE id = @id;
+
 -- name: ListDeploymentHTTPTools :many
 SELECT *
 FROM http_tool_definitions
@@ -28,6 +38,12 @@ WHERE deployment_id = @deployment_id;
 -- name: ScrubDeploymentFunctionMachineSpecs :exec
 -- Simulates a legacy deployment by NULLing out memory_mib and scale, as if the row was inserted before these columns existed.
 UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deployment_id = @deployment_id;
+
+-- name: SetDeploymentFunctionInfraOverrides :exec
+UPDATE deployments_functions SET memory_mib_override = @memory_mib_override, scale_override = @scale_override WHERE deployment_id = @deployment_id;
+
+-- name: GetDeploymentFunctionInfraOverrides :many
+SELECT memory_mib_override, scale_override FROM deployments_functions WHERE deployment_id = @deployment_id;
 -- name: CountOutboxEntriesByEventType :one
 SELECT COUNT(*)
 FROM outbox
@@ -67,3 +83,35 @@ SET svix_app_id = @svix_app_id,
     webhooks_enabled = @webhooks_enabled,
     updated_at = clock_timestamp()
 WHERE id = @organization_id;
+
+-- name: CreateOrganizationMetadataFixture :exec
+-- Test-only fixture that lets seeders populate every column on
+-- organization_metadata. Prefer this over CreateOrganizationMetadata when a
+-- test needs to exercise filters that depend on account type, workos linkage,
+-- disabled state, whitelist flag, or trial window.
+INSERT INTO organization_metadata (
+    id,
+    name,
+    slug,
+    gram_account_type,
+    workos_id,
+    whitelisted,
+    free_trial_started_at,
+    free_trial_ends_at,
+    disabled_at
+) VALUES (
+    @id,
+    @name,
+    @slug,
+    @gram_account_type,
+    sqlc.narg('workos_id')::text,
+    @whitelisted,
+    @free_trial_started_at,
+    @free_trial_ends_at,
+    sqlc.narg('disabled_at')::timestamptz
+);
+
+-- name: CreateOrganizationUserRelationshipFixture :exec
+-- Test-only fixture for seeding membership counts.
+INSERT INTO organization_user_relationships (organization_id, user_id)
+VALUES (@organization_id, sqlc.narg('user_id')::text);

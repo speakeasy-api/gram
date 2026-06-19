@@ -17,9 +17,7 @@ pub fn canonicalize_inside_workdir(path: &Path) -> Result<PathBuf, ToolError> {
         Some(p) => p,
         None => {
             let p = std::fs::canonicalize(ASSISTANT_WORKDIR).map_err(|e| {
-                ToolError::ExecutionFailed(format!(
-                    "canonicalize workdir {ASSISTANT_WORKDIR}: {e}"
-                ))
+                ToolError::ExecutionFailed(format!("canonicalize workdir {ASSISTANT_WORKDIR}: {e}"))
             })?;
             CANONICAL_WORKDIR.get_or_init(|| p)
         }
@@ -40,6 +38,7 @@ fn canonicalize_inside(path: &Path, canonical_workdir: &Path) -> Result<PathBuf,
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
 

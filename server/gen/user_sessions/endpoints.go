@@ -17,6 +17,8 @@ import (
 // Endpoints wraps the "userSessions" service endpoints.
 type Endpoints struct {
 	ListUserSessions  goa.Endpoint
+	ListFacets        goa.Endpoint
+	MintUserSession   goa.Endpoint
 	RevokeUserSession goa.Endpoint
 }
 
@@ -26,6 +28,8 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		ListUserSessions:  NewListUserSessionsEndpoint(s, a.APIKeyAuth),
+		ListFacets:        NewListFacetsEndpoint(s, a.APIKeyAuth),
+		MintUserSession:   NewMintUserSessionEndpoint(s, a.APIKeyAuth),
 		RevokeUserSession: NewRevokeUserSessionEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -33,6 +37,8 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "userSessions" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListUserSessions = m(e.ListUserSessions)
+	e.ListFacets = m(e.ListFacets)
+	e.MintUserSession = m(e.MintUserSession)
 	e.RevokeUserSession = m(e.RevokeUserSession)
 }
 
@@ -67,7 +73,7 @@ func NewListUserSessionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -92,6 +98,100 @@ func NewListUserSessionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.ListUserSessions(ctx, p)
+	}
+}
+
+// NewListFacetsEndpoint returns an endpoint function that calls the method
+// "listFacets" of service "userSessions".
+func NewListFacetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListFacetsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListFacets(ctx, p)
+	}
+}
+
+// NewMintUserSessionEndpoint returns an endpoint function that calls the
+// method "mintUserSession" of service "userSessions".
+func NewMintUserSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MintUserSessionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.MintUserSession(ctx, p)
 	}
 }
 
@@ -126,7 +226,7 @@ func NewRevokeUserSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string

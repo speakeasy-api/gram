@@ -3,11 +3,15 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { CardContextMenu } from "@/components/card-context-menu";
 import { DotCard } from "@/components/ui/dot-card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
-import { formatRemoteMcpDisplay, sourceTypeToUrnKind } from "@/lib/sources";
+import {
+  formatRemoteMcpUrlForDisplay,
+  sourceTypeToUrnKind,
+} from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query/index.js";
@@ -28,6 +32,7 @@ export type NamedAsset =
       name: string;
       slug: string;
       type: "externalmcp";
+      organizationMcpCollectionRegistryId?: string;
       registryId?: string;
       iconUrl?: string;
     }
@@ -69,11 +74,15 @@ export function SourceCard({
   handleRemove: (assetId: string) => void;
   handleViewAsset: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
-}) {
+}): JSX.Element {
   const routes = useRoutes();
   const { hasScope } = useRBAC();
   const canWrite = hasScope("project:write");
   const config = sourceTypeConfig[asset.type];
+  const sourceTypeLabel =
+    asset.type === "externalmcp" && asset.organizationMcpCollectionRegistryId
+      ? "Collection"
+      : config.label;
 
   const sourceKind = sourceTypeToUrnKind(asset.type);
 
@@ -118,8 +127,20 @@ export function SourceCard({
           },
         ];
 
+  const remoteMcpUrlDisplay =
+    asset.type === "remotemcp"
+      ? formatRemoteMcpUrlForDisplay(asset.url)
+      : undefined;
+  const remoteMcpTrimmedName =
+    asset.type === "remotemcp" ? asset.name?.trim() : undefined;
   const displayName =
-    asset.type === "remotemcp" ? formatRemoteMcpDisplay(asset) : asset.name;
+    asset.type === "remotemcp"
+      ? remoteMcpTrimmedName || remoteMcpUrlDisplay || ""
+      : asset.name;
+  const displaySubtitle =
+    asset.type === "remotemcp" && remoteMcpTrimmedName
+      ? remoteMcpUrlDisplay
+      : undefined;
 
   const iconContent = (() => {
     if (asset.type === "externalmcp" && asset.iconUrl) {
@@ -138,46 +159,61 @@ export function SourceCard({
   })();
 
   return (
-    <routes.sources.source.Link
-      key={asset.id}
-      params={[sourceKind, asset.slug]}
-      className="hover:no-underline"
-    >
-      <DotCard icon={iconContent}>
-        {/* Header row with name and actions */}
-        <div className="mb-2 flex items-start justify-between gap-2">
-          <Type
-            variant="subheading"
-            as="div"
-            className="text-md group-hover:text-primary flex-1 truncate transition-colors"
-            title={displayName}
-          >
-            {displayName}
-          </Type>
-          <div className="flex shrink-0 items-center gap-1">
-            {causingFailure && <AssetIsCausingFailureNotice />}
-            {actions.length > 0 && (
-              <div onClick={(e) => e.stopPropagation()}>
-                <MoreActions actions={actions} />
-              </div>
-            )}
+    <CardContextMenu actions={actions}>
+      <routes.sources.source.Link
+        key={asset.id}
+        params={[sourceKind, asset.slug]}
+        className="block h-full hover:no-underline"
+      >
+        <DotCard icon={iconContent}>
+          {/* Header row with name and actions */}
+          <div className="mb-2 flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <Type
+                variant="subheading"
+                as="div"
+                className="text-md group-hover:text-primary truncate transition-colors"
+                title={displayName}
+              >
+                {displayName}
+              </Type>
+              {displaySubtitle && (
+                <Type
+                  as="div"
+                  muted
+                  small
+                  className="truncate"
+                  title={displaySubtitle}
+                >
+                  {displaySubtitle}
+                </Type>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              {causingFailure && <AssetIsCausingFailureNotice />}
+              {actions.length > 0 && (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <MoreActions actions={actions} />
+                </div>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Footer row with type badge and open link */}
-        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <Badge variant="neutral">{config.label}</Badge>
-          <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
-            <span>Open</span>
-            <ArrowRight className="h-3.5 w-3.5" />
+          {/* Footer row with type badge and open link */}
+          <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+            <Badge variant="neutral">{sourceTypeLabel}</Badge>
+            <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
+              <span>Open</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </div>
           </div>
-        </div>
-      </DotCard>
-    </routes.sources.source.Link>
+        </DotCard>
+      </routes.sources.source.Link>
+    </CardContextMenu>
   );
 }
 
-export function SourceCardSkeleton() {
+export function SourceCardSkeleton(): JSX.Element {
   return (
     <div className="bg-card text-card-foreground flex flex-row overflow-hidden rounded-xl border">
       {/* Dot pattern sidebar placeholder */}

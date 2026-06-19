@@ -16,12 +16,20 @@ import (
 
 // Endpoints wraps the "organizations" service endpoints.
 type Endpoints struct {
-	SendInvite       goa.Endpoint
-	RevokeInvite     goa.Endpoint
-	ListInvites      goa.Endpoint
-	GetInviteByToken goa.Endpoint
-	ListUsers        goa.Endpoint
-	RemoveUser       goa.Endpoint
+	Get                                goa.Endpoint
+	SendInvite                         goa.Endpoint
+	RevokeInvite                       goa.Endpoint
+	UpdateInviteRole                   goa.Endpoint
+	ListInvites                        goa.Endpoint
+	ListUsers                          goa.Endpoint
+	RemoveUser                         goa.Endpoint
+	EnableWebhooks                     goa.Endpoint
+	DisableWebhooks                    goa.Endpoint
+	CreatePortalSession                goa.Endpoint
+	GetOnboardingStatus                goa.Endpoint
+	VerifyOnboardingHooksSetup         goa.Endpoint
+	SendEnterpriseAdminOnboardingEmail goa.Endpoint
+	GenerateWorkOSAdminPortalLink      goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "organizations" service with endpoints.
@@ -29,24 +37,63 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		SendInvite:       NewSendInviteEndpoint(s, a.APIKeyAuth),
-		RevokeInvite:     NewRevokeInviteEndpoint(s, a.APIKeyAuth),
-		ListInvites:      NewListInvitesEndpoint(s, a.APIKeyAuth),
-		GetInviteByToken: NewGetInviteByTokenEndpoint(s),
-		ListUsers:        NewListUsersEndpoint(s, a.APIKeyAuth),
-		RemoveUser:       NewRemoveUserEndpoint(s, a.APIKeyAuth),
+		Get:                                NewGetEndpoint(s, a.APIKeyAuth),
+		SendInvite:                         NewSendInviteEndpoint(s, a.APIKeyAuth),
+		RevokeInvite:                       NewRevokeInviteEndpoint(s, a.APIKeyAuth),
+		UpdateInviteRole:                   NewUpdateInviteRoleEndpoint(s, a.APIKeyAuth),
+		ListInvites:                        NewListInvitesEndpoint(s, a.APIKeyAuth),
+		ListUsers:                          NewListUsersEndpoint(s, a.APIKeyAuth),
+		RemoveUser:                         NewRemoveUserEndpoint(s, a.APIKeyAuth),
+		EnableWebhooks:                     NewEnableWebhooksEndpoint(s, a.APIKeyAuth),
+		DisableWebhooks:                    NewDisableWebhooksEndpoint(s, a.APIKeyAuth),
+		CreatePortalSession:                NewCreatePortalSessionEndpoint(s, a.APIKeyAuth),
+		GetOnboardingStatus:                NewGetOnboardingStatusEndpoint(s, a.APIKeyAuth),
+		VerifyOnboardingHooksSetup:         NewVerifyOnboardingHooksSetupEndpoint(s, a.APIKeyAuth),
+		SendEnterpriseAdminOnboardingEmail: NewSendEnterpriseAdminOnboardingEmailEndpoint(s, a.APIKeyAuth),
+		GenerateWorkOSAdminPortalLink:      NewGenerateWorkOSAdminPortalLinkEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "organizations" service
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.Get = m(e.Get)
 	e.SendInvite = m(e.SendInvite)
 	e.RevokeInvite = m(e.RevokeInvite)
+	e.UpdateInviteRole = m(e.UpdateInviteRole)
 	e.ListInvites = m(e.ListInvites)
-	e.GetInviteByToken = m(e.GetInviteByToken)
 	e.ListUsers = m(e.ListUsers)
 	e.RemoveUser = m(e.RemoveUser)
+	e.EnableWebhooks = m(e.EnableWebhooks)
+	e.DisableWebhooks = m(e.DisableWebhooks)
+	e.CreatePortalSession = m(e.CreatePortalSession)
+	e.GetOnboardingStatus = m(e.GetOnboardingStatus)
+	e.VerifyOnboardingHooksSetup = m(e.VerifyOnboardingHooksSetup)
+	e.SendEnterpriseAdminOnboardingEmail = m(e.SendEnterpriseAdminOnboardingEmail)
+	e.GenerateWorkOSAdminPortalLink = m(e.GenerateWorkOSAdminPortalLink)
+}
+
+// NewGetEndpoint returns an endpoint function that calls the method "get" of
+// service "organizations".
+func NewGetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.Get(ctx, p)
+	}
 }
 
 // NewSendInviteEndpoint returns an endpoint function that calls the method
@@ -95,6 +142,29 @@ func NewRevokeInviteEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 	}
 }
 
+// NewUpdateInviteRoleEndpoint returns an endpoint function that calls the
+// method "updateInviteRole" of service "organizations".
+func NewUpdateInviteRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateInviteRolePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateInviteRole(ctx, p)
+	}
+}
+
 // NewListInvitesEndpoint returns an endpoint function that calls the method
 // "listInvites" of service "organizations".
 func NewListInvitesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -115,15 +185,6 @@ func NewListInvitesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 			return nil, err
 		}
 		return s.ListInvites(ctx, p)
-	}
-}
-
-// NewGetInviteByTokenEndpoint returns an endpoint function that calls the
-// method "getInviteByToken" of service "organizations".
-func NewGetInviteByTokenEndpoint(s Service) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetInviteByTokenPayload)
-		return s.GetInviteByToken(ctx, p)
 	}
 }
 
@@ -170,5 +231,167 @@ func NewRemoveUserEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return nil, s.RemoveUser(ctx, p)
+	}
+}
+
+// NewEnableWebhooksEndpoint returns an endpoint function that calls the method
+// "enableWebhooks" of service "organizations".
+func NewEnableWebhooksEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*EnableWebhooksPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.EnableWebhooks(ctx, p)
+	}
+}
+
+// NewDisableWebhooksEndpoint returns an endpoint function that calls the
+// method "disableWebhooks" of service "organizations".
+func NewDisableWebhooksEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DisableWebhooksPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DisableWebhooks(ctx, p)
+	}
+}
+
+// NewCreatePortalSessionEndpoint returns an endpoint function that calls the
+// method "createPortalSession" of service "organizations".
+func NewCreatePortalSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreatePortalSessionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreatePortalSession(ctx, p)
+	}
+}
+
+// NewGetOnboardingStatusEndpoint returns an endpoint function that calls the
+// method "getOnboardingStatus" of service "organizations".
+func NewGetOnboardingStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOnboardingStatusPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOnboardingStatus(ctx, p)
+	}
+}
+
+// NewVerifyOnboardingHooksSetupEndpoint returns an endpoint function that
+// calls the method "verifyOnboardingHooksSetup" of service "organizations".
+func NewVerifyOnboardingHooksSetupEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*VerifyOnboardingHooksSetupPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.VerifyOnboardingHooksSetup(ctx, p)
+	}
+}
+
+// NewSendEnterpriseAdminOnboardingEmailEndpoint returns an endpoint function
+// that calls the method "sendEnterpriseAdminOnboardingEmail" of service
+// "organizations".
+func NewSendEnterpriseAdminOnboardingEmailEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SendEnterpriseAdminOnboardingEmailPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SendEnterpriseAdminOnboardingEmail(ctx, p)
+	}
+}
+
+// NewGenerateWorkOSAdminPortalLinkEndpoint returns an endpoint function that
+// calls the method "generateWorkOSAdminPortalLink" of service "organizations".
+func NewGenerateWorkOSAdminPortalLinkEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GenerateWorkOSAdminPortalLinkPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GenerateWorkOSAdminPortalLink(ctx, p)
 	}
 }

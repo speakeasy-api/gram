@@ -4,6 +4,8 @@
 
 import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
+import { Agent } from "./agent.js";
+import { AiIntegrations } from "./aiintegrations.js";
 import { Assets } from "./assets.js";
 import { AssistantMemories } from "./assistantmemories.js";
 import { Assistants } from "./assistants.js";
@@ -26,15 +28,18 @@ import { McpEndpoints } from "./mcpendpoints.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
+import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
 import { Organizations } from "./organizations.js";
 import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
 import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
 import { RemoteMcp } from "./remotemcp.js";
+import { RemoteSessionClients } from "./remotesessionclients.js";
+import { RemoteSessionIssuers } from "./remotesessionissuers.js";
+import { RemoteSessions } from "./remotesessions.js";
 import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
-import { Slack } from "./slack.js";
 import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
 import { Tools } from "./tools.js";
@@ -51,6 +56,16 @@ export class Gram extends ClientSDK {
   private _access?: Access;
   get access(): Access {
     return (this._access ??= new Access(this._options));
+  }
+
+  private _agent?: Agent;
+  get agent(): Agent {
+    return (this._agent ??= new Agent(this._options));
+  }
+
+  private _aiIntegrations?: AiIntegrations;
+  get aiIntegrations(): AiIntegrations {
+    return (this._aiIntegrations ??= new AiIntegrations(this._options));
   }
 
   private _assets?: Assets;
@@ -158,6 +173,12 @@ export class Gram extends ClientSDK {
     return (this._mcpServers ??= new McpServers(this._options));
   }
 
+  private _organizationRemoteSessionIssuers?: OrganizationRemoteSessionIssuers;
+  get organizationRemoteSessionIssuers(): OrganizationRemoteSessionIssuers {
+    return (this._organizationRemoteSessionIssuers ??=
+      new OrganizationRemoteSessionIssuers(this._options));
+  }
+
   private _organizations?: Organizations;
   get organizations(): Organizations {
     return (this._organizations ??= new Organizations(this._options));
@@ -193,6 +214,25 @@ export class Gram extends ClientSDK {
     return (this._remoteMcp ??= new RemoteMcp(this._options));
   }
 
+  private _remoteSessionClients?: RemoteSessionClients;
+  get remoteSessionClients(): RemoteSessionClients {
+    return (this._remoteSessionClients ??= new RemoteSessionClients(
+      this._options,
+    ));
+  }
+
+  private _remoteSessionIssuers?: RemoteSessionIssuers;
+  get remoteSessionIssuers(): RemoteSessionIssuers {
+    return (this._remoteSessionIssuers ??= new RemoteSessionIssuers(
+      this._options,
+    ));
+  }
+
+  private _remoteSessions?: RemoteSessions;
+  get remoteSessions(): RemoteSessions {
+    return (this._remoteSessions ??= new RemoteSessions(this._options));
+  }
+
   private _resources?: Resources;
   get resources(): Resources {
     return (this._resources ??= new Resources(this._options));
@@ -201,11 +241,6 @@ export class Gram extends ClientSDK {
   private _risk?: Risk;
   get risk(): Risk {
     return (this._risk ??= new Risk(this._options));
-  }
-
-  private _slack?: Slack;
-  get slack(): Slack {
-    return (this._slack ??= new Slack(this._options));
   }
 
   private _telemetry?: Telemetry;

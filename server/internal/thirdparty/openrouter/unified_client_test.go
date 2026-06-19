@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 // Mock implementations for testing
@@ -29,6 +30,8 @@ type mockProvisioner struct {
 	apiKey string
 	err    error
 }
+
+var _ Provisioner = (*mockProvisioner)(nil)
 
 func (m *mockProvisioner) ProvisionAPIKey(ctx context.Context, orgID string) (string, error) {
 	if m.err != nil {
@@ -43,6 +46,14 @@ func (m *mockProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, 
 
 func (m *mockProvisioner) GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error) {
 	return 0, 0, nil
+}
+
+func (m *mockProvisioner) GetKeyUsage(ctx context.Context, apiKey string) (float64, *int64, error) {
+	return 0, nil, nil
+}
+
+func (m *mockProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID string, currentLimit int64, upstreamLimit *int64) (int64, error) {
+	return currentLimit, nil
 }
 
 func (m *mockProvisioner) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
@@ -121,29 +132,6 @@ func (m *mockChatTitleGenerator) ScheduleChatTitleGeneration(ctx context.Context
 	return m.err
 }
 
-type mockChatResolutionAnalyzer struct {
-	mu        sync.Mutex
-	called    bool
-	err       error
-	chatID    uuid.UUID
-	projectID uuid.UUID
-	orgID     string
-	apiKeyID  string
-	callCount int
-}
-
-func (m *mockChatResolutionAnalyzer) ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.called = true
-	m.callCount++
-	m.chatID = chatID
-	m.projectID = projectID
-	m.orgID = orgID
-	m.apiKeyID = apiKeyID
-	return m.err
-}
-
 type mockTelemetryLogger struct {
 	mu     sync.Mutex
 	called bool
@@ -202,7 +190,6 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	captureStrategy := &mockMessageCaptureStrategy{}
 	trackingStrategy := &mockUsageTrackingStrategy{}
 	titleGenerator := &mockChatTitleGenerator{}
-	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
 	telemetryLogger := &mockTelemetryLogger{}
 
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -217,7 +204,6 @@ func TestChatClient_GetCompletion(t *testing.T) {
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
-		resolutionAnalyzer,
 		telemetryLogger,
 	)
 
@@ -261,7 +247,6 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	assert.True(t, captureStrategy.captureMessageCalled, "CaptureMessage should be called")
 	assert.True(t, trackingStrategy.trackUsageCalled, "TrackUsage should be called")
 	assert.True(t, titleGenerator.called, "ScheduleChatTitleGeneration should be called")
-	assert.True(t, resolutionAnalyzer.called, "ScheduleChatResolutionAnalysis should be called")
 	assert.True(t, telemetryLogger.called, "CreateLog should be called")
 
 	// Verify captured data
@@ -272,10 +257,6 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	assert.Equal(t, chatID.String(), titleGenerator.chatID)
 	assert.Equal(t, "test-org", titleGenerator.orgID)
 	assert.Equal(t, projectID.String(), titleGenerator.projectID)
-	assert.Equal(t, chatID, resolutionAnalyzer.chatID)
-	assert.Equal(t, projectID, resolutionAnalyzer.projectID)
-	assert.Equal(t, "test-org", resolutionAnalyzer.orgID)
-	assert.Equal(t, "test-api-key-id", resolutionAnalyzer.apiKeyID)
 }
 
 func TestChatClient_GetCompletionStream(t *testing.T) {
@@ -326,7 +307,6 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 	captureStrategy := &mockMessageCaptureStrategy{}
 	trackingStrategy := &mockUsageTrackingStrategy{}
 	titleGenerator := &mockChatTitleGenerator{}
-	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
 	telemetryLogger := &mockTelemetryLogger{}
 
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -341,7 +321,6 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
-		resolutionAnalyzer,
 		telemetryLogger,
 	)
 
@@ -391,7 +370,6 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 	assert.True(t, captureStrategy.captureMessageCalled, "CaptureMessage should be called")
 	assert.True(t, trackingStrategy.trackUsageCalled, "TrackUsage should be called")
 	assert.True(t, titleGenerator.called, "ScheduleChatTitleGeneration should be called")
-	assert.True(t, resolutionAnalyzer.called, "ScheduleChatResolutionAnalysis should be called")
 	assert.True(t, telemetryLogger.called, "CreateLog should be called")
 
 	// Verify captured data
@@ -442,7 +420,6 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 	captureStrategy := &mockMessageCaptureStrategy{}
 	trackingStrategy := &mockUsageTrackingStrategy{}
 	titleGenerator := &mockChatTitleGenerator{}
-	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
 	telemetryService := &mockTelemetryLogger{}
 
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -457,7 +434,6 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
-		resolutionAnalyzer,
 		telemetryService,
 	)
 
@@ -553,7 +529,6 @@ func TestChatClient_NormalizesMixedAssistantOnlyForOpenRouterRequest(t *testing.
 		nil,
 		nil,
 		nil,
-		nil,
 	)
 	client.httpClient = &http.Client{
 		Transport: &testTransport{server: server},
@@ -634,7 +609,6 @@ func TestChatClient_PassesMixedAssistantThroughWhenNormalizeFlagUnset(t *testing
 		nil,
 		nil,
 		nil,
-		nil,
 	)
 	client.httpClient = &http.Client{
 		Transport: &testTransport{server: server},
@@ -700,7 +674,6 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 			}
 			trackingStrategy := &mockUsageTrackingStrategy{}
 			titleGenerator := &mockChatTitleGenerator{}
-			resolutionAnalyzer := &mockChatResolutionAnalyzer{}
 			telemetryService := &mockTelemetryLogger{}
 
 			tracerProvider := testenv.NewTracerProvider(t)
@@ -715,7 +688,6 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 				captureStrategy,
 				trackingStrategy,
 				titleGenerator,
-				resolutionAnalyzer,
 				telemetryService,
 			)
 
@@ -772,7 +744,6 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 	captureStrategy := &mockMessageCaptureStrategy{}
 	trackingStrategy := &mockUsageTrackingStrategy{}
 	titleGenerator := &mockChatTitleGenerator{}
-	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
 	telemetryService := &mockTelemetryLogger{}
 
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -787,7 +758,6 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
-		resolutionAnalyzer,
 		telemetryService,
 	)
 
@@ -824,11 +794,6 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 	titleGenerator.mu.Lock()
 	assert.Equal(t, 3, titleGenerator.callCount, "Title generation should be scheduled when isFirstMessage=true (mock always returns true)")
 	titleGenerator.mu.Unlock()
-
-	// Resolution analysis should be scheduled for every message (resets timer)
-	resolutionAnalyzer.mu.Lock()
-	assert.Equal(t, 3, resolutionAnalyzer.callCount, "Resolution analysis should be scheduled for each completion (resets timer)")
-	resolutionAnalyzer.mu.Unlock()
 }
 
 // trackingTitleGenerator records every ScheduleChatTitleGeneration call with its chatID.
@@ -955,7 +920,6 @@ func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
 		&mockMessageCaptureStrategy{},
 		&mockUsageTrackingStrategy{},
 		titleGenerator,
-		&mockChatResolutionAnalyzer{},
 		&mockTelemetryLogger{},
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
@@ -1002,7 +966,6 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 		tracker,
 		&mockUsageTrackingStrategy{},
 		titleGenerator,
-		&mockChatResolutionAnalyzer{},
 		&mockTelemetryLogger{},
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
@@ -1068,7 +1031,6 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 		tracker,
 		&mockUsageTrackingStrategy{},
 		&mockChatTitleGenerator{},
-		&mockChatResolutionAnalyzer{},
 		&mockTelemetryLogger{},
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
@@ -1183,7 +1145,6 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 	captureStrategy := &mockMessageCaptureStrategy{}
 	trackingStrategy := &mockUsageTrackingStrategy{}
 	titleGenerator := &mockChatTitleGenerator{}
-	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
 	telemetryService := &mockTelemetryLogger{}
 
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -1198,7 +1159,6 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
-		resolutionAnalyzer,
 		telemetryService,
 	)
 
@@ -1300,7 +1260,6 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 	captureStrategy := &mockMessageCaptureStrategy{}
 	trackingStrategy := &mockUsageTrackingStrategy{}
 	titleGenerator := &mockChatTitleGenerator{}
-	resolutionAnalyzer := &mockChatResolutionAnalyzer{}
 	telemetryService := &mockTelemetryLogger{}
 
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -1315,7 +1274,6 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
-		resolutionAnalyzer,
 		telemetryService,
 	)
 
@@ -1424,7 +1382,6 @@ func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
 		&mockMessageCaptureStrategy{},
 		&mockUsageTrackingStrategy{},
 		&mockChatTitleGenerator{},
-		&mockChatResolutionAnalyzer{},
 		&mockTelemetryLogger{},
 	)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
@@ -1448,6 +1405,74 @@ func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
 		"server should receive a model from the allowlist, got: %s", receivedModel)
 	require.True(t, strings.HasPrefix(receivedModel, "openai/"),
 		"fallback model should be from the same provider (openai), got: %s", receivedModel)
+}
+
+// TestChatClient_GetCompletion_AttributionFields verifies that session_id, user,
+// metadata.source, and trace.trace_id are forwarded to OpenRouter so dashboard
+// grouping and Datadog APM correlation work.
+func TestChatClient_GetCompletion_AttributionFields(t *testing.T) {
+	t.Parallel()
+
+	var receivedRequestBody OpenAIChatRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&receivedRequestBody); !assert.NoError(t, err) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id": "msg_attr",
+			"model": "openai/gpt-5.4",
+			"choices": [{"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
+			"usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+		}`))
+	}))
+	defer server.Close()
+
+	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+
+	client := NewUnifiedClient(
+		testenv.NewLogger(t),
+		guardianPolicy,
+		&mockProvisioner{apiKey: "test-api-key"},
+		&mockMessageCaptureStrategy{},
+		&mockUsageTrackingStrategy{},
+		&mockChatTitleGenerator{},
+		&mockTelemetryLogger{},
+	)
+	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
+
+	// Real SDK tracer (testenv's provider is noop, so it never produces a
+	// trace ID for the attribution path to pick up).
+	sdkProvider := sdktrace.NewTracerProvider()
+	t.Cleanup(func() { _ = sdkProvider.Shutdown(context.Background()) })
+	ctx, span := sdkProvider.Tracer("openrouter-test").Start(context.Background(), "test-span")
+	defer span.End()
+	spanCtx := span.SpanContext()
+
+	chatID := uuid.New()
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   projectID.String(),
+		Messages:    []or.ChatMessages{CreateMessageUser("Hello")},
+		ChatID:      chatID,
+		UsageSource: billing.ModelUsageSourcePlayground,
+		APIKeyID:    "test-api-key-id",
+	}
+
+	_, err = client.GetCompletion(ctx, req)
+	require.NoError(t, err)
+
+	require.Equal(t, chatID.String(), receivedRequestBody.SessionID,
+		"session_id must mirror the chat ID for OpenRouter dashboard grouping")
+	require.Equal(t, "test-org", receivedRequestBody.User,
+		"user must be the org ID so per-customer cost rollups attribute spend correctly")
+	require.Equal(t, map[string]string{"source": string(billing.ModelUsageSourcePlayground)}, receivedRequestBody.Metadata)
+	require.NotNil(t, receivedRequestBody.Trace)
+	require.Equal(t, spanCtx.TraceID().String(), receivedRequestBody.Trace.TraceID)
+	require.Equal(t, spanCtx.SpanID().String(), receivedRequestBody.Trace.ParentSpanID)
 }
 
 // testTransport is a custom http.RoundTripper that redirects all requests to the test server

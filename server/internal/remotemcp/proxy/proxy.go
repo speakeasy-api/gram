@@ -13,6 +13,7 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -71,6 +72,18 @@ const (
 	DefaultMaxBufferedBodyBytes int64 = 50 * 1024 * 1024
 )
 
+// ServerIdentity bundles the two correlation ids the proxy stamps onto its
+// telemetry: RemoteMCPServerID is the remote_mcp_servers row id (the upstream
+// the proxy forwards to) and McpServerID is the fronting mcp_servers row id
+// (the server users manage). Bundling them keeps the pair from being
+// transposed across the constructors and record calls that thread them, and
+// both are omitted from emitted telemetry when empty rather than recorded as
+// empty-string labels.
+type ServerIdentity struct {
+	RemoteMCPServerID string
+	McpServerID       string
+}
+
 // Proxy is a one-request handler that forwards inbound MCP client requests
 // to a configured Remote MCP Server. A fresh value is expected per inbound
 // request so the SessionID and interceptor state stay tied to a single
@@ -106,6 +119,7 @@ type Proxy struct {
 	// disables metrics recording; tests that do not care about metrics pass
 	// nil here.
 	Metrics *Metrics
+
 	// MaxBufferedBodyBytes bounds the size of any JSON body that is fully
 	// read into memory before parsing — applied to both the inbound user
 	// request and the upstream response. Streamed responses are not subject
@@ -114,12 +128,15 @@ type Proxy struct {
 	// for the package default.
 	MaxBufferedBodyBytes int64
 
-	// ServerID is the Remote MCP Server UUID. When set, it is attached to
-	// every span emitted by the proxy so traces can be correlated across the
-	// HTTP lifecycle and the proxy forward.
-	ServerID string
+	// Identity carries the two correlation ids attached to every span, log
+	// line, and metric the proxy emits: the remote_mcp_servers row id and
+	// the fronting mcp_servers row id. Both are optional and omitted when
+	// empty rather than emitted as empty-string labels.
+	Identity ServerIdentity
+
 	// RemoteURL is the upstream endpoint all requests are forwarded to.
 	RemoteURL string
+
 	// Headers are applied on top of any forwarded client headers when
 	// constructing the upstream request.
 	Headers []ConfiguredHeader
@@ -181,6 +198,34 @@ type Proxy struct {
 	// originating request ID is seen. Responses to non-tools/list requests
 	// skip this loop entirely.
 	ToolsListResponseInterceptors []ToolsListResponseInterceptor
+
+	// ResourcesReadRequestInterceptors run for inbound "resources/read"
+	// JSON-RPC requests only, after the generic UserRequestInterceptors
+	// chain has completed. Non-resources/read requests skip this loop
+	// entirely.
+	ResourcesReadRequestInterceptors []ResourcesReadRequestInterceptor
+
+	// ResourcesReadResponseInterceptors run for "resources/read" JSON-RPC
+	// responses only, after the generic RemoteMessageInterceptors chain has
+	// completed. Dispatches from either the JSON response path or — for
+	// SSE responses — when a terminal response event matching the
+	// originating request ID is seen. Responses to non-resources/read
+	// requests skip this loop entirely.
+	ResourcesReadResponseInterceptors []ResourcesReadResponseInterceptor
+
+	// ResourcesListRequestInterceptors run for inbound "resources/list"
+	// JSON-RPC requests only, after the generic UserRequestInterceptors
+	// chain has completed. Non-resources/list requests skip this loop
+	// entirely.
+	ResourcesListRequestInterceptors []ResourcesListRequestInterceptor
+
+	// ResourcesListResponseInterceptors run for "resources/list" JSON-RPC
+	// responses only, after the generic RemoteMessageInterceptors chain has
+	// completed. Dispatches from either the JSON response path or — for
+	// SSE responses — when a terminal response event matching the
+	// originating request ID is seen. Responses to non-resources/list
+	// requests skip this loop entirely.
+	ResourcesListResponseInterceptors []ResourcesListResponseInterceptor
 }
 
 // Delete forwards an inbound DELETE to the remote MCP server. In MCP's
@@ -203,7 +248,7 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 		responseBytes  int64
 	)
 	defer func() {
-		p.Metrics.Record(ctx, p.ServerID, http.MethodDelete, upstreamStatus, responseBytes, time.Since(start))
+		p.Metrics.Record(ctx, p.Identity, http.MethodDelete, upstreamStatus, responseBytes, time.Since(start))
 	}()
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
@@ -253,7 +298,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 		responseBytes  int64
 	)
 	defer func() {
-		p.Metrics.Record(ctx, p.ServerID, http.MethodGet, upstreamStatus, responseBytes, time.Since(start))
+		p.Metrics.Record(ctx, p.Identity, http.MethodGet, upstreamStatus, responseBytes, time.Since(start))
 	}()
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
@@ -274,7 +319,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	// the user's MCP runtime sees upstream's actual response instead of
 	// silently misparsing it as an SSE stream.
 	if isEventStream(upstreamResp.Header) {
-		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil)
+		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil, nil, nil)
 		responseBytes = n
 		if streamErr != nil {
 			return streamErr
@@ -310,12 +355,25 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		responseBytes  int64
 	)
 	defer func() {
-		p.Metrics.Record(ctx, p.ServerID, http.MethodPost, upstreamStatus, responseBytes, time.Since(start))
+		p.Metrics.Record(ctx, p.Identity, http.MethodPost, upstreamStatus, responseBytes, time.Since(start))
 	}()
 
-	userReq := &UserRequest{UserHTTPRequest: r, JSONRPCMessages: nil, body: nil}
+	userReq := &UserRequest{UserHTTPRequest: r, JSONRPCMessages: nil, body: nil, dirty: false}
 	if parseErr := userReq.ParseJSONRPCMessages(p.MaxBufferedBodyBytes); parseErr != nil {
-		return oops.E(oops.CodeBadRequest, parseErr, "invalid jsonrpc request").Log(ctx, p.Logger)
+		// Batch (array) bodies are rejected ahead of the decoder so the
+		// user sees a spec-shaped JSON-RPC error envelope instead of a
+		// generic decode error. No id can be extracted from a batch
+		// body, so writeRejection takes the invalid-id branch (HTTP 400
+		// + envelope without the "id" field) per MCP Streamable HTTP.
+		if errors.Is(parseErr, ErrBatchRequest) {
+			responseBytes = p.writeRejection(ctx, w, span, jsonrpc.ID{}, &RejectError{
+				Code:    RejectCodeInvalidRequest,
+				Message: ErrBatchRequest.Error(),
+				Data:    nil,
+			})
+			return nil
+		}
+		return oops.E(oops.CodeBadRequest, parseErr, "invalid jsonrpc request").LogError(ctx, p.Logger)
 	}
 
 	// Extract the originating request id once. Used as the correlation id
@@ -335,9 +393,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	}
 
 	if err := p.runUserRequestInterceptors(ctx, userReq); err != nil {
-		n := p.writeRejection(ctx, w, span, userReqID, err)
-		responseBytes = n
-		return nil
+		return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 	}
 
 	// Typed per-RPC dispatch runs after the generic chain so generic
@@ -349,9 +405,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	initializeReq, _ := initializeRequestFromUserRequest(userReq)
 	if initializeReq != nil {
 		if err := p.runInitializeRequestInterceptors(ctx, initializeReq); err != nil {
-			n := p.writeRejection(ctx, w, span, userReqID, err)
-			responseBytes = n
-			return nil
+			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 		}
 	}
 
@@ -363,19 +417,45 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		// matching how /mcp aggregations already work.
 		span.SetAttributes(attr.ToolName(toolsCallReq.Params.Name))
 		if err := p.runToolsCallRequestInterceptors(ctx, toolsCallReq); err != nil {
-			n := p.writeRejection(ctx, w, span, userReqID, err)
-			responseBytes = n
-			return nil
+			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 		}
 	}
 
 	toolsListReq, _ := toolsListRequestFromUserRequest(userReq)
 	if toolsListReq != nil {
 		if err := p.runToolsListRequestInterceptors(ctx, toolsListReq); err != nil {
-			n := p.writeRejection(ctx, w, span, userReqID, err)
-			responseBytes = n
-			return nil
+			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 		}
+	}
+
+	resourcesReadReq, _ := resourcesReadRequestFromUserRequest(userReq)
+	if resourcesReadReq != nil {
+		// Attach the resource URI to the parent Post span so the
+		// `gram.resource.uri` attribute on traces populates for /x/mcp
+		// resource reads, mirroring how tools/call sets `tool_name`.
+		span.SetAttributes(attr.ResourceURI(resourcesReadReq.Params.URI))
+		if err := p.runResourcesReadRequestInterceptors(ctx, resourcesReadReq); err != nil {
+			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
+		}
+	}
+
+	resourcesListReq, _ := resourcesListRequestFromUserRequest(userReq)
+	if resourcesListReq != nil {
+		if err := p.runResourcesListRequestInterceptors(ctx, resourcesListReq); err != nil {
+			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
+		}
+	}
+
+	// Materialize any typed-setter mutations (e.g. ToolsCallRequest.SetArguments)
+	// into the cached body bytes so the forwarder sends the mutated payload
+	// upstream. A no-op when no interceptor mutated the request.
+	if mutated, err := userReq.refreshBody(); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "refresh mutated request body").LogError(ctx, p.Logger)
+	} else if mutated {
+		p.Logger.InfoContext(ctx, "forwarding mutated request body upstream",
+			attr.SlogComponent("remotemcp.proxy"),
+			attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
+			attr.SlogMcpServerID(p.Identity.McpServerID))
 	}
 
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
@@ -396,7 +476,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// below is bypassed entirely for SSE responses because the body is
 	// not a single message to hand off — it's a stream of them.
 	if isEventStream(upstreamResp.Header) {
-		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, toolsCallReq, toolsListReq)
+		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq)
 		responseBytes = n
 		if streamErr != nil {
 			return streamErr
@@ -406,7 +486,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	bodyBytes, msg, err := readJSONRPCBody(upstreamResp.Body, p.MaxBufferedBodyBytes)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "invalid jsonrpc response from remote mcp server").Log(ctx, p.Logger)
+		return oops.E(oops.CodeUnexpected, err, "invalid jsonrpc response from remote mcp server").LogError(ctx, p.Logger)
 	}
 
 	// Empty bodies skip interceptor invocation but still relay through to
@@ -417,12 +497,11 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			RemoteHTTPRequest:  upstreamReq,
 			RemoteHTTPResponse: upstreamResp,
 			Message:            msg,
+			dirty:              false,
 		}
 
 		if err := p.runRemoteMessageInterceptors(ctx, remoteMsg); err != nil {
-			n := p.writeRejection(ctx, w, span, userReqID, err)
-			responseBytes = n
-			return nil
+			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 		}
 
 		// Typed response dispatch runs after the generic chain, symmetric
@@ -432,9 +511,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		if toolsCallReq != nil {
 			if toolsCallResp, ok := toolsCallResponseFromRemoteMessage(toolsCallReq, remoteMsg); ok {
 				if err := p.runToolsCallResponseInterceptors(ctx, toolsCallResp); err != nil {
-					n := p.writeRejection(ctx, w, span, userReqID, err)
-					responseBytes = n
-					return nil
+					return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 				}
 			}
 		}
@@ -442,11 +519,39 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		if toolsListReq != nil {
 			if toolsListResp, ok := toolsListResponseFromRemoteMessage(toolsListReq, remoteMsg); ok {
 				if err := p.runToolsListResponseInterceptors(ctx, toolsListResp); err != nil {
-					n := p.writeRejection(ctx, w, span, userReqID, err)
-					responseBytes = n
-					return nil
+					return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 				}
 			}
+		}
+
+		if resourcesReadReq != nil {
+			if resourcesReadResp, ok := resourcesReadResponseFromRemoteMessage(resourcesReadReq, remoteMsg); ok {
+				if err := p.runResourcesReadResponseInterceptors(ctx, resourcesReadResp); err != nil {
+					return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
+				}
+			}
+		}
+
+		if resourcesListReq != nil {
+			if resourcesListResp, ok := resourcesListResponseFromRemoteMessage(resourcesListReq, remoteMsg); ok {
+				if err := p.runResourcesListResponseInterceptors(ctx, resourcesListResp); err != nil {
+					return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
+				}
+			}
+		}
+
+		// Materialize any typed-setter mutations (e.g.
+		// ToolsListResponse.SetTools) into fresh wire bytes that replace
+		// the upstream's original payload. A no-op when no interceptor
+		// mutated the response.
+		if mutated, ok, err := remoteMsg.materializedBytes(); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "encode mutated response body").LogError(ctx, p.Logger)
+		} else if ok {
+			bodyBytes = mutated
+			p.Logger.InfoContext(ctx, "relaying mutated response body to client",
+				attr.SlogComponent("remotemcp.proxy"),
+				attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
+				attr.SlogMcpServerID(p.Identity.McpServerID))
 		}
 	}
 
@@ -493,7 +598,7 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 	if err != nil {
 		phaseTimer.Stop()
 		forwardCancel()
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "build upstream request").Log(ctx, p.Logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "build upstream request").LogError(ctx, p.Logger)
 	}
 
 	if err := p.applyRequestHeaders(ctx, r, upstreamReq); err != nil {
@@ -566,6 +671,8 @@ func (p *Proxy) relaySSEStream(
 	upstreamResp *http.Response,
 	toolsCallReq *ToolsCallRequest,
 	toolsListReq *ToolsListRequest,
+	resourcesReadReq *ResourcesReadRequest,
+	resourcesListReq *ResourcesListRequest,
 ) (int64, error) {
 	applyResponseHeaders(w, upstreamResp)
 	w.WriteHeader(upstreamResp.StatusCode)
@@ -583,7 +690,7 @@ func (p *Proxy) relaySSEStream(
 
 	// Extract the request ID of the originating typed request once, so we
 	// can match it against response events to detect the terminal event.
-	// At most one of toolsCallReq and toolsListReq is non-nil for a given
+	// At most one of the typed request views is non-nil for a given
 	// inbound POST.
 	var terminalID jsonrpc.ID
 	var haveTerminalID bool
@@ -598,10 +705,20 @@ func (p *Proxy) relaySSEStream(
 			terminalID = rpcReq.ID
 			haveTerminalID = true
 		}
+	case resourcesReadReq != nil && len(resourcesReadReq.UserRequest.JSONRPCMessages) == 1:
+		if rpcReq, ok := resourcesReadReq.UserRequest.JSONRPCMessages[0].(*jsonrpc.Request); ok {
+			terminalID = rpcReq.ID
+			haveTerminalID = true
+		}
+	case resourcesListReq != nil && len(resourcesListReq.UserRequest.JSONRPCMessages) == 1:
+		if rpcReq, ok := resourcesListReq.UserRequest.JSONRPCMessages[0].(*jsonrpc.Request); ok {
+			terminalID = rpcReq.ID
+			haveTerminalID = true
+		}
 	}
 
 	var total int64
-	parseErr := forEachSSEEvent(upstreamResp.Body, p.MaxBufferedBodyBytes, func(rawEvent []byte, data []byte) error {
+	parseErr := forEachSSEEvent(upstreamResp.Body, p.MaxBufferedBodyBytes, func(rawEvent []byte, data []byte, nonData []byte) error {
 		// 1. Try to decode the event's payload as a JSON-RPC message.
 		//    Events whose data is empty or doesn't decode (comments,
 		//    keepalives, non-JSON data) skip interception entirely and
@@ -618,13 +735,19 @@ func (p *Proxy) relaySSEStream(
 		//    error reject the message — its bytes are not written to the
 		//    client and the proxy substitutes a spec-aligned JSON-RPC
 		//    error event in its place (see substituteRejectedSSEEvent).
-		var rejectionErr error
+		//    A successful typed interceptor may also mutate the payload
+		//    via SetX setters; we materialize the swap below.
+		var (
+			rejectionErr error
+			remoteMsg    *RemoteMessage
+		)
 		if msg != nil {
-			remoteMsg := &RemoteMessage{
+			remoteMsg = &RemoteMessage{
 				UserHTTPRequest:    userReq,
 				RemoteHTTPRequest:  remoteReq,
 				RemoteHTTPResponse: upstreamResp,
 				Message:            msg,
+				dirty:              false,
 			}
 
 			if err := p.runRemoteMessageInterceptors(ctx, remoteMsg); err != nil {
@@ -634,8 +757,8 @@ func (p *Proxy) relaySSEStream(
 			// Typed dispatch on terminal response events. Same rejection
 			// semantics as the generic chain — a typed rejection
 			// substitutes the same way. At most one of the typed
-			// dispatchers fires per event because at most one of
-			// toolsCallReq/toolsListReq is non-nil.
+			// dispatchers fires per event because at most one of the
+			// typed request views is non-nil.
 			if rejectionErr == nil && haveTerminalID {
 				if resp, ok := msg.(*jsonrpc.Response); ok && jsonrpcIDsEqual(resp.ID, terminalID) {
 					switch {
@@ -651,6 +774,18 @@ func (p *Proxy) relaySSEStream(
 								rejectionErr = err
 							}
 						}
+					case resourcesReadReq != nil:
+						if typedResp, typedOK := resourcesReadResponseFromRemoteMessage(resourcesReadReq, remoteMsg); typedOK {
+							if err := p.runResourcesReadResponseInterceptors(ctx, typedResp); err != nil {
+								rejectionErr = err
+							}
+						}
+					case resourcesListReq != nil:
+						if typedResp, typedOK := resourcesListResponseFromRemoteMessage(resourcesListReq, remoteMsg); typedOK {
+							if err := p.runResourcesListResponseInterceptors(ctx, typedResp); err != nil {
+								rejectionErr = err
+							}
+						}
 					}
 				}
 			}
@@ -659,7 +794,8 @@ func (p *Proxy) relaySSEStream(
 		// 3. If the message was rejected, write a substitute event in its
 		//    place so the user's MCP runtime can correlate (response/
 		//    server-request shapes) or surface the rejection (notification
-		//    shapes) rather than silently missing the message.
+		//    shapes) rather than silently missing the message. Any prior
+		//    mutation in the chain is discarded — rejection wins.
 		if rejectionErr != nil {
 			rejectErr := RejectErrorFromCause(rejectionErr)
 			substitute, buildErr := substituteRejectedSSEEvent(msg, rejectErr)
@@ -682,14 +818,28 @@ func (p *Proxy) relaySSEStream(
 			return nil
 		}
 
-		// 4. Otherwise relay the raw event bytes to the client and flush
-		//    so the next event reaches them as soon as it's read. Headers
-		//    and prior events were already flushed during the previous
-		//    loop iteration (or the initial header flush above).
-		if _, writeErr := w.Write(rawEvent); writeErr != nil {
+		// 4. Otherwise relay to the client. If a typed setter mutated
+		//    the message, re-emit the event with the mutated payload
+		//    spliced into the original non-data fields (event:, id:,
+		//    retry:, comments). Otherwise relay the raw event bytes
+		//    verbatim. Flush in both cases so the next event reaches
+		//    the client as soon as it's read.
+		emit := rawEvent
+		if remoteMsg != nil {
+			if mutated, ok, err := remoteMsg.materializedBytes(); err != nil {
+				return fmt.Errorf("encode mutated sse event: %w", err)
+			} else if ok {
+				emit = formatSSEEventWithData(nonData, mutated)
+				p.Logger.InfoContext(ctx, "relaying mutated SSE event to client",
+					attr.SlogComponent("remotemcp.proxy"),
+					attr.SlogRemoteMCPServerID(p.Identity.RemoteMCPServerID),
+					attr.SlogMcpServerID(p.Identity.McpServerID))
+			}
+		}
+		if _, writeErr := w.Write(emit); writeErr != nil {
 			return fmt.Errorf("stream sse event: %w", writeErr)
 		}
-		total += int64(len(rawEvent))
+		total += int64(len(emit))
 		if flusher != nil {
 			flusher.Flush()
 		}
@@ -704,15 +854,18 @@ func (p *Proxy) relaySSEStream(
 }
 
 // requestSpanAttributes returns the attribute set applied to every span the proxy
-// emits for an inbound request. ServerID is optional on Proxy and is omitted
-// when empty rather than emitted as an empty-string label.
+// emits for an inbound request. Both correlation ids are optional on Proxy and
+// are omitted when empty rather than emitted as empty-string labels.
 func (p *Proxy) requestSpanAttributes(method string) []attribute.KeyValue {
 	attrs := []attribute.KeyValue{
 		attr.HTTPRequestMethod(method),
 		attr.RemoteMCPServerURL(p.RemoteURL),
 	}
-	if p.ServerID != "" {
-		attrs = append(attrs, attr.RemoteMCPServerID(p.ServerID))
+	if p.Identity.RemoteMCPServerID != "" {
+		attrs = append(attrs, attr.RemoteMCPServerID(p.Identity.RemoteMCPServerID))
+	}
+	if p.Identity.McpServerID != "" {
+		attrs = append(attrs, attr.McpServerID(p.Identity.McpServerID))
 	}
 	return attrs
 }
@@ -844,6 +997,78 @@ func (p *Proxy) runToolsListResponseInterceptors(ctx context.Context, list *Tool
 	return nil
 }
 
+// runResourcesReadRequestInterceptors invokes each configured
+// ResourcesReadRequestInterceptor in order, returning the first wrapped
+// rejection error or nil if all interceptors accept the request.
+func (p *Proxy) runResourcesReadRequestInterceptors(ctx context.Context, read *ResourcesReadRequest) error {
+	for _, interceptor := range p.ResourcesReadRequestInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ResourcesReadRequestInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		if err := interceptor.InterceptResourcesReadRequest(iterCtx, read); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err, trace.WithStackTrace(true))
+			span.End()
+			return p.wrapInterceptorRejection(iterCtx, "resources/read request", interceptor.Name(), err)
+		}
+		span.End()
+	}
+	return nil
+}
+
+// runResourcesReadResponseInterceptors invokes each configured
+// ResourcesReadResponseInterceptor in order, returning the first wrapped
+// rejection error or nil if all interceptors accept the response.
+func (p *Proxy) runResourcesReadResponseInterceptors(ctx context.Context, read *ResourcesReadResponse) error {
+	for _, interceptor := range p.ResourcesReadResponseInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ResourcesReadResponseInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		if err := interceptor.InterceptResourcesReadResponse(iterCtx, read); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err, trace.WithStackTrace(true))
+			span.End()
+			return p.wrapInterceptorRejection(iterCtx, "resources/read response", interceptor.Name(), err)
+		}
+		span.End()
+	}
+	return nil
+}
+
+// runResourcesListRequestInterceptors invokes each configured
+// ResourcesListRequestInterceptor in order, returning the first wrapped
+// rejection error or nil if all interceptors accept the request.
+func (p *Proxy) runResourcesListRequestInterceptors(ctx context.Context, list *ResourcesListRequest) error {
+	for _, interceptor := range p.ResourcesListRequestInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ResourcesListRequestInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		if err := interceptor.InterceptResourcesListRequest(iterCtx, list); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err, trace.WithStackTrace(true))
+			span.End()
+			return p.wrapInterceptorRejection(iterCtx, "resources/list request", interceptor.Name(), err)
+		}
+		span.End()
+	}
+	return nil
+}
+
+// runResourcesListResponseInterceptors invokes each configured
+// ResourcesListResponseInterceptor in order, returning the first wrapped
+// rejection error or nil if all interceptors accept the response.
+func (p *Proxy) runResourcesListResponseInterceptors(ctx context.Context, list *ResourcesListResponse) error {
+	for _, interceptor := range p.ResourcesListResponseInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ResourcesListResponseInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		if err := interceptor.InterceptResourcesListResponse(iterCtx, list); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err, trace.WithStackTrace(true))
+			span.End()
+			return p.wrapInterceptorRejection(iterCtx, "resources/list response", interceptor.Name(), err)
+		}
+		span.End()
+	}
+	return nil
+}
+
 // runUserRequestInterceptors invokes each configured UserRequestInterceptor
 // in order, returning the first wrapped rejection error or nil if all
 // interceptors accept the request. Each invocation gets its own span so
@@ -916,6 +1141,36 @@ func (p *Proxy) writeRejection(ctx context.Context, w http.ResponseWriter, span 
 	span.SetStatus(codes.Error, cause.Error())
 	span.RecordError(cause, trace.WithStackTrace(true))
 	return int64(n)
+}
+
+// dispatchInterceptorError routes an interceptor error to the right handler.
+// A [*MutationError] anywhere in the error chain indicates the setter ran
+// into an internal anomaly (typically a marshal failure on a spec-defined
+// type) rather than a deliberate policy rejection — the proxy surfaces it
+// as an HTTP 5xx via [oops.E] with [oops.CodeUnexpected] so well-behaved
+// clients see a server-error signal rather than a JSON-RPC InternalError
+// envelope, matching the treatment of failures in [UserRequest.refreshBody]
+// and [RemoteMessage.materializedBytes]. Any other error is treated as a
+// normal rejection and routed through [Proxy.writeRejection], with the
+// byte count stored through responseBytes for metric attribution.
+//
+// Returns a non-nil error only when the proxy method should propagate
+// (5xx path); rejection writes always return nil because the response has
+// already been committed to the wire.
+func (p *Proxy) dispatchInterceptorError(
+	ctx context.Context,
+	w http.ResponseWriter,
+	span trace.Span,
+	id jsonrpc.ID,
+	err error,
+	responseBytes *int64,
+) error {
+	var mutErr *MutationError
+	if errors.As(err, &mutErr) {
+		return oops.E(oops.CodeUnexpected, err, "proxy interceptor mutation failure").LogError(ctx, p.Logger)
+	}
+	*responseBytes = p.writeRejection(ctx, w, span, id, err)
+	return nil
 }
 
 // writeResponse relays status, headers, and body from the upstream response

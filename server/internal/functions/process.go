@@ -115,7 +115,7 @@ func (p *ToolExtractor) Do(
 		"functions attachment id set", attachementID != uuid.Nil,
 		"functions attachement info set", attachement != nil && attachement.Name != "" && attachement.Slug != "",
 	); err != nil {
-		return nil, oops.E(oops.CodeInvariantViolation, oops.Permanent(err), "unable to verify functions attachement").Log(ctx, p.logger)
+		return nil, oops.E(oops.CodeInvariantViolation, oops.Permanent(err), "unable to verify functions attachement").LogError(ctx, p.logger)
 	}
 
 	slug := attachement.Slug
@@ -156,7 +156,7 @@ func (p *ToolExtractor) Do(
 			oops.CodeBadRequest,
 			nil,
 			"%s: unsupported functions runtime: %s (allowed: %s)", slug, attachement.Runtime, supportedRuntimes,
-		).Log(ctx, logger, attrError)
+		).LogError(ctx, logger, attrError)
 	}
 
 	var validEntrypoint map[string]struct{}
@@ -166,13 +166,13 @@ func (p *ToolExtractor) Do(
 	case strings.HasPrefix(attachement.Runtime, "python:"):
 		validEntrypoint = pythonEntrypoints
 	default:
-		return nil, oops.E(oops.CodeBadRequest, nil, "%s: unrecognized functions runtime", slug).Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "%s: unrecognized functions runtime", slug).LogError(ctx, logger)
 	}
 	entrypointKeys := slices.Sorted(maps.Keys(validEntrypoint))
 
 	rc, size, err := p.assetStorage.ReadAt(ctx, assetURL)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "%s: error fetching functions zip file", slug).Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "%s: error fetching functions zip file", slug).LogError(ctx, logger)
 	}
 	defer o11y.LogDefer(ctx, logger, func() error {
 		return rc.Close()
@@ -180,7 +180,7 @@ func (p *ToolExtractor) Do(
 
 	rdr, err := zip.NewReader(rc, size)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%s: error opening functions zip file", slug).Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "%s: error opening functions zip file", slug).LogError(ctx, logger)
 	}
 
 	foundEntrypoint := false
@@ -196,16 +196,16 @@ func (p *ToolExtractor) Do(
 	}
 
 	if !foundEntrypoint {
-		return nil, oops.E(oops.CodeBadRequest, errPermanent, "%s: functions zip file is missing entrypoint file: %v", entrypointKeys, slug).Log(ctx, logger, attrError)
+		return nil, oops.E(oops.CodeBadRequest, errPermanent, "%s: functions zip file is missing entrypoint file: %v", entrypointKeys, slug).LogError(ctx, logger, attrError)
 	}
 
 	if manifestFile == nil {
-		return nil, oops.E(oops.CodeBadRequest, errPermanent, "%s: functions zip file is missing manifest.json file", slug).Log(ctx, logger, attrError)
+		return nil, oops.E(oops.CodeBadRequest, errPermanent, "%s: functions zip file is missing manifest.json file", slug).LogError(ctx, logger, attrError)
 	}
 
 	manifestRdr, err := manifestFile.Open()
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%s: error opening manifest file", slug).Log(ctx, logger, attrError)
+		return nil, oops.E(oops.CodeBadRequest, err, "%s: error opening manifest file", slug).LogError(ctx, logger, attrError)
 	}
 	defer o11y.LogDefer(ctx, logger, func() error {
 		return manifestRdr.Close()
@@ -213,17 +213,17 @@ func (p *ToolExtractor) Do(
 
 	manifestBs, err := io.ReadAll(manifestRdr)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%s: error reading manifest file", slug).Log(ctx, logger, attrError)
+		return nil, oops.E(oops.CodeBadRequest, err, "%s: error reading manifest file", slug).LogError(ctx, logger, attrError)
 	}
 
 	var manifest Manifest
 	if err := manifest.UnmarshalJSON(manifestBs); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%s: error parsing manifest file", slug).Log(ctx, logger, attrError)
+		return nil, oops.E(oops.CodeBadRequest, err, "%s: error parsing manifest file", slug).LogError(ctx, logger, attrError)
 	}
 
 	dbtx, err := p.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "%s: error opening database transaction", slug).Log(ctx, p.logger, attrError)
+		return nil, oops.E(oops.CodeUnexpected, err, "%s: error opening database transaction", slug).LogError(ctx, p.logger, attrError)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -282,7 +282,7 @@ func (p *ToolExtractor) Do(
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "%s: error saving tools and resources", slug).Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "%s: error saving tools and resources", slug).LogError(ctx, logger)
 	}
 
 	logger.InfoContext(ctx, fmt.Sprintf("[%s] processed function source: %d tools created, %d tools skipped, %d resources created, %d resources skipped", slug, numTools, numToolsSkipped, numResources, numResourcesSkipped))
@@ -312,6 +312,11 @@ func processManifestToolV0(
 	inputSchema := tool.InputSchema
 	variables := tool.Variables
 	metaTags := tool.Meta
+
+	tags := tool.Tags
+	if tags == nil {
+		tags = []string{}
+	}
 
 	if variables == nil {
 		variables = map[string]*ManifestVariableAttributeV0{}
@@ -359,10 +364,15 @@ func processManifestToolV0(
 		}
 	}
 
+	toolURN := urn.NewTool(urn.ToolKindFunction, string(attachementSlug), name)
+	if err := toolURN.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid tool urn: %w", err)
+	}
+
 	t, err := tx.CreateFunctionsTool(ctx, repo.CreateFunctionsToolParams{
 		DeploymentID:    deploymentID,
 		FunctionID:      attachementID,
-		ToolUrn:         urn.NewTool(urn.ToolKindFunction, string(attachementSlug), name),
+		ToolUrn:         toolURN,
 		ProjectID:       projectID,
 		Runtime:         runtime,
 		Name:            name,
@@ -370,6 +380,7 @@ func processManifestToolV0(
 		InputSchema:     inputSchema,
 		Variables:       varBs,
 		AuthInput:       authInput,
+		Tags:            tags,
 		Meta:            metaBs,
 		ReadOnlyHint:    readOnlyHint,
 		DestructiveHint: destructiveHint,

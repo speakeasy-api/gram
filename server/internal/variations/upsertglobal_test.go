@@ -67,7 +67,7 @@ func TestVariationsService_UpsertGlobal_Create(t *testing.T) {
 	require.Equal(t, "variation", record.SubjectType)
 	require.Equal(t, "test-tool", record.SubjectDisplay)
 	require.Empty(t, record.SubjectSlug)
-	require.Equal(t, "null", string(record.BeforeSnapshot))
+	require.Nil(t, record.BeforeSnapshot)
 	require.NotNil(t, record.AfterSnapshot)
 
 	metadata, err := audittest.DecodeAuditData(record.Metadata)

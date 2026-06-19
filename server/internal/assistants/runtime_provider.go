@@ -1,14 +1,10 @@
 package assistants
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/url"
-	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/superfly/fly-go/tokens"
 	"go.opentelemetry.io/otel/trace"
 
@@ -16,8 +12,8 @@ import (
 )
 
 const (
-	RuntimeProviderLocal = runtimeBackendLocal
 	RuntimeProviderFlyIO = runtimeBackendFlyIO
+	RuntimeProviderGKE   = runtimeBackendGKE
 
 	defaultFlyRuntimeRegion = "us"
 	defaultFlyRuntimePrefix = "gram-asst"
@@ -25,8 +21,8 @@ const (
 
 type RuntimeBackendConfig struct {
 	Provider string
-	Local    RuntimeManagerConfig
 	Fly      FlyRuntimeConfig
+	GKE      GKERuntimeConfig
 }
 
 type FlyRuntimeConfig struct {
@@ -38,9 +34,19 @@ type FlyRuntimeConfig struct {
 	DefaultFlyOrg      string
 	DefaultFlyRegion   string
 	OCIImage           string
-	ImageVersion       string
+	ImageTag           string
 	AppNamePrefix      string
-	ServerURLOverride  *url.URL
+	ServerURL          *url.URL
+
+	// OTLP exporter settings stamped into runtime machine env as standard
+	// OTEL_EXPORTER_OTLP_* variables so the runner exports agentkit spans.
+	// Trace export is disabled when OTLPEndpoint is empty.
+	OTLPEndpoint string
+	OTLPProtocol string
+	OTLPHeaders  string
+	// Environment is stamped into OTEL_RESOURCE_ATTRIBUTES as
+	// deployment.environment.name, matching the server's own resource tags.
+	Environment string
 }
 
 func (c FlyRuntimeConfig) Validate() error {
@@ -53,53 +59,54 @@ func (c FlyRuntimeConfig) Validate() error {
 	if c.OCIImage == "" {
 		return fmt.Errorf("--assistant-runtime-oci-image is required")
 	}
-	if c.ImageVersion == "" {
-		return fmt.Errorf("--assistant-runtime-image-version is required")
+	if c.ServerURL == nil {
+		return fmt.Errorf("assistant fly runtime server URL is not configured")
+	}
+	if c.ServerURL.Hostname() == "" {
+		return fmt.Errorf("assistant fly runtime requires a public --assistant-runtime-server-url or --server-url; got %q", c.ServerURL.String())
+	}
+	switch c.OTLPProtocol {
+	case "", "grpc", "http/protobuf", "http/json":
+	default:
+		return fmt.Errorf("invalid --assistant-runtime-otlp-protocol: %s (allowed: grpc, http/protobuf, http/json)", c.OTLPProtocol)
 	}
 	return nil
 }
 
-func normalizeRuntimeProvider(provider string) string {
-	switch provider {
-	case "", runtimeBackendLegacyFirecracker:
-		return RuntimeProviderLocal
-	default:
-		return provider
-	}
-}
+// NewRuntimeBackend assembles a runtimeRouter over every configured backend and
+// targets config.Provider for new admissions. A backend is constructed when its
+// config is present — Fly when an API token is set, GKE when an in-cluster
+// kubernetes client is injected — so the two can run side by side (e.g. target
+// GKE while still tearing down Fly-backed rows). The target backend must be
+// among those constructed.
+func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpPolicy *guardian.Policy, config RuntimeBackendConfig) (RuntimeBackend, error) {
+	backends := map[string]RuntimeBackend{}
 
-func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpPolicy *guardian.Policy, config RuntimeBackendConfig) RuntimeBackend {
-	provider := normalizeRuntimeProvider(config.Provider)
-	switch provider {
-	case RuntimeProviderLocal:
-		return NewRuntimeManager(logger, httpPolicy, config.Local)
-	case RuntimeProviderFlyIO:
-		return NewFlyRuntimeBackend(logger, tracerProvider, httpPolicy, config.Fly)
-	default:
-		panic(fmt.Sprintf("assistants.NewRuntimeBackend: unsupported provider %q (CLI validation should have rejected this)", provider))
+	if config.Fly.FlyTokens != nil {
+		if err := config.Fly.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid fly assistant runtime config: %w", err)
+		}
+		backends[runtimeBackendFlyIO] = NewFlyRuntimeBackend(logger, tracerProvider, httpPolicy, config.Fly)
 	}
-}
 
-func ValidateRuntimeBackendServerURL(ctx context.Context, runtime RuntimeBackend, serverURL *url.URL) error {
-	if runtime == nil || runtime.Backend() != runtimeBackendFlyIO {
-		return nil
+	if config.GKE.Dynamic != nil {
+		if err := config.GKE.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid gke assistant runtime config: %w", err)
+		}
+		// Reach the in-pod runner through the guardian egress policy, matching
+		// the Fly backend, but allowlist the runner pod CIDR: the server dials
+		// runners by their RFC1918 pod IP (resolved from the Kubernetes API),
+		// which the default policy would otherwise reject as SSRF.
+		gkeClient := httpPolicy.PooledClient(
+			guardian.WithDefaultRetryConfig(),
+			guardian.WithAllowedCIDRBlocks(config.GKE.RunnerCIDRBlocks...),
+		)
+		backends[runtimeBackendGKE] = NewGKERuntimeBackend(logger, tracerProvider, gkeClient, config.GKE)
 	}
-	_, err := runtime.ServerURL(ctx, assistantRuntimeRecord{
-		ID:                  uuid.Nil,
-		AssistantThreadID:   uuid.Nil,
-		AssistantID:         uuid.Nil,
-		ProjectID:           uuid.Nil,
-		Backend:             runtime.Backend(),
-		BackendMetadataJSON: nil,
-		State:               "",
-		WarmUntil: pgtype.Timestamptz{
-			Time:             time.Time{},
-			InfinityModifier: pgtype.Finite,
-			Valid:            false,
-		},
-	}, serverURL)
+
+	router, err := newRuntimeRouter(config.Provider, backends)
 	if err != nil {
-		return fmt.Errorf("validate assistant runtime server url: %w", err)
+		return nil, fmt.Errorf("assemble assistant runtime backends: %w", err)
 	}
-	return nil
+	return router, nil
 }

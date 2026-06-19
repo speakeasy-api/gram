@@ -1,0 +1,35 @@
+edition = "2024";
+
+package gram.ping.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/ping/v1;pingv1";
+
+message Processor {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.ping.v1.Message"
+    ack_deadline: {seconds: 30}
+    retention: {seconds: 3600}
+    retain_acked_messages: true
+    retry_policy: {
+      minimum_backoff: {seconds: 10}
+      maximum_backoff: {seconds: 600}
+    }
+    dead_letter: {max_delivery_attempts: 5}
+  };
+}
+
+message PyProcessor {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.ping.v1.Message"
+    ack_deadline: {seconds: 30}
+    retention: {seconds: 3600}
+    retain_acked_messages: true
+    retry_policy: {
+      minimum_backoff: {seconds: 10}
+      maximum_backoff: {seconds: 600}
+    }
+    dead_letter: {max_delivery_attempts: 5}
+  };
+}

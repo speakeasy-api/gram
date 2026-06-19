@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -23,8 +24,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -68,9 +72,6 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
-
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
@@ -81,10 +82,34 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+
+	enc := testenv.NewEncryptionClient(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	serverURL, err := url.Parse("http://0.0.0.0")
+	require.NoError(t, err)
+
+	// usersessions reaches the legacy gram registration migration through a
+	// remotesessions.Service; construct one over the same test database.
+	remoteSessionsService := remotesessions.NewService(
+		logger,
+		tracerProvider,
+		conn,
+		sessionManager,
+		authzEngine,
+		enc,
+		environments.NewEnvironmentEntries(logger, conn, enc, mcpmetadatarepo.New(conn)),
+		guardianPolicy,
+		audit.NewLogger(),
+		serverURL,
+		cache.NewRedisCacheAdapter(redisClient),
+	)
 
 	svc := usersessions.NewService(
 		logger,
@@ -92,8 +117,11 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		conn,
 		sessionManager,
 		chatSessionsManager,
-		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache),
+		authzEngine,
 		audit.NewLogger(),
+		usersessions.NewSigner("test-jwt-secret"),
+		"http://0.0.0.0",
+		remoteSessionsService,
 	)
 
 	return ctx, &testInstance{

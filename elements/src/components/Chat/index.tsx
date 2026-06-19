@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useElements } from "@/hooks/useElements";
 import { AssistantModal } from "../assistant-ui/assistant-modal";
 import { AssistantSidecar } from "../assistant-ui/assistant-sidecar";
@@ -11,7 +12,7 @@ interface ChatProps {
   className?: string;
 }
 
-export const Chat = ({ className }: ChatProps) => {
+export const Chat = ({ className }: ChatProps): React.JSX.Element => {
   const { config } = useElements();
 
   switch (config.variant) {
@@ -34,6 +35,8 @@ export const Chat = ({ className }: ChatProps) => {
 
     // If no variant is provided then fallback to the modal
     // Modal has its own internal ErrorBoundary around Thread
+    case "widget":
+    case undefined:
     default:
       return (
         <ShadowRoot>

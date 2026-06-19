@@ -3,8 +3,11 @@
  */
 
 import { userSessionsList } from "../funcs/userSessionsList.js";
+import { userSessionsListFacets } from "../funcs/userSessionsListFacets.js";
+import { userSessionsMint } from "../funcs/userSessionsMint.js";
 import { userSessionsRevoke } from "../funcs/userSessionsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -24,6 +27,44 @@ export class UserSessions extends ClientSDK {
     PageIterator<operations.ListUserSessionsResponse, { cursor: string }>
   > {
     return unwrapResultIterator(userSessionsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listFacets userSessions
+   *
+   * @remarks
+   * List available user session facet values (clients, users, servers) in the caller's project.
+   */
+  async listFacets(
+    request?: operations.ListUserSessionFacetsRequest | undefined,
+    security?: operations.ListUserSessionFacetsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListUserSessionFacetsResult> {
+    return unwrapAsync(userSessionsListFacets(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * mintUserSession userSessions
+   *
+   * @remarks
+   * Mint a user_session for an issuer-gated toolset on behalf of the authenticated dashboard user. The minted JWT matches the shape of the one /mcp/{slug}/token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.
+   */
+  async mint(
+    request: operations.MintUserSessionRequest,
+    security?: operations.MintUserSessionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.MintUserSessionResponseBody> {
+    return unwrapAsync(userSessionsMint(
       this,
       request,
       security,

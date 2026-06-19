@@ -1,3 +1,4 @@
+// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import { useTelemetry } from "@/contexts/Telemetry.tsx";
 import { cn } from "@/lib/utils.ts";
 import { useIsProjectEmpty } from "@/pages/onboarding/upload-openapi-utils";
@@ -7,20 +8,19 @@ import { Button, Stack } from "@speakeasy-api/moonshine";
 import React, { ReactElement } from "react";
 import { ContentErrorBoundary } from "./content-error-boundary.tsx";
 import { PageHeader } from "./page-header.tsx";
+import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "./ui/heading.tsx";
 import { MoreActions } from "./ui/more-actions.tsx";
+import { Toolbar } from "./ui/toolbar.tsx";
 import { Type } from "./ui/type.tsx";
 import { XYFade } from "./ui/xy-fade.tsx";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
-    // Height accounts for the AppLayout chrome above us (TopHeader = 3.5rem,
-    // content-wrapper pt-2 = 0.5rem), the SidebarInset visual gutter (m-2
-    // top+bottom = 1rem), and the impersonation banner via --banner-offset.
-    // Without subtracting the TopHeader + pt-2, fullHeight pages overflow the
-    // visible area and SidebarInset's overflow-auto silently scrolls them
-    // (clipping things like the chat composer below the fold).
-    <div className="flex h-[calc(100vh-5rem-var(--banner-offset,0px))] flex-col overflow-hidden">
+    // Height accounts for the SidebarInset visual gutter (m-2 top+bottom = 1rem)
+    // and the impersonation banner via --banner-offset. The top bar is gone, so
+    // there's no header/pt-2 term to subtract.
+    <div className="flex h-[calc(100vh-1rem-var(--banner-offset,0px))] flex-col overflow-hidden">
       <ContentErrorBoundary>{children}</ContentErrorBoundary>
     </div>
   );
@@ -115,11 +115,16 @@ function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
           align="center"
           className="mb-6"
         >
-          <Stack gap={2}>
+          <Stack gap={2} className="min-w-0">
             {slots.title}
             {slots.description}
           </Stack>
-          <Stack direction="horizontal" gap={2} align="center">
+          <Stack
+            direction="horizontal"
+            gap={2}
+            align="center"
+            className="shrink-0"
+          >
             {slots.ctas.map((cta) => cta)}
             {slots.moreActions}
           </Stack>
@@ -134,10 +139,23 @@ function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
 function PageSectionTitle({
   children,
   className,
+  stage,
 }: {
   children: React.ReactNode;
   className?: string;
+  stage?: ReleaseStage;
 }) {
+  if (stage) {
+    return (
+      <Stack direction="horizontal" align="center" gap={2}>
+        <Heading variant="h3" className={className}>
+          {children}
+        </Heading>
+        <ReleaseStageBadge stage={stage} />
+      </Stack>
+    );
+  }
+
   return (
     <Heading variant="h3" className={className}>
       {children}
@@ -175,10 +193,16 @@ const PageSection = Object.assign(PageSectionComponent, {
   MoreActions: MoreActions,
 });
 
+function PageBanner({ children }: { children: React.ReactNode }) {
+  return <div className="flex w-full shrink-0 flex-col">{children}</div>;
+}
+
 export const Page = Object.assign(PageLayout, {
   Header: PageHeader,
+  Banner: PageBanner,
   Body: PageBody,
   Section: PageSection,
+  Toolbar: Toolbar,
 });
 
 export function EmptyState({
@@ -193,7 +217,7 @@ export function EmptyState({
   nonEmptyProjectCTA?: React.ReactNode;
   graphic: React.ReactNode;
   graphicClassName?: string;
-}) {
+}): React.JSX.Element {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const { isEmpty, isLoading } = useIsProjectEmpty();

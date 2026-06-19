@@ -16,10 +16,10 @@ import "context"
 // the JSON-RPC error code, message, and data; returning a plain error
 // falls back to a generic mapping (see [RejectErrorFromCause]).
 //
-// Payload mutation is not yet supported — changes to call.Request,
-// call.Result, or call.Error are silent no-ops and the response body is
-// relayed verbatim. Typed setters for payload modification will be
-// introduced when modification becomes a requirement.
+// Payload mutation has no typed setter on this view today — changes to
+// call.Request, call.Result, or call.Error are silent no-ops and the
+// response body is relayed verbatim. Typed setters will be introduced
+// when a concrete consumer needs to rewrite tools/call response payloads.
 //
 // Responses to non-"tools/call" requests are not routed to this interface;
 // implement [RemoteMessageInterceptor] for RPC-agnostic hooks.

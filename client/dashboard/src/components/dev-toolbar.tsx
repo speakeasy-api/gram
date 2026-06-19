@@ -1,3 +1,4 @@
+import { ReactElement } from "react";
 import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { Switch } from "./ui/switch";
@@ -21,6 +22,7 @@ import { createPortal } from "react-dom";
 const STORAGE_KEY = "gram-rbac-dev-override";
 const HIDDEN_KEY = "gram-dev-toolbar-hidden";
 const SUPER_ADMIN_KEY = "gram-dev-super-admin";
+const DEV_TOOLBAR_PORTAL_SELECTOR = "[data-rbac-dev-toolbar-portal='true']";
 
 type ResourceType = "org" | "project" | "environment" | "mcp";
 
@@ -199,7 +201,7 @@ const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "mcp", label: "MCP" },
 ];
 
-export function RBACDevToolbar() {
+export function RBACDevToolbar(): ReactElement | null {
   const { session } = useSession();
   const isAdmin = useIsAdmin();
   const [hidden, setHidden] = useState(
@@ -266,7 +268,7 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
   }));
 
   // Cache the full resource list when overrides are off so the toolbar
-  // still shows all projects/MCPs after the user restricts scopes.
+  // still shows scoped options after the user restricts scopes.
   const orgProjects = organization?.projects;
   const toolsets = toolsetsData?.toolsets;
   const orgId = organization?.id ?? "";
@@ -372,7 +374,13 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
   useEffect(() => {
     if (collapsed) return;
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current?.contains(e.target as Node)) return;
+      const targetNode = e.target instanceof Node ? e.target : null;
+      if (targetNode && rootRef.current?.contains(targetNode)) return;
+
+      const targetElement =
+        targetNode instanceof Element ? targetNode : targetNode?.parentElement;
+      if (targetElement?.closest(DEV_TOOLBAR_PORTAL_SELECTOR)) return;
+
       setCollapsed(true);
     };
     document.addEventListener("mousedown", onDown);
@@ -381,7 +389,7 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
 
   const invalidate = useCallback(() => {
     setTimeout(() => {
-      queryClient.invalidateQueries();
+      void queryClient.invalidateQueries();
       window.dispatchEvent(new Event("rbac-override-change"));
     }, 0);
   }, [queryClient]);
@@ -439,7 +447,7 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
     <div
       ref={rootRef}
       className="pointer-events-auto fixed z-[99999] select-none"
-      style={pos ? { left: pos.x, top: pos.y } : { left: 16, bottom: 16 }}
+      style={pos ? { left: pos.x, top: pos.y } : { right: 16, bottom: 16 }}
     >
       <div className={`
           w-80 rounded-xl border shadow-2xl backdrop-blur-md transition-all
@@ -776,6 +784,7 @@ function ResourceDropdown({
         createPortal(
           <div
             ref={panelRef}
+            data-rbac-dev-toolbar-portal="true"
             className="border-border bg-background fixed z-[999999] rounded-md border shadow-lg"
             style={{
               top: triggerRect.bottom + 4,

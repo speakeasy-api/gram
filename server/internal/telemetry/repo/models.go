@@ -97,6 +97,30 @@ type HookTraceSummary struct {
 	SkillName         *string `ch:"skill_name"`           // String - skill name from materialized column (only for Skill tool)
 }
 
+// RecentHookEvent represents a single hook event row from telemetry_logs,
+// shaped for the onboarding wizard's confirm-traffic verification step.
+type RecentHookEvent struct {
+	TimeUnixNano  int64   `ch:"time_unix_nano"`
+	GramProjectID string  `ch:"gram_project_id"`
+	GramChatID    *string `ch:"gram_chat_id"`
+	HookSource    string  `ch:"hook_source"` // materialized from attributes.gram.hook.source — "claude-code", "cursor", "codex"
+	ToolName      *string `ch:"tool_name"`   // materialized
+	UserEmail     *string `ch:"user_email"`  // materialized
+	EventName     *string `ch:"event_name"`  // extracted from attributes.gram.hook.event_name
+	Status        string  `ch:"status"`      // "blocked" if hook_block_reason set, else "received"
+}
+
+// ClaudeUserPromptCandidate represents a ranked Claude OTEL user_prompt event
+// candidate for correlating a captured chat message with a Claude prompt ID.
+type ClaudeUserPromptCandidate struct {
+	PromptID      string  `ch:"prompt_id"`
+	Prompt        string  `ch:"prompt"`
+	EventSequence int64   `ch:"event_sequence"`
+	TimeUnixNano  int64   `ch:"time_unix_nano"`
+	Similarity    float64 `ch:"similarity"`
+	IsExact       bool    `ch:"is_exact"`
+}
+
 // ChatSummary represents an aggregated view of a chat session (one row per gram_chat_id).
 // Used for displaying a list of chat sessions in the UI.
 type ChatSummary struct {
@@ -206,6 +230,22 @@ type UserSummary struct {
 
 	// Hook source breakdowns (maps of hook source -> count)
 	HookSourceCounts map[string]uint64 `ch:"hook_source_counts"`
+}
+
+// EmployeeDataFlowRow represents an aggregated call-path tuple for an employee.
+// The service layer expands each tuple into graph nodes and edges, skipping tiers
+// that are empty for a given row. Origin is the hostname or client context that
+// started the call, not the MCP server URL.
+type EmployeeDataFlowRow struct {
+	Origin      string `ch:"origin"`
+	Client      string `ch:"client"`
+	Server      string `ch:"server"`
+	ServerClass string `ch:"server_class"`
+	Tool        string `ch:"tool"`
+
+	CallCount    uint64 `ch:"call_count"`
+	SuccessCount uint64 `ch:"success_count"`
+	FailureCount uint64 `ch:"failure_count"`
 }
 
 // TimeSeriesBucket represents a single time bucket for time series metrics.

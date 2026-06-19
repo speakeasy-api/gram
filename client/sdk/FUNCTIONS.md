@@ -32,7 +32,7 @@ async function run() {
       description: "swerve hm receptor how",
       grants: [
         {
-          scope: "mcp:connect",
+          scope: "environment:write",
         },
       ],
       name: "<value>",

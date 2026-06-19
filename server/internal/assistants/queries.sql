@@ -1,4 +1,15 @@
 -- name: ReapStuckAssistantRuntimes :many
+-- Short-horizon reaper for rows the happy-path can no longer move — crash
+-- recovery only. Idle runtimes are deliberately not collected: a VM with no
+-- traffic stays up until its assistant is deleted. Both branches cover rows
+-- stranded by a dead process, and the next admit recreates the runtime:
+--   - 'starting' rows that never transitioned to active within the startup
+--     grace window (server crashed mid-boot).
+--   - 'expiring' rows older than the ExpireThreadRuntime activity's full
+--     retry budget (legacy expire workflows that gave up after CAS
+--     active->expiring without reaching Stop). Without this the partial
+--     unique indexes (v1 on assistant_thread_id, v2 on assistant_id) block
+--     new admits indefinitely.
 UPDATE assistant_runtimes
 SET
   state = @stopped_state,
@@ -7,15 +18,6 @@ SET
 WHERE deleted IS FALSE
   AND (
     (state = @starting_state AND updated_at < @starting_cutoff)
-    OR (
-      state = @active_state
-      AND warm_until IS NOT NULL
-      AND warm_until < @warm_cutoff
-      AND COALESCE(last_heartbeat_at, updated_at) < @heartbeat_cutoff
-    )
-    -- Backstop for activities that exhaust Temporal's retry budget after CAS
-    -- active->expiring without reaching Stop. Without this the partial unique
-    -- index on (assistant_thread_id) blocks new admits indefinitely.
     OR (state = @expiring_state AND updated_at < @expiring_cutoff)
   )
 RETURNING assistant_id;
@@ -35,11 +37,63 @@ SELECT project_id
 FROM assistant_threads
 WHERE id = @thread_id;
 
+-- name: LoadAssistantThreadForBootstrap :one
+SELECT
+  t.id,
+  t.assistant_id,
+  t.project_id,
+  t.correlation_id,
+  t.chat_id,
+  t.source_kind,
+  t.source_ref_json,
+  a.organization_id,
+  a.created_by_user_id,
+  a.name,
+  a.model,
+  a.instructions,
+  a.warm_ttl_seconds,
+  a.max_concurrency,
+  a.status,
+  a.created_at,
+  a.updated_at,
+  a.deleted_at
+FROM assistant_threads t
+JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
+WHERE t.id = @thread_id
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND a.deleted IS FALSE;
+
 -- name: ResolveThreadCorrelation :one
 SELECT id, project_id, assistant_id, correlation_id
 FROM assistant_threads
 WHERE id = @thread_id
+  AND project_id = @project_id
   AND deleted IS FALSE;
+
+-- name: GetAssistantThreadIDByCorrelation :one
+SELECT id
+FROM assistant_threads
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND correlation_id = @correlation_id
+  AND deleted IS FALSE;
+
+-- name: CallerOwnsDashboardChat :one
+-- Read gate for a dashboard conversation: returns a row only when the caller
+-- owns the chat. The conversation key (chat id) is client-chosen and not
+-- user-namespaced, so without scoping by user_id one caller could read or
+-- continue another's chat. Ownership is stamped on the chats row at
+-- UpsertAssistantChat time; no row means the caller has nothing here (chat
+-- doesn't exist for them), which the handler surfaces as not-found so existence
+-- isn't disclosed.
+SELECT 1 AS ok
+FROM chats
+WHERE id = @chat_id
+  AND project_id = @project_id
+  AND user_id = @user_id
+  AND deleted IS FALSE
+LIMIT 1;
 
 -- name: ResolveToolsetsForWrite :many
 SELECT id, slug
@@ -94,9 +148,8 @@ INSERT INTO assistant_toolsets (
 -- Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
 -- toolset attached to an assistant must be MCP-reachable for the runtime's
 -- startup config to build; we enable on attach so users don't have to do it
--- separately. Bypasses the unpaid-plan public-server cap on purpose: an
--- assistant-attached toolset has no working alternative. mcp_slug is
--- required for an MCP-reachable toolset, so we skip rows that lack one.
+-- separately. mcp_slug is required for an MCP-reachable toolset, so we skip
+-- rows that lack one.
 UPDATE toolsets
 SET mcp_enabled = TRUE,
     updated_at = clock_timestamp()
@@ -150,6 +203,37 @@ FROM assistants
 WHERE id = @assistant_id
   AND deleted IS FALSE;
 
+-- name: GetManagedAssistantByProject :one
+-- Resolves a project's platform-managed assistant (powers the AI Insights
+-- sidebar) through the project_managed_assistants mapping. Returns no rows
+-- when the feature isn't toggled on for the project.
+SELECT a.id, a.project_id, a.organization_id, a.created_by_user_id, a.name, a.model, a.instructions, a.warm_ttl_seconds, a.max_concurrency, a.status, a.created_at, a.updated_at, a.deleted_at
+FROM project_managed_assistants pma
+JOIN assistants a ON a.id = pma.assistant_id
+WHERE pma.project_id = @project_id
+  AND a.deleted IS FALSE;
+
+-- name: GetProjectName :one
+-- Display name of a project, used to compose the managed assistant's name so
+-- it's distinguishable from other projects' managed assistants in the same org.
+SELECT name
+FROM projects
+WHERE id = @project_id
+  AND deleted IS FALSE;
+
+-- name: CreateProjectManagedAssistant :exec
+-- Marks an assistant as the project's managed assistant. PRIMARY KEY(project_id)
+-- enforces 0-or-1, so a concurrent enable raises a unique violation the caller
+-- recovers from by re-reading.
+INSERT INTO project_managed_assistants (project_id, assistant_id)
+VALUES (@project_id, @assistant_id);
+
+-- name: DeleteProjectManagedAssistant :exec
+-- Toggles the managed assistant off for a project (the assistant row itself is
+-- soft-deleted separately). Returns silently if no mapping exists.
+DELETE FROM project_managed_assistants
+WHERE project_id = @project_id;
+
 -- name: UpdateAssistant :one
 UPDATE assistants
 SET
@@ -173,9 +257,18 @@ WHERE id = @assistant_id
   AND deleted IS FALSE;
 
 -- name: UpsertAssistantChat :exec
+-- user_id is the conversation owner — stamped on first insert so reads can
+-- scope to the user who started the chat. The dashboard source passes the
+-- Gram user id; external-source turns (Slack/cron/wake) pass NULL. On conflict
+-- the existing user_id is preserved when already set so a later NULL-user-id
+-- retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
+-- backfilled on first owned send so dashboard ownership checks accept the
+-- legitimate owner.
 INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
-VALUES (@chat_id, @project_id, @organization_id, NULL, NULL, @title, NOW(), NOW())
-ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id;
+VALUES (@chat_id, @project_id, @organization_id, sqlc.narg('user_id')::TEXT, NULL, @title, NOW(), NOW())
+ON CONFLICT (id) DO UPDATE SET
+  user_id = COALESCE(chats.user_id, EXCLUDED.user_id),
+  updated_at = NOW();
 
 -- name: UpsertAssistantThread :one
 INSERT INTO assistant_threads (
@@ -261,6 +354,29 @@ WHERE project_id = @project_id
     OR (state = @active_state AND (warm_until IS NULL OR warm_until > clock_timestamp()))
   );
 
+-- name: CountActiveAssistantThreads :one
+-- Threads with last_event_at inside the warm TTL window. Excludes threads
+-- that themselves have a pending event so callers computing headroom for
+-- a fresh pending admit don't double-count it. The event-less warmup
+-- thread is excluded too: it holds the VM warm but never occupies a
+-- runner slot, and counting it would block max_concurrency=1 assistants
+-- from admitting their first real turn until the window lapses.
+SELECT COUNT(*)::BIGINT AS active_threads
+FROM assistant_threads t
+WHERE t.project_id = @project_id
+  AND t.assistant_id = @assistant_id
+  AND t.deleted IS FALSE
+  AND t.source_kind <> @warmup_source_kind
+  AND t.last_event_at > @active_since
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_thread_events e
+    WHERE e.project_id = t.project_id
+      AND e.assistant_thread_id = t.id
+      AND e.deleted IS FALSE
+      AND e.status = @pending_status
+  );
+
 -- name: ListColdPendingThreadsForAdmit :many
 SELECT t.id, t.project_id
 FROM assistant_threads t
@@ -338,6 +454,154 @@ INSERT INTO assistant_runtimes (
   ), '{}'::jsonb)
 )
 ON CONFLICT DO NOTHING;
+
+-- name: ReserveAssistantRuntimeV2 :exec
+-- v2 runtimes are keyed on (project_id, assistant_id) — one VM serves
+-- every thread under an assistant. assistant_thread_id is set to the
+-- admitting thread (the one that triggered admit) so the column stays
+-- a real reference; the runtime_version = 2 marker carries the v2
+-- semantic distinction. The unique partial index
+-- `assistant_runtimes_v2_one_per_assistant` backs the ON CONFLICT and
+-- guarantees the single-VM invariant under concurrent admit. Callers
+-- must hold pg_advisory_xact_lock on the assistant id to serialise VM
+-- creation across workers.
+INSERT INTO assistant_runtimes (
+  assistant_thread_id,
+  assistant_id,
+  project_id,
+  backend,
+  state,
+  runtime_version,
+  backend_metadata_json
+) VALUES (
+  @assistant_thread_id,
+  @assistant_id,
+  @project_id,
+  @backend,
+  @state,
+  2,
+  COALESCE((
+    SELECT r.backend_metadata_json
+    FROM assistant_runtimes r
+    WHERE r.project_id = @project_id
+      AND r.assistant_id = @assistant_id
+      AND r.runtime_version = 2
+      AND r.backend = @backend
+      AND r.backend_metadata_json <> '{}'::jsonb
+    ORDER BY r.created_at DESC
+    LIMIT 1
+  ), '{}'::jsonb)
+)
+ON CONFLICT DO NOTHING;
+
+-- name: ListAssistantPendingThreads :many
+-- v2 admit needs every thread with pending events under an assistant
+-- (no per-thread runtime gating — one VM serves them all). Used after
+-- the v2 runtime row is reserved so the workflow can fan out to one
+-- ProcessThreadEvents per thread.
+SELECT t.id, t.project_id
+FROM assistant_threads t
+WHERE t.project_id = @project_id
+  AND t.assistant_id = @assistant_id
+  AND t.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM assistant_thread_events e
+    WHERE e.project_id = t.project_id
+      AND e.assistant_thread_id = t.id
+      AND e.deleted IS FALSE
+      AND e.status = @pending_status
+  )
+ORDER BY (
+  SELECT MIN(e.created_at)
+  FROM assistant_thread_events e
+  WHERE e.project_id = t.project_id
+    AND e.assistant_thread_id = t.id
+    AND e.deleted IS FALSE
+    AND e.status = @pending_status
+) ASC;
+
+-- name: LookupActiveAssistantRuntimeV2 :one
+-- Returns the live v2 row including its state so admit can distinguish
+-- starting/active (signal threads) from expiring (skip this cycle and wait
+-- for the warm-timer workflow's Stop to soft-delete the row, then re-admit
+-- on the next coordinator kick). The unique partial index keyed on
+-- (project_id, assistant_id) means there is at most one matching row.
+SELECT id, state
+FROM assistant_runtimes
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND runtime_version = 2
+  AND deleted IS FALSE
+  AND ended IS FALSE
+LIMIT 1;
+
+-- name: GetAssistantRuntimeV2 :one
+-- Full-row sibling of LookupActiveAssistantRuntimeV2 for callers that need
+-- the backend metadata to drive Ensure without a thread to join through
+-- (eager warmup at assistant creation). At most one row matches per the
+-- v2 unique partial index.
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+FROM assistant_runtimes
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND runtime_version = 2
+  AND deleted IS FALSE
+  AND ended IS FALSE
+LIMIT 1;
+
+-- name: AcquireAssistantAdvisoryLock :exec
+-- pg_advisory_xact_lock auto-releases at commit. Hashed on the assistant
+-- id so concurrent workers admitting the same assistant serialise on VM
+-- creation; concurrent admits across assistants do not contend.
+SELECT pg_advisory_xact_lock(hashtext('asst:' || @assistant_id::text));
+
+-- name: LoadThreadContextV2 :one
+-- v2 sibling of LoadThreadContext: the runtime row is keyed on assistant,
+-- not thread. Joins assistant_thread → assistant → v2 runtime by
+-- assistant_id, returning the same shape as LoadThreadContext (with
+-- assistant_thread_id on the runtime row left NULL).
+SELECT
+  t.id,
+  t.assistant_id,
+  t.project_id,
+  t.correlation_id,
+  t.chat_id,
+  t.source_kind,
+  t.source_ref_json,
+  t.last_event_at,
+  a.id AS assistant_record_id,
+  a.project_id AS assistant_record_project_id,
+  a.organization_id,
+  a.created_by_user_id,
+  a.name,
+  a.model,
+  a.instructions,
+  a.warm_ttl_seconds,
+  a.max_concurrency,
+  a.status,
+  a.created_at,
+  a.updated_at,
+  a.deleted_at,
+  r.id AS runtime_id,
+  r.assistant_id AS runtime_assistant_id,
+  r.project_id AS runtime_project_id,
+  r.backend,
+  r.backend_metadata_json,
+  r.state,
+  r.warm_until
+FROM assistant_threads t
+JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
+JOIN assistant_runtimes r ON r.assistant_id = t.assistant_id
+  AND r.project_id = t.project_id
+  AND r.runtime_version = 2
+WHERE t.id = @thread_id
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND a.deleted IS FALSE
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.state IN (@starting_state, @active_state);
 
 -- name: TouchProcessingLease :exec
 WITH touch_runtime AS (
@@ -420,7 +684,7 @@ SET
   updated_at = clock_timestamp()
 FROM next_event
 WHERE e.id = next_event.id
-RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error;
+RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at;
 
 -- name: CompleteAssistantThreadEvent :exec
 UPDATE assistant_thread_events
@@ -458,7 +722,9 @@ SET
   last_heartbeat_at = clock_timestamp(),
   updated_at = clock_timestamp()
 WHERE id = @runtime_id
-  AND project_id = @project_id;
+  AND project_id = @project_id
+  AND deleted IS FALSE
+  AND ended IS FALSE;
 
 -- name: UpdateAssistantRuntimeMetadata :exec
 UPDATE assistant_runtimes
@@ -476,7 +742,7 @@ SET
   updated_at = clock_timestamp(),
   deleted_at = clock_timestamp()
 WHERE project_id = @project_id
-  AND assistant_thread_id = @thread_id
+  AND id = @runtime_id
   AND deleted IS FALSE
   AND ended IS FALSE
   AND state IN (@starting_state, @active_state, @expiring_state);
@@ -493,23 +759,102 @@ WHERE assistant_id = @assistant_id
   AND backend_metadata_json <> '{}'::jsonb;
 
 -- name: ListInactiveAssistantRuntimesForReap :many
--- Returns runtime rows that still carry backend metadata and whose owning
--- assistant has had no runtime activity since @inactive_before. Active and
--- starting rows are excluded so a long-running session that updated_at
--- recently is never collected mid-flight.
+-- Returns runtime rows that still carry backend metadata and are safe to
+-- collect, in two cases:
+--   1. Orphans: finalized (soft-deleted or ended; the state value is ignored
+--      since a tombstone can carry any state, e.g. one stamped by a racing
+--      turn) or under a soft-deleted assistant, whose owning assistant has had
+--      no runtime activity since @inactive_before — i.e. Stop/Reap never
+--      completed. A live row under a live assistant is never an orphan: an
+--      idle runtime keeps its VM until the assistant is deleted.
+--   2. Superseded backend: a row on a backend the process no longer targets
+--      (backend <> @target_backend), parked at @stopped_state after its warm
+--      window. Collecting it frees the deprecated backend's resources so the
+--      next admit lands on the target backend. Active/starting/expiring rows
+--      are left to finish, so a live assistant is never disrupted mid-turn.
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
-  AND r.state NOT IN (@starting_state, @active_state)
-  AND NOT EXISTS (
-    SELECT 1
-    FROM assistant_runtimes r2
-    WHERE r2.assistant_id = r.assistant_id
-      AND r2.updated_at >= @inactive_before
-      AND r2.backend_metadata_json <> '{}'::jsonb
+  AND (
+    (
+      (
+        r.deleted IS TRUE
+        OR r.ended IS TRUE
+        OR EXISTS (
+          SELECT 1
+          FROM assistants a
+          WHERE a.id = r.assistant_id
+            AND a.project_id = r.project_id
+            AND a.deleted IS TRUE
+        )
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM assistant_runtimes r2
+        WHERE r2.assistant_id = r.assistant_id
+          AND r2.updated_at >= @inactive_before
+          AND r2.backend_metadata_json <> '{}'::jsonb
+      )
+    )
+    OR (
+      r.backend <> @target_backend
+      AND r.deleted IS NOT TRUE
+      AND r.ended IS NOT TRUE
+      AND r.state = @stopped_state
+    )
   )
 ORDER BY r.updated_at ASC
 LIMIT @limit_count;
+
+-- name: CountInFlightAssistantThreadEvents :one
+-- Counts events that are queued for or currently using the assistant's
+-- runtime. The image recycle sweep skips assistants with any in-flight
+-- events: their turns are about to hit the VM (the runner's idle clock
+-- only clears on /turn enqueue) and their admissions recycle the image
+-- lazily anyway.
+SELECT COUNT(*)
+FROM assistant_thread_events
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND deleted IS FALSE
+  AND status IN (@pending_status, @processing_status);
+
+-- name: UpdateActiveAssistantRuntimeMetadata :execrows
+-- Persists post-recycle backend metadata only while the row is still live.
+-- Zero rows affected means the warm timer expired the runtime mid-recycle;
+-- the caller must undo the machine restart instead of recording it.
+UPDATE assistant_runtimes
+SET
+  backend_metadata_json = @backend_metadata_json,
+  updated_at = clock_timestamp()
+WHERE id = @runtime_id
+  AND project_id = @project_id
+  AND state = @active_state
+  AND deleted IS FALSE;
+
+-- name: ListActiveAssistantRuntimesForImageRecycle :many
+-- Returns live v2 runtime rows that carry backend metadata so a deploy-time
+-- sweep can roll their machines onto the current runtime image. Only `active`
+-- rows qualify: `starting` rows are mid-boot and already pull the current
+-- image, while expiring/stopped rows are torn down or recycled lazily on the
+-- next admission. Rows orphaned by a deleted assistant are excluded: they
+-- belong to the deleted-assistant janitor, and recycling them would bump
+-- updated_at and postpone the inactivity-based reap.
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+FROM assistant_runtimes r
+WHERE r.state = @active_state
+  AND r.runtime_version = 2
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.backend_metadata_json <> '{}'::jsonb
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistants a
+    WHERE a.id = r.assistant_id
+      AND a.project_id = r.project_id
+      AND a.deleted IS TRUE
+  )
+ORDER BY r.updated_at ASC;
 
 -- name: MarkAssistantRuntimeReaped :exec
 -- Records that the backend resource (e.g. Fly app) for this runtime has
@@ -571,12 +916,35 @@ WHERE id = @runtime_id
 -- Stop failed mid-flight) re-enters the Status/Stop path idempotently.
 -- ErrNoRows means another actor (Stop, reaper, manual API) already finalized
 -- the row; callers must not then call Stop.
+--
+-- v2 (single-VM-per-assistant) rows pin assistant_thread_id to the admitting
+-- thread, but every thread workflow under the assistant runs its own warm
+-- timer and calls expire with its own thread id. Resolve the row via
+-- assistant_threads.assistant_id when no v1 row matches the caller's thread
+-- so any thread can flip the v2 row to expiring; the post-CAS /state poll
+-- guards against tearing down a VM another thread is still using.
 UPDATE assistant_runtimes
 SET
   state = @expiring_state,
   updated_at = clock_timestamp()
-WHERE project_id = @project_id
-  AND assistant_thread_id = @thread_id
+WHERE id = (
+  SELECT r.id
+  FROM assistant_runtimes r
+  JOIN assistant_threads t
+    ON t.project_id = r.project_id
+   AND t.id = @thread_id
+   AND (
+     r.assistant_thread_id = t.id
+     OR (r.runtime_version = 2 AND r.assistant_id = t.assistant_id)
+   )
+  WHERE r.project_id = @project_id
+    AND r.state IN (@active_state, @expiring_state)
+    AND r.deleted IS FALSE
+    AND r.ended IS FALSE
+  ORDER BY r.runtime_version DESC, r.created_at DESC
+  LIMIT 1
+)
+  AND project_id = @project_id
   AND state IN (@active_state, @expiring_state)
   AND deleted IS FALSE
   AND ended IS FALSE
@@ -591,7 +959,9 @@ SET
   updated_at = clock_timestamp()
 WHERE id = @runtime_id
   AND project_id = @project_id
-  AND state = @expiring_state;
+  AND state = @expiring_state
+  AND deleted IS FALSE
+  AND ended IS FALSE;
 
 -- name: CreateAssistantRuntime :exec
 -- Inserts an assistant_runtimes row with caller-controlled id, timestamps,

@@ -101,7 +101,7 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").Log(ctx, s.logger, attr.SlogProjectSlug(slug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").LogError(ctx, s.logger, attr.SlogProjectSlug(slug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: proj.ID.String(), Dimensions: nil}); err != nil {
@@ -139,7 +139,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, err
 	}
 
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("get session user info: %w", err)
 	}
@@ -152,7 +152,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing projects").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing projects").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -170,9 +170,9 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		if pgErr.Code == pgerrcode.UniqueViolation {
 			return nil, oops.E(oops.CodeConflict, err, "project slug already exists")
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "database error creating project").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID), attr.SlogProjectName(payload.Name))
+		return nil, oops.E(oops.CodeUnexpected, err, "database error creating project").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID), attr.SlogProjectName(payload.Name))
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "unexpected error creating project").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID), attr.SlogProjectName(payload.Name))
+		return nil, oops.E(oops.CodeUnexpected, err, "unexpected error creating project").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID), attr.SlogProjectName(payload.Name))
 	}
 
 	_, err = er.CreateEnvironment(ctx, envrepo.CreateEnvironmentParams{
@@ -183,7 +183,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		Description:    conv.ToPGText("Default project for organization"),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error creating default environment").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating default environment").LogError(ctx, s.logger)
 	}
 
 	if err := s.audit.LogProjectCreate(ctx, dbtx, audit.LogProjectCreateEvent{
@@ -197,11 +197,11 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		ProjectName: prj.Name,
 		ProjectSlug: prj.Slug,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error creating project creation audit log").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating project creation audit log").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error saving project creation").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving project creation").LogError(ctx, s.logger)
 	}
 
 	project := &gen.CreateProjectResult{
@@ -229,7 +229,7 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 		return nil, oops.E(oops.CodeForbidden, nil, "organization does not match active organization context")
 	}
 
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("get session user info: %w", err)
 	}
@@ -298,12 +298,12 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 
 	assetID, err := uuid.Parse(payload.AssetID)
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "error parsing asset ID").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeInvalid, err, "error parsing asset ID").LogError(ctx, s.logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing projects").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing projects").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -311,7 +311,7 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 
 	existingRow, err := pr.GetProjectByID(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting project").Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting project").LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
 	}
 
 	existing := toProject(existingRow)
@@ -321,7 +321,7 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 		LogoAssetID: uuid.NullUUID{UUID: assetID, Valid: true},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error updating project logo").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating project logo").LogError(ctx, s.logger)
 	}
 
 	projectResponse := toProject(updatedProject)
@@ -340,11 +340,11 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 		ProjectSnapshotBefore: existing,
 		ProjectSnapshotAfter:  projectResponse,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error creating project update audit log").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating project update audit log").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error saving project").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving project").LogError(ctx, s.logger)
 	}
 
 	return &gen.SetProjectLogoResult{
@@ -364,7 +364,7 @@ func (s *Service) ListAllowedOrigins(ctx context.Context, payload *gen.ListAllow
 
 	allowedOrigins, err := s.repo.ListAllowedOriginsByProjectID(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing allowed origins").Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing allowed origins").LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
 	}
 
 	entries := make([]*gen.AllowedOrigin, 0, len(allowedOrigins))
@@ -406,7 +406,7 @@ func (s *Service) UpsertAllowedOrigin(ctx context.Context, payload *gen.UpsertAl
 		Status:    status,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error upserting allowed origin").Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
+		return nil, oops.E(oops.CodeUnexpected, err, "error upserting allowed origin").LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
 	}
 
 	return &gen.UpsertAllowedOriginResult{
@@ -429,7 +429,7 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 
 	projectID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return oops.E(oops.CodeInvalid, err, "invalid project id").Log(ctx, s.logger)
+		return oops.E(oops.CodeInvalid, err, "invalid project id").LogError(ctx, s.logger)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
@@ -446,7 +446,7 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "error retrieving project").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error retrieving project").LogError(ctx, s.logger)
 	}
 
 	// The first project (ordered by id ASC) is the default project
@@ -456,7 +456,7 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error accessing projects").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error accessing projects").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -467,7 +467,7 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil // Return successfully even if the project was already deleted
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "error deleting project").Log(ctx, s.logger, attr.SlogProjectID(payload.ID))
+		return oops.E(oops.CodeUnexpected, err, "error deleting project").LogError(ctx, s.logger, attr.SlogProjectID(payload.ID))
 	}
 
 	if err := s.audit.LogProjectDelete(ctx, dbtx, audit.LogProjectDeleteEvent{
@@ -481,11 +481,11 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 		ProjectName: project.Name,
 		ProjectSlug: project.Slug,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error creating project deletion audit log").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error creating project deletion audit log").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error saving project deletion").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error saving project deletion").LogError(ctx, s.logger)
 	}
 
 	return nil
@@ -500,7 +500,7 @@ func (s *Service) SetOrganizationWhitelist(ctx context.Context, payload *gen.Set
 	// Check that the API key is from the speakeasy-team organization
 	const speakeasyTeamOrgID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
 	if authCtx.ActiveOrganizationID != speakeasyTeamOrgID {
-		return oops.E(oops.CodeUnauthorized, nil, "only speakeasy-team can set organization whitelist status").Log(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return oops.E(oops.CodeUnauthorized, nil, "only speakeasy-team can set organization whitelist status").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
 	err := s.repo.SetOrganizationWhitelist(ctx, repo.SetOrganizationWhitelistParams{
@@ -508,7 +508,7 @@ func (s *Service) SetOrganizationWhitelist(ctx context.Context, payload *gen.Set
 		Whitelisted:    payload.Whitelisted,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error setting organization whitelist status").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
+		return oops.E(oops.CodeUnexpected, err, "error setting organization whitelist status").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
 	}
 
 	return nil

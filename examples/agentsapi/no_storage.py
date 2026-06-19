@@ -48,5 +48,3 @@ try:
     poll_resp.raise_for_status()
 except requests.exceptions.HTTPError as e:
     print(f"\nExpected error: {e}")
-
-

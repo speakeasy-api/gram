@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { useHideInsightsDock } from "@/components/insights-context";
 import { useProject, useSession } from "@/contexts/Auth";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
@@ -25,7 +26,7 @@ import {
 } from "./systemPrompt";
 import { useOnboardingTools } from "./tools/useOnboardingTools";
 
-export function NewAssistantOnboarding() {
+export function NewAssistantOnboarding(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialId = searchParams.get("id");
 
@@ -53,7 +54,7 @@ export function NewAssistantOnboarding() {
   );
 }
 
-export function EditAssistantOnboarding() {
+export function EditAssistantOnboarding(): JSX.Element {
   const { assistantId = "" } = useParams();
   return (
     <AssistantDraftProvider initialAssistantId={assistantId}>
@@ -63,6 +64,9 @@ export function EditAssistantOnboarding() {
 }
 
 function OnboardingShell() {
+  // Hosts its own chat runtime — hide the floating dock and keep the shared
+  // runtime out of this tree (no nested RemoteThreadListRuntime).
+  useHideInsightsDock();
   const draft = useAssistantDraft();
   const mode: "create" | "edit" = draft.assistantId ? "edit" : "create";
   const substitutions = useMemo(
@@ -86,7 +90,7 @@ function OnboardingShell() {
           <ResizablePanel.Pane minSize={35}>
             <ChatPane mode={mode} />
           </ResizablePanel.Pane>
-          <ResizablePanel.Pane minSize={20} defaultSize={28}>
+          <ResizablePanel.Pane minSize={24} defaultSize={36}>
             <AssistantDraftPanel />
           </ResizablePanel.Pane>
         </ResizablePanel>
@@ -225,7 +229,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           systemPrompt,
           mcps,
           model: {
-            defaultModel: "anthropic/claude-sonnet-4.6" as Model,
+            defaultModel: "anthropic/claude-opus-4.7" as Model,
             showModelPicker: false,
           },
           welcome,

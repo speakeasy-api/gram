@@ -226,15 +226,15 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Grants"}`)
 	})
 
-	Method("updateMemberRole", func() {
-		Description("Change a team member's role assignment.")
+	Method("updateMemberRoles", func() {
+		Description("Update a team member's role assignments.")
 		Security(security.ByKey, func() {
 			Scope("producer")
 		})
 		Security(security.Session)
 
 		Payload(func() {
-			Extend(UpdateMemberRoleForm)
+			Extend(UpdateMemberRolesForm)
 			security.ByKeyPayload()
 			security.SessionPayload()
 		})
@@ -242,15 +242,227 @@ var _ = Service("access", func() {
 		Result(MemberModel)
 
 		HTTP(func() {
-			PUT("/rpc/access.updateMemberRole")
+			PUT("/rpc/access.updateMemberRoles")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "updateMemberRole")
-		Meta("openapi:extension:x-speakeasy-name-override", "updateMemberRole")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateMemberRole"}`)
+		Meta("openapi:operationId", "updateMemberRoles")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateMemberRoles")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateMemberRoles"}`)
+	})
+
+	Method("listShadowMCPApprovalRequests", func() {
+		Description("List Shadow MCP approval requests for the current organization. Requires organization admin access because requests include requester and block details.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("status", String, func() {
+				Enum("requested", "approved", "denied")
+			})
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("limit", Int, func() {
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
+			Attribute("cursor", String, "Cursor for the next page of results.")
+			security.SessionPayload()
+		})
+
+		Result(ListShadowMCPApprovalRequestsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.shadowMcp.requests.list")
+			Param("status")
+			Param("project_id")
+			Param("limit")
+			Param("cursor")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listShadowMCPApprovalRequests")
+		Meta("openapi:extension:x-speakeasy-name-override", "listShadowMCPApprovalRequests")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPApprovalRequests"}`)
+	})
+
+	Method("createShadowMCPApprovalRequest", func() {
+		Description("Create or return an active Shadow MCP approval request.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(CreateShadowMCPApprovalRequestForm)
+			security.SessionPayload()
+		})
+
+		Result(ShadowMCPApprovalRequestModel)
+
+		HTTP(func() {
+			POST("/rpc/access.shadowMcp.requests.create")
+			security.SessionHeader()
+			Response(StatusCreated)
+		})
+
+		Meta("openapi:operationId", "createShadowMCPApprovalRequest")
+		Meta("openapi:extension:x-speakeasy-name-override", "createShadowMCPApprovalRequest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateShadowMCPApprovalRequest", "type": "mutation"}`)
+	})
+
+	Method("approveShadowMCPApprovalRequest", func() {
+		Description("Approve a Shadow MCP request, creating an allow rule scoped to the organization or project.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(ApproveShadowMCPApprovalRequestForm)
+			security.SessionPayload()
+		})
+
+		Result(ShadowMCPApprovalDecisionResult)
+
+		HTTP(func() {
+			POST("/rpc/access.shadowMcp.requests.approve")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "approveShadowMCPApprovalRequest")
+		Meta("openapi:extension:x-speakeasy-name-override", "approveShadowMCPApprovalRequest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ApproveShadowMCPApprovalRequest", "type": "mutation"}`)
+	})
+
+	Method("denyShadowMCPApprovalRequest", func() {
+		Description("Deny a Shadow MCP request and optionally create a deny rule.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(DenyShadowMCPApprovalRequestForm)
+			security.SessionPayload()
+		})
+
+		Result(ShadowMCPApprovalDecisionResult)
+
+		HTTP(func() {
+			POST("/rpc/access.shadowMcp.requests.deny")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "denyShadowMCPApprovalRequest")
+		Meta("openapi:extension:x-speakeasy-name-override", "denyShadowMCPApprovalRequest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DenyShadowMCPApprovalRequest", "type": "mutation"}`)
+	})
+
+	Method("listShadowMCPAccessRules", func() {
+		Description("List managed Shadow MCP allow and deny rules.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("disposition", String, func() {
+				Enum("allowed", "denied")
+			})
+			Attribute("access_scope", String, func() {
+				Enum("organization", "project")
+			})
+			Attribute("project_id", String, func() {
+				Format(FormatUUID)
+			})
+			Attribute("limit", Int, func() {
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
+			Attribute("cursor", String, "Cursor for the next page of results.")
+			security.SessionPayload()
+		})
+
+		Result(ListShadowMCPAccessRulesResult)
+
+		HTTP(func() {
+			GET("/rpc/access.shadowMcp.rules.list")
+			Param("disposition")
+			Param("access_scope")
+			Param("project_id")
+			Param("limit")
+			Param("cursor")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listShadowMCPAccessRules")
+		Meta("openapi:extension:x-speakeasy-name-override", "listShadowMCPAccessRules")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPAccessRules"}`)
+	})
+
+	Method("createShadowMCPAccessRule", func() {
+		Description("Create a managed Shadow MCP access rule.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(CreateShadowMCPAccessRuleForm)
+			security.SessionPayload()
+		})
+
+		Result(CreateShadowMCPAccessRuleResult)
+
+		HTTP(func() {
+			POST("/rpc/access.shadowMcp.rules.create")
+			security.SessionHeader()
+			Response(StatusCreated)
+		})
+
+		Meta("openapi:operationId", "createShadowMCPAccessRule")
+		Meta("openapi:extension:x-speakeasy-name-override", "createShadowMCPAccessRule")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateShadowMCPAccessRule", "type": "mutation"}`)
+	})
+
+	Method("updateShadowMCPAccessRule", func() {
+		Description("Update a managed Shadow MCP access rule.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(UpdateShadowMCPAccessRuleForm)
+			security.SessionPayload()
+		})
+
+		Result(ShadowMCPAccessRuleModel)
+
+		HTTP(func() {
+			PUT("/rpc/access.shadowMcp.rules.update")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateShadowMCPAccessRule")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateShadowMCPAccessRule")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateShadowMCPAccessRule", "type": "mutation"}`)
+	})
+
+	Method("deleteShadowMCPAccessRule", func() {
+		Description("Delete a managed Shadow MCP access rule.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("id", String, func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/access.shadowMcp.rules.delete")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "deleteShadowMCPAccessRule")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteShadowMCPAccessRule")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteShadowMCPAccessRule", "type": "mutation"}`)
 	})
 
 	Method("getRBACStatus", func() {
@@ -453,7 +665,7 @@ var SelectorModel = Type("Selector", func() {
 
 	Attribute("resource_kind", String, func() {
 		Description("The kind of resource this selector targets.")
-		Enum("project", "mcp", "org", "environment", "*")
+		Enum("project", "mcp", "org", "environment", "risk_policy", "*")
 	})
 	Attribute("resource_id", String, func() {
 		Description("The resource identifier, or '*' for all resources of this kind.")
@@ -468,6 +680,10 @@ var SelectorModel = Type("Selector", func() {
 	Attribute("project_id", String, func() {
 		Description("Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.")
 	})
+	Attribute("server_url", String, func() {
+		Description("Server URL filter (risk policy scopes only). Include the URI scheme, for example https://api.example.com.")
+		Format(FormatURI)
+	})
 })
 
 var RoleGrantModel = Type("RoleGrant", func() {
@@ -475,7 +691,13 @@ var RoleGrantModel = Type("RoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
+	})
+
+	Attribute("effect", String, func() {
+		Description("Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.")
+		Enum("allow", "deny")
+		Default("allow")
 	})
 
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
@@ -489,12 +711,19 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
 	})
+
+	Attribute("effect", String, func() {
+		Description("Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.")
+		Enum("allow", "deny")
+		Default("allow")
+	})
+
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
-			Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write")
+			Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
 		})
 	})
 
@@ -504,10 +733,12 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 })
 
 var RoleModel = Type("Role", func() {
-	Required("id", "name", "description", "is_system", "grants", "member_count", "created_at", "updated_at")
+	Required("id", "principal_urn", "name", "slug", "description", "is_system", "grants", "member_count", "created_at", "updated_at")
 
 	Attribute("id", String, "Unique role identifier.")
+	Attribute("principal_urn", String, "Canonical principal URN for this role.")
 	Attribute("name", String, "Display name of the role.")
+	Attribute("slug", String, "Stable WorkOS role slug.")
 	Attribute("description", String, "Human-readable description.")
 	Attribute("is_system", Boolean, "Whether this is a built-in system role that cannot be deleted.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants assigned to this role.")
@@ -530,12 +761,12 @@ var ScopeModel = Type("ScopeDefinition", func() {
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
 	})
 	Attribute("description", String, "What this scope protects.")
 	Attribute("resource_type", String, func() {
 		Description("The type of resource this scope applies to.")
-		Enum("org", "project", "mcp", "environment")
+		Enum("org", "project", "mcp", "environment", "risk_policy")
 	})
 })
 
@@ -559,18 +790,20 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 	Attribute("id", String, "The ID of the role to update.")
 	Attribute("name", String, "Updated display name.")
 	Attribute("description", String, "Updated description.")
-	Attribute("grants", ArrayOf(RoleGrantModel), "Updated scope grants.")
+	Attribute("add_grants", ArrayOf(RoleGrantModel), "Scope grants to add.")
+	Attribute("remove_grants", ArrayOf(RoleGrantModel), "Scope grants to remove.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role. Existing assignments are preserved.")
 })
 
 var MemberModel = Type("AccessMember", func() {
-	Required("id", "name", "email", "role_id", "joined_at")
+	Required("id", "principal_urn", "name", "email", "role_ids", "joined_at")
 
 	Attribute("id", String, "User ID.")
+	Attribute("principal_urn", String, "Canonical principal URN for this member.")
 	Attribute("name", String, "Display name.")
 	Attribute("email", String, "Email address.")
 	Attribute("photo_url", String, "Avatar URL.")
-	Attribute("role_id", String, "Currently assigned role ID.")
+	Attribute("role_ids", ArrayOf(String), "All role IDs assigned to this member.")
 	Attribute("joined_at", String, func() {
 		Description("When the member joined the organization.")
 		Format(FormatDateTime)
@@ -587,11 +820,210 @@ var ListUserGrantsResult = Type("ListUserGrantsResult", func() {
 	Attribute("grants", ArrayOf(ListRoleGrantModel), "The user's effective grants in this organization.")
 })
 
-var UpdateMemberRoleForm = Type("UpdateMemberRoleForm", func() {
-	Required("user_id", "role_id")
+var UpdateMemberRolesForm = Type("UpdateMemberRolesForm", func() {
+	Required("user_id", "role_ids")
 
 	Attribute("user_id", String, "The user ID to update.")
-	Attribute("role_id", String, "The new role ID to assign.")
+	Attribute("role_ids", ArrayOf(String), "The role IDs to assign. Replaces all existing role assignments.")
+})
+
+var ShadowMCPApprovalRequestModel = Type("ShadowMCPApprovalRequest", func() {
+	Required("id", "organization_id", "project_id", "resource_type", "status", "blocked_count", "requested_at", "created_at", "updated_at")
+
+	Attribute("id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("organization_id", String)
+	Attribute("project_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("resource_type", String)
+	Attribute("requester_user_id", String)
+	Attribute("requester_email", String)
+	Attribute("requester_display_name", String)
+	Attribute("status", String, func() {
+		Enum("requested", "approved", "denied")
+	})
+	Attribute("risk_policy_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("risk_result_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("observed_name", String)
+	Attribute("observed_full_url", String)
+	Attribute("observed_url_host", String)
+	Attribute("observed_server_identity", String)
+	Attribute("tool_name", String)
+	Attribute("tool_call", String)
+	Attribute("block_reason", String)
+	Attribute("blocked_count", Int)
+	Attribute("first_blocked_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_blocked_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("requested_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("decided_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("decided_by", String)
+	Attribute("decision_note", String)
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+var ListShadowMCPApprovalRequestsResult = Type("ListShadowMCPApprovalRequestsResult", func() {
+	Required("requests")
+	Attribute("requests", ArrayOf(ShadowMCPApprovalRequestModel))
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
+var ShadowMCPAccessRuleModel = Type("ShadowMCPAccessRule", func() {
+	Required("id", "organization_id", "access_scope", "resource_type", "disposition", "match_breadth", "match_value", "display_name", "created_at", "updated_at")
+
+	Attribute("id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("organization_id", String)
+	Attribute("project_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("access_scope", String, func() {
+		Enum("organization", "project")
+	})
+	Attribute("resource_type", String)
+	Attribute("disposition", String, func() {
+		Enum("allowed", "denied")
+	})
+	Attribute("match_breadth", String, func() {
+		Enum("full_url", "url_host")
+	})
+	Attribute("match_value", String)
+	Attribute("display_name", String)
+	Attribute("observed_full_url", String)
+	Attribute("observed_url_host", String)
+	Attribute("observed_server_identity", String)
+	Attribute("source_request_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("created_by", String)
+	Attribute("updated_by", String)
+	Attribute("reason", String)
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+var ListShadowMCPAccessRulesResult = Type("ListShadowMCPAccessRulesResult", func() {
+	Required("rules")
+	Attribute("rules", ArrayOf(ShadowMCPAccessRuleModel))
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
+var ShadowMCPApprovalDecisionResult = Type("ShadowMCPApprovalDecisionResult", func() {
+	Required("request", "rules")
+	Attribute("request", ShadowMCPApprovalRequestModel)
+	Attribute("rule", ShadowMCPAccessRuleModel)
+	Attribute("rules", ArrayOf(ShadowMCPAccessRuleModel))
+})
+
+var CreateShadowMCPAccessRuleResult = Type("CreateShadowMCPAccessRuleResult", func() {
+	Required("rules")
+	Attribute("rules", ArrayOf(ShadowMCPAccessRuleModel))
+})
+
+var CreateShadowMCPApprovalRequestForm = Type("CreateShadowMCPApprovalRequestForm", func() {
+	Required("request_token")
+
+	Attribute("request_token", String, "Signed token from the Shadow MCP block response.")
+})
+
+var ApproveShadowMCPApprovalRequestForm = Type("ApproveShadowMCPApprovalRequestForm", func() {
+	Required("id", "access_scope", "match_breadth", "match_value", "display_name")
+
+	Attribute("id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("access_scope", String, func() {
+		Enum("organization", "project")
+	})
+	Attribute("project_ids", ArrayOf(String), "Project ids to create project-scoped rules for. Empty falls back to the request project.")
+	Attribute("match_breadth", String, func() {
+		Enum("full_url", "url_host")
+	})
+	Attribute("match_value", String)
+	Attribute("display_name", String)
+	Attribute("observed_full_url", String)
+	Attribute("observed_url_host", String)
+	Attribute("observed_server_identity", String)
+	Attribute("reason", String)
+})
+
+var DenyShadowMCPApprovalRequestForm = Type("DenyShadowMCPApprovalRequestForm", func() {
+	Required("id", "create_deny_rule")
+
+	Attribute("id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("create_deny_rule", Boolean)
+	Attribute("project_ids", ArrayOf(String), "Project ids to create project-scoped deny rules for. Empty falls back to the request project.")
+	Attribute("match_breadth", String, func() {
+		Enum("full_url", "url_host")
+	})
+	Attribute("match_value", String)
+	Attribute("display_name", String)
+	Attribute("observed_full_url", String)
+	Attribute("observed_url_host", String)
+	Attribute("observed_server_identity", String)
+	Attribute("reason", String)
+})
+
+var CreateShadowMCPAccessRuleForm = Type("CreateShadowMCPAccessRuleForm", func() {
+	Extend(ShadowMCPAccessRuleForm)
+	Attribute("project_ids", ArrayOf(String), "Project ids to create project-scoped rules for. Empty uses project_id for single-rule creation.")
+})
+
+var ShadowMCPAccessRuleForm = Type("ShadowMCPAccessRuleForm", func() {
+	Required("disposition", "access_scope", "match_breadth", "match_value", "display_name")
+
+	Attribute("disposition", String, func() {
+		Enum("allowed", "denied")
+	})
+	Attribute("access_scope", String, func() {
+		Enum("organization", "project")
+	})
+	Attribute("project_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("match_breadth", String, func() {
+		Enum("full_url", "url_host")
+	})
+	Attribute("match_value", String)
+	Attribute("display_name", String)
+	Attribute("observed_full_url", String)
+	Attribute("observed_url_host", String)
+	Attribute("observed_server_identity", String)
+	Attribute("reason", String)
+})
+
+var UpdateShadowMCPAccessRuleForm = Type("UpdateShadowMCPAccessRuleForm", func() {
+	Required("id", "disposition", "match_breadth", "match_value", "display_name")
+
+	Attribute("id", String, func() {
+		Format(FormatUUID)
+	})
+	Extend(ShadowMCPAccessRuleForm)
 })
 
 var RBACStatus = Type("RBACStatus", func() {
@@ -625,7 +1057,7 @@ var AuthzChallengeModel = Type("AuthzChallenge", func() {
 		Enum("allow", "deny", "error")
 	})
 	Attribute("reason", String, func() {
-		Enum("grant_matched", "no_grants", "scope_unsatisfied", "invalid_check", "rbac_skipped_apikey", "dev_override")
+		Enum("grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override")
 	})
 	Attribute("scope", String, "Scope that was checked.")
 	Attribute("resource_kind", String, "Resource kind of the check.")
@@ -685,7 +1117,7 @@ var ChallengeBucketModel = Type("ChallengeBucket", func() {
 		Enum("allow", "deny", "error")
 	})
 	Attribute("reason", String, func() {
-		Enum("grant_matched", "no_grants", "scope_unsatisfied", "invalid_check", "rbac_skipped_apikey", "dev_override")
+		Enum("grant_matched", "no_grants", "scope_unsatisfied", "deny_grant", "invalid_check", "rbac_skipped_apikey", "dev_override")
 	})
 	Attribute("scope", String, "Scope that was checked.")
 	Attribute("resource_kind", String, "Resource kind of the check.")

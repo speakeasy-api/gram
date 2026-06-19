@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"time"
 
+	"go.temporal.io/sdk/activity"
+
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
@@ -42,6 +44,9 @@ func (r *ReapInactiveAssistantRuntimes) Do(ctx context.Context, req ReapInactive
 	result, err := r.core.ReapInactiveAssistantRuntimes(ctx, assistants.ReapInactiveAssistantRuntimesParams{
 		InactivityThreshold: req.InactivityThreshold,
 		BatchSize:           req.BatchSize,
+		OnRowProcessed: func() {
+			activity.RecordHeartbeat(ctx)
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("reap inactive assistant runtimes: %w", err)

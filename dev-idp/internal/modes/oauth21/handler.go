@@ -5,9 +5,8 @@
 //
 // Identity resolution is non-interactive (idp-design.md §3) — every
 // /authorize call resolves the per-mode currentUser and
-// immediately redirects with the issued code. Client authentication is
-// permissive (idp-design.md §5.2) — every client_id / client_secret /
-// redirect_uri is accepted as-is.
+// immediately redirects with the issued code. Dynamic client registration
+// persists redirect_uris so tests can catch unregistered callback URLs.
 package oauth21
 
 import (
@@ -86,9 +85,13 @@ func NewHandler(cfg Config, ks *keystore.Keystore, logger *slog.Logger, tracerPr
 // Handler returns the http.Handler that should be mounted under `Prefix`
 // (use http.StripPrefix). All registered paths are relative to that
 // prefix.
+//
+// Note: the RFC 8414 .well-known/oauth-authorization-server route is NOT
+// mounted here — RFC 8414 places that document at the host root with the
+// issuer's path component as a suffix, not under the issuer path. Wire it
+// via RegisterRootRoutes on the outer (host-root) mux.
 func (h *Handler) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /.well-known/oauth-authorization-server", h.handleASMetadata)
 	mux.HandleFunc("GET /.well-known/openid-configuration", h.handleOIDCDiscovery)
 	mux.Handle("GET /.well-known/jwks.json", h.keystore.JWKSHandler())
 	mux.HandleFunc("POST /register", h.handleRegister)
@@ -97,6 +100,15 @@ func (h *Handler) Handler() http.Handler {
 	mux.HandleFunc("GET /userinfo", h.handleUserinfo)
 	mux.HandleFunc("POST /revoke", h.handleRevoke)
 	return mux
+}
+
+// RegisterRootRoutes mounts the RFC 8414 .well-known/oauth-authorization-server
+// route on the host-root mux. Per RFC 8414 §3, the well-known URI suffix is
+// appended to the host and the issuer's path component is appended after,
+// so an issuer of "<host>/oauth2-1" exposes its metadata at
+// "<host>/.well-known/oauth-authorization-server/oauth2-1".
+func (h *Handler) RegisterRootRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /.well-known/oauth-authorization-server"+Prefix, h.handleASMetadata)
 }
 
 // issuer is the absolute URL identifying this AS in OAuth/OIDC metadata
@@ -179,7 +191,7 @@ type dcrResponse struct {
 
 func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Decode whatever the caller sent so we can echo redirect_uris /
-	// grant_types / response_types back. None of it is persisted (§5.2).
+	// grant_types / response_types back.
 	var body struct {
 		RedirectURIs            []string `json:"redirect_uris"`
 		GrantTypes              []string `json:"grant_types"`
@@ -188,12 +200,35 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
+	clientID := "client_" + randomHex(16)
+	clientSecret := "secret_" + randomHex(32)
+	redirectURIs := body.RedirectURIs
+	if redirectURIs == nil {
+		redirectURIs = []string{}
+	}
+	rawRedirectURIs, err := json.Marshal(redirectURIs)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "marshal registered redirect uris", slog.Any("error", err))
+		oauthError(w, http.StatusInternalServerError, "server_error", "failed to register client")
+		return
+	}
+	if _, err := repo.New(h.db).CreateOAuthClient(r.Context(), repo.CreateOAuthClientParams{
+		ClientID:     clientID,
+		Mode:         Mode,
+		ClientSecret: clientSecret,
+		RedirectUris: string(rawRedirectURIs),
+	}); err != nil {
+		h.logger.ErrorContext(r.Context(), "create oauth client", slog.Any("error", err))
+		oauthError(w, http.StatusInternalServerError, "server_error", "failed to register client")
+		return
+	}
+
 	writeJSON(w, http.StatusCreated, dcrResponse{
-		ClientID:                "client_" + randomHex(16),
-		ClientSecret:            "secret_" + randomHex(32),
+		ClientID:                clientID,
+		ClientSecret:            clientSecret,
 		ClientIDIssuedAt:        time.Now().Unix(),
 		ClientSecretExpiresAt:   0, // 0 = never expires (RFC 7591)
-		RedirectURIs:            body.RedirectURIs,
+		RedirectURIs:            redirectURIs,
 		GrantTypes:              body.GrantTypes,
 		ResponseTypes:           body.ResponseTypes,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
@@ -241,6 +276,30 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	target, err := url.Parse(redirectURI)
 	if err != nil {
 		oauthError(w, http.StatusBadRequest, "invalid_request", "redirect_uri is not a valid URL")
+		return
+	}
+
+	client, err := repo.New(h.db).GetOAuthClient(ctx, repo.GetOAuthClientParams{
+		ClientID: clientID,
+		Mode:     Mode,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			oauthError(w, http.StatusBadRequest, "invalid_client", "client_id is not registered")
+			return
+		}
+		h.logger.ErrorContext(ctx, "load oauth client", slog.Any("error", err))
+		oauthError(w, http.StatusInternalServerError, "server_error", "failed to load client")
+		return
+	}
+	var registeredRedirectURIs []string
+	if err := json.Unmarshal([]byte(client.RedirectUris), &registeredRedirectURIs); err != nil {
+		h.logger.ErrorContext(ctx, "decode registered redirect uris", slog.Any("error", err))
+		oauthError(w, http.StatusInternalServerError, "server_error", "failed to load client")
+		return
+	}
+	if !slices.Contains(registeredRedirectURIs, redirectURI) {
+		oauthError(w, http.StatusBadRequest, "invalid_request", "redirect_uri is not registered for this client")
 		return
 	}
 

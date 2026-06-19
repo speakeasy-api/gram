@@ -6,7 +6,7 @@ export function useFetchSourceContent(
   isOpenAPI: boolean,
   project: { id: string },
   projectSlug: string | undefined,
-) {
+): ReturnType<typeof useQuery<{ content: string; language: string }>> {
   return useQuery<{ content: string; language: string }>({
     queryKey: ["sourceContent", source?.assetId, isOpenAPI],
     enabled: !!source?.assetId,

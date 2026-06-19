@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -30,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -38,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -74,22 +77,32 @@ func handleToolsCall(
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporalEnv *temporal.Environment,
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
+	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool call request").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool call request").LogError(ctx, logger)
 	}
 
 	if params.Name == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "tool name is required").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, nil, "tool name is required").LogError(ctx, logger)
 	}
 
 	projectID := mv.ProjectID(payload.projectID)
 
-	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache, platformExtras...)
+	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache, payload.toolVariationsGroupID, platformExtras...)
 	if err != nil {
 		return nil, err
+	}
+
+	// Apply the ?tags= filter before any tool resolution — dynamic dispatch,
+	// proxy matching, and the static name lookup all read this slice, so a
+	// filtered-out tool surfaces as method-not-found.
+	if len(payload.tags) > 0 {
+		before := len(toolset.Tools)
+		toolset.Tools = toolfilter.FilterToolsByTags(toolset.Tools, payload.tags)
+		recordToolFilterSpan(ctx, len(toolset.Tools), before-len(toolset.Tools))
 	}
 
 	if payload.mode != ToolModeStatic {
@@ -111,12 +124,13 @@ func handleToolsCall(
 	}
 
 	// Strip the x-gram-toolset-id property the agent echoed back from the
-	// tool's input schema (see injectToolsetIDConstant in rpc_tools_list.go).
-	// It is not part of the underlying tool's real schema, so passing it
-	// through would cause the executor to reject the call.
-	stripped, err := stripGramToolsetIDProperty(params.Arguments)
+	// tool's input schema (see shadowmcp.InjectToolsetIDConstant in
+	// rpc_tools_list.go). It is not part of the underlying tool's real
+	// schema, so passing it through would cause the executor to reject the
+	// call.
+	stripped, err := shadowmcp.StripToolsetIDProperty(params.Arguments)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool arguments").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool arguments").LogError(ctx, logger)
 	}
 	params.Arguments = stripped
 
@@ -130,7 +144,7 @@ func handleToolsCall(
 
 	toolsetID, err := uuid.Parse(toolset.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
 	}
 
 	executor := externalmcp.BuildProxyToolExecutor(logger, guardianPolicy, toolset.Tools)
@@ -151,7 +165,7 @@ func handleToolsCall(
 
 	planInputs, err := executor.MatchPlanInputs(ctx, params.Name, uuid.UUID(projectID), resolve)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to match proxy tool").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to match proxy tool").LogError(ctx, logger)
 	}
 
 	var tool *types.Tool
@@ -179,18 +193,18 @@ func handleToolsCall(
 		}
 
 		if tool == nil {
-			return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").Log(ctx, logger)
+			return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").LogError(ctx, logger)
 		}
 
 		urn, err := conv.GetToolURN(*tool)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").LogError(ctx, logger)
 		}
 		toolURN = *urn
 
 		plan, err = toolsetHelpers.GetToolCallPlanByURN(ctx, toolURN, uuid.UUID(projectID))
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").LogError(ctx, logger)
 		}
 	}
 
@@ -223,7 +237,7 @@ func handleToolsCall(
 
 	systemConfig, err := env.LoadSystemEnv(ctx, payload.projectID, toolsetID, string(toolURN.Kind), toolURN.Source)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").LogError(ctx, logger)
 	}
 
 	// Extract general OAuth token (no security-key binding)
@@ -251,7 +265,7 @@ func handleToolsCall(
 
 	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to filter omitted environment variables").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to filter omitted environment variables").LogError(ctx, logger)
 	}
 
 	descriptor := plan.Descriptor
@@ -274,6 +288,22 @@ func handleToolsCall(
 	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingRepository)
 	if err != nil {
 		return nil, err
+	}
+
+	// Assistant-initiated calls leave a durable audit trail entry on dispatch,
+	// regardless of how the tool execution turns out. Ordinary user MCP
+	// traffic is not audited here.
+	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+		recordAssistantToolCallAudit(ctx, logger, auditLogger, db, assistantToolCallAudit{
+			organizationID: toolset.OrganizationID,
+			projectID:      payload.projectID,
+			principal:      principal,
+			chatID:         payload.chatID,
+			toolsetSlug:    payload.toolset,
+			toolName:       params.Name,
+			toolURN:        toolURN,
+			params:         params.Arguments,
+		})
 	}
 
 	logAttrs := tm.HTTPLogAttributes{}
@@ -311,24 +341,20 @@ func handleToolsCall(
 		if payload.chatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
 		}
-		if payload.userID != "" {
-			logAttrs[attr.UserIDKey] = payload.userID
+		externalUserID := payload.externalUserID
+		if externalUserID == "" && oauthToken != "" {
+			externalUserID = jwtclaims.UnsafeExtractSubject(oauthToken)
 		}
-		switch {
-		case payload.externalUserID != "":
-			logAttrs[attr.ExternalUserIDKey] = payload.externalUserID
-		case oauthToken != "":
-			if sub := jwtclaims.UnsafeExtractSubject(oauthToken); sub != "" {
-				logAttrs[attr.ExternalUserIDKey] = sub
-			}
+		if externalUserID != "" {
+			logAttrs[attr.ExternalUserIDKey] = externalUserID
 		}
 		if payload.apiKeyID != "" {
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
 		}
-		if gramEmail != "" {
-			logAttrs[attr.UserEmailKey] = gramEmail
-		}
 		logAttrs.RecordToolsetSlug(payload.toolset)
+		if payload.mcpServerID != nil {
+			logAttrs[attr.McpServerIDKey] = payload.mcpServerID.String()
+		}
 		logAttrs.RecordMCPURL(mcpURL)
 		params := tm.LogParams{
 			Timestamp: time.Now(),
@@ -341,6 +367,7 @@ func handleToolsCall(
 				OrganizationID: descriptor.OrganizationID,
 				FunctionID:     nil,
 			},
+			UserInfo:   tm.UserInfoByID(payload.userID),
 			Attributes: logAttrs,
 		}
 		telemLogger.Log(ctx, params)
@@ -348,7 +375,7 @@ func handleToolsCall(
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute tool call").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute tool call").LogError(ctx, logger)
 	}
 
 	outputBytes = int64(rw.body.Len())
@@ -382,26 +409,27 @@ func handleToolsCall(
 			Result: json.RawMessage(rw.body.Bytes()),
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").LogError(ctx, logger)
 		}
 
 		return bs, nil
 	}
 
-	chunk, err := formatResult(*rw, plan.Kind)
+	chunk, structured, err := formatResult(*rw, plan.Kind)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").LogError(ctx, logger)
 	}
 
 	bs, err := json.Marshal(result[toolCallResult]{
 		ID: req.ID,
 		Result: toolCallResult{
-			Content: []json.RawMessage{chunk},
-			IsError: rw.statusCode < 200 || rw.statusCode >= 300,
+			Content:           []json.RawMessage{chunk},
+			StructuredContent: structured,
+			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger)
 	}
 
 	return bs, nil
@@ -422,9 +450,9 @@ func resolveUserConfiguration(
 		storedEnvVars, err := env.Load(ctx, payload.projectID, toolconfig.Slug(payload.environment))
 		switch {
 		case errors.Is(err, toolconfig.ErrNotFound):
-			return nil, oops.E(oops.CodeBadRequest, err, "environment not found").Log(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "environment not found").LogError(ctx, logger)
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger)
 		}
 
 		for k, v := range storedEnvVars {
@@ -487,7 +515,7 @@ func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string
 	}
 
 	if periodUsage.ToolCalls >= hardToolCallsLimit {
-		return oops.E(oops.CodeForbidden, errors.New("tool usage limit reached"), "tool usage limit reached").Log(ctx, logger)
+		return oops.E(oops.CodeForbidden, errors.New("tool usage limit reached"), "tool usage limit reached").LogError(ctx, logger)
 	}
 
 	return nil
@@ -516,15 +544,15 @@ type executeToolArguments struct {
 func processExecuteToolCall(ctx context.Context, logger *slog.Logger, argsRaw json.RawMessage) (string, json.RawMessage, error) {
 	var args executeToolArguments
 	if len(argsRaw) == 0 {
-		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing execute arguments"), "execute_tool arguments are required").Log(ctx, logger)
+		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing execute arguments"), "execute_tool arguments are required").LogError(ctx, logger)
 	}
 	if err := json.Unmarshal(argsRaw, &args); err != nil {
-		return "", nil, oops.E(oops.CodeBadRequest, err, "failed to parse execute_tool arguments").Log(ctx, logger)
+		return "", nil, oops.E(oops.CodeBadRequest, err, "failed to parse execute_tool arguments").LogError(ctx, logger)
 	}
 
 	name := strings.TrimSpace(args.Name)
 	if name == "" {
-		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing tool name"), "name is required for execute_tool").Log(ctx, logger)
+		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing tool name"), "name is required for execute_tool").LogError(ctx, logger)
 	}
 
 	payload := args.Arguments
@@ -533,12 +561,12 @@ func processExecuteToolCall(ctx context.Context, logger *slog.Logger, argsRaw js
 		if len(trimmed) > 0 && trimmed[0] == '"' {
 			var payloadString string
 			if err := json.Unmarshal(payload, &payloadString); err != nil {
-				return "", nil, oops.E(oops.CodeBadRequest, err, "failed to parse execute_tool payload").Log(ctx, logger)
+				return "", nil, oops.E(oops.CodeBadRequest, err, "failed to parse execute_tool payload").LogError(ctx, logger)
 			}
 			payload = json.RawMessage(payloadString)
 		}
 		if !json.Valid(payload) {
-			return "", nil, oops.E(oops.CodeBadRequest, errors.New("invalid payload"), "arguments must be valid JSON").Log(ctx, logger)
+			return "", nil, oops.E(oops.CodeBadRequest, errors.New("invalid payload"), "arguments must be valid JSON").LogError(ctx, logger)
 		}
 	}
 
@@ -568,16 +596,22 @@ func (w *toolCallResponseWriter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.RawMessage, error) {
+// formatResult turns a tool's raw HTTP response body into an MCP content
+// chunk. When the body is a JSON object it also returns it verbatim as
+// structuredContent so spec-compliant clients (MCP 2025-06-18) receive a
+// parsed object instead of having to re-parse the stringified text block.
+// structured is nil for non-JSON bodies and for JSON that is not an object
+// (arrays/scalars), which the spec reserves the field for.
+func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk json.RawMessage, structured json.RawMessage, err error) {
 	body := rw.body.Bytes()
 	if len(body) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	ct := rw.headers.Get("content-type")
 	mt, _, err := mime.ParseMediaType(ct)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse content type %q: %w", ct, err)
+		return nil, nil, fmt.Errorf("failed to parse content type %q: %w", ct, err)
 	}
 
 	switch {
@@ -592,10 +626,16 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 			},
 		})
 		if err != nil {
-			return nil, fmt.Errorf("serialize text content: %w", err)
+			return nil, nil, fmt.Errorf("serialize text content: %w", err)
 		}
 
-		return bs, nil
+		if contenttypes.IsJSON(mt) {
+			if trimmed := bytes.TrimSpace(body); len(trimmed) > 0 && trimmed[0] == '{' && json.Valid(trimmed) {
+				structured = json.RawMessage(trimmed)
+			}
+		}
+
+		return bs, structured, nil
 	case strings.HasPrefix(mt, "image/"):
 		encoded := base64.StdEncoding.EncodeToString(body)
 		bs, err := json.Marshal(contentChunk[json.RawMessage, string]{
@@ -606,10 +646,10 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 			Meta:     nil,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("serialize image content: %w", err)
+			return nil, nil, fmt.Errorf("serialize image content: %w", err)
 		}
 
-		return bs, nil
+		return bs, nil, nil
 	case strings.HasPrefix(mt, "audio/"):
 		encoded := base64.StdEncoding.EncodeToString(body)
 		bs, err := json.Marshal(contentChunk[json.RawMessage, string]{
@@ -620,12 +660,12 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 			Meta:     nil,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("serialize audio content: %w", err)
+			return nil, nil, fmt.Errorf("serialize audio content: %w", err)
 		}
 
-		return bs, nil
+		return bs, nil, nil
 	default:
-		return nil, fmt.Errorf("unsupported content type %q", ct)
+		return nil, nil, fmt.Errorf("unsupported content type %q", ct)
 	}
 }
 
@@ -638,8 +678,9 @@ type contentChunk[T any, D any] struct {
 }
 
 type toolCallResult struct {
-	Content []json.RawMessage `json:"content"`
-	IsError bool              `json:"isError,omitzero"`
+	Content           []json.RawMessage `json:"content"`
+	StructuredContent json.RawMessage   `json:"structuredContent,omitempty"`
+	IsError           bool              `json:"isError,omitzero"`
 }
 
 // filterOmittedEnvVars filters environment variables based on MCP metadata configuration.
@@ -650,7 +691,7 @@ func filterOmittedEnvVars(
 	repo *mcpmetadata_repo.Queries,
 	toolsetID uuid.UUID,
 ) error {
-	rawMetadata, err := repo.GetMetadataForToolset(ctx, toolsetID)
+	rawMetadata, err := repo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
 	if err != nil {
 		// Fallback behavior for backwards compatibility
 		if errors.Is(err, pgx.ErrNoRows) {

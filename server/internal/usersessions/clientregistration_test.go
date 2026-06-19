@@ -148,13 +148,13 @@ func TestRegistrationRequest_Validate(t *testing.T) {
 		require.NoError(t, validateAfterDefaults(req))
 	})
 
-	t.Run("rejects single-token custom scheme", func(t *testing.T) {
+	t.Run("accepts single-token custom scheme", func(t *testing.T) {
 		t.Parallel()
 		req := &RegistrationRequest{
 			ClientName:   "named",
 			RedirectURIs: []string{"myapp:/callback"},
 		}
-		assertOAuthError(t, validateAfterDefaults(req), "invalid_redirect_uri", "reverse-DNS")
+		require.NoError(t, validateAfterDefaults(req))
 	})
 
 	t.Run("rejects unsupported grant_type", func(t *testing.T) {

@@ -1,7 +1,13 @@
 // source: https://github.com/sersavan/shadcn-multi-select-component
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { CheckIcon, ChevronDown, XIcon, WandSparkles } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronDown,
+  PlusIcon,
+  XIcon,
+  WandSparkles,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
@@ -14,7 +20,6 @@ import {
 } from "@/components/ui/popover";
 import {
   Command,
-  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -25,7 +30,7 @@ import {
 /**
  * Animation types and configurations
  */
-export interface AnimationConfig {
+interface AnimationConfig {
   /** Badge animation type */
   badgeAnimation?: "bounce" | "pulse" | "wiggle" | "fade" | "slide" | "none";
   /** Popover animation type */
@@ -269,6 +274,17 @@ interface MultiSelectProps
    * Optional, defaults to false.
    */
   closeOnSelect?: boolean;
+
+  /**
+   * If true, allows users to create new values from the search input.
+   * When the search query has content and does not exactly match an existing
+   * option (case-insensitive), a "Create '<text>'" item is shown at the top
+   * of the dropdown. Selecting it adds the trimmed search text to the
+   * selected values. Selected values that are not present in `options` are
+   * still rendered as badges using the value as the label.
+   * Optional, defaults to false.
+   */
+  creatable?: boolean;
 }
 
 /**
@@ -323,6 +339,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       deduplicateOptions = false,
       resetOnDefaultValueChange = true,
       closeOnSelect = false,
+      creatable = false,
       ...props
     },
     ref,
@@ -363,7 +380,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       (
         opts: MultiSelectOption[] | MultiSelectGroup[],
       ): opts is MultiSelectGroup[] => {
-        return opts.length > 0 && "heading" in opts[0];
+        return opts.length > 0 && "heading" in opts[0]!;
       },
       [],
     );
@@ -562,14 +579,18 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
     const getOptionByValue = React.useCallback(
       (value: string): MultiSelectOption | undefined => {
         const option = getAllOptions().find((option) => option.value === value);
-        if (!option && process.env.NODE_ENV === "development") {
+        if (option) return option;
+        if (creatable) {
+          return { label: value, value };
+        }
+        if (process.env.NODE_ENV === "development") {
           console.warn(
             `MultiSelect: Option with value "${value}" not found in options list`,
           );
         }
-        return option;
+        return undefined;
       },
-      [getAllOptions],
+      [getAllOptions, creatable],
     );
 
     const filteredOptions = React.useMemo(() => {
@@ -596,6 +617,23 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       );
     }, [options, searchValue, searchable, isGroupedOptions]);
 
+    // We filter `options` into `filteredOptions` ourselves, so cmdk's built-in
+    // filtering is disabled (see <Command shouldFilter={false}> below). Leaving
+    // both filters enabled makes them race over a shrinking item set as the user
+    // types, which intermittently shows the empty state for valid matches and
+    // can leave it stuck when characters are deleted (AIS-84). Because
+    // shouldFilter={false} also disables cmdk's <CommandEmpty>, the empty state
+    // is derived from filteredOptions instead.
+    const filteredOptionCount = React.useMemo(() => {
+      if (isGroupedOptions(filteredOptions)) {
+        return filteredOptions.reduce(
+          (count, group) => count + group.options.length,
+          0,
+        );
+      }
+      return filteredOptions.length;
+    }, [filteredOptions, isGroupedOptions]);
+
     const handleInputKeyDown = (
       event: React.KeyboardEvent<HTMLInputElement>,
     ) => {
@@ -618,6 +656,30 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
         : [...selectedValues, optionValue];
       setSelectedValues(newSelectedValues);
       onValueChange(newSelectedValues);
+      if (closeOnSelect) {
+        setIsPopoverOpen(false);
+      }
+    };
+
+    const trimmedSearchValue = searchValue.trim();
+    const canCreateFromSearch = React.useMemo(() => {
+      if (!creatable || !trimmedSearchValue) return false;
+      const needle = trimmedSearchValue.toLowerCase();
+      const matchesExisting = getAllOptions().some(
+        (option) =>
+          option.value.toLowerCase() === needle ||
+          option.label.toLowerCase() === needle,
+      );
+      if (matchesExisting) return false;
+      return !selectedValues.some((value) => value.toLowerCase() === needle);
+    }, [creatable, trimmedSearchValue, getAllOptions, selectedValues]);
+
+    const handleCreate = () => {
+      if (disabled || !canCreateFromSearch) return;
+      const newSelectedValues = [...selectedValues, trimmedSearchValue];
+      setSelectedValues(newSelectedValues);
+      onValueChange(newSelectedValues);
+      setSearchValue("");
       if (closeOnSelect) {
         setIsPopoverOpen(false);
       }
@@ -1015,7 +1077,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
             align="start"
             onEscapeKeyDown={() => setIsPopoverOpen(false)}
           >
-            <Command>
+            <Command shouldFilter={false}>
               {searchable && (
                 <CommandInput
                   placeholder="Search options..."
@@ -1038,9 +1100,38 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                   "overscroll-behavior-y-contain",
                 )}
               >
-                <CommandEmpty>
-                  {emptyIndicator || "No results found."}
-                </CommandEmpty>{" "}
+                {filteredOptionCount === 0 && !canCreateFromSearch && (
+                  <div
+                    data-slot="command-empty"
+                    className="py-6 text-center text-sm"
+                  >
+                    {emptyIndicator || "No results found."}
+                  </div>
+                )}{" "}
+                {canCreateFromSearch && (
+                  <CommandGroup>
+                    <CommandItem
+                      key={`__create__${trimmedSearchValue}`}
+                      value={trimmedSearchValue}
+                      onSelect={handleCreate}
+                      role="option"
+                      aria-label={`Create new option "${trimmedSearchValue}"`}
+                      className="cursor-pointer"
+                    >
+                      <PlusIcon
+                        className="text-muted-foreground mr-2 h-4 w-4"
+                        aria-hidden="true"
+                      />
+                      <span>
+                        Create &ldquo;
+                        <span className="font-medium">
+                          {trimmedSearchValue}
+                        </span>
+                        &rdquo;
+                      </span>
+                    </CommandItem>
+                  </CommandGroup>
+                )}
                 {!hideSelectAll && !searchValue && (
                   <CommandGroup>
                     <CommandItem

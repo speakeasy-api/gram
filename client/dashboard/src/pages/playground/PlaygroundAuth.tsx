@@ -1,12 +1,13 @@
-import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PrivateInput } from "@/components/ui/private-input";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
+import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
+import { useMcpOAuthRequired } from "@/lib/mcpOAuth";
 import { Toolset } from "@/lib/toolTypes";
-import { getServerURL } from "@/lib/utils";
+import { getPlaygroundMcpBaseURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   useGetMcpMetadata,
@@ -14,14 +15,8 @@ import {
 } from "@gram/client/react-query";
 import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  CheckCircle,
-  ExternalLink,
-  Loader2,
-  LogOut,
-} from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle, ExternalLink, Loader2, LogOut } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { usePlaygroundEnvironment } from "./usePlaygroundEnvironment";
 import { toast } from "sonner";
 import {
@@ -30,10 +25,6 @@ import {
 } from "../mcp/environmentVariableUtils";
 import { useEnvironmentVariables } from "../mcp/useEnvironmentVariables";
 import { useToolset } from "@/hooks/toolTypes";
-import {
-  getOAuthProviderName,
-  getToolsetOAuthMode,
-} from "./playgroundOAuthMode";
 import {
   getExternalMcpOAuthStatusQueryKey,
   useExternalMcpOAuthStatus,
@@ -52,17 +43,17 @@ const PASSWORD_MASK = "••••••••";
  */
 function ExternalMcpOAuthConnection({
   toolsetSlug,
-  oauthMode,
   providerName,
+  isIssuerGated,
 }: {
   toolsetSlug: string;
-  oauthMode: "custom-proxy" | "external";
   providerName: string;
+  isIssuerGated: boolean;
 }) {
   const { data: toolset } = useToolset(toolsetSlug);
   const project = useProject();
   const queryClient = useQueryClient();
-  const apiUrl = getServerURL();
+  const apiUrl = getPlaygroundMcpBaseURL();
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Clean up poll timer on unmount
@@ -72,6 +63,18 @@ function ExternalMcpOAuthConnection({
         clearInterval(pollTimerRef.current);
       }
     };
+  }, []);
+
+  // Auto-close when this page is loaded inside the issuer-connect popup:
+  // the server redirects back to the dashboard URL with ?issuer_connected=1
+  // after writing remote_sessions; the parent window's popup-close polling
+  // then refetches status.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.opener) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("issuer_connected") === "1") {
+      window.close();
+    }
   }, []);
 
   // Query OAuth status using the shared hook
@@ -107,7 +110,7 @@ function ExternalMcpOAuthConnection({
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: getExternalMcpOAuthStatusQueryKey(toolset?.id),
       });
       toast.success(`Disconnected from ${providerName}`);
@@ -126,11 +129,14 @@ function ExternalMcpOAuthConnection({
 
     const params = new URLSearchParams({
       toolset_id: toolset?.id ?? "",
-      redirect_uri: window.location.href.split("?")[0],
+      redirect_uri: window.location.href.split("?")[0] ?? "",
       project: project.slug,
     });
 
-    const authUrl = `${apiUrl}/oauth-external/authorize?${params.toString()}`;
+    const endpoint = isIssuerGated
+      ? "/oauth-external/issuer-connect"
+      : "/oauth-external/authorize";
+    const authUrl = `${apiUrl}${endpoint}?${params.toString()}`;
 
     const width = 600;
     const height = 700;
@@ -159,15 +165,13 @@ function ExternalMcpOAuthConnection({
         }
         // Small delay to ensure server has processed the callback
         setTimeout(() => {
-          refetchStatus();
+          void refetchStatus();
         }, 300);
       }
     }, 500);
   };
 
   const isConnected = oauthStatus?.status === "authenticated";
-  const oauthVersionLabel =
-    oauthMode === "custom-proxy" ? "MCP OAuth 2.1" : "OAuth";
 
   return (
     <div className="bg-muted/30 rounded-md border p-3">
@@ -178,7 +182,7 @@ function ExternalMcpOAuthConnection({
           className="justify-between"
         >
           <Type variant="small" className="font-medium">
-            {oauthVersionLabel}
+            OAuth
           </Type>
           {statusLoading ? (
             <Loader2 className="text-muted-foreground size-4 animate-spin" />
@@ -197,16 +201,18 @@ function ExternalMcpOAuthConnection({
         </Type>
 
         {isConnected ? (
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full"
-            onClick={() => disconnectMutation.mutate()}
-            disabled={disconnectMutation.isPending}
-          >
-            <LogOut className="mr-2 size-3" />
-            Disconnect
-          </Button>
+          isIssuerGated ? null : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full"
+              onClick={() => disconnectMutation.mutate()}
+              disabled={disconnectMutation.isPending}
+            >
+              <LogOut className="mr-2 size-3" />
+              Disconnect
+            </Button>
+          )
         ) : (
           <Button
             size="sm"
@@ -226,16 +232,13 @@ function ExternalMcpOAuthConnection({
 export function PlaygroundAuth({
   toolset,
   onPlaygroundEnvironmentSlug,
-}: PlaygroundAuthProps) {
+}: PlaygroundAuthProps): JSX.Element {
   const routes = useRoutes();
 
-  // Check if toolset has OAuth configuration at the toolset level
-  const oauthMode = useMemo(() => getToolsetOAuthMode(toolset), [toolset]);
-  const hasOAuth = oauthMode !== "none";
-  const oauthProviderName = useMemo(
-    () => getOAuthProviderName(toolset),
-    [toolset],
-  );
+  // Standard OAuth discovery against the MCP URL — no toolset-field sniffing.
+  const mcpUrl = useInternalMcpUrl(toolset);
+  const { oauthRequired } = useMcpOAuthRequired(mcpUrl);
+  const loginSecured = !!toolset.userSessionIssuerSlug;
 
   // Use the same environment data fetching as MCPAuthenticationTab
   const { data: environmentsData } = useListEnvironments();
@@ -273,9 +276,6 @@ export function PlaygroundAuth({
     defaultEnvironmentSlug,
     mcpMetadata,
   );
-
-  const oauthConfigStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
-  const oauthConfigRequired = oauthConfigStatus === "required-unconfigured";
 
   // Notify parent component of the playground environment slug.
   // The cleanup clears the slug on unmount so the parent never holds
@@ -329,7 +329,7 @@ export function PlaygroundAuth({
   };
 
   // Show "no auth required" only if there are no env vars AND no OAuth
-  if (envVars.length === 0 && !hasOAuth && !oauthConfigRequired) {
+  if (envVars.length === 0 && !oauthRequired && !loginSecured) {
     return (
       <div className="py-4 text-center">
         <Type variant="small" className="text-muted-foreground">
@@ -341,30 +341,17 @@ export function PlaygroundAuth({
 
   return (
     <div className="space-y-3">
-      {oauthConfigRequired && (
-        <div className="border-warning-foreground/80 bg-warning rounded-md border border-dashed p-3 text-center">
-          <AlertTriangle className="text-warning-foreground mx-auto mb-1 size-4" />
-          <Type
-            variant="small"
-            className="text-warning-foreground block font-bold"
-          >
-            OAuth setup required
-          </Type>
-          <Type
-            variant="small"
-            className="text-warning-foreground/80 mb-2 block"
-          >
-            This MCP server requires OAuth. Configure it before testing in the
-            playground.
-          </Type>
-          <routes.mcp.details.Link
-            params={[toolset.slug]}
-            hash="authentication"
-          >
-            <Button size="sm" variant="secondary" className="w-full">
-              Configure OAuth
-            </Button>
-          </routes.mcp.details.Link>
+      {loginSecured && (
+        <div className="border-success-softest bg-success-softest rounded-md border p-3">
+          <Stack direction="horizontal" align="center" className="gap-2">
+            <Badge variant="success">
+              <CheckCircle className="mr-1 size-3" />
+              Login Secured
+            </Badge>
+            <Type variant="small" className="text-success-foreground">
+              Interactive auth is configured.
+            </Type>
+          </Stack>
         </div>
       )}
 
@@ -379,14 +366,13 @@ export function PlaygroundAuth({
       )}
 
       {/* Toolset-level OAuth Connection UI */}
-      {hasOAuth &&
-        (oauthMode === "custom-proxy" || oauthMode === "external") && (
-          <ExternalMcpOAuthConnection
-            toolsetSlug={toolset.slug}
-            oauthMode={oauthMode}
-            providerName={oauthProviderName}
-          />
-        )}
+      {oauthRequired && (
+        <ExternalMcpOAuthConnection
+          toolsetSlug={toolset.slug}
+          providerName={toolset.name}
+          isIssuerGated={loginSecured}
+        />
+      )}
 
       {/* Environment Variables */}
       {envVars.map((envVar) => {
@@ -469,7 +455,7 @@ export function PlaygroundAuth({
           size="sm"
           variant="default"
           className="w-full"
-          onClick={handleSave}
+          onClick={() => void handleSave()}
           disabled={editedKeys.size === 0 || playgroundEnv.isSaving}
         >
           {playgroundEnv.isSaving ? (

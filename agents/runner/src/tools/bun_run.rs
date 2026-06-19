@@ -128,21 +128,18 @@ async fn resolve_script(input: &BunRunInput) -> Result<Script, ToolError> {
                 .prefix(".bun-inline-")
                 .suffix(".ts")
                 .tempfile_in(ASSISTANT_WORKDIR)
-                .map_err(|e| {
-                    ToolError::ExecutionFailed(format!("create inline script: {e}"))
-                })?;
+                .map_err(|e| ToolError::ExecutionFailed(format!("create inline script: {e}")))?;
             tokio::fs::write(tmp.path(), code)
                 .await
                 .map_err(|e| ToolError::ExecutionFailed(format!("write inline script: {e}")))?;
             Ok(Script::Inline(tmp))
         }
-        (None, Some(file)) => {
-            canonicalize_inside_workdir(Path::new(file)).map(Script::File)
-        }
+        (None, Some(file)) => canonicalize_inside_workdir(Path::new(file)).map(Script::File),
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
 
@@ -153,7 +150,9 @@ mod tests {
             file: Some("/tmp/x.ts".into()),
             timeout_ms: None,
         };
-        let err = resolve_script(&input).await.expect_err("both must be rejected");
+        let err = resolve_script(&input)
+            .await
+            .expect_err("both must be rejected");
         match err {
             ToolError::InvalidInput(msg) => assert!(msg.contains("not both")),
             other => panic!("expected InvalidInput, got {other:?}"),
@@ -167,7 +166,9 @@ mod tests {
             file: None,
             timeout_ms: None,
         };
-        let err = resolve_script(&input).await.expect_err("neither must be rejected");
+        let err = resolve_script(&input)
+            .await
+            .expect_err("neither must be rejected");
         match err {
             ToolError::InvalidInput(msg) => assert!(msg.contains("requires")),
             other => panic!("expected InvalidInput, got {other:?}"),

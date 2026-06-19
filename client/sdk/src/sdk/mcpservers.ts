@@ -6,6 +6,7 @@ import { mcpServersCreate } from "../funcs/mcpServersCreate.js";
 import { mcpServersDelete } from "../funcs/mcpServersDelete.js";
 import { mcpServersGet } from "../funcs/mcpServersGet.js";
 import { mcpServersList } from "../funcs/mcpServersList.js";
+import { mcpServersListToolFilters } from "../funcs/mcpServersListToolFilters.js";
 import { mcpServersUpdate } from "../funcs/mcpServersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -55,10 +56,10 @@ export class McpServers extends ClientSDK {
    * getMcpServer mcpServers
    *
    * @remarks
-   * Get an MCP server by ID
+   * Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
    */
   async get(
-    request: operations.GetMcpServerRequest,
+    request?: operations.GetMcpServerRequest | undefined,
     security?: operations.GetMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.McpServer> {
@@ -90,10 +91,29 @@ export class McpServers extends ClientSDK {
   }
 
   /**
+   * listToolFilters mcpServers
+   *
+   * @remarks
+   * List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
+   */
+  async listToolFilters(
+    request?: operations.ListMcpServerToolFiltersRequest | undefined,
+    security?: operations.ListMcpServerToolFiltersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListToolFiltersResult> {
+    return unwrapAsync(mcpServersListToolFilters(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * updateMcpServer mcpServers
    *
    * @remarks
-   * Update an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.
+   * Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.
    */
   async update(
     request: operations.UpdateMcpServerRequest,

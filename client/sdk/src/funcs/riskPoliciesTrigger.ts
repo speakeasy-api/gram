@@ -30,7 +30,7 @@ import { Result } from "../types/fp.js";
  * triggerRiskAnalysis risk
  *
  * @remarks
- * Manually trigger risk analysis for a policy, starting or signaling the drain workflow.
+ * Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to the most recent 100 unanalyzed messages; pass `limit=0` to backfill every unanalyzed message.
  */
 export function riskPoliciesTrigger(
   client: GramCore,

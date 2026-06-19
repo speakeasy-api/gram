@@ -4,14 +4,15 @@ import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import { FeatureName } from "@gram/client/models/components";
-import { useFeaturesGet } from "@gram/client/react-query/featuresGet";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Eye, FileText, Monitor } from "lucide-react";
 import { useState } from "react";
+import { AIIntegrationsSection } from "./AIIntegrationsSection";
 import { OtelForwardingSection } from "./OtelForwardingSection";
+import { useProductFeatures } from "@gram/client/react-query";
 
-export default function OrgLogs() {
+export default function OrgLogs(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -26,8 +27,9 @@ export default function OrgLogs() {
   );
 }
 
-export function OrgLogsInner() {
-  const { data: featuresData, isLoading: featuresLoading } = useFeaturesGet();
+function OrgLogsInner() {
+  const { data: featuresData, isLoading: featuresLoading } =
+    useProductFeatures();
   const [logsEnabled, setLogsEnabled] = useState<boolean | null>(null);
   const [toolIoLogsEnabled, setToolIoLogsEnabled] = useState<boolean | null>(
     null,
@@ -110,8 +112,9 @@ export function OrgLogsInner() {
         Logs
       </Heading>
       <Type muted small className="mb-6">
-        Configure logging and telemetry settings for your MCP servers. When
+        Configure logging and telemetry settings for all your tool capture. When
         enabled, tool calls and traces are recorded for debugging and analytics.
+        These power the insights and logs page on the platform.
       </Type>
       <div className="border-border bg-card rounded-lg border p-4">
         <Stack gap={4}>
@@ -203,6 +206,10 @@ export function OrgLogsInner() {
             )}
           </Stack>
         </Stack>
+      </div>
+
+      <div className="mt-8">
+        <AIIntegrationsSection />
       </div>
 
       <div className="mt-8">

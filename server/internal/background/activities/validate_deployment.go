@@ -47,12 +47,12 @@ func (v *ValidateDeployment) Do(ctx context.Context, projectID uuid.UUID, deploy
 
 	orgData, err := projRepo.GetProjectWithOrganizationMetadata(ctx, uuid.MustParse(deployment.ProjectID))
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error loading organization metadata").Log(ctx, v.logger)
+		return oops.E(oops.CodeUnexpected, err, "error loading organization metadata").LogError(ctx, v.logger)
 	}
 
 	org, err := mv.DescribeOrganization(ctx, v.logger, orgRepo, v.billingRepo, orgData.ID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error loading organization metadata").Log(ctx, v.logger)
+		return oops.E(oops.CodeUnexpected, err, "error loading organization metadata").LogError(ctx, v.logger)
 	}
 
 	var validationError *oops.ShareableError
@@ -60,18 +60,18 @@ func (v *ValidateDeployment) Do(ctx context.Context, projectID uuid.UUID, deploy
 	switch billing.Tier(org.GramAccountType) {
 	case billing.TierBase:
 		if len(deployment.FunctionsAssets) > 5 {
-			validationError = oops.E(oops.CodeForbidden, nil, "Free tier only allows up to 5 function sources. Please contact Speakeasy support for assistance.").Log(ctx, v.logger)
+			validationError = oops.E(oops.CodeForbidden, nil, "Free tier only allows up to 5 function sources. Please contact Speakeasy support for assistance.").LogError(ctx, v.logger)
 		}
 	case billing.TierPro:
 		if len(deployment.FunctionsAssets) > 10 {
-			validationError = oops.E(oops.CodeForbidden, nil, "Pro tier only allows up to 10 function sources. Please contact Speakeasy support for assistance.").Log(ctx, v.logger)
+			validationError = oops.E(oops.CodeForbidden, nil, "Pro tier only allows up to 10 function sources. Please contact Speakeasy support for assistance.").LogError(ctx, v.logger)
 		}
 	case billing.TierEnterprise:
 		if len(deployment.FunctionsAssets) > 25 {
-			validationError = oops.E(oops.CodeForbidden, nil, "Enterprise tier only allows up to 25 function sources. Please contact Speakeasy support for assistance.").Log(ctx, v.logger)
+			validationError = oops.E(oops.CodeForbidden, nil, "Enterprise tier only allows up to 25 function sources. Please contact Speakeasy support for assistance.").LogError(ctx, v.logger)
 		}
 	default:
-		validationError = oops.E(oops.CodeForbidden, nil, "Unsupported organization tier").Log(ctx, v.logger)
+		validationError = oops.E(oops.CodeForbidden, nil, "Unsupported organization tier").LogError(ctx, v.logger)
 	}
 
 	if validationError != nil {

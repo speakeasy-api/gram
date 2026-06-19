@@ -1,29 +1,10 @@
 use std::collections::BTreeMap;
 
-use agentkit_core::{Item, Usage};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct RunnerConfig {
-    pub model: String,
-    pub instructions: Option<String>,
-    pub auth_token: String,
-    pub completions_url: Option<String>,
-    pub chat_id: String,
-    #[serde(default)]
-    pub mcp_servers: Vec<McpServer>,
-    /// Prior transcript to prime the driver with at configure time. The loop
-    /// comes up already hydrated; /turn carries only new user input after that.
-    #[serde(default)]
-    pub history: Vec<RunnerMessage>,
-    /// Smallest `context_length` the gram backend resolved for `model`.
-    /// Sized in tokens; `None` disables the token-aware compaction trigger
-    /// (the loop falls back to never compacting on input-token budget).
-    #[serde(default)]
-    pub context_window: Option<u64>,
-}
+use crate::compaction::CompactionPolicy;
 
-#[derive(Debug, Deserialize, Serialize, Clone, Hash)]
+#[derive(Debug, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
 pub struct McpServer {
     pub id: String,
     pub url: String,
@@ -31,16 +12,44 @@ pub struct McpServer {
     pub headers: BTreeMap<String, String>,
 }
 
+/// `/threads/{thread_id}/turn` request body. The runner looks up — or
+/// bootstraps — a per-thread tokio task on first hit and enqueues `input`
+/// onto its inbox. `auth_token` rotates the host's shared bearer; an
+/// optional `mcp_servers` reconciles the assistant-wide MCP set.
 #[derive(Debug, Deserialize)]
-pub struct RunnerRequest {
+pub struct ThreadTurnRequest {
     pub input: String,
     #[serde(default)]
     pub auth_token: Option<String>,
+    /// Identity for a runner that booted without `GRAM_ASSISTANT_ID` — i.e. a
+    /// generic warm-pool sandbox that learns which assistant it serves from
+    /// the first turn. Ignored once the boot env has set it (env wins).
+    #[serde(default)]
+    pub assistant_id: Option<String>,
 }
 
-// RunnerMessage is the wire shape used to rehydrate transcript items at
-// /configure. It mirrors server/internal/assistants/runtime.go's
-// runtimeMessage one field at a time — keep them in sync.
+/// 202-style ack returned by `/threads/{thread_id}/turn`. The actual turn
+/// runs asynchronously on the per-thread tokio task; outputs land on
+/// `/chat/completions` via the host's bearer.
+#[derive(Debug, Serialize)]
+pub struct ThreadTurnResponse {
+    pub finish_reason: String,
+}
+
+impl ThreadTurnResponse {
+    pub fn deduped() -> Self {
+        Self {
+            finish_reason: "deduped".to_string(),
+        }
+    }
+
+    pub fn accepted() -> Self {
+        Self {
+            finish_reason: "accepted".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone, Hash)]
 pub struct RunnerMessage {
     pub role: String,
@@ -56,49 +65,41 @@ pub struct RunnerMessage {
 pub struct RunnerToolCall {
     pub id: String,
     pub name: String,
-    // JSON-encoded string matching the OpenAI tool-call arguments shape; stored
-    // verbatim in the DB so the bytes we persist equal the bytes we replay.
     pub arguments: String,
 }
 
-#[derive(Debug, Serialize)]
-pub struct RunnerResponse {
-    pub finish_reason: String,
-    pub final_text: String,
-    pub items: Vec<Item>,
-    pub usage: Option<Usage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-impl RunnerResponse {
-    pub fn deduped() -> Self {
-        Self {
-            finish_reason: "deduped".to_string(),
-            final_text: String::new(),
-            items: Vec::new(),
-            usage: None,
-            error: None,
-        }
-    }
-
-    pub fn accepted() -> Self {
-        Self {
-            finish_reason: "accepted".to_string(),
-            final_text: String::new(),
-            items: Vec::new(),
-            usage: None,
-            error: None,
-        }
-    }
-}
-
+/// `/state` reply. The backend reaper polls this to evict idle threads
+/// and to confirm the VM still belongs to the assistant it admitted.
 #[derive(Debug, Serialize)]
 pub struct RunnerStateResponse {
-    pub configured: bool,
-    /// Seconds the loop has been idle (between turns). `0` while a turn is in
-    /// flight. Backend reapers read this to decide TTL eviction. Absent when
-    /// the runner has never been /configured.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub idle_seconds: Option<u64>,
+    pub assistant_id: String,
+    pub uptime_seconds: u64,
+    pub threads: Vec<ThreadStateView>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ThreadStateView {
+    pub thread_id: String,
+    pub chat_id: String,
+    pub idle_seconds: u64,
+}
+
+/// Bootstrap blob the runner pulls from
+/// `POST /rpc/assistants.getThreadBootstrap` on the first /turn for a
+/// thread. Mirrors `server/internal/assistants/runtime.go::threadBootstrap`.
+#[derive(Debug, Deserialize, Clone)]
+pub struct ThreadBootstrap {
+    pub model: String,
+    #[serde(default)]
+    pub instructions: String,
+    pub completions_url: String,
+    pub chat_id: String,
+    #[serde(default)]
+    pub mcp_servers: Vec<McpServer>,
+    #[serde(default)]
+    pub history: Vec<RunnerMessage>,
+    #[serde(default)]
+    pub context_window: Option<u64>,
+    #[serde(default)]
+    pub compaction: CompactionPolicy,
 }

@@ -1,5 +1,4 @@
 import { useReplayContext } from "@/contexts/ReplayContext";
-import { getApiUrl } from "@/lib/api";
 import { useAssistantState } from "@assistant-ui/react";
 import { generateObject } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -64,8 +63,6 @@ export function useFollowOnSuggestions(): {
   const isRunning = useAssistantState(({ thread }) => thread.isRunning);
   const messages = useAssistantState(({ thread }) => thread.messages);
 
-  const apiUrl = getApiUrl(config);
-
   const fetchSuggestions = useCallback(async () => {
     if (!isEnabled || auth.isLoading || !auth.headers) return;
 
@@ -89,7 +86,7 @@ export function useFollowOnSuggestions(): {
     let lastAssistantMessage = "";
     for (let i = recentMessages.length - 1; i >= 0; i--) {
       const msg = recentMessages[i];
-      if (msg.role === "assistant") {
+      if (msg && msg.role === "assistant") {
         lastAssistantMessage = msg.content;
         break;
       }
@@ -191,7 +188,7 @@ ${conversation}`,
         abortControllerRef.current = null;
       }
     }
-  }, [isEnabled, apiUrl, auth.headers, auth.isLoading, messages]);
+  }, [isEnabled, auth.headers, auth.isLoading, messages, model]);
 
   // Fetch suggestions when:
   // 1. The thread stops running (assistant finished responding)
@@ -224,7 +221,7 @@ ${conversation}`,
     if (lastProcessedMessageIdRef.current === lastMessage.id) return;
 
     lastProcessedMessageIdRef.current = lastMessage.id;
-    fetchSuggestions();
+    void fetchSuggestions();
   }, [isRunning, messages, fetchSuggestions, auth.isLoading, auth.headers]);
 
   // Cleanup on unmount

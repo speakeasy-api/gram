@@ -166,3 +166,141 @@ func TestResolveToolsetCall_MissingToolsetIDReturnsNoResult(t *testing.T) {
 	require.False(t, ok)
 	require.Nil(t, resolved)
 }
+
+func TestValidateRemoteMCPServerCall_NonMapInput(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	detail, denied := f.client.ValidateRemoteMCPServerCall(t.Context(), "not a map", "tool", f.projectID.String())
+	assert.True(t, denied)
+	assert.Contains(t, detail, shadowmcp.XGramToolsetIDField)
+}
+
+func TestValidateRemoteMCPServerCall_NilInput(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	detail, denied := f.client.ValidateRemoteMCPServerCall(t.Context(), nil, "tool", f.projectID.String())
+	assert.True(t, denied)
+	assert.Contains(t, detail, shadowmcp.XGramToolsetIDField)
+}
+
+func TestValidateRemoteMCPServerCall_MissingToolsetIDKey(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	detail, denied := f.client.ValidateRemoteMCPServerCall(t.Context(), map[string]any{"foo": "bar"}, "tool", f.projectID.String())
+	assert.True(t, denied)
+	assert.Contains(t, detail, shadowmcp.XGramToolsetIDField)
+}
+
+func TestValidateRemoteMCPServerCall_EmptyToolsetID(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	detail, denied := f.client.ValidateRemoteMCPServerCall(t.Context(), map[string]any{shadowmcp.XGramToolsetIDField: ""}, "tool", f.projectID.String())
+	assert.True(t, denied)
+	assert.Contains(t, detail, shadowmcp.XGramToolsetIDField)
+}
+
+func TestValidateRemoteMCPServerCall_NonStringToolsetID(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	detail, denied := f.client.ValidateRemoteMCPServerCall(t.Context(), map[string]any{shadowmcp.XGramToolsetIDField: 123}, "tool", f.projectID.String())
+	assert.True(t, denied)
+	assert.Contains(t, detail, shadowmcp.XGramToolsetIDField)
+}
+
+func TestValidateRemoteMCPServerCall_InvalidUUID(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	detail, denied := f.client.ValidateRemoteMCPServerCall(t.Context(), map[string]any{shadowmcp.XGramToolsetIDField: "not-a-uuid"}, "tool", f.projectID.String())
+	assert.True(t, denied)
+	assert.Contains(t, detail, "not a UUID")
+}
+
+func TestValidateRemoteMCPServerCall_InvalidProjectID(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	detail, denied := f.client.ValidateRemoteMCPServerCall(
+		t.Context(),
+		map[string]any{shadowmcp.XGramToolsetIDField: uuid.New().String()},
+		"tool",
+		"not-a-uuid",
+	)
+	assert.True(t, denied)
+	assert.Contains(t, detail, "invalid project id")
+}
+
+func TestValidateRemoteMCPServerCall_ServerNotFound(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	missingID := uuid.New().String()
+	detail, denied := f.client.ValidateRemoteMCPServerCall(
+		t.Context(),
+		map[string]any{shadowmcp.XGramToolsetIDField: missingID},
+		"tool",
+		f.projectID.String(),
+	)
+	assert.True(t, denied)
+	assert.Contains(t, detail, "not found in this project")
+	assert.Contains(t, detail, missingID)
+}
+
+func TestValidateRemoteMCPServerCall_ServerInOtherProject(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	serverID := f.createRemoteMCPServer(t, "srv-"+uuid.NewString()[:8])
+
+	// A real server exists, but the request claims a different project —
+	// the lookup is project-scoped, so cross-project echoes are rejected.
+	detail, denied := f.client.ValidateRemoteMCPServerCall(
+		t.Context(),
+		map[string]any{shadowmcp.XGramToolsetIDField: serverID.String()},
+		"tool",
+		uuid.New().String(),
+	)
+	assert.True(t, denied)
+	assert.Contains(t, detail, "not found in this project")
+}
+
+func TestValidateRemoteMCPServerCall_EmptyToolName(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	serverID := f.createRemoteMCPServer(t, "srv-"+uuid.NewString()[:8])
+
+	detail, denied := f.client.ValidateRemoteMCPServerCall(
+		t.Context(),
+		map[string]any{shadowmcp.XGramToolsetIDField: serverID.String()},
+		"",
+		f.projectID.String(),
+	)
+	assert.True(t, denied)
+	assert.Contains(t, detail, "missing tool name")
+}
+
+func TestValidateRemoteMCPServerCall_Success(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	serverID := f.createRemoteMCPServer(t, "srv-"+uuid.NewString()[:8])
+
+	// A valid, project-scoped server UUID with a non-empty tool name
+	// passes validation. Tool-name catalog cross-check is deliberately
+	// skipped — remote MCP servers expose their catalog dynamically and
+	// Gram does not mirror it.
+	detail, denied := f.client.ValidateRemoteMCPServerCall(
+		t.Context(),
+		map[string]any{shadowmcp.XGramToolsetIDField: serverID.String()},
+		"arbitrary-tool-name",
+		f.projectID.String(),
+	)
+	require.False(t, denied, detail)
+	require.Empty(t, detail)
+}

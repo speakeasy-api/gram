@@ -1,5 +1,85 @@
 # @gram-ai/elements
 
+## 1.37.1
+
+### Patch Changes
+
+- bf94bd2: Expand the pool of whimsical "thinking" verbs cycled in the chat while the assistant is working (e.g. Ruminating, Sleuthing, Triangulating, Spelunking, "Connecting the dots") so the loading indicator repeats far less often.
+
+## 1.37.0
+
+### Minor Changes
+
+- 4f65d12: Make the Project Assistant dock a continuous experience across the dashboard. The dock stays expanded across page navigation and swaps in the new page's suggestions; every suggestion set is colocated in one route-keyed object with question-phrased titles and per-subject icons, and chips animate in on route change. The expanded composer gets a Granola-style grey tray with a bordered inner input, the Cmd+/ hint moves to the breadcrumb bar, and the chat panel opens as an extension of the pill — including a matching slim composer.
+
+  Elements: add `theme.customCss` to `ElementsConfig` — extra CSS injected into the Elements shadow root after the built-in stylesheet, the supported escape hatch for embedders restyling the stable `aui-*` class hooks (host-page CSS cannot reach into the shadow DOM).
+
+### Patch Changes
+
+- 4f65d12: Fix the Project Assistant dock losing or duplicating the first message sent after a cold page load.
+
+  Elements: the history-enabled runtime now mounts immediately instead of waiting for auth — the previous auth gate swapped the without-history runtime for the history one when the session resolved, replacing the runtime and wiping any message sent into the first. The thread-list adapter resolves request headers through an async `getHeaders` that awaits the session fetch, so its bind-time `chat.list` waits for auth instead of failing. The custom transport is also resolved in its own memo so churn in the default transport's dependencies (MCP tool discovery settling, auth, connection status) no longer changes the transport identity mid-turn, which rebuilt the per-thread runtimes and discarded in-flight optimistic messages.
+
+  Dashboard: the dock's queued-prompt bridge appends exactly once — a throw from the placeholder thread core (before the real core binds) leaves the prompt queued for retry, while a successful append never re-fires, fixing both the dropped first message and the duplicate sends that minted a fresh chat per attempt. The server-assistant transport keeps at most one chat.load poll loop alive per dock: each send aborts the previous turn's poller, so a turn that never reaches a terminal row no longer leaves zombie polling loops behind.
+
+## 1.36.0
+
+### Minor Changes
+
+- 87cb734: The Project Assistant now cycles a set of whimsical "thinking" verbs while it works and types replies onto the screen token-by-token, emulating an SSE stream over the poll-based transport.
+
+### Patch Changes
+
+- 9bc9a1d: Stop tool call cards from flashing while the assistant works. Cards no longer
+  reset (collapsing and re-highlighting their code) when a streaming turn grows
+  a single tool call into a group, and they no longer re-render on every text
+  chunk.
+
+## 1.35.0
+
+### Minor Changes
+
+- fb3f0ca: Add an optional `history.transformChatMessage` hook to `ElementsConfig`. It runs against every message loaded from `chat.load` before rendering: return a (possibly rewritten) message to render it, or `null` to omit it. This lets consumers keep product- or backend-specific transcript conventions (e.g. stripping a server-injected framing block, or hiding system events) out of the shared library — Elements itself stays agnostic to any such convention.
+- 7acfbee: Add two welcome/composer affordances:
+
+  - `WelcomeConfig.logo` — an optional logo image URL rendered above the title on the empty-thread welcome screen.
+  - A composer tool-mention picker button (next to the attachment button) that opens a list of the available tools and inserts an `@mention` for the chosen one — a discoverable counterpart to the existing type-`@` autocomplete. Hidden when tool mentions are disabled or there are no tools.
+
+## 1.34.0
+
+### Minor Changes
+
+- e39ea7e: Add hooks for backing the chat with a server-side assistant:
+
+  - `ElementsConfig.transport` accepts a `ChatTransport` or a factory `(ctx) => ChatTransport`. The factory is invoked inside the provider and receives `getChatId()` / `setChatId()`, so a consumer transport can read the active chat id at send time and adopt a backend-minted id without reaching into internals.
+  - `ElementsConfig.history` gains `threadListFilters` (extra query params forwarded to the thread list, e.g. to scope it to one backend conversation set) and `deferThreadIdMinting` (let the backend own chat-id creation instead of client-minting).
+  - `ElementsConfig.allowMessageEdit` (default `true`) hides the inline edit affordance on user messages — set to `false` when paired with a server-side transport that can't honour assistant-ui's local branch rewriting.
+  - Export `convertGramMessagesToUIMessages` and the `GramChat` types for building a custom transport against the chat service.
+
+## 1.33.2
+
+### Patch Changes
+
+- faaab73: Upgrade pnpm to v11
+
+## 1.33.1
+
+### Patch Changes
+
+- 12a0fa3: Add risk overview summary metrics, charts, and trend data for recent policy findings
+
+## 1.33.0
+
+### Minor Changes
+
+- fb40041: Show a graceful message in AI Insights and the Playground when an organization runs out of chat credits. Previously the chat would silently stop streaming on a 402 from the gateway because the AI SDK masks stream errors by default. The thread now renders `You've reached the chat credit limit for this account. Click the "Get Support" button at the top of the page to reach out about upgrading.` and the new `describeStreamError` / `CREDITS_EXHAUSTED_MESSAGE` exports are available on `@gram-ai/elements` for downstream consumers that want to react to the same condition.
+
+## 1.32.1
+
+### Patch Changes
+
+- 4069ffd: Stop one failing MCP server from dropping tools from healthy ones. When a chat is configured with multiple MCP servers, a rejection on any single `tools/list` call (e.g. a 401 on one toolset) used to wipe out the merged tool map and trigger React Query retries against every server. Healthy servers are now merged in normally; only when every server fails does the query reject and retry.
+
 ## 1.32.0
 
 ### Minor Changes

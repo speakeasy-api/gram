@@ -27,6 +27,10 @@ const mocks = vi.hoisted(() => {
     invalidateAllToolset: vi.fn(),
     invalidateAllGetMcpMetadata: vi.fn(),
     invalidateAllListEnvironments: vi.fn(),
+    invalidateAllRemoteSessionIssuers: vi.fn(),
+    invalidateAllRemoteSessionClients: vi.fn(),
+    invalidateAllUserSessionIssuers: vi.fn(),
+    isFeatureEnabled: vi.fn(() => false),
   };
 });
 
@@ -35,6 +39,9 @@ vi.mock("@gram/client/react-query", () => ({
   invalidateAllToolset: mocks.invalidateAllToolset,
   invalidateAllGetMcpMetadata: mocks.invalidateAllGetMcpMetadata,
   invalidateAllListEnvironments: mocks.invalidateAllListEnvironments,
+  invalidateAllRemoteSessionIssuers: mocks.invalidateAllRemoteSessionIssuers,
+  invalidateAllRemoteSessionClients: mocks.invalidateAllRemoteSessionClients,
+  invalidateAllUserSessionIssuers: mocks.invalidateAllUserSessionIssuers,
   buildAddExternalOAuthServerMutation: () => ({
     mutationKey: [],
     mutationFn: mocks.addExternalOAuth,
@@ -71,8 +78,15 @@ vi.mock("@/contexts/Fetcher", () => ({
   }),
 }));
 
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({}),
+}));
+
 vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({ capture: mocks.capture }),
+  useTelemetry: () => ({
+    capture: mocks.capture,
+    isFeatureEnabled: mocks.isFeatureEnabled,
+  }),
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({
@@ -131,6 +145,25 @@ const toolset = {
   oauthEnablementMetadata: { oauth2SecurityCount: 0 },
 } as unknown as Parameters<typeof ConnectOAuthModal>[0]["toolset"];
 
+const oauthToolset = {
+  ...toolset,
+  rawTools: [
+    {
+      externalMcpToolDefinition: {
+        requiresOauth: true,
+        slug: "my-oauth-server",
+        name: "proxy",
+        registryServerName: "My OAuth Server",
+        oauthVersion: "2.1",
+        oauthAuthorizationEndpoint: "https://idp.example/oauth/authorize",
+        oauthTokenEndpoint: "https://idp.example/oauth/token",
+        oauthRegistrationEndpoint: "https://idp.example/oauth/register",
+        oauthScopesSupported: ["read"],
+      },
+    },
+  ],
+} as unknown as Parameters<typeof ConnectOAuthModal>[0]["toolset"];
+
 function renderWizard(
   props: Partial<Parameters<typeof ConnectOAuthModal>[0]> = {},
 ) {
@@ -156,6 +189,7 @@ beforeEach(() => {
   for (const fn of Object.values(mocks)) {
     if (typeof fn === "function" && "mockClear" in fn) fn.mockClear();
   }
+  mocks.isFeatureEnabled.mockReturnValue(false);
 });
 
 afterEach(() => {
@@ -174,12 +208,23 @@ describe("OAuthWizard — rendering", () => {
     expect(screen.getByRole("button", { name: /OAuth Proxy/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /External OAuth/ })).toBeTruthy();
   });
+
+  it("keeps auto-configure labeled as OAuth Proxy when user-session onboarding is enabled", () => {
+    mocks.isFeatureEnabled.mockReturnValue(true);
+    renderWizard({ toolset: oauthToolset });
+    expect(
+      screen.getByText(
+        "Automatically set up OAuth Proxy based on pre-discovered details about this MCP server.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("Interactive auth enabled")).toBeNull();
+  });
 });
 
 describe("OAuthWizard — happy proxy create", () => {
   it("walks path selection → metadata → credentials → success", async () => {
     const onClose = vi.fn();
-    renderWizard({ onClose });
+    renderWizard({ onClose: () => void onClose() });
 
     fireEvent.click(screen.getByRole("button", { name: /OAuth Proxy/ }));
 

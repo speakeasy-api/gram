@@ -70,7 +70,7 @@ func parsePromptArgumentsFromJSONSchema(schemaStr string, logger *slog.Logger, c
 func handlePromptsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents], platformExtras []platformtools.ExternalTool) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
-	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache, platformExtras...)
+	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache, nil, platformExtras...)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func handlePromptsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Poo
 
 	bs, err := json.Marshal(result)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize prompts/list response").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize prompts/list response").LogError(ctx, logger)
 	}
 
 	return bs, nil

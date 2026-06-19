@@ -23,7 +23,7 @@ func NewListWorkOSOrganizations(logger *slog.Logger, workosClient WorkOSClient) 
 func (l *ListWorkOSOrganizations) Do(ctx context.Context) ([]string, error) {
 	orgs, err := l.workos.ListOrganizations(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list WorkOS organizations").Log(ctx, l.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list WorkOS organizations").LogError(ctx, l.logger)
 	}
 
 	orgIDs := make([]string, 0, len(orgs))

@@ -17,8 +17,8 @@ import type { Collection, CollectionServer } from "./types";
 function useInvalidateCollections() {
   const queryClient = useQueryClient();
   return () => {
-    invalidateAllListCollections(queryClient);
-    invalidateAllCollectionsListServers(queryClient);
+    void invalidateAllListCollections(queryClient);
+    void invalidateAllCollectionsListServers(queryClient);
   };
 }
 
@@ -78,7 +78,9 @@ export function useCollectionServers(slug: string | undefined): {
   return { servers, rawServers, isLoading };
 }
 
-export function useUpdateCollection() {
+export function useUpdateCollection(): ReturnType<
+  typeof useCollectionsUpdateMutation
+> {
   const invalidate = useInvalidateCollections();
 
   return useCollectionsUpdateMutation({
@@ -92,7 +94,9 @@ export function useUpdateCollection() {
   });
 }
 
-export function useDeleteCollection() {
+export function useDeleteCollection(): ReturnType<
+  typeof useCollectionsDeleteMutation
+> {
   const invalidate = useInvalidateCollections();
 
   return useCollectionsDeleteMutation({
@@ -106,7 +110,9 @@ export function useDeleteCollection() {
   });
 }
 
-export function useAttachServer() {
+export function useAttachServer(): ReturnType<
+  typeof useCollectionsAttachServerMutation
+> {
   const invalidate = useInvalidateCollections();
 
   return useCollectionsAttachServerMutation({
@@ -120,7 +126,9 @@ export function useAttachServer() {
   });
 }
 
-export function useDetachServer() {
+export function useDetachServer(): ReturnType<
+  typeof useCollectionsDetachServerMutation
+> {
   const invalidate = useInvalidateCollections();
 
   return useCollectionsDetachServerMutation({
@@ -134,7 +142,9 @@ export function useDetachServer() {
   });
 }
 
-export function useCreateCollection() {
+export function useCreateCollection(): ReturnType<
+  typeof useCollectionsCreateMutation
+> {
   const invalidate = useInvalidateCollections();
 
   return useCollectionsCreateMutation({

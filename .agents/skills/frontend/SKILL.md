@@ -9,6 +9,21 @@ metadata:
 
 ## React & Frontend Coding Guidelines
 
+### Verification Commands
+
+Use `pnpm` package scripts for frontend checks. From the repo root, prefer `pnpm -F <package> <script>` so commands run against the right frontend package without `cd`. Do not run `npm exec`, `npx`, bare `vitest`, bare `eslint`, bare `oxfmt`, or bare `tsc` unless you are debugging the package script itself.
+
+| Need                | Dashboard                       | Elements                                | Whole workspace                             |
+| ------------------- | ------------------------------- | --------------------------------------- | ------------------------------------------- |
+| Package lint gate   | `pnpm -F dashboard lint`        | `pnpm -F @gram-ai/elements lint`        | `pnpm lint`                                 |
+| Type-check only     | `pnpm -F dashboard type-check`  | `pnpm -F @gram-ai/elements type-check`  | `pnpm type-check`                           |
+| Tests once          | `pnpm -F dashboard test`        | `pnpm -F @gram-ai/elements test`        | Run the touched package's `pnpm test`       |
+| Tests in watch mode | `pnpm -F dashboard test:watch`  | `pnpm -F @gram-ai/elements test:watch`  | Run the touched package's `pnpm test:watch` |
+| ESLint only         | `pnpm -F dashboard lint:eslint` | `pnpm -F @gram-ai/elements lint:eslint` | Run the touched package's script            |
+| Format check only   | `pnpm -F dashboard lint:format` | `pnpm -F @gram-ai/elements lint:format` | Run the touched package's script            |
+
+For small edits, run the narrowest package script that proves the change. For shared or cross-package frontend changes, run the root `pnpm lint` and `pnpm type-check` scripts.
+
 ### General Guidelines
 
 - Use the `pnpm` package manager
@@ -45,9 +60,240 @@ If you find yourself copy-pasting a JSX structure — even with minor variations
 
 Never use immediately-invoked function expressions inside JSX (`{(() => { ... })()} `). Extract to a named sub-component or a variable above the return statement.
 
+#### No multi-line or nested ternaries
+
+A ternary that wraps onto multiple lines, or chains a second `?:` inside a branch, is unreadable. Reach for one of these instead:
+
+- A `switch` statement when mapping a discriminator (e.g. a `kind` / `type` string) to one of several values.
+- A small **named helper function**, hoisted to module scope when the mapping is pure (e.g. converting a frontend enum to a backend constant). The helper labels the intent at the call site and the JSX stays flat.
+- An object lookup when the keys are statically known and the values are simple constants.
+
+```tsx
+// ❌ wrong — nested multi-line ternary
+attachmentType={
+  sourceKind === "function"
+    ? "functions"
+    : sourceKind === "externalmcp" || sourceKind === "remotemcp"
+      ? "external_mcp"
+      : "openapi"
+}
+
+// ✅ right — hoisted helper with a switch
+function attachmentTypeForSourceKind(sourceKind: string | undefined): string {
+  switch (sourceKind) {
+    case "function":
+      return "functions";
+    case "externalmcp":
+    case "remotemcp":
+      return "external_mcp";
+    default:
+      return "openapi";
+  }
+}
+
+attachmentType={attachmentTypeForSourceKind(sourceKind)}
+```
+
+Single-line, single-branch ternaries (`isOpen ? "x" : "y"`) are fine.
+
 #### Keep components focused
 
 A component that has grown past ~150 lines of JSX is doing too much. Break it up. If a page has multiple tabs, each tab's content is its own component.
+
+#### Page headers and subtext are a common duplication trap
+
+Many pages render the same `<h1>` + `<p>` header block in 2–3 conditional render paths (loading skeleton, empty state, populated state). Examples observed: `InsightsTools.tsx`, `LogsTools.tsx`, `LogsAgents.tsx`, `SecurityOverview.tsx`, `PolicyCenter.tsx`. Symptoms: a copy change touches the same string in 3 places; `Edit` with `replace_all` fails because indentation differs between the duplicates.
+
+When adding or editing page headers, lift the title and subtitle into a small `<PageHeader title="…" subtitle="…" />` (or pass them as props to a shared shell), not into each render branch. When editing existing duplicated copy, target a unique trailing fragment of the string (e.g. `"in chat messages."`) so a single `replace_all` covers every copy regardless of indentation — and file a follow-up to extract a shared header.
+
+#### Shared empty states: props with defaults, not forks
+
+When the same empty-state component is reused across pages but needs different copy per caller (e.g. `HooksEmptyState` rendered from both `/insights/tools` and `/logs/tools`), add optional `title` / `subtitle` props with sensible defaults rather than forking the component:
+
+```tsx
+export function HooksEmptyState({
+  title = "No logs captured",
+  subtitle = "Install Observability plugin in your AI agent to start capturing tool execution logs",
+}: { title?: string; subtitle?: string } = {}) {
+  /* … */
+}
+```
+
+Backwards-compatible callers stay `<HooksEmptyState />`; only the variant caller passes overrides. Avoids divergent copies of the surrounding scaffolding (provider cards, setup dialogs, etc.).
+
+### Tables
+
+Use Moonshine's `Table` from `@speakeasy-api/moonshine` for dashboard tables. The legacy `@/components/ui/table` wrapper has been removed; do **not** recreate it, add new shadcn table wrappers, or hand-roll table styling with raw `<table>` markup when Moonshine can express the UI. If you find a lingering legacy table pattern, migrate it to Moonshine when touched.
+
+```tsx
+import { Column, Table } from "@speakeasy-api/moonshine";
+```
+
+For normal data tables, prefer the declarative `columns` / `data` / `rowKey` API. Define `Column<T>[]` near the component so render functions stay typed, use `render` for rich cells, and use `width` for stable layouts instead of ad hoc cell class widths.
+
+```tsx
+const columns: Column<Role>[] = [
+  {
+    key: "name",
+    header: "Name",
+    width: "180px",
+    render: (role) => <Type className="font-medium">{role.name}</Type>,
+  },
+  {
+    key: "members",
+    header: "Members",
+    width: "100px",
+    render: (role) => <Type>{role.memberCount}</Type>,
+  },
+];
+
+<Table columns={columns} data={roles} rowKey={(row) => row.id} />;
+```
+
+For empty and loading states, use the Table's built-in empty surface and the shared `SkeletonTable` from `@/components/ui/skeleton`. Do not rebuild a one-off empty `<tbody>` or skeleton table.
+
+```tsx
+<Table
+  columns={columns}
+  data={filteredKeys}
+  rowKey={(row) => row.id}
+  className="max-h-[500px] overflow-y-auto"
+  noResultsMessage={<Type>No matching API keys</Type>}
+/>
+```
+
+Search and filter controls are siblings above the table. Keep filter state outside the table, derive filtered rows with `useMemo`, and pass the result to `data`. Use existing controls such as `SearchBar`, `MultiSelect`, `Select`, or page-specific filter pills; do not put form controls inside `Table.Header` unless they are truly column headers. If the table is paginated, reset the page index when filters change.
+
+```tsx
+const [search, setSearch] = useState("");
+const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+const filteredRows = useMemo(() => {
+  const normalizedSearch = search.trim().toLowerCase();
+
+  return rows.filter((row) => {
+    const matchesSearch =
+      normalizedSearch.length === 0 ||
+      row.name.toLowerCase().includes(normalizedSearch);
+    const matchesTags =
+      selectedTags.length === 0 ||
+      row.tags.some((tag) => selectedTags.includes(tag));
+
+    return matchesSearch && matchesTags;
+  });
+}, [rows, search, selectedTags]);
+
+<Stack direction="horizontal" gap={2} className="mb-4 h-fit">
+  <SearchBar
+    value={search}
+    onChange={(value) => {
+      setSearch(value);
+      setPage(0);
+    }}
+    placeholder="Search tools"
+    className="w-64"
+  />
+  <MultiSelect
+    options={tagOptions}
+    defaultValue={selectedTags}
+    onValueChange={(value) => {
+      setSelectedTags(value);
+      setPage(0);
+    }}
+    placeholder="Filter by tag"
+    autoSize
+  />
+</Stack>
+
+<Table
+  columns={columns}
+  data={filteredRows}
+  rowKey={(row) => row.id}
+  noResultsMessage={<Type>No matching tools</Type>}
+/>;
+```
+
+Footers that summarize, paginate, or load more rows should usually be sibling bars immediately below the table. Moonshine's table API does not require a special footer component for this; keep the table declarative and put pagination/load-more controls after it.
+
+```tsx
+<Table columns={columns} data={visibleRows} rowKey={(row) => row.id} />;
+
+{
+  totalPages > 1 && (
+    <div className="flex items-center justify-between border-t px-4 py-3">
+      <Type className="text-muted-foreground text-sm">
+        {pageStart}-{pageEnd} of {filteredRows.length}
+      </Type>
+      <div className="flex items-center gap-1">
+        <Button
+          variant="tertiary"
+          size="sm"
+          onClick={() => setPage((page) => page - 1)}
+          disabled={page === 0}
+        >
+          Previous
+        </Button>
+        <Button
+          variant="tertiary"
+          size="sm"
+          onClick={() => setPage((page) => page + 1)}
+          disabled={page >= totalPages - 1}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+Use the compound API only when the body needs custom structure that the declarative API cannot express, such as mixed rows, a full-width CTA row, or a custom no-results branch. Keep the Moonshine wrapper, header, row, and cell components as the default primitives.
+
+```tsx
+<Table columns={columns}>
+  <Table.Header columns={columns} />
+  {items.length === 0 ? (
+    <Table.NoResultsMessage>No results found.</Table.NoResultsMessage>
+  ) : (
+    <Table.Body>
+      {items.map((item) => (
+        <Table.Row key={item.id} row={item} columns={columns} />
+      ))}
+    </Table.Body>
+  )}
+  <Table.Row>
+    <div className="border-border bg-muted/20 col-span-full border-t py-5 text-center">
+      <Type className="text-muted-foreground text-sm">
+        Want to grant new members access?
+      </Type>
+      <Button variant="tertiary" size="sm" className="mt-2">
+        Configure Roles
+      </Button>
+    </div>
+  </Table.Row>
+</Table>
+```
+
+Use grouped or expandable rows through Moonshine's table props instead of nesting unrelated cards or custom accordions around a table. Current patterns use `hideHeader` for grouped parent rows and `renderExpandedContent` for nested details.
+
+```tsx
+<Table
+  columns={groupColumns}
+  data={groups}
+  rowKey={(row) => row.key}
+  hideHeader
+  renderExpandedContent={(group) => (
+    <Table
+      columns={childColumns}
+      data={group.items}
+      rowKey={(row) => row.id}
+      hideHeader
+    />
+  )}
+/>
+```
+
+Raw `<tr>` / `<td>` should be rare and stay inside a Moonshine `<Table.Body>` only when native table semantics are needed and Moonshine does not expose them, such as a `colSpan` overflow row. If the row is a normal data row, use `<Table.Row row={row} columns={columns} />` or the declarative `data` prop.
 
 ### React Performance Patterns
 
@@ -125,8 +371,185 @@ Use `<Tooltip>`, `<TooltipTrigger>`, and `<TooltipContent>` directly — they in
 </TooltipProvider>
 ```
 
+### Navigation and Links
+
+Use the right primitive for the link type — mixing them causes full-page reloads, broken multi-tenancy, or missing security headers.
+
+**Internal navigation (any URL inside the dashboard):** Use the route helpers from `client/dashboard/src/routes.tsx`. Top-level routes _and_ subpages expose `.Link`, `.href()`, and `.goTo()`:
+
+```tsx
+// Wrap a child node with .Link
+<routes.sources.Link>
+  <Button>Connect a Source</Button>
+</routes.sources.Link>
+
+// Subpages get .Link too — use it instead of building strings
+<routes.insights.tools.Link>
+  <Button>Track AI usage</Button>
+</routes.insights.tools.Link>
+
+// Plain react-router Link with .href() when you need a className or are inside <p>
+<Link to={routes.plugins.href()} className="underline underline-offset-2">
+  Observability plugin
+</Link>
+```
+
+Never hardcode org/project slugs in an `href` (e.g. `https://app.getgram.ai/speakeasy-team/projects/default/plugins`). The route helpers resolve the current `:orgSlug` / `:projectSlug` from the URL, so the same call works for every tenant.
+
+**External links (anywhere outside the dashboard):** Use a plain `<a>` with `target="_blank"` and `rel="noopener noreferrer"`. This matches the existing pattern (`AddServerDialog.tsx:1162`, `CatalogDetail.tsx:229`) and the security attributes are mandatory — `noopener` blocks `window.opener` access; `noreferrer` strips the Referer header.
+
+```tsx
+<a
+  href="https://www.speakeasy.com/product/mcp-gateway/catalog"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="underline underline-offset-2 hover:text-foreground"
+>
+  MCP Registry
+</a>
+```
+
+The `@/components/ui/link` wrapper sets `target="_blank"` when `external` is true but also injects an icon — fine for nav rows, too heavy for inline links inside subtext. Reach for the plain `<a>` for inline external links.
+
+### Editing copy
+
+- **Preserve dynamic tokens.** Page subtext often interpolates state like `{rangeLabel}`, `{periodUsage.credits}`, or `{projectName}`. When rewording copy that contains a token, keep the token in place — replace it with the literal current value (e.g. "the last 30 days") only when the data fetch itself is locked to that value. Otherwise the copy starts lying as soon as the user changes a filter.
+- **Don't fight the Tailwind class sorter.** Prettier's `prettier-plugin-tailwindcss` reorders classes on save. Write classes in any order; the formatter will normalize them and the diff stays clean across the codebase.
+- **AI context strings shadow user-visible names.** When renaming a chart or card (e.g. "Most Used LLM Clients" → "Most Used Agents"), search for the old name in nearby `contextInfo=` / `suggestions=` props passed to `ExploreWithAI` / `InsightsConfig`. Those strings are sent to the LLM as analytical context; if they drift from the visible label, the AI assistant talks about a card the user can't see.
+
 ### Styling and Design System
 
 - **ALWAYS use Moonshine design system utilities** from `@speakeasy-api/moonshine` instead of hardcoded Tailwind color values
 - **NEVER use hardcoded Tailwind colors** like `bg-neutral-100`, `border-gray-200`, `text-gray-500`, etc.
 - `@tailwindcss/typography` must remain in `devDependencies` — the dashboard uses `prose` and `not-prose` classes directly (e.g. `CatalogDetail.tsx`, `tool.tsx`) which are provided by this plugin.
+
+### Release Stage Badges (Preview / Beta)
+
+Pre-GA features get a `Preview` or `Beta` badge wherever the user would otherwise mistake the feature for being GA. The same `ReleaseStageBadge` component renders on every surface, so labels never drift.
+
+**Source of truth:** `client/dashboard/src/components/release-stage-badge.tsx` — exports `ReleaseStageBadge` and the `ReleaseStage = "preview" | "beta"` type.
+
+**Underlying primitive:** Moonshine's `<Badge>` component (`@speakeasy-api/moonshine`). `ReleaseStageBadge` composes Moonshine's Badge with `background` enabled — this is the source of truth for shape (mono, uppercase, tracked, bordered, `rounded-xs`, `h-5`, `text-[12px]`). Do **not** override these classes; the design system owns them. The wrapper just picks a semantic variant and adds a tooltip.
+
+**Variant → stage mapping** (variant names are hooks, not literal semantics):
+
+- `preview` → Moonshine `warning` variant (amber).
+- `beta` → Moonshine `information` variant (Speakeasy brand blue).
+
+> Moonshine's badge variants (`neutral | destructive | information | success | warning`) are tuned for alert/feedback contexts, but the names are just hooks — `warning` here means "experimental, use with caution," not "alert." That's the intended way to reuse the palettes; don't invent new variants without design buy-in.
+
+**Never hardcode Tailwind colors** (no `bg-violet-500`, no raw `bg-warning-softest` spans). If you find yourself reaching for raw classes for a new badge use case, that's a signal to either pick an existing Moonshine variant or add one upstream.
+
+#### Surface 1 — sidebar nav (route-driven)
+
+Set `stage` on the route declaration. `app-sidebar.tsx` forwards `item.stage` through `ScopeGatedNavItem → NavButton`, which renders the badge with a hover tooltip explaining what the stage means. The badge auto-hides in collapsed-icon mode.
+
+```tsx
+// client/dashboard/src/routes.tsx
+assistants: {
+  title: "Assistants",
+  url: "assistants",
+  icon: "bot",
+  stage: "preview", // ← sidebar pill appears automatically
+  component: AssistantsRoot,
+},
+```
+
+> **Gotcha**: if you ever introduce another sidebar wrapper that calls `NavButton` directly (instead of going through `NavMenuButton`), you must forward `stage={item.stage}` explicitly. `app-sidebar.tsx`'s `ScopeGatedNavItem` does this — copy that pattern.
+
+#### Surface 2 — page section title
+
+Pass `stage` on the **primary** `Page.Section.Title` for the page (usually the first `Page.Section` under `Page.Body`). Don't put it on secondary section titles like "Recent Chats" — the badge labels the whole feature, not individual sections.
+
+```tsx
+<Page.Section>
+  <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
+  <Page.Section.Description>…</Page.Section.Description>
+</Page.Section>
+```
+
+> **Gotcha**: pages with multiple render branches (loading / empty / populated) must include the title — and therefore the `stage` — in **every** branch. `PolicyCenter.tsx` and `SecurityOverview.tsx` are the reference for this pattern.
+
+#### Surface 3 — tab nav (sub-route tabs)
+
+For `ObserveTabNav`-style tab strips, add `stage` to the local tab descriptor and render `<ReleaseStageBadge size="xs" noTooltip>` inline. Use `inline-flex items-center gap-2` on the tab `<Link>` so the badge tracks the label without disrupting the active-tab underline.
+
+```tsx
+// client/dashboard/src/components/observe/ObserveTabNav.tsx
+type Tab = { label: string; href: string; stage?: ReleaseStage };
+const tabs: Tab[] = [
+  { label: "Employees", href: `${baseSlug}/employees`, stage: "preview" },
+];
+```
+
+#### Surface 4 — raw `<h1>` headings (pages that don't use Page.Section.Title)
+
+A handful of pages render their own `<h1 className="text-xl font-semibold">…</h1>` instead of `Page.Section.Title` (e.g., `InsightsEmployees`, `InsightsAgents`). Wrap the heading and the badge in a `flex items-center gap-2` div:
+
+```tsx
+<div className="flex items-center gap-2">
+  <h1 className="text-xl font-semibold">AI Agent Costs</h1>
+  <ReleaseStageBadge stage="preview" />
+</div>
+```
+
+> Consider migrating these pages to `Page.Section.Title` in a follow-up — but don't bundle that refactor with the badge addition.
+
+#### Which surfaces does a given feature need?
+
+- **Default**: every surface where the user encounters the feature's name. If it has a sidebar entry **and** a page heading, badge both.
+- **Tab-only feature**: badge the tab. The parent route's nav entry stays clean since the parent isn't itself pre-GA.
+- **Hidden behind a feature flag**: still badge the visible surfaces. The flag controls visibility; the badge communicates stage to users who can see it.
+
+#### Removing a badge (feature ships GA)
+
+Grep `stage="preview"` and `stage="beta"` and delete every match:
+
+- `routes.tsx` — remove the `stage:` field on the route entry
+- `Page.Section.Title stage="…"` — drop the prop
+- `ObserveTabNav` (or similar) tab descriptors — drop the `stage` field
+- Inline `<ReleaseStageBadge>` usages — delete the element and unwrap the `flex items-center gap-2` div
+
+There's no other cleanup. The component itself stays in place for the next pre-GA feature.
+
+### Drawer Component Usage
+
+`DrawerContent` requires `DrawerTitle` (and optionally `DrawerDescription`) inside it. Omitting them generates a console error and breaks screen reader accessibility. `DrawerHeader` and `DrawerFooter` are optional layout wrappers.
+
+```tsx
+<Drawer>
+  <DrawerTrigger>Open</DrawerTrigger>
+  <DrawerContent>
+    <DrawerTitle>Session Details</DrawerTitle>
+    <DrawerDescription>Viewing trace for this chat.</DrawerDescription>
+    {/* content */}
+  </DrawerContent>
+</Drawer>
+```
+
+If the title is visually redundant, hide it from sighted users while keeping it for screen readers:
+
+```tsx
+<DrawerTitle className="sr-only">Details</DrawerTitle>
+```
+
+### Dialog Component Usage
+
+`DialogContent` requires `DialogTitle` (and optionally `DialogDescription`) inside it. Omitting them generates a console error and breaks screen reader accessibility. `DialogHeader` and `DialogFooter` are optional layout wrappers.
+
+```tsx
+<Dialog>
+  <DialogTrigger>Open</DialogTrigger>
+  <DialogContent>
+    <DialogTitle>Confirm Action</DialogTitle>
+    <DialogDescription>This cannot be undone.</DialogDescription>
+    {/* content */}
+  </DialogContent>
+</Dialog>
+```
+
+If the title is visually redundant, hide it from sighted users while keeping it for screen readers:
+
+```tsx
+<DialogTitle className="sr-only">Details</DialogTitle>
+```

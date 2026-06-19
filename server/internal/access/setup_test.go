@@ -2,15 +2,19 @@ package access
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -18,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -67,9 +70,6 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
-
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
@@ -78,7 +78,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -93,8 +93,15 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	auditLogger := audit.NewLogger()
+	accessCache := prefixedTestCache{
+		prefix: "access-test:" + uuid.NewString() + ":",
+		cache:  cache.NewRedisCacheAdapter(redisClient),
+	}
+	accessStore := accesscontrol.NewRedisStore(accessCache, accesscontrol.AlphaTTL)
 
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roles, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache), noopFeatureCacheWriter{}, auditLogger)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
+	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, noopFeatureCacheWriter{}, auditLogger, "test-jwt-secret", accessStore)
 
 	return ctx, &testInstance{
 		service: svc,
@@ -102,6 +109,91 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 		chConn:  chConn,
 		roles:   roles,
 	}
+}
+
+type prefixedTestCache struct {
+	prefix string
+	cache  cache.Cache
+}
+
+func (p prefixedTestCache) key(key string) string {
+	return p.prefix + key
+}
+
+func (p prefixedTestCache) Get(ctx context.Context, key string, value any) error {
+	if err := p.cache.Get(ctx, p.key(key), value); err != nil {
+		return fmt.Errorf("get prefixed test cache: %w", err)
+	}
+	return nil
+}
+
+func (p prefixedTestCache) GetAndDelete(ctx context.Context, key string, value any) error {
+	if err := p.cache.GetAndDelete(ctx, p.key(key), value); err != nil {
+		return fmt.Errorf("get and delete prefixed test cache: %w", err)
+	}
+	return nil
+}
+
+func (p prefixedTestCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	if err := p.cache.Set(ctx, p.key(key), value, ttl); err != nil {
+		return fmt.Errorf("set prefixed test cache: %w", err)
+	}
+	return nil
+}
+
+func (p prefixedTestCache) Update(ctx context.Context, key string, value any) error {
+	if err := p.cache.Update(ctx, p.key(key), value); err != nil {
+		return fmt.Errorf("update prefixed test cache: %w", err)
+	}
+	return nil
+}
+
+func (p prefixedTestCache) Delete(ctx context.Context, key string) error {
+	if err := p.cache.Delete(ctx, p.key(key)); err != nil {
+		return fmt.Errorf("delete prefixed test cache: %w", err)
+	}
+	return nil
+}
+
+func (p prefixedTestCache) Expire(ctx context.Context, key string, ttl time.Duration) error {
+	if err := p.cache.Expire(ctx, p.key(key), ttl); err != nil {
+		return fmt.Errorf("expire prefixed test cache: %w", err)
+	}
+	return nil
+}
+
+func (p prefixedTestCache) ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error {
+	if err := p.cache.ListAppend(ctx, p.key(key), value, ttl); err != nil {
+		return fmt.Errorf("append prefixed test cache list: %w", err)
+	}
+	return nil
+}
+
+func (p prefixedTestCache) ListRange(ctx context.Context, key string, start, stop int64, value any) error {
+	if err := p.cache.ListRange(ctx, p.key(key), start, stop, value); err != nil {
+		return fmt.Errorf("range prefixed test cache list: %w", err)
+	}
+	return nil
+}
+
+func (p prefixedTestCache) DeleteByPrefix(ctx context.Context, prefix string) error {
+	if err := p.cache.DeleteByPrefix(ctx, p.key(prefix)); err != nil {
+		return fmt.Errorf("delete prefixed test cache by prefix: %w", err)
+	}
+	return nil
+}
+
+func (p prefixedTestCache) Mutate(ctx context.Context, key string, value any, ttl time.Duration, fn func(exists bool) error) error {
+	mutating, ok := p.cache.(interface {
+		Mutate(context.Context, string, any, time.Duration, func(bool) error) error
+	})
+	if !ok {
+		return fmt.Errorf("prefixed test cache does not support mutation")
+	}
+	if err := mutating.Mutate(ctx, p.key(key), value, ttl, fn); err != nil {
+		return fmt.Errorf("mutate prefixed test cache: %w", err)
+	}
+	return nil
 }
 
 func seedOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) {
@@ -143,6 +235,87 @@ func listPrincipalGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	return grants
 }
 
+func seedRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, role workos.Role) string {
+	t.Helper()
+
+	createdAt, err := time.Parse(time.RFC3339, role.CreatedAt)
+	require.NoError(t, err)
+	updatedAt, err := time.Parse(time.RFC3339, role.UpdatedAt)
+	require.NoError(t, err)
+
+	_, err = accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+		OrganizationID:    organizationID,
+		WorkosSlug:        role.Slug,
+		WorkosName:        role.Name,
+		WorkosDescription: conv.ToPGTextEmpty(role.Description),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(createdAt),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(updatedAt),
+		WorkosLastEventID: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	row, err := accessrepo.New(conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
+		OrganizationID: organizationID,
+		WorkosSlug:     role.Slug,
+	})
+	require.NoError(t, err)
+
+	return row.ID.String()
+}
+
+func seedGlobalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, role workos.Role) string {
+	t.Helper()
+
+	createdAt, err := time.Parse(time.RFC3339, role.CreatedAt)
+	require.NoError(t, err)
+	updatedAt, err := time.Parse(time.RFC3339, role.UpdatedAt)
+	require.NoError(t, err)
+
+	err = accessrepo.New(conn).UpsertGlobalRole(ctx, accessrepo.UpsertGlobalRoleParams{
+		WorkosSlug:        role.Slug,
+		WorkosName:        role.Name,
+		WorkosDescription: conv.ToPGTextEmpty(role.Description),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(createdAt),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(updatedAt),
+		WorkosLastEventID: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	row, err := accessrepo.New(conn).GetGlobalRoleBySlug(ctx, role.Slug)
+	require.NoError(t, err)
+
+	return row.ID.String()
+}
+
+func seedRoleAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, userID string, member workos.Member) {
+	t.Helper()
+
+	updatedAt := time.Now().UTC()
+	if member.UpdatedAt != "" {
+		parsed, err := time.Parse(time.RFC3339, member.UpdatedAt)
+		require.NoError(t, err)
+		updatedAt = parsed
+	} else if member.CreatedAt != "" {
+		parsed, err := time.Parse(time.RFC3339, member.CreatedAt)
+		require.NoError(t, err)
+		updatedAt = parsed
+	}
+
+	for _, slug := range member.RoleSlugs {
+		inserted, err := accessrepo.New(conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+			OrganizationID:     organizationID,
+			WorkosUserID:       member.UserID,
+			WorkosRoleSlug:     slug,
+			UserID:             conv.ToPGTextEmpty(userID),
+			WorkosMembershipID: conv.ToPGTextEmpty(member.ID),
+			WorkosUpdatedAt:    conv.ToPGTimestamptz(updatedAt),
+			WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), inserted)
+	}
+}
+
 // seedDisconnectedUser creates a user in the users table with a workos_id but
 // does NOT insert into organization_user_relationships, simulating a WorkOS
 // user who hasn't been connected to the Gram org.
@@ -158,8 +331,8 @@ func seedDisconnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 	})
 	require.NoError(t, err)
 
-	err = usersrepo.New(conn).SetUserWorkosID(ctx, usersrepo.SetUserWorkosIDParams{
-		WorkosID: conv.PtrToPGText(conv.PtrEmpty(workosUserID)),
+	err = usersrepo.New(conn).OverwriteUserWorkosID(ctx, usersrepo.OverwriteUserWorkosIDParams{
+		WorkosID: conv.ToPGText(workosUserID),
 		ID:       userID,
 	})
 	require.NoError(t, err)
@@ -177,8 +350,8 @@ func seedConnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, or
 	})
 	require.NoError(t, err)
 
-	err = usersrepo.New(conn).SetUserWorkosID(ctx, usersrepo.SetUserWorkosIDParams{
-		WorkosID: conv.PtrToPGText(conv.PtrEmpty(workosUserID)),
+	err = usersrepo.New(conn).OverwriteUserWorkosID(ctx, usersrepo.OverwriteUserWorkosIDParams{
+		WorkosID: conv.ToPGText(workosUserID),
 		ID:       userID,
 	})
 	require.NoError(t, err)

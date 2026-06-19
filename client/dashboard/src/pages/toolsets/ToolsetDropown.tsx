@@ -19,7 +19,7 @@ export function ToolsetDropdown({
   noLabel?: boolean;
   disabledMessage?: string;
   defaultSelection?: "most-recent";
-}) {
+}): JSX.Element {
   const { data: toolsets } = useListToolsets();
 
   const toolsetDropdownItems = useMemo(

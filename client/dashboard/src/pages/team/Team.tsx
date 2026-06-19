@@ -1,11 +1,20 @@
+import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useUser } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import { formatDistanceToNow } from "date-fns";
+import { z } from "zod";
 import {
   invalidateAllListInvites,
   invalidateAllListOrganizationUsers,
@@ -13,18 +22,50 @@ import {
   useListInvitesSuspense,
   useSendInviteMutation,
   useRevokeInviteMutation,
+  useUpdateInviteRoleMutation,
   useRemoveOrganizationUserMutation,
 } from "@gram/client/react-query";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
 import {
   OrganizationUser,
   OrganizationInvitation,
 } from "@gram/client/models/components";
-import { Button, Column, Stack, Table } from "@speakeasy-api/moonshine";
+import { SimpleTooltip } from "@/components/ui/tooltip";
+import {
+  Button,
+  Column,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  Icon,
+  Input,
+  Stack,
+  Table,
+} from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Trash2, UserPlus, Users, X } from "lucide-react";
-import { useState } from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Ellipsis,
+  FolderSync,
+  RefreshCw,
+  Shield,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { RequireScope } from "@/components/require-scope";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useOrgRoutes } from "@/routes";
+import { cn } from "@/lib/utils";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import { ChangeRoleDialog } from "@/pages/access/ChangeRoleDialog";
 
 function getMemberColors(id: string) {
   let hash = 2166136261;
@@ -45,7 +86,7 @@ function getMemberColors(id: string) {
   };
 }
 
-export default function Team() {
+export default function Team(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -60,24 +101,89 @@ export default function Team() {
   );
 }
 
-export function TeamInner() {
+function TeamInner() {
   const organization = useOrganization();
   const user = useUser();
+  const { isRbacEnabled } = useRBAC();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const orgRoutes = useOrgRoutes();
 
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteEmailTouched, setInviteEmailTouched] = useState(false);
+  const [inviteRoleId, setInviteRoleId] = useState<string | undefined>(
+    undefined,
+  );
+
   const [memberToRemove, setMemberToRemove] = useState<OrganizationUser | null>(
     null,
   );
   const [inviteToCancel, setInviteToCancel] =
     useState<OrganizationInvitation | null>(null);
+  const [changingMember, setChangingMember] = useState<AccessMember | null>(
+    null,
+  );
+
+  const MEMBERS_PAGE_SIZE = 10;
+  const [page, setPage] = useState(0);
+  const [search, setSearch] = useState("");
 
   const { data: membersData } = useListOrganizationUsersSuspense();
   const { data: invitesData } = useListInvitesSuspense();
+  const { data: rolesData } = useRoles();
+  const { data: accessMembersData } = useMembers();
 
-  const members = membersData?.users ?? [];
+  const allMembers = useMemo(
+    () =>
+      [...(membersData?.users ?? [])].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      ),
+    [membersData?.users],
+  );
+  const members = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return allMembers;
+    return allMembers.filter(
+      (m) =>
+        m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q),
+    );
+  }, [allMembers, search]);
+  const totalPages = Math.ceil(members.length / MEMBERS_PAGE_SIZE);
+  const safePage = Math.min(page, Math.max(totalPages - 1, 0));
+  const visibleMembers = members.slice(
+    safePage * MEMBERS_PAGE_SIZE,
+    (safePage + 1) * MEMBERS_PAGE_SIZE,
+  );
   const invites = invitesData?.invitations ?? [];
+  const roles = rolesData?.roles ?? [];
+  const accessMembers = accessMembersData?.members ?? [];
+  const memberRole = roles.find(
+    (r) => r.slug === "member" || r.name.toLowerCase() === "member",
+  );
+  const memberRoleId = memberRole?.id;
+  const defaultRoleId = memberRoleId;
+  const effectiveInviteRoleId = isRbacEnabled
+    ? (inviteRoleId ?? defaultRoleId)
+    : memberRoleId;
+
+  // Cross-reference AccessMember (has roleIds) by user ID
+  const roleIdsByUserId = new Map(accessMembers.map((m) => [m.id, m.roleIds]));
+  const accessMemberByUserId = new Map(accessMembers.map((m) => [m.id, m]));
+  const roleBySlug = new Map(roles.map((role) => [role.slug, role]));
+  const roleById = new Map(roles.map((role) => [role.id, role]));
+  const getRoleName = (roleId: string) =>
+    roleById.get(roleId)?.name ?? "Unknown";
+  const getInviteRole = (invite: OrganizationInvitation) =>
+    invite.roleSlug ? roleBySlug.get(invite.roleSlug) : undefined;
+  const getInviteRoleId = (invite: OrganizationInvitation) =>
+    getInviteRole(invite)?.id;
+
+  // Identify admin role and count admins for last-admin protection
+  const adminRoleId = roles.find((r) => r.name.toLowerCase() === "admin")?.id;
+  const adminCount = adminRoleId
+    ? accessMembers.filter((m) => m.roleIds.includes(adminRoleId)).length
+    : 0;
 
   const invalidateTeamData = async () => {
     await Promise.all([
@@ -86,15 +192,27 @@ export function TeamInner() {
     ]);
   };
 
+  const emailSchema = z.string().email();
+  const inviteEmailError =
+    inviteEmailTouched &&
+    inviteEmail.trim() !== "" &&
+    !emailSchema.safeParse(inviteEmail.trim()).success
+      ? "Please enter a valid email address"
+      : undefined;
+
   const inviteMutation = useSendInviteMutation({
-    onError: () => {
-      toast.error("Failed to send invite");
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to send invite",
+      );
     },
   });
 
   const removeMemberMutation = useRemoveOrganizationUserMutation({
-    onError: () => {
-      toast.error("Failed to remove member");
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to remove member",
+      );
     },
   });
 
@@ -104,25 +222,37 @@ export function TeamInner() {
     },
   });
 
+  const updateInviteRoleMutation = useUpdateInviteRoleMutation({
+    onError: () => {
+      toast.error("Failed to update invite role");
+    },
+  });
+
   const handleInvite = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const submittedEmail = inviteEmail.trim();
-    if (!submittedEmail) return;
+    if (!submittedEmail || !emailSchema.safeParse(submittedEmail).success)
+      return;
 
     inviteMutation.mutate(
       {
         request: {
           sendInviteRequestBody: {
             email: submittedEmail,
+            roleId: effectiveInviteRoleId,
           },
         },
       },
       {
-        onSuccess: async () => {
-          await invalidateTeamData();
-          toast.success(`Invite sent to ${submittedEmail}`);
-          setInviteEmail("");
-          setIsInviteDialogOpen(false);
+        onSuccess: () => {
+          void (async () => {
+            await invalidateTeamData();
+            toast.success(`Invite sent to ${submittedEmail}`);
+            setInviteEmail("");
+            setInviteEmailTouched(false);
+            setInviteRoleId(undefined);
+            setIsInviteDialogOpen(false);
+          })();
         },
       },
     );
@@ -139,10 +269,12 @@ export function TeamInner() {
         },
       },
       {
-        onSuccess: async () => {
-          await invalidateTeamData();
-          toast.success(`${displayName} has been removed`);
-          setMemberToRemove(null);
+        onSuccess: () => {
+          void (async () => {
+            await invalidateTeamData();
+            toast.success(`${displayName} has been removed`);
+            setMemberToRemove(null);
+          })();
         },
       },
     );
@@ -159,14 +291,91 @@ export function TeamInner() {
         },
       },
       {
-        onSuccess: async () => {
-          await invalidateTeamData();
-          toast.success(`Invite to ${email} has been cancelled`);
-          setInviteToCancel(null);
+        onSuccess: () => {
+          void (async () => {
+            await invalidateTeamData();
+            toast.success(`Invite to ${email} has been cancelled`);
+            setInviteToCancel(null);
+          })();
         },
       },
     );
   };
+
+  const handleUpdateInviteRole = (
+    invite: OrganizationInvitation,
+    roleId: string,
+  ) => {
+    if (!isRbacEnabled) return;
+    if (!roleId || roleId === getInviteRoleId(invite)) return;
+
+    updateInviteRoleMutation.mutate(
+      {
+        request: {
+          updateInviteRoleRequestBody: {
+            invitationId: invite.id,
+            roleId,
+          },
+        },
+      },
+      {
+        onSuccess: () => {
+          void (async () => {
+            await invalidateAllListInvites(queryClient);
+            toast.success(`Invite role changed to ${getRoleName(roleId)}`);
+          })();
+        },
+      },
+    );
+  };
+
+  const handleResendInvite = (invite: OrganizationInvitation) => {
+    const inviteRoleId = isRbacEnabled
+      ? (getInviteRoleId(invite) ?? effectiveInviteRoleId)
+      : memberRoleId;
+
+    // Must revoke first — the unique partial index (org_id, email) WHERE
+    // state = 'pending' blocks a second pending invite for the same email.
+    // Pass this invite's role ID so the resent invite preserves the role.
+    revokeInviteMutation.mutate(
+      { request: { invitationId: invite.id } },
+      {
+        onSuccess: () => {
+          inviteMutation.mutate(
+            {
+              request: {
+                sendInviteRequestBody: {
+                  email: invite.email,
+                  roleId: inviteRoleId,
+                },
+              },
+            },
+            {
+              onSuccess: () => {
+                void (async () => {
+                  await invalidateTeamData();
+                  toast.success(`Invite resent to ${invite.email}`);
+                })();
+              },
+              onError: () => {
+                void (async () => {
+                  await invalidateTeamData();
+                  toast.error(
+                    `Failed to resend invite to ${invite.email}. The previous invite was revoked — please send a new invite.`,
+                  );
+                })();
+              },
+            },
+          );
+        },
+        onError: () => {
+          toast.error(`Failed to revoke previous invite for ${invite.email}`);
+        },
+      },
+    );
+  };
+
+  const membersByUserId = new Map(members.map((m) => [m.userId, m]));
 
   const memberColumns: Column<OrganizationUser>[] = [
     {
@@ -220,30 +429,143 @@ export function TeamInner() {
         </Type>
       ),
     },
+    ...(isRbacEnabled
+      ? [
+          {
+            key: "role",
+            header: "Roles",
+            width: "200px",
+            render: (member) => {
+              const memberRoleIds = roleIdsByUserId.get(member.userId);
+              if (!memberRoleIds || memberRoleIds.length === 0)
+                return <span className="text-muted-foreground">—</span>;
+              const MAX_VISIBLE = 1;
+              const visible = memberRoleIds.slice(0, MAX_VISIBLE);
+              const overflow = memberRoleIds.slice(MAX_VISIBLE);
+              return (
+                <Stack direction="horizontal" gap={1} className="flex-wrap">
+                  {visible.map((roleId) => (
+                    <Link
+                      key={roleId}
+                      to={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
+                      className="text-foreground hover:text-primary rounded-sm border px-1.5 py-0.5 text-xs no-underline transition-colors"
+                    >
+                      {getRoleName(roleId)}
+                    </Link>
+                  ))}
+                  {overflow.length > 0 && (
+                    <SimpleTooltip
+                      tooltip={overflow.map((id) => getRoleName(id)).join(", ")}
+                    >
+                      <span className="text-muted-foreground cursor-pointer rounded-sm border px-1.5 py-0.5 text-xs">
+                        +{overflow.length} more
+                      </span>
+                    </SimpleTooltip>
+                  )}
+                </Stack>
+              );
+            },
+          } satisfies Column<OrganizationUser>,
+        ]
+      : []),
+    {
+      key: "lastLogin",
+      header: "Last active",
+      width: "200px",
+      render: (member) => (
+        <Type
+          variant="body"
+          className="text-muted-foreground whitespace-nowrap"
+        >
+          {member.lastLogin ? (
+            <HumanizeDateTime date={member.lastLogin} />
+          ) : (
+            <span className="text-muted-foreground/50">—</span>
+          )}
+        </Type>
+      ),
+    },
     {
       key: "actions",
       header: "",
-      width: "80px",
-      render: (member) =>
-        member.email !== user.email ? (
-          <RequireScope scope="org:admin" level="component">
-            <Button
-              variant="tertiary"
-              size="sm"
-              onClick={() => setMemberToRemove(member)}
-              className="hover:text-destructive"
-            >
-              <Button.LeftIcon>
-                <Trash2 className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text className="sr-only">Remove member</Button.Text>
-            </Button>
-          </RequireScope>
-        ) : (
-          <Type variant="body" className="text-muted-foreground text-sm">
-            You
-          </Type>
-        ),
+      width: "60px",
+      render: (member) => {
+        const memberRoleIds = roleIdsByUserId.get(member.userId) ?? [];
+        const isLastAdmin =
+          adminRoleId != null &&
+          memberRoleIds.includes(adminRoleId) &&
+          adminCount <= 1;
+        const isSelf = member.email === user.email;
+        const accessMember: AccessMember | undefined =
+          accessMemberByUserId.get(member.userId) ??
+          (memberRoleIds.length > 0
+            ? {
+                id: member.userId,
+                principalUrn: `user:${member.userId}`,
+                name: member.name,
+                email: member.email,
+                photoUrl: member.photoUrl,
+                roleIds: memberRoleIds,
+                joinedAt: member.createdAt,
+              }
+            : undefined);
+
+        return (
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
+                )}
+              >
+                <Ellipsis className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {isRbacEnabled && accessMember && !organization.scimEnabled && (
+                <RequireScope scope="org:admin" level="component">
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      void setTimeout(() => setChangingMember(accessMember), 0);
+                    }}
+                  >
+                    Manage roles
+                  </DropdownMenuItem>
+                </RequireScope>
+              )}
+              {isRbacEnabled && (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    void setTimeout(() => {
+                      void navigate(
+                        `${orgRoutes.access.challenges.href()}?identity=${encodeURIComponent(member.email)}`,
+                      );
+                    }, 0);
+                  }}
+                >
+                  View challenges
+                </DropdownMenuItem>
+              )}
+              {!isSelf && !isLastAdmin && (
+                <>
+                  {isRbacEnabled && <DropdownMenuSeparator />}
+                  <RequireScope scope="org:admin" level="component">
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onSelect={() => {
+                        void setTimeout(() => setMemberToRemove(member), 0);
+                      }}
+                    >
+                      Remove member
+                    </DropdownMenuItem>
+                  </RequireScope>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      },
     },
   ];
 
@@ -251,7 +573,7 @@ export function TeamInner() {
     {
       key: "email",
       header: "Email",
-      width: "1fr",
+      width: "2fr",
       render: (invite) => {
         const isExpired = invite.state === "expired";
         return (
@@ -278,10 +600,88 @@ export function TeamInner() {
         );
       },
     },
+    ...(isRbacEnabled
+      ? [
+          {
+            key: "role",
+            header: "Role",
+            width: "180px",
+            render: (invite) => {
+              const inviteRole = getInviteRole(invite);
+              if (roles.length === 0) {
+                return (
+                  <Type variant="body" className="text-muted-foreground">
+                    {invite.roleSlug ?? "—"}
+                  </Type>
+                );
+              }
+
+              return (
+                <Select
+                  value={inviteRole?.id}
+                  onValueChange={(roleId) =>
+                    handleUpdateInviteRole(invite, roleId)
+                  }
+                  disabled={updateInviteRoleMutation.isPending}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={invite.roleSlug ?? "Select role"}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roles.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              );
+            },
+          } satisfies Column<OrganizationInvitation>,
+        ]
+      : []),
+    {
+      key: "invitedBy",
+      header: "Invited by",
+      width: "100px",
+      render: (invite) => {
+        const inviter = invite.inviterUserId
+          ? membersByUserId.get(invite.inviterUserId)
+          : undefined;
+        if (!inviter) return <span className="text-muted-foreground">—</span>;
+        return (
+          <SimpleTooltip tooltip={inviter.email}>
+            {inviter.photoUrl ? (
+              <img
+                src={inviter.photoUrl}
+                alt={inviter.name}
+                className="h-7 w-7 rounded-full"
+              />
+            ) : (
+              <div
+                className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium text-white"
+                style={{
+                  backgroundImage: `linear-gradient(${getMemberColors(inviter.id).angle}deg, ${getMemberColors(inviter.id).from}, ${getMemberColors(inviter.id).to})`,
+                }}
+              >
+                {inviter.name
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")
+                  .toUpperCase()
+                  .slice(0, 2)}
+              </div>
+            )}
+          </SimpleTooltip>
+        );
+      },
+    },
     {
       key: "createdAt",
       header: "Sent",
-      width: "200px",
+      width: "1fr",
       render: (invite) => (
         <Type
           variant="body"
@@ -294,7 +694,7 @@ export function TeamInner() {
     {
       key: "expiresAt",
       header: "Expires",
-      width: "150px",
+      width: "1fr",
       render: (invite) => {
         const isExpired =
           invite.state === "expired" ||
@@ -316,20 +716,39 @@ export function TeamInner() {
     {
       key: "actions",
       header: "",
-      width: "80px",
+      width: "120px",
       render: (invite) => (
         <RequireScope scope="org:admin" level="component">
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => setInviteToCancel(invite)}
-            className="hover:text-destructive"
-          >
-            <Button.LeftIcon>
-              <X className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text className="sr-only">Revoke invite</Button.Text>
-          </Button>
+          <Stack direction="horizontal" gap={1}>
+            <SimpleTooltip tooltip="Resend invite">
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={() => handleResendInvite(invite)}
+                disabled={
+                  revokeInviteMutation.isPending || inviteMutation.isPending
+                }
+              >
+                <Button.LeftIcon>
+                  <RefreshCw className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text className="sr-only">Resend invite</Button.Text>
+              </Button>
+            </SimpleTooltip>
+            <SimpleTooltip tooltip="Revoke invite">
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={() => setInviteToCancel(invite)}
+                className="hover:text-destructive"
+              >
+                <Button.LeftIcon>
+                  <X className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text className="sr-only">Revoke invite</Button.Text>
+              </Button>
+            </SimpleTooltip>
+          </Stack>
         </RequireScope>
       ),
     },
@@ -353,18 +772,51 @@ export function TeamInner() {
               </Type>
             </Stack>
             <RequireScope scope="org:admin" level="component">
-              <Button onClick={() => setIsInviteDialogOpen(true)}>
-                <Button.LeftIcon>
-                  <UserPlus className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Invite Member</Button.Text>
-              </Button>
+              {organization.scimEnabled ? (
+                <SimpleTooltip tooltip="Managed by your identity provider">
+                  <span className="inline-flex">
+                    <Button
+                      onClick={() => setIsInviteDialogOpen(true)}
+                      disabled
+                    >
+                      <Button.LeftIcon>
+                        <UserPlus className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Invite Member</Button.Text>
+                    </Button>
+                  </span>
+                </SimpleTooltip>
+              ) : (
+                <Button onClick={() => setIsInviteDialogOpen(true)}>
+                  <Button.LeftIcon>
+                    <UserPlus className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Invite Member</Button.Text>
+                </Button>
+              )}
             </RequireScope>
           </Stack>
 
+          <div className="relative">
+            <Icon
+              name="search"
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+            />
+            <Input
+              type="text"
+              placeholder="Search members..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(0);
+              }}
+              className="mb-4 w-full py-2 pl-9 text-sm"
+            />
+          </div>
+
           <Table
             columns={memberColumns}
-            data={members}
+            data={visibleMembers}
             rowKey={(row) => row.userId}
             className="min-h-fit"
             noResultsMessage={
@@ -376,11 +828,46 @@ export function TeamInner() {
               >
                 <Users className="text-muted-foreground h-12 w-12" />
                 <Type variant="body" className="text-muted-foreground">
-                  No team members yet
+                  {search
+                    ? "No members matching your search"
+                    : "No team members yet"}
                 </Type>
               </Stack>
             }
           />
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t px-4 py-3">
+              <Type variant="body" className="text-muted-foreground text-sm">
+                {safePage * MEMBERS_PAGE_SIZE + 1}–
+                {Math.min((safePage + 1) * MEMBERS_PAGE_SIZE, members.length)}{" "}
+                of {members.length}
+              </Type>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() => setPage((p) => p - 1)}
+                  disabled={safePage === 0}
+                >
+                  <Button.LeftIcon>
+                    <ChevronLeft className="size-4" />
+                  </Button.LeftIcon>
+                  <Button.Text className="sr-only">Previous page</Button.Text>
+                </Button>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={safePage >= totalPages - 1}
+                >
+                  <Button.LeftIcon>
+                    <ChevronRight className="size-4" />
+                  </Button.LeftIcon>
+                  <Button.Text className="sr-only">Next page</Button.Text>
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Pending Invites Section */}
@@ -401,6 +888,48 @@ export function TeamInner() {
             />
           </div>
         )}
+        {/* Identity signpost */}
+        <div className="border-border border-t pt-8">
+          {organization.scimEnabled ? (
+            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
+              <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <Type variant="body" className="text-sm font-medium">
+                  Directory Sync is enabled
+                </Type>
+                <Type muted small className="mt-0.5">
+                  Team membership and role assignments are managed by your
+                  identity provider.{" "}
+                  <Link
+                    to={orgRoutes.identity.href()}
+                    className="text-foreground underline underline-offset-4"
+                  >
+                    Manage identity settings
+                  </Link>
+                </Type>
+              </div>
+            </div>
+          ) : (
+            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
+              <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <Type variant="body" className="text-sm font-medium">
+                  SSO & Directory Sync
+                </Type>
+                <Type muted small className="mt-0.5">
+                  Automate member provisioning and enforce identity provider
+                  authentication.{" "}
+                  <Link
+                    to={orgRoutes.identity.href()}
+                    className="text-foreground underline underline-offset-4"
+                  >
+                    Set up SSO & SCIM
+                  </Link>
+                </Type>
+              </div>
+            </div>
+          )}
+        </div>
       </Stack>
 
       {/* Invite Dialog */}
@@ -422,14 +951,45 @@ export function TeamInner() {
               name="email"
               type="email"
               value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
+              onChange={(e) => {
+                setInviteEmail(e.target.value);
+                if (!inviteEmailTouched) setInviteEmailTouched(true);
+              }}
+              onBlur={() => setInviteEmailTouched(true)}
+              error={inviteEmailError}
               placeholder="colleague@company.com"
               required
               autoFocus
               autoCapitalize="off"
               autoComplete="off"
               autoCorrect="off"
+              data-1p-ignore
+              data-lpignore="true"
+              data-bwignore
             />
+            {isRbacEnabled && roles.length > 0 && (
+              <AnyField
+                label="Role"
+                optionality="hidden"
+                render={() => (
+                  <Select
+                    value={effectiveInviteRoleId}
+                    onValueChange={setInviteRoleId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {roles.map((role) => (
+                        <SelectItem key={role.id} value={role.id}>
+                          {role.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            )}
             <div className="flex justify-end space-x-2">
               <Button
                 type="button"
@@ -440,7 +1000,11 @@ export function TeamInner() {
               </Button>
               <Button
                 type="submit"
-                disabled={inviteMutation.isPending || !inviteEmail.trim()}
+                disabled={
+                  inviteMutation.isPending ||
+                  !inviteEmail.trim() ||
+                  !!inviteEmailError
+                }
               >
                 {inviteMutation.isPending ? "Sending..." : "Send Invite"}
               </Button>
@@ -452,7 +1016,9 @@ export function TeamInner() {
       {/* Remove Member Dialog */}
       <Dialog
         open={!!memberToRemove}
-        onOpenChange={(open) => !open && setMemberToRemove(null)}
+        onOpenChange={(open) => {
+          void (!open && setMemberToRemove(null));
+        }}
       >
         <Dialog.Content>
           <Dialog.Header>
@@ -489,7 +1055,9 @@ export function TeamInner() {
       {/* Cancel Invite Dialog */}
       <Dialog
         open={!!inviteToCancel}
-        onOpenChange={(open) => !open && setInviteToCancel(null)}
+        onOpenChange={(open) => {
+          void (!open && setInviteToCancel(null));
+        }}
       >
         <Dialog.Content>
           <Dialog.Header>
@@ -520,6 +1088,16 @@ export function TeamInner() {
           </div>
         </Dialog.Content>
       </Dialog>
+
+      {/* Change Role Dialog — hidden when directory sync manages role assignment */}
+      {isRbacEnabled && !organization.scimEnabled && (
+        <ChangeRoleDialog
+          member={changingMember}
+          onOpenChange={(open) => {
+            if (!open) setChangingMember(null);
+          }}
+        />
+      )}
     </>
   );
 }

@@ -101,10 +101,10 @@ describe("buildCollectionMcpJson", () => {
       }),
     ]);
 
-    expect(result.config.mcpServers.Duplicate.url).toBe(
+    expect(result.config.mcpServers.Duplicate!.url).toBe(
       "https://app.getgram.ai/mcp/http",
     );
-    expect(result.config.mcpServers["Duplicate (2)"].url).toBe(
+    expect(result.config.mcpServers["Duplicate (2)"]!.url).toBe(
       "https://app.getgram.ai/mcp/second",
     );
   });
@@ -130,7 +130,7 @@ describe("buildCollectionMcpJson", () => {
       }),
     ]);
 
-    expect(result.config.mcpServers.Analytics.headers).toEqual({
+    expect(result.config.mcpServers.Analytics!.headers).toEqual({
       "MCP-Service-API-Key": "${SERVICE_API_KEY}",
     });
   });

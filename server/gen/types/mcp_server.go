@@ -14,16 +14,22 @@ type McpServer struct {
 	ID string
 	// The project ID this MCP server belongs to
 	ProjectID string
+	// A human-readable display name for the server
+	Name *string
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string
 	// The ID of the environment associated with the server
 	EnvironmentID *string
-	// The ID of the external OAuth server associated with the server
-	ExternalOauthServerID *string
-	// The ID of the OAuth proxy server associated with the server
-	OauthProxyServerID *string
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication for this server, if any.
+	UserSessionIssuerID *string
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string
 	// The ID of the toolset used as the backend
 	ToolsetID *string
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server, if any.
+	ToolVariationsGroupID *string
 	// The visibility of the server
 	Visibility McpServerVisibility
 	// When the MCP server was created

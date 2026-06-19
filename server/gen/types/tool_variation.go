@@ -24,6 +24,8 @@ type ToolVariation struct {
 	Name *string
 	// The description of the tool variation
 	Description *string
+	// The tags of the tool variation
+	Tags []string
 	// The summarizer of the tool variation
 	Summarizer *string
 	// Display name override for the tool

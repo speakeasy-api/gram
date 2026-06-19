@@ -6,7 +6,7 @@ import { toast } from "sonner";
  * Playground-specific share button that wraps the Elements ShareButton
  * with telemetry tracking and toast notifications.
  */
-export function ShareChatButton() {
+export function ShareChatButton(): JSX.Element {
   const telemetry = useTelemetry();
   const { threadId } = useThreadId();
 

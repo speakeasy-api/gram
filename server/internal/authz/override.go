@@ -23,6 +23,7 @@ func readScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
 // Scopes with no selectors get wildcard access; scopes with selectors get
 // one grant per selector. For backward compatibility with the header format,
 // bare resource IDs are converted to selectors via NewSelector.
+// Override grants always use the allow effect.
 func GrantsFromOverrides(overrides []RoleGrant) []Grant {
 	var grants []Grant
 	for _, o := range overrides {
@@ -52,7 +53,7 @@ func parseOverrideHeader(value string) []RoleGrant {
 			continue
 		}
 
-		override := RoleGrant{Scope: scope, Selectors: nil}
+		override := RoleGrant{Scope: scope, Effect: PolicyEffectAllow, Selectors: nil}
 		if hasResources && resourcesStr != "" {
 			for r := range strings.SplitSeq(resourcesStr, "|") {
 				r = strings.TrimSpace(r)

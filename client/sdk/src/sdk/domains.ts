@@ -4,7 +4,9 @@
 
 import { domainsDeleteDomain } from "../funcs/domainsDeleteDomain.js";
 import { domainsGetDomain } from "../funcs/domainsGetDomain.js";
+import { domainsListMcpEndpoints } from "../funcs/domainsListMcpEndpoints.js";
 import { domainsRegisterDomain } from "../funcs/domainsRegisterDomain.js";
+import { domainsUpdateDomain } from "../funcs/domainsUpdateDomain.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -50,6 +52,25 @@ export class Domains extends ClientSDK {
   }
 
   /**
+   * listMcpEndpoints domains
+   *
+   * @remarks
+   * List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.
+   */
+  async listMcpEndpoints(
+    request?: operations.ListCustomDomainMcpEndpointsRequest | undefined,
+    security?: operations.ListCustomDomainMcpEndpointsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListCustomDomainMcpEndpointsResult> {
+    return unwrapAsync(domainsListMcpEndpoints(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * createDomain domains
    *
    * @remarks
@@ -61,6 +82,25 @@ export class Domains extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(domainsRegisterDomain(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateDomain domains
+   *
+   * @remarks
+   * Update the IP allowlist for the organization's custom domain
+   */
+  async updateDomain(
+    request: operations.UpdateDomainRequest,
+    security?: operations.UpdateDomainSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.CustomDomain> {
+    return unwrapAsync(domainsUpdateDomain(
       this,
       request,
       security,

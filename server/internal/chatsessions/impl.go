@@ -68,10 +68,19 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return nil, oops.C(oops.CodeUnauthorized).Log(ctx, s.logger)
+		return nil, oops.C(oops.CodeUnauthorized).LogError(ctx, s.logger)
 	}
 	if authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized).Log(ctx, s.logger)
+		return nil, oops.C(oops.CodeUnauthorized).LogError(ctx, s.logger)
+	}
+
+	// Extract user identity from the caller's auth context. When the dashboard
+	// user creates a chat session, their UserID and SessionID are carried into
+	// the JWT so the MCP gateway can enforce RBAC on tool calls.
+	var sessionID *string
+	if authCtx.SessionID != nil {
+		sid := *authCtx.SessionID
+		sessionID = &sid
 	}
 
 	claims := chatsessions.ChatSessionClaims{
@@ -81,6 +90,9 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 		ProjectSlug:      *authCtx.ProjectSlug,
 		ExternalUserID:   p.UserIdentifier,
 		APIKeyID:         authCtx.APIKeyID,
+		UserID:           authCtx.UserID,
+		SessionID:        sessionID,
+		AccountType:      authCtx.AccountType,
 		RegisteredClaims: jwt.RegisteredClaims{}, //nolint:exhaustruct // to be populated by chatSessionsManager
 	}
 
@@ -91,7 +103,7 @@ func (s *Service) Create(ctx context.Context, p *gen.CreatePayload) (*gen.Create
 		p.ExpiresAfter, // Min/max validated by Goa
 	)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate chat session token").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate chat session token").LogError(ctx, s.logger)
 	}
 
 	result := &gen.CreateResult{
@@ -116,27 +128,27 @@ func (s *Service) Revoke(ctx context.Context, p *gen.RevokePayload) error {
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return oops.C(oops.CodeUnauthorized).Log(ctx, s.logger)
+		return oops.C(oops.CodeUnauthorized).LogError(ctx, s.logger)
 	}
 	if authCtx.ProjectID == nil {
-		return oops.C(oops.CodeUnauthorized).Log(ctx, s.logger)
+		return oops.C(oops.CodeUnauthorized).LogError(ctx, s.logger)
 	}
 
 	// Validate the token and extract JTI
 	claims, err := s.chatSessionsManager.ValidateToken(ctx, p.Token)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid token").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid token").LogError(ctx, s.logger)
 	}
 
 	// Verify the token belongs to the same org/project
 	if claims.OrgID != authCtx.ActiveOrganizationID || claims.ProjectID != authCtx.ProjectID.String() {
-		return oops.E(oops.CodeForbidden, nil, "token does not belong to this project").Log(ctx, s.logger)
+		return oops.E(oops.CodeForbidden, nil, "token does not belong to this project").LogError(ctx, s.logger)
 	}
 
 	// Revoke the token
 	err = s.chatSessionsManager.RevokeToken(ctx, claims.ID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to revoke token").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to revoke token").LogError(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "revoked chat session",

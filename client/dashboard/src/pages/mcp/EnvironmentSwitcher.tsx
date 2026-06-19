@@ -43,7 +43,7 @@ export function EnvironmentSwitcher({
   onSetDefaultEnvironment,
   onDetachEnvironment,
   onCreateEnvironment,
-}: EnvironmentSwitcherProps) {
+}: EnvironmentSwitcherProps): JSX.Element | null {
   // Sort environments with attached environment first, falling back to default for sort order only
   const sortSlug =
     mcpAttachedEnvironmentSlug || defaultEnvironmentSlug || "default";

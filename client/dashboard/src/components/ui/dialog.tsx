@@ -1,3 +1,4 @@
+// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as React from "react";
 

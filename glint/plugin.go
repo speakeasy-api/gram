@@ -29,9 +29,11 @@ type ruleSettings struct {
 	AuditEventTypedSnapshot    auditEventTypedSnapshotSettings    `json:"audit-event-typed-snapshot"`
 	AuditEventURNNaming        auditEventURNNamingSettings        `json:"audit-event-urn-naming"`
 	AuditEventURNTyping        auditEventURNTypingSettings        `json:"audit-event-urn-typing"`
+	AuditActionNaming          auditActionNamingSettings          `json:"audit-action-naming"`
 	NoDirectChatMessageInsert  noDirectChatMessageInsertSettings  `json:"no-direct-chat-message-insert"`
 	NoSqlErrNoRows             noSqlErrNoRowsSettings             `json:"no-sql-err-no-rows"`
 	NoTestingRawSql            noTestingRawSqlSettings            `json:"no-testing-raw-sql"`
+	NoClientErrorLogError      noClientErrorLogErrorSettings      `json:"no-client-error-log-error"`
 }
 
 type plugin struct {
@@ -76,6 +78,9 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	if !p.settings.Rules.AuditEventURNTyping.Disabled {
 		analyzers = append(analyzers, newAuditEventURNTypingAnalyzer(p.settings.Rules.AuditEventURNTyping))
 	}
+	if !p.settings.Rules.AuditActionNaming.Disabled {
+		analyzers = append(analyzers, newAuditActionNamingAnalyzer(p.settings.Rules.AuditActionNaming))
+	}
 	if !p.settings.Rules.NoDirectChatMessageInsert.Disabled {
 		analyzers = append(analyzers, newNoDirectChatMessageInsertAnalyzer(p.settings.Rules.NoDirectChatMessageInsert))
 	}
@@ -84,6 +89,9 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	}
 	if !p.settings.Rules.NoTestingRawSql.Disabled {
 		analyzers = append(analyzers, newNoTestingRawSqlAnalyzer(p.settings.Rules.NoTestingRawSql))
+	}
+	if !p.settings.Rules.NoClientErrorLogError.Disabled {
+		analyzers = append(analyzers, newNoClientErrorLogErrorAnalyzer(p.settings.Rules.NoClientErrorLogError))
 	}
 
 	return analyzers, nil

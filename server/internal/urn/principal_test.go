@@ -25,6 +25,12 @@ func TestNewPrincipal(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			name:    "valid all users subject-set principal",
+			typ:     urn.PrincipalTypeUser,
+			id:      urn.AllUsersPrincipalID,
+			wantErr: nil,
+		},
+		{
 			name:    "valid role principal",
 			typ:     urn.PrincipalTypeRole,
 			id:      "admin",
@@ -99,6 +105,11 @@ func TestPrincipal_String(t *testing.T) {
 			want:      "user:user_01abc",
 		},
 		{
+			name:      "all users subject-set principal",
+			principal: urn.NewPrincipal(urn.PrincipalTypeUser, urn.AllUsersPrincipalID),
+			want:      "user:all",
+		},
+		{
 			name:      "role principal",
 			principal: urn.NewPrincipal(urn.PrincipalTypeRole, "admin"),
 			want:      "role:admin",
@@ -109,6 +120,38 @@ func TestPrincipal_String(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tt.want, tt.principal.String())
+		})
+	}
+}
+
+func TestPrincipal_Label(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		principal urn.Principal
+		want      string
+	}{
+		{
+			name:      "user principal",
+			principal: urn.NewPrincipal(urn.PrincipalTypeUser, "user_01abc"),
+			want:      `user "user_01abc"`,
+		},
+		{
+			name:      "role principal",
+			principal: urn.NewPrincipal(urn.PrincipalTypeRole, "admin"),
+			want:      `role "admin"`,
+		},
+		{
+			name:      "zero principal",
+			principal: urn.Principal{},
+			want:      ":",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, tt.principal.Label())
 		})
 	}
 }
@@ -451,6 +494,62 @@ func TestPrincipal_validationCaching(t *testing.T) {
 	_, err2 = invalid.MarshalJSON()
 	require.Error(t, err2)
 	require.Equal(t, err1.Error(), err2.Error())
+}
+
+func TestPrincipal_emailValidation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("accepts canonical lowercase address", func(t *testing.T) {
+		t.Parallel()
+		p := urn.NewPrincipal(urn.PrincipalTypeEmail, "dev@acme.corp")
+		v, err := p.Value()
+		require.NoError(t, err)
+		require.Equal(t, "email:dev@acme.corp", v)
+	})
+
+	t.Run("accepts plus-addressing", func(t *testing.T) {
+		t.Parallel()
+		p := urn.NewPrincipal(urn.PrincipalTypeEmail, "dev+ops@acme.corp")
+		_, err := p.Value()
+		require.NoError(t, err)
+	})
+
+	t.Run("rejects uppercase", func(t *testing.T) {
+		t.Parallel()
+		p := urn.NewPrincipal(urn.PrincipalTypeEmail, "Dev@Acme.Corp")
+		_, err := p.Value()
+		require.ErrorIs(t, err, urn.ErrInvalid)
+	})
+
+	t.Run("rejects display-name form", func(t *testing.T) {
+		t.Parallel()
+		p := urn.NewPrincipal(urn.PrincipalTypeEmail, `"Dev" <dev@acme.corp>`)
+		_, err := p.Value()
+		require.ErrorIs(t, err, urn.ErrInvalid)
+	})
+
+	t.Run("rejects missing @", func(t *testing.T) {
+		t.Parallel()
+		p := urn.NewPrincipal(urn.PrincipalTypeEmail, "dev.acme.corp")
+		_, err := p.Value()
+		require.ErrorIs(t, err, urn.ErrInvalid)
+	})
+
+	t.Run("rejects empty id", func(t *testing.T) {
+		t.Parallel()
+		p := urn.NewPrincipal(urn.PrincipalTypeEmail, "")
+		_, err := p.Value()
+		require.ErrorIs(t, err, urn.ErrInvalid)
+	})
+
+	t.Run("roundtrips through Parse", func(t *testing.T) {
+		t.Parallel()
+		p, err := urn.ParsePrincipal("email:dev@acme.corp")
+		require.NoError(t, err)
+		require.Equal(t, urn.PrincipalTypeEmail, p.Type)
+		require.Equal(t, "dev@acme.corp", p.ID)
+		require.Equal(t, "email:dev@acme.corp", p.String())
+	})
 }
 
 func TestPrincipal_idPermissiveness(t *testing.T) {

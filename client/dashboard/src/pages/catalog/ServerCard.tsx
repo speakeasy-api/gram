@@ -36,7 +36,7 @@ export function ServerCard({
   externalMcps,
   isSelected,
   onToggleSelect,
-}: ServerCardProps) {
+}: ServerCardProps): JSX.Element {
   const displayName = server.title ?? server.registrySpecifier;
 
   const isSpeakeasyServer = server.registrySpecifier.startsWith(
@@ -50,10 +50,15 @@ export function ServerCard({
 
   // Get tool names for the badge tooltip
   const toolNames = useMemo(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tools = (server.tools ?? []) as any[];
+    const tools = server.tools ?? [];
     return tools.map((t) => t.name || "Unknown tool");
   }, [server.tools]);
+
+  // Remote-only servers (auth-gated proxies like GitHub, Make) can't enumerate
+  // tools until a user authenticates, so the "No Tools" badge would be
+  // misleading. Hide it for them.
+  const isRemoteOnly =
+    (server.remotes?.length ?? 0) > 0 && toolNames.length === 0;
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation(); // Prevent click-outside-to-deselect from firing
@@ -119,7 +124,10 @@ export function ServerCard({
           </div>
           <div className="flex items-baseline gap-1">
             {isSpeakeasyServer && <PoweredBySpeakeasyBadge />}
-            <ToolCollectionBadge toolNames={toolNames} />
+            <ToolCollectionBadge
+              toolNames={toolNames}
+              emptyLabel={isRemoteOnly ? null : undefined}
+            />
           </div>
         </div>
 

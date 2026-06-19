@@ -15,7 +15,9 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/pubsub/v2"
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/multitracer"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,6 +31,7 @@ import (
 	svix "github.com/svix/svix-webhooks/go"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
+	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"github.com/workos/workos-go/v6/pkg/webhooks"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -37,11 +40,19 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/interceptor"
+	"google.golang.org/api/option"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/speakeasy-api/gram/infra/gen"
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/background"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -60,10 +71,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	sv "github.com/speakeasy-api/gram/server/internal/thirdparty/svix"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
+
+func noopShutdown(context.Context) error { return nil }
 
 func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	var cfgLoader cli.BeforeFunc = func(ctx *cli.Context) error { return nil }
@@ -100,7 +114,7 @@ func newGuardianPolicy(c *cli.Context, tracerProvider trace.TracerProvider) (pol
 
 func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
 	logger = logger.With(attr.SlogComponent("clickhouse"))
-	nilFunc := func(context.Context) error { return nil }
+	nilFunc := noopShutdown
 
 	host := c.String("clickhouse-host")
 	database := c.String("clickhouse-database")
@@ -308,7 +322,7 @@ type temporalClientOptions struct {
 }
 
 func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (*temporal.Environment, func(context.Context) error, error) {
-	var nilShutdownFunc = func(context.Context) error { return nil }
+	var nilShutdownFunc = noopShutdown
 	if opts.address == "" || opts.namespace == "" {
 		return nil, nilShutdownFunc, nil
 	}
@@ -469,23 +483,40 @@ func newBillingProvider(
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient
 // call site below. Pulls the optional --workos-endpoint override (env:
 // WORKOS_API_URL) so local dev can point both real-WorkOS callers at
-// the dev-idp's local-speakeasy emulator without changing any wiring.
+// the dev-idp's mock-workos emulator without changing any wiring.
 func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{
 		Endpoint:   c.String("workos-endpoint"),
 		HTTPClient: nil,
+		ClientID:   c.String("idp-client-id"),
 	}
 }
 
 func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) (access.RoleProvider, error) {
-	apiKey := c.String("workos-api-key")
+	apiKey := c.String("idp-client-secret")
+
+	// Local dev: when a real GRAM_IDP_CLIENT_SECRET is configured (GRAM_IDP_MODE=workos),
+	// use it so the access role provider proxies through dev-idp to real WorkOS.
+	// Otherwise fall back to the mock-workos emulator or a stub.
+	if c.String("environment") == "local" {
+		haveRealKey := apiKey != "" && apiKey != "unset"
+		opts := workosClientOpts(c)
+
+		if haveRealKey {
+			logger.InfoContext(ctx, "using real WorkOS API key as access role provider")
+			return workos.NewClient(guardianPolicy, apiKey, opts), nil
+		}
+		if opts.Endpoint != "" {
+			logger.InfoContext(ctx, "using dev-idp mock-workos as access role provider")
+			return workos.NewClient(guardianPolicy, "dev-idp-mock", opts), nil
+		}
+		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
+		return workos.NewStubClient(), nil
+	}
 
 	switch {
 	case apiKey != "" && apiKey != "unset":
 		return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), nil
-	case c.String("environment") == "local":
-		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
-		return workos.NewStubClient(), nil
 	default:
 		return nil, errors.New("WorkOS API key not provided")
 	}
@@ -493,7 +524,7 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 
 func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {
 	env := c.String("environment")
-	apiKey := c.String("workos-api-key")
+	apiKey := c.String("idp-client-secret")
 
 	haveAPIKey := apiKey != "" && apiKey != "unset"
 	if env != "local" && !haveAPIKey {
@@ -501,6 +532,26 @@ func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *w
 	}
 
 	return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), haveAPIKey, nil
+}
+
+// newIDPUserManagementClient creates a WorkOS user-management SDK client
+// scoped to the IDP application key. Returns nil only when the key is empty.
+// In mock-workos mode the key can be any non-empty string (e.g. "unset") —
+// the mock endpoint accepts it.
+func newIDPUserManagementClient(guardianPolicy *guardian.Policy, apiKey string, c *cli.Context) *usermanagement.Client {
+	if apiKey == "" {
+		return nil
+	}
+
+	retryCfg := guardian.DefaultRetryConfig()
+	retryCfg.WaitMax = 10 * time.Second
+
+	um := usermanagement.NewClient(apiKey)
+	um.HTTPClient = guardianPolicy.PooledClient(guardian.WithRetryConfig(retryCfg))
+	if ep := c.String("workos-endpoint"); ep != "" {
+		um.Endpoint = ep
+	}
+	return um
 }
 
 func newWorkOSWebhooksClient(c *cli.Context) *webhooks.Client {
@@ -512,7 +563,7 @@ func newWorkOSWebhooksClient(c *cli.Context) *webhooks.Client {
 }
 
 func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {
-	nilShutdown := func(context.Context) error { return nil }
+	nilShutdown := noopShutdown
 
 	switch provider := c.String("functions-provider"); provider {
 	case "local":
@@ -580,7 +631,7 @@ func newFunctionOrchestrator(
 	tigrisStore *assets.TigrisStore,
 	enc *encryption.Client,
 ) (functions.Orchestrator, func(context.Context) error, error) {
-	nilShutdown := func(context.Context) error { return nil }
+	nilShutdown := noopShutdown
 
 	switch provider := c.String("functions-provider"); provider {
 	case "local":
@@ -689,6 +740,8 @@ func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat pro
 func newTelemetryLogger(
 	ctx context.Context,
 	logger *slog.Logger,
+	db *pgxpool.Pool,
+	cacheImpl cache.Cache,
 	chDB clickhouse.Conn,
 	logsEnabled telemetry.FeatureChecker,
 	toolIOLogsEnabled telemetry.FeatureChecker,
@@ -701,7 +754,9 @@ func newTelemetryLogger(
 		return nil
 	}
 
-	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled), shutdown
+	users := telemetry.NewUserInfoResolver(logger, db, cacheImpl)
+
+	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled, users), shutdown
 }
 
 func newTriggersApp(
@@ -712,6 +767,7 @@ func newTriggersApp(
 	telemetryLogger *telemetry.Logger,
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
+	slackClient *slack_client.SlackClient,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
 	return bgtriggers.NewApp(
@@ -736,11 +792,13 @@ func newTriggersApp(
 					FunctionID:     nil,
 					OrganizationID: entry.Instance.OrganizationID,
 				},
+				UserInfo:   telemetry.UserInfo{},
 				Attributes: entry.Attributes,
 			})
 		}),
 		auditLogger,
 		serverURL,
+		slackClient,
 		bgtriggers.NewNoopDispatcher(logger),
 	)
 }
@@ -749,9 +807,59 @@ func newAuditLogger() *audit.Logger {
 	return audit.NewLogger()
 }
 
+func newAdminOIDCClient(ctx context.Context, c *cli.Context, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, serverURL *url.URL) (*admin.OIDCClient, error) {
+	rawHDs := c.StringSlice("admin-allowed-hds")
+	adminAllowedHDs := []string{}
+	for _, hd := range rawHDs {
+		trimmed := strings.TrimSpace(hd)
+		if trimmed != "" {
+			adminAllowedHDs = append(adminAllowedHDs, trimmed)
+		}
+	}
+
+	if c.String("environment") == "local" {
+		policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+		if err != nil {
+			return nil, fmt.Errorf("create unsafe guarding policy: %w", err)
+		}
+
+		emulatorBase, err := url.Parse(c.String("admin-oidc-emulator-url"))
+		if err != nil {
+			return nil, fmt.Errorf("parse admin oidc emulator url: %w", err)
+		}
+
+		provider, err := oidc.NewProvider(ctx, emulatorBase.String())
+		if err != nil {
+			return nil, fmt.Errorf("create oidc provider for admin oidc emulator: %w", err)
+		}
+
+		return admin.NewOIDCClient(admin.OIDCClientOptions{
+			HTTPClient:   policy.PooledClient(),
+			Provider:     provider,
+			ClientID:     c.String("admin-oidc-client-id"),
+			ClientSecret: c.String("admin-oidc-client-secret"),
+			RedirectURL:  serverURL.JoinPath("/admin/auth.callback").String(),
+			AllowedHDs:   adminAllowedHDs,
+		}), nil
+	} else {
+		provider, err := oidc.NewProvider(ctx, "https://accounts.google.com")
+		if err != nil {
+			return nil, fmt.Errorf("create oidc provider for google: %w", err)
+		}
+		return admin.NewOIDCClient(admin.OIDCClientOptions{
+			HTTPClient:   guardianPolicy.PooledClient(),
+			Provider:     provider,
+			ClientID:     c.String("admin-oidc-client-id"),
+			ClientSecret: c.String("admin-oidc-client-secret"),
+			RedirectURL:  serverURL.JoinPath("/admin/auth.callback").String(),
+			AllowedHDs:   adminAllowedHDs,
+		}), nil
+	}
+}
+
 func newSvixClient(c *cli.Context, logger *slog.Logger, guardianPolicy *guardian.Policy) (*svix.Svix, func(context.Context) error, error) {
 	var svixAPIURL *url.URL
-	shutdownFunc := func(context.Context) error { return nil }
+	shutdownFunc := noopShutdown
 	hasAPIKey := c.String("svix-api-key") != "" && c.String("svix-api-key") != "unset"
 	if c.String("environment") == "local" && !hasAPIKey {
 		logger.InfoContext(c.Context, "no svix api key provided in local environment, using stub svix server")
@@ -783,4 +891,86 @@ func newSvixClient(c *cli.Context, logger *slog.Logger, guardianPolicy *guardian
 	}
 
 	return svixClient, shutdownFunc, nil
+}
+
+type pubSubBroker interface {
+	gcp.PublisherBroker
+	gcp.SubscriberBroker
+}
+
+func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (*pubsub.Client, pubSubBroker, func(ctx context.Context) error, error) {
+	var emulated bool
+	var projectID string
+	opts := []option.ClientOption{option.WithLogger(logger.With(attr.SlogComponent("gcp-pubsub-client")))}
+	switch {
+	case c.String("pubsub-emulator-host") != "":
+		emulated = true
+		// The emulator speaks plaintext gRPC, so we must use insecure transport
+		// credentials. The pubsub library only injects these automatically when
+		// the PUBSUB_EMULATOR_HOST env var is set; supplying the host via the CLI
+		// flag alone would otherwise default to TLS and fail the handshake.
+		opts = append(opts,
+			option.WithEndpoint(c.String("pubsub-emulator-host")),
+			option.WithoutAuthentication(),
+			option.WithGRPCDialOption(grpc.WithTransportCredentials(insecure.NewCredentials())),
+		)
+		projectID = conv.Default(c.String("gcp-project-id"), "my-project-id")
+	default:
+		projectID = conv.Default(c.String("gcp-project-id"), pubsub.DetectProjectID)
+	}
+
+	client, err := pubsub.NewClient(ctx, projectID, opts...)
+	if err != nil {
+		return nil, nil, noopShutdown, fmt.Errorf("failed to create pubsub client: %w", err)
+	}
+
+	var broker pubSubBroker
+	if emulated {
+		broker = gcp.NewEmulatedPubSub(logger.With(attr.SlogComponent("gcp-emulated-pubsub-broker")), projectID, client, gen.Descriptors)
+	} else {
+		broker = gcp.NewPubSubBroker(logger.With(attr.SlogComponent("gcp-pubsub-broker")), client, gen.Descriptors)
+	}
+
+	return client, broker, func(context.Context) error { return client.Close() }, nil
+}
+
+type labelledStop struct {
+	label string
+	pub   interface {
+		Stop(ctx context.Context) error
+	}
+}
+
+func (l labelledStop) Stop(ctx context.Context) error {
+	err := l.pub.Stop(ctx)
+	if err != nil {
+		return fmt.Errorf("stop publisher %s: %w", l.label, err)
+	}
+	return nil
+}
+
+func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publishers, func(ctx context.Context) error, error) {
+	pubs := make([]interface {
+		Stop(ctx context.Context) error
+	}, 0, 1)
+
+	presidioRequest, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.PresidioRequest{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for presidio scan requests: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "presidioRequest", pub: presidioRequest})
+
+	shutdown := func(ctx context.Context) error {
+		var err error
+		for _, pub := range pubs {
+			if e := pub.Stop(ctx); e != nil && err == nil {
+				err = errors.Join(err, e)
+			}
+		}
+		return err
+	}
+
+	return &background.Publishers{
+		PresidioRequest: presidioRequest,
+	}, shutdown, nil
 }

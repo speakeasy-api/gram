@@ -44,4 +44,3 @@ func optionalUUID(in *string, field string) (uuid.NullUUID, error) {
 	}
 	return uuid.NullUUID{UUID: parsed, Valid: true}, nil
 }
-

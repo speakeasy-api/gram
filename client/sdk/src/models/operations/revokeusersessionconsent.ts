@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import * as components from "../components/index.js";
 
 export type RevokeUserSessionConsentSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -23,6 +22,10 @@ export type RevokeUserSessionConsentSecurity = {
 
 export type RevokeUserSessionConsentRequest = {
   /**
+   * The user_session_consent id.
+   */
+  id: string;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -34,7 +37,6 @@ export type RevokeUserSessionConsentRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  triggerRiskAnalysisRequestBody: components.TriggerRiskAnalysisRequestBody;
 };
 
 /** @internal */
@@ -146,11 +148,10 @@ export function revokeUserSessionConsentSecurityToJSON(
 
 /** @internal */
 export type RevokeUserSessionConsentRequest$Outbound = {
+  id: string;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  TriggerRiskAnalysisRequestBody:
-    components.TriggerRiskAnalysisRequestBody$Outbound;
 };
 
 /** @internal */
@@ -159,18 +160,16 @@ export const RevokeUserSessionConsentRequest$outboundSchema: z.ZodMiniType<
   RevokeUserSessionConsentRequest
 > = z.pipe(
   z.object({
+    id: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    triggerRiskAnalysisRequestBody:
-      components.TriggerRiskAnalysisRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
-      triggerRiskAnalysisRequestBody: "TriggerRiskAnalysisRequestBody",
     });
   }),
 );

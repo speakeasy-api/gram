@@ -17,10 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// WorkOS organization membership id stored on organization_user_relationships (not Gram user_id).
 const testWorkosMembershipID = "org_membership_test_1"
-
-// testOtherUserID is a different user from the authenticated admin, used as the removal target.
 const testOtherUserID = "other-user-id"
 
 func TestService_RemoveUser(t *testing.T) {
@@ -48,8 +45,6 @@ func TestService_RemoveUser(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	expectWorkOSOrgAdminRole(t, ti.orgs)
-
 	ti.orgs.On("DeleteOrganizationMembership", mock.Anything, testWorkosMembershipID).Return(nil).Once()
 
 	err = ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{
@@ -59,7 +54,8 @@ func TestService_RemoveUser(t *testing.T) {
 
 	rows, err := orgrepo.New(ti.conn).ListOrganizationUsers(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Empty(t, rows, "expected soft-deleted user to no longer appear in organization list")
+	// The auth user (from InitAuthContext) remains; only the other user was removed.
+	require.Len(t, rows, 1, "expected only the auth user to remain after removing the other user")
 
 	ti.orgs.AssertExpectations(t)
 }
@@ -89,8 +85,6 @@ func TestService_RollsBackOnWorkOSError(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	expectWorkOSOrgAdminRole(t, ti.orgs)
-
 	workosErr := errors.New("workos error")
 	ti.orgs.On("DeleteOrganizationMembership", mock.Anything, testWorkosMembershipID).Return(workosErr).Once()
 
@@ -102,8 +96,8 @@ func TestService_RollsBackOnWorkOSError(t *testing.T) {
 
 	rows, err := orgrepo.New(ti.conn).ListOrganizationUsers(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Len(t, rows, 1, "transaction rollback should leave the organization_user_relationships row active")
-	require.Equal(t, testOtherUserID, rows[0].UserID.String)
+	// Auth user (from InitAuthContext) + other user (rollback preserved the row).
+	require.Len(t, rows, 2, "transaction rollback should leave the organization_user_relationships row active")
 
 	ti.orgs.AssertExpectations(t)
 }
@@ -112,11 +106,6 @@ func TestService_RemoveUser_NotAMember(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-
-	expectWorkOSOrgAdminRole(t, ti.orgs)
 
 	err := ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{
 		UserID: "non-member-user-id",
@@ -135,8 +124,6 @@ func TestService_RemoveUser_CannotRemoveSelf(t *testing.T) {
 	ctx, ti := newTestOrganizationsService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-
-	expectWorkOSOrgAdminRole(t, ti.orgs)
 
 	err := ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{
 		UserID: authCtx.UserID,
@@ -189,18 +176,6 @@ func TestService_RemoveUser_ForbiddenWithGrantForDifferentOrganization(t *testin
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, "org_other")})
-
-	err := ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{UserID: "any-user-id"})
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-}
-
-func TestService_RemoveUser_ForbiddenWhenNotOrgAdmin(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestOrganizationsService(t)
-	expectWorkOSOrgNonAdminRole(t, ti.orgs)
 
 	err := ti.service.RemoveUser(ctx, &gen.RemoveUserPayload{UserID: "any-user-id"})
 	var oopsErr *oops.ShareableError

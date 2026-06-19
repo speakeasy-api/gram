@@ -18,17 +18,37 @@ import (
 
 // Server lists the risk service endpoint HTTP handlers.
 type Server struct {
-	Mounts                []*MountPoint
-	CreateRiskPolicy      http.Handler
-	ListRiskPolicies      http.Handler
-	GetRiskCapabilities   http.Handler
-	GetRiskPolicy         http.Handler
-	UpdateRiskPolicy      http.Handler
-	DeleteRiskPolicy      http.Handler
-	ListRiskResults       http.Handler
-	ListRiskResultsByChat http.Handler
-	GetRiskPolicyStatus   http.Handler
-	TriggerRiskAnalysis   http.Handler
+	Mounts                         []*MountPoint
+	CreateRiskPolicy               http.Handler
+	ListRiskPolicies               http.Handler
+	GetRiskPolicy                  http.Handler
+	UpdateRiskPolicy               http.Handler
+	DeleteRiskPolicy               http.Handler
+	ListRiskResults                http.Handler
+	ListRiskResultsForAgent        http.Handler
+	ListRiskResultsByChat          http.Handler
+	GetRiskOverview                http.Handler
+	ListRiskCategories             http.Handler
+	GetRiskUserBreakdown           http.Handler
+	GetRiskRuleBreakdown           http.Handler
+	GetRiskPolicyStatus            http.Handler
+	CreateRiskPolicyBypassRequest  http.Handler
+	ListRiskPolicyBypassRequests   http.Handler
+	ApproveRiskPolicyBypassRequest http.Handler
+	DenyRiskPolicyBypassRequest    http.Handler
+	RevokeRiskPolicyBypassRequest  http.Handler
+	TriggerRiskAnalysis            http.Handler
+	CreateCustomDetectionRule      http.Handler
+	ListCustomDetectionRules       http.Handler
+	GetCustomDetectionRule         http.Handler
+	UpdateCustomDetectionRule      http.Handler
+	DeleteCustomDetectionRule      http.Handler
+	ListRiskExclusions             http.Handler
+	CreateRiskExclusion            http.Handler
+	UpdateRiskExclusion            http.Handler
+	DeleteRiskExclusion            http.Handler
+	SuggestCustomDetectionRule     http.Handler
+	TestDetectionRule              http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -60,25 +80,65 @@ func New(
 		Mounts: []*MountPoint{
 			{"CreateRiskPolicy", "POST", "/rpc/risk.policies.create"},
 			{"ListRiskPolicies", "GET", "/rpc/risk.policies.list"},
-			{"GetRiskCapabilities", "GET", "/rpc/risk.capabilities.get"},
 			{"GetRiskPolicy", "GET", "/rpc/risk.policies.get"},
 			{"UpdateRiskPolicy", "PUT", "/rpc/risk.policies.update"},
 			{"DeleteRiskPolicy", "DELETE", "/rpc/risk.policies.delete"},
 			{"ListRiskResults", "GET", "/rpc/risk.results.list"},
+			{"ListRiskResultsForAgent", "GET", "/rpc/risk.results.listForAgent"},
 			{"ListRiskResultsByChat", "GET", "/rpc/risk.results.byChat"},
+			{"GetRiskOverview", "GET", "/rpc/risk.overview.get"},
+			{"ListRiskCategories", "GET", "/rpc/risk.categories"},
+			{"GetRiskUserBreakdown", "GET", "/rpc/risk.overview.userBreakdown"},
+			{"GetRiskRuleBreakdown", "GET", "/rpc/risk.overview.rules"},
 			{"GetRiskPolicyStatus", "GET", "/rpc/risk.policies.status"},
+			{"CreateRiskPolicyBypassRequest", "POST", "/rpc/risk.createPolicyBypassRequest"},
+			{"ListRiskPolicyBypassRequests", "GET", "/rpc/risk.listPolicyBypassRequests"},
+			{"ApproveRiskPolicyBypassRequest", "POST", "/rpc/risk.approvePolicyBypassRequest"},
+			{"DenyRiskPolicyBypassRequest", "POST", "/rpc/risk.denyPolicyBypassRequest"},
+			{"RevokeRiskPolicyBypassRequest", "POST", "/rpc/risk.revokePolicyBypassRequest"},
 			{"TriggerRiskAnalysis", "POST", "/rpc/risk.policies.trigger"},
+			{"CreateCustomDetectionRule", "POST", "/rpc/risk.customRules.create"},
+			{"ListCustomDetectionRules", "GET", "/rpc/risk.customRules.list"},
+			{"GetCustomDetectionRule", "GET", "/rpc/risk.customRules.get"},
+			{"UpdateCustomDetectionRule", "POST", "/rpc/risk.customRules.update"},
+			{"DeleteCustomDetectionRule", "POST", "/rpc/risk.customRules.delete"},
+			{"ListRiskExclusions", "GET", "/rpc/risk.listExclusions"},
+			{"CreateRiskExclusion", "POST", "/rpc/risk.createExclusions"},
+			{"UpdateRiskExclusion", "PUT", "/rpc/risk.updateExclusions"},
+			{"DeleteRiskExclusion", "DELETE", "/rpc/risk.deleteExclusions"},
+			{"SuggestCustomDetectionRule", "POST", "/rpc/risk.customRules.suggest"},
+			{"TestDetectionRule", "POST", "/rpc/risk.rules.test"},
 		},
-		CreateRiskPolicy:      NewCreateRiskPolicyHandler(e.CreateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
-		ListRiskPolicies:      NewListRiskPoliciesHandler(e.ListRiskPolicies, mux, decoder, encoder, errhandler, formatter),
-		GetRiskCapabilities:   NewGetRiskCapabilitiesHandler(e.GetRiskCapabilities, mux, decoder, encoder, errhandler, formatter),
-		GetRiskPolicy:         NewGetRiskPolicyHandler(e.GetRiskPolicy, mux, decoder, encoder, errhandler, formatter),
-		UpdateRiskPolicy:      NewUpdateRiskPolicyHandler(e.UpdateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
-		DeleteRiskPolicy:      NewDeleteRiskPolicyHandler(e.DeleteRiskPolicy, mux, decoder, encoder, errhandler, formatter),
-		ListRiskResults:       NewListRiskResultsHandler(e.ListRiskResults, mux, decoder, encoder, errhandler, formatter),
-		ListRiskResultsByChat: NewListRiskResultsByChatHandler(e.ListRiskResultsByChat, mux, decoder, encoder, errhandler, formatter),
-		GetRiskPolicyStatus:   NewGetRiskPolicyStatusHandler(e.GetRiskPolicyStatus, mux, decoder, encoder, errhandler, formatter),
-		TriggerRiskAnalysis:   NewTriggerRiskAnalysisHandler(e.TriggerRiskAnalysis, mux, decoder, encoder, errhandler, formatter),
+		CreateRiskPolicy:               NewCreateRiskPolicyHandler(e.CreateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
+		ListRiskPolicies:               NewListRiskPoliciesHandler(e.ListRiskPolicies, mux, decoder, encoder, errhandler, formatter),
+		GetRiskPolicy:                  NewGetRiskPolicyHandler(e.GetRiskPolicy, mux, decoder, encoder, errhandler, formatter),
+		UpdateRiskPolicy:               NewUpdateRiskPolicyHandler(e.UpdateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
+		DeleteRiskPolicy:               NewDeleteRiskPolicyHandler(e.DeleteRiskPolicy, mux, decoder, encoder, errhandler, formatter),
+		ListRiskResults:                NewListRiskResultsHandler(e.ListRiskResults, mux, decoder, encoder, errhandler, formatter),
+		ListRiskResultsForAgent:        NewListRiskResultsForAgentHandler(e.ListRiskResultsForAgent, mux, decoder, encoder, errhandler, formatter),
+		ListRiskResultsByChat:          NewListRiskResultsByChatHandler(e.ListRiskResultsByChat, mux, decoder, encoder, errhandler, formatter),
+		GetRiskOverview:                NewGetRiskOverviewHandler(e.GetRiskOverview, mux, decoder, encoder, errhandler, formatter),
+		ListRiskCategories:             NewListRiskCategoriesHandler(e.ListRiskCategories, mux, decoder, encoder, errhandler, formatter),
+		GetRiskUserBreakdown:           NewGetRiskUserBreakdownHandler(e.GetRiskUserBreakdown, mux, decoder, encoder, errhandler, formatter),
+		GetRiskRuleBreakdown:           NewGetRiskRuleBreakdownHandler(e.GetRiskRuleBreakdown, mux, decoder, encoder, errhandler, formatter),
+		GetRiskPolicyStatus:            NewGetRiskPolicyStatusHandler(e.GetRiskPolicyStatus, mux, decoder, encoder, errhandler, formatter),
+		CreateRiskPolicyBypassRequest:  NewCreateRiskPolicyBypassRequestHandler(e.CreateRiskPolicyBypassRequest, mux, decoder, encoder, errhandler, formatter),
+		ListRiskPolicyBypassRequests:   NewListRiskPolicyBypassRequestsHandler(e.ListRiskPolicyBypassRequests, mux, decoder, encoder, errhandler, formatter),
+		ApproveRiskPolicyBypassRequest: NewApproveRiskPolicyBypassRequestHandler(e.ApproveRiskPolicyBypassRequest, mux, decoder, encoder, errhandler, formatter),
+		DenyRiskPolicyBypassRequest:    NewDenyRiskPolicyBypassRequestHandler(e.DenyRiskPolicyBypassRequest, mux, decoder, encoder, errhandler, formatter),
+		RevokeRiskPolicyBypassRequest:  NewRevokeRiskPolicyBypassRequestHandler(e.RevokeRiskPolicyBypassRequest, mux, decoder, encoder, errhandler, formatter),
+		TriggerRiskAnalysis:            NewTriggerRiskAnalysisHandler(e.TriggerRiskAnalysis, mux, decoder, encoder, errhandler, formatter),
+		CreateCustomDetectionRule:      NewCreateCustomDetectionRuleHandler(e.CreateCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
+		ListCustomDetectionRules:       NewListCustomDetectionRulesHandler(e.ListCustomDetectionRules, mux, decoder, encoder, errhandler, formatter),
+		GetCustomDetectionRule:         NewGetCustomDetectionRuleHandler(e.GetCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
+		UpdateCustomDetectionRule:      NewUpdateCustomDetectionRuleHandler(e.UpdateCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
+		DeleteCustomDetectionRule:      NewDeleteCustomDetectionRuleHandler(e.DeleteCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
+		ListRiskExclusions:             NewListRiskExclusionsHandler(e.ListRiskExclusions, mux, decoder, encoder, errhandler, formatter),
+		CreateRiskExclusion:            NewCreateRiskExclusionHandler(e.CreateRiskExclusion, mux, decoder, encoder, errhandler, formatter),
+		UpdateRiskExclusion:            NewUpdateRiskExclusionHandler(e.UpdateRiskExclusion, mux, decoder, encoder, errhandler, formatter),
+		DeleteRiskExclusion:            NewDeleteRiskExclusionHandler(e.DeleteRiskExclusion, mux, decoder, encoder, errhandler, formatter),
+		SuggestCustomDetectionRule:     NewSuggestCustomDetectionRuleHandler(e.SuggestCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
+		TestDetectionRule:              NewTestDetectionRuleHandler(e.TestDetectionRule, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -89,14 +149,34 @@ func (s *Server) Service() string { return "risk" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateRiskPolicy = m(s.CreateRiskPolicy)
 	s.ListRiskPolicies = m(s.ListRiskPolicies)
-	s.GetRiskCapabilities = m(s.GetRiskCapabilities)
 	s.GetRiskPolicy = m(s.GetRiskPolicy)
 	s.UpdateRiskPolicy = m(s.UpdateRiskPolicy)
 	s.DeleteRiskPolicy = m(s.DeleteRiskPolicy)
 	s.ListRiskResults = m(s.ListRiskResults)
+	s.ListRiskResultsForAgent = m(s.ListRiskResultsForAgent)
 	s.ListRiskResultsByChat = m(s.ListRiskResultsByChat)
+	s.GetRiskOverview = m(s.GetRiskOverview)
+	s.ListRiskCategories = m(s.ListRiskCategories)
+	s.GetRiskUserBreakdown = m(s.GetRiskUserBreakdown)
+	s.GetRiskRuleBreakdown = m(s.GetRiskRuleBreakdown)
 	s.GetRiskPolicyStatus = m(s.GetRiskPolicyStatus)
+	s.CreateRiskPolicyBypassRequest = m(s.CreateRiskPolicyBypassRequest)
+	s.ListRiskPolicyBypassRequests = m(s.ListRiskPolicyBypassRequests)
+	s.ApproveRiskPolicyBypassRequest = m(s.ApproveRiskPolicyBypassRequest)
+	s.DenyRiskPolicyBypassRequest = m(s.DenyRiskPolicyBypassRequest)
+	s.RevokeRiskPolicyBypassRequest = m(s.RevokeRiskPolicyBypassRequest)
 	s.TriggerRiskAnalysis = m(s.TriggerRiskAnalysis)
+	s.CreateCustomDetectionRule = m(s.CreateCustomDetectionRule)
+	s.ListCustomDetectionRules = m(s.ListCustomDetectionRules)
+	s.GetCustomDetectionRule = m(s.GetCustomDetectionRule)
+	s.UpdateCustomDetectionRule = m(s.UpdateCustomDetectionRule)
+	s.DeleteCustomDetectionRule = m(s.DeleteCustomDetectionRule)
+	s.ListRiskExclusions = m(s.ListRiskExclusions)
+	s.CreateRiskExclusion = m(s.CreateRiskExclusion)
+	s.UpdateRiskExclusion = m(s.UpdateRiskExclusion)
+	s.DeleteRiskExclusion = m(s.DeleteRiskExclusion)
+	s.SuggestCustomDetectionRule = m(s.SuggestCustomDetectionRule)
+	s.TestDetectionRule = m(s.TestDetectionRule)
 }
 
 // MethodNames returns the methods served.
@@ -106,14 +186,34 @@ func (s *Server) MethodNames() []string { return risk.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateRiskPolicyHandler(mux, h.CreateRiskPolicy)
 	MountListRiskPoliciesHandler(mux, h.ListRiskPolicies)
-	MountGetRiskCapabilitiesHandler(mux, h.GetRiskCapabilities)
 	MountGetRiskPolicyHandler(mux, h.GetRiskPolicy)
 	MountUpdateRiskPolicyHandler(mux, h.UpdateRiskPolicy)
 	MountDeleteRiskPolicyHandler(mux, h.DeleteRiskPolicy)
 	MountListRiskResultsHandler(mux, h.ListRiskResults)
+	MountListRiskResultsForAgentHandler(mux, h.ListRiskResultsForAgent)
 	MountListRiskResultsByChatHandler(mux, h.ListRiskResultsByChat)
+	MountGetRiskOverviewHandler(mux, h.GetRiskOverview)
+	MountListRiskCategoriesHandler(mux, h.ListRiskCategories)
+	MountGetRiskUserBreakdownHandler(mux, h.GetRiskUserBreakdown)
+	MountGetRiskRuleBreakdownHandler(mux, h.GetRiskRuleBreakdown)
 	MountGetRiskPolicyStatusHandler(mux, h.GetRiskPolicyStatus)
+	MountCreateRiskPolicyBypassRequestHandler(mux, h.CreateRiskPolicyBypassRequest)
+	MountListRiskPolicyBypassRequestsHandler(mux, h.ListRiskPolicyBypassRequests)
+	MountApproveRiskPolicyBypassRequestHandler(mux, h.ApproveRiskPolicyBypassRequest)
+	MountDenyRiskPolicyBypassRequestHandler(mux, h.DenyRiskPolicyBypassRequest)
+	MountRevokeRiskPolicyBypassRequestHandler(mux, h.RevokeRiskPolicyBypassRequest)
 	MountTriggerRiskAnalysisHandler(mux, h.TriggerRiskAnalysis)
+	MountCreateCustomDetectionRuleHandler(mux, h.CreateCustomDetectionRule)
+	MountListCustomDetectionRulesHandler(mux, h.ListCustomDetectionRules)
+	MountGetCustomDetectionRuleHandler(mux, h.GetCustomDetectionRule)
+	MountUpdateCustomDetectionRuleHandler(mux, h.UpdateCustomDetectionRule)
+	MountDeleteCustomDetectionRuleHandler(mux, h.DeleteCustomDetectionRule)
+	MountListRiskExclusionsHandler(mux, h.ListRiskExclusions)
+	MountCreateRiskExclusionHandler(mux, h.CreateRiskExclusion)
+	MountUpdateRiskExclusionHandler(mux, h.UpdateRiskExclusion)
+	MountDeleteRiskExclusionHandler(mux, h.DeleteRiskExclusion)
+	MountSuggestCustomDetectionRuleHandler(mux, h.SuggestCustomDetectionRule)
+	MountTestDetectionRuleHandler(mux, h.TestDetectionRule)
 }
 
 // Mount configures the mux to serve the risk endpoints.
@@ -204,59 +304,6 @@ func NewListRiskPoliciesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listRiskPolicies")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountGetRiskCapabilitiesHandler configures the mux to serve the "risk"
-// service "getRiskCapabilities" endpoint.
-func MountGetRiskCapabilitiesHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("GET", "/rpc/risk.capabilities.get", f)
-}
-
-// NewGetRiskCapabilitiesHandler creates a HTTP handler which loads the HTTP
-// request and calls the "risk" service "getRiskCapabilities" endpoint.
-func NewGetRiskCapabilitiesHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeGetRiskCapabilitiesRequest(mux, decoder)
-		encodeResponse = EncodeGetRiskCapabilitiesResponse(encoder)
-		encodeError    = EncodeGetRiskCapabilitiesError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getRiskCapabilities")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -492,6 +539,59 @@ func NewListRiskResultsHandler(
 	})
 }
 
+// MountListRiskResultsForAgentHandler configures the mux to serve the "risk"
+// service "listRiskResultsForAgent" endpoint.
+func MountListRiskResultsForAgentHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.results.listForAgent", f)
+}
+
+// NewListRiskResultsForAgentHandler creates a HTTP handler which loads the
+// HTTP request and calls the "risk" service "listRiskResultsForAgent" endpoint.
+func NewListRiskResultsForAgentHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListRiskResultsForAgentRequest(mux, decoder)
+		encodeResponse = EncodeListRiskResultsForAgentResponse(encoder)
+		encodeError    = EncodeListRiskResultsForAgentError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listRiskResultsForAgent")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountListRiskResultsByChatHandler configures the mux to serve the "risk"
 // service "listRiskResultsByChat" endpoint.
 func MountListRiskResultsByChatHandler(mux goahttp.Muxer, h http.Handler) {
@@ -522,6 +622,218 @@ func NewListRiskResultsByChatHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listRiskResultsByChat")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetRiskOverviewHandler configures the mux to serve the "risk" service
+// "getRiskOverview" endpoint.
+func MountGetRiskOverviewHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.overview.get", f)
+}
+
+// NewGetRiskOverviewHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "getRiskOverview" endpoint.
+func NewGetRiskOverviewHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetRiskOverviewRequest(mux, decoder)
+		encodeResponse = EncodeGetRiskOverviewResponse(encoder)
+		encodeError    = EncodeGetRiskOverviewError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getRiskOverview")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListRiskCategoriesHandler configures the mux to serve the "risk"
+// service "listRiskCategories" endpoint.
+func MountListRiskCategoriesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.categories", f)
+}
+
+// NewListRiskCategoriesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "listRiskCategories" endpoint.
+func NewListRiskCategoriesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListRiskCategoriesRequest(mux, decoder)
+		encodeResponse = EncodeListRiskCategoriesResponse(encoder)
+		encodeError    = EncodeListRiskCategoriesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listRiskCategories")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetRiskUserBreakdownHandler configures the mux to serve the "risk"
+// service "getRiskUserBreakdown" endpoint.
+func MountGetRiskUserBreakdownHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.overview.userBreakdown", f)
+}
+
+// NewGetRiskUserBreakdownHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "getRiskUserBreakdown" endpoint.
+func NewGetRiskUserBreakdownHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetRiskUserBreakdownRequest(mux, decoder)
+		encodeResponse = EncodeGetRiskUserBreakdownResponse(encoder)
+		encodeError    = EncodeGetRiskUserBreakdownError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getRiskUserBreakdown")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetRiskRuleBreakdownHandler configures the mux to serve the "risk"
+// service "getRiskRuleBreakdown" endpoint.
+func MountGetRiskRuleBreakdownHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.overview.rules", f)
+}
+
+// NewGetRiskRuleBreakdownHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "getRiskRuleBreakdown" endpoint.
+func NewGetRiskRuleBreakdownHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetRiskRuleBreakdownRequest(mux, decoder)
+		encodeResponse = EncodeGetRiskRuleBreakdownResponse(encoder)
+		encodeError    = EncodeGetRiskRuleBreakdownError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getRiskRuleBreakdown")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -598,6 +910,276 @@ func NewGetRiskPolicyStatusHandler(
 	})
 }
 
+// MountCreateRiskPolicyBypassRequestHandler configures the mux to serve the
+// "risk" service "createRiskPolicyBypassRequest" endpoint.
+func MountCreateRiskPolicyBypassRequestHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.createPolicyBypassRequest", f)
+}
+
+// NewCreateRiskPolicyBypassRequestHandler creates a HTTP handler which loads
+// the HTTP request and calls the "risk" service
+// "createRiskPolicyBypassRequest" endpoint.
+func NewCreateRiskPolicyBypassRequestHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateRiskPolicyBypassRequestRequest(mux, decoder)
+		encodeResponse = EncodeCreateRiskPolicyBypassRequestResponse(encoder)
+		encodeError    = EncodeCreateRiskPolicyBypassRequestError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createRiskPolicyBypassRequest")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListRiskPolicyBypassRequestsHandler configures the mux to serve the
+// "risk" service "listRiskPolicyBypassRequests" endpoint.
+func MountListRiskPolicyBypassRequestsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.listPolicyBypassRequests", f)
+}
+
+// NewListRiskPolicyBypassRequestsHandler creates a HTTP handler which loads
+// the HTTP request and calls the "risk" service "listRiskPolicyBypassRequests"
+// endpoint.
+func NewListRiskPolicyBypassRequestsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListRiskPolicyBypassRequestsRequest(mux, decoder)
+		encodeResponse = EncodeListRiskPolicyBypassRequestsResponse(encoder)
+		encodeError    = EncodeListRiskPolicyBypassRequestsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listRiskPolicyBypassRequests")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountApproveRiskPolicyBypassRequestHandler configures the mux to serve the
+// "risk" service "approveRiskPolicyBypassRequest" endpoint.
+func MountApproveRiskPolicyBypassRequestHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.approvePolicyBypassRequest", f)
+}
+
+// NewApproveRiskPolicyBypassRequestHandler creates a HTTP handler which loads
+// the HTTP request and calls the "risk" service
+// "approveRiskPolicyBypassRequest" endpoint.
+func NewApproveRiskPolicyBypassRequestHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeApproveRiskPolicyBypassRequestRequest(mux, decoder)
+		encodeResponse = EncodeApproveRiskPolicyBypassRequestResponse(encoder)
+		encodeError    = EncodeApproveRiskPolicyBypassRequestError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "approveRiskPolicyBypassRequest")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDenyRiskPolicyBypassRequestHandler configures the mux to serve the
+// "risk" service "denyRiskPolicyBypassRequest" endpoint.
+func MountDenyRiskPolicyBypassRequestHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.denyPolicyBypassRequest", f)
+}
+
+// NewDenyRiskPolicyBypassRequestHandler creates a HTTP handler which loads the
+// HTTP request and calls the "risk" service "denyRiskPolicyBypassRequest"
+// endpoint.
+func NewDenyRiskPolicyBypassRequestHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDenyRiskPolicyBypassRequestRequest(mux, decoder)
+		encodeResponse = EncodeDenyRiskPolicyBypassRequestResponse(encoder)
+		encodeError    = EncodeDenyRiskPolicyBypassRequestError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "denyRiskPolicyBypassRequest")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRevokeRiskPolicyBypassRequestHandler configures the mux to serve the
+// "risk" service "revokeRiskPolicyBypassRequest" endpoint.
+func MountRevokeRiskPolicyBypassRequestHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.revokePolicyBypassRequest", f)
+}
+
+// NewRevokeRiskPolicyBypassRequestHandler creates a HTTP handler which loads
+// the HTTP request and calls the "risk" service
+// "revokeRiskPolicyBypassRequest" endpoint.
+func NewRevokeRiskPolicyBypassRequestHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRevokeRiskPolicyBypassRequestRequest(mux, decoder)
+		encodeResponse = EncodeRevokeRiskPolicyBypassRequestResponse(encoder)
+		encodeError    = EncodeRevokeRiskPolicyBypassRequestError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "revokeRiskPolicyBypassRequest")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountTriggerRiskAnalysisHandler configures the mux to serve the "risk"
 // service "triggerRiskAnalysis" endpoint.
 func MountTriggerRiskAnalysisHandler(mux goahttp.Muxer, h http.Handler) {
@@ -628,6 +1210,594 @@ func NewTriggerRiskAnalysisHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "triggerRiskAnalysis")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateCustomDetectionRuleHandler configures the mux to serve the "risk"
+// service "createCustomDetectionRule" endpoint.
+func MountCreateCustomDetectionRuleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.customRules.create", f)
+}
+
+// NewCreateCustomDetectionRuleHandler creates a HTTP handler which loads the
+// HTTP request and calls the "risk" service "createCustomDetectionRule"
+// endpoint.
+func NewCreateCustomDetectionRuleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateCustomDetectionRuleRequest(mux, decoder)
+		encodeResponse = EncodeCreateCustomDetectionRuleResponse(encoder)
+		encodeError    = EncodeCreateCustomDetectionRuleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createCustomDetectionRule")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListCustomDetectionRulesHandler configures the mux to serve the "risk"
+// service "listCustomDetectionRules" endpoint.
+func MountListCustomDetectionRulesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.customRules.list", f)
+}
+
+// NewListCustomDetectionRulesHandler creates a HTTP handler which loads the
+// HTTP request and calls the "risk" service "listCustomDetectionRules"
+// endpoint.
+func NewListCustomDetectionRulesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListCustomDetectionRulesRequest(mux, decoder)
+		encodeResponse = EncodeListCustomDetectionRulesResponse(encoder)
+		encodeError    = EncodeListCustomDetectionRulesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listCustomDetectionRules")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetCustomDetectionRuleHandler configures the mux to serve the "risk"
+// service "getCustomDetectionRule" endpoint.
+func MountGetCustomDetectionRuleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.customRules.get", f)
+}
+
+// NewGetCustomDetectionRuleHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "getCustomDetectionRule" endpoint.
+func NewGetCustomDetectionRuleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetCustomDetectionRuleRequest(mux, decoder)
+		encodeResponse = EncodeGetCustomDetectionRuleResponse(encoder)
+		encodeError    = EncodeGetCustomDetectionRuleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getCustomDetectionRule")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateCustomDetectionRuleHandler configures the mux to serve the "risk"
+// service "updateCustomDetectionRule" endpoint.
+func MountUpdateCustomDetectionRuleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.customRules.update", f)
+}
+
+// NewUpdateCustomDetectionRuleHandler creates a HTTP handler which loads the
+// HTTP request and calls the "risk" service "updateCustomDetectionRule"
+// endpoint.
+func NewUpdateCustomDetectionRuleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateCustomDetectionRuleRequest(mux, decoder)
+		encodeResponse = EncodeUpdateCustomDetectionRuleResponse(encoder)
+		encodeError    = EncodeUpdateCustomDetectionRuleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateCustomDetectionRule")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteCustomDetectionRuleHandler configures the mux to serve the "risk"
+// service "deleteCustomDetectionRule" endpoint.
+func MountDeleteCustomDetectionRuleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.customRules.delete", f)
+}
+
+// NewDeleteCustomDetectionRuleHandler creates a HTTP handler which loads the
+// HTTP request and calls the "risk" service "deleteCustomDetectionRule"
+// endpoint.
+func NewDeleteCustomDetectionRuleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteCustomDetectionRuleRequest(mux, decoder)
+		encodeResponse = EncodeDeleteCustomDetectionRuleResponse(encoder)
+		encodeError    = EncodeDeleteCustomDetectionRuleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteCustomDetectionRule")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListRiskExclusionsHandler configures the mux to serve the "risk"
+// service "listRiskExclusions" endpoint.
+func MountListRiskExclusionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.listExclusions", f)
+}
+
+// NewListRiskExclusionsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "listRiskExclusions" endpoint.
+func NewListRiskExclusionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListRiskExclusionsRequest(mux, decoder)
+		encodeResponse = EncodeListRiskExclusionsResponse(encoder)
+		encodeError    = EncodeListRiskExclusionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listRiskExclusions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateRiskExclusionHandler configures the mux to serve the "risk"
+// service "createRiskExclusion" endpoint.
+func MountCreateRiskExclusionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.createExclusions", f)
+}
+
+// NewCreateRiskExclusionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "createRiskExclusion" endpoint.
+func NewCreateRiskExclusionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateRiskExclusionRequest(mux, decoder)
+		encodeResponse = EncodeCreateRiskExclusionResponse(encoder)
+		encodeError    = EncodeCreateRiskExclusionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createRiskExclusion")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateRiskExclusionHandler configures the mux to serve the "risk"
+// service "updateRiskExclusion" endpoint.
+func MountUpdateRiskExclusionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("PUT", "/rpc/risk.updateExclusions", f)
+}
+
+// NewUpdateRiskExclusionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "updateRiskExclusion" endpoint.
+func NewUpdateRiskExclusionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateRiskExclusionRequest(mux, decoder)
+		encodeResponse = EncodeUpdateRiskExclusionResponse(encoder)
+		encodeError    = EncodeUpdateRiskExclusionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateRiskExclusion")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteRiskExclusionHandler configures the mux to serve the "risk"
+// service "deleteRiskExclusion" endpoint.
+func MountDeleteRiskExclusionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/risk.deleteExclusions", f)
+}
+
+// NewDeleteRiskExclusionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "deleteRiskExclusion" endpoint.
+func NewDeleteRiskExclusionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteRiskExclusionRequest(mux, decoder)
+		encodeResponse = EncodeDeleteRiskExclusionResponse(encoder)
+		encodeError    = EncodeDeleteRiskExclusionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteRiskExclusion")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSuggestCustomDetectionRuleHandler configures the mux to serve the
+// "risk" service "suggestCustomDetectionRule" endpoint.
+func MountSuggestCustomDetectionRuleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.customRules.suggest", f)
+}
+
+// NewSuggestCustomDetectionRuleHandler creates a HTTP handler which loads the
+// HTTP request and calls the "risk" service "suggestCustomDetectionRule"
+// endpoint.
+func NewSuggestCustomDetectionRuleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSuggestCustomDetectionRuleRequest(mux, decoder)
+		encodeResponse = EncodeSuggestCustomDetectionRuleResponse(encoder)
+		encodeError    = EncodeSuggestCustomDetectionRuleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "suggestCustomDetectionRule")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountTestDetectionRuleHandler configures the mux to serve the "risk" service
+// "testDetectionRule" endpoint.
+func MountTestDetectionRuleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.rules.test", f)
+}
+
+// NewTestDetectionRuleHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "testDetectionRule" endpoint.
+func NewTestDetectionRuleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeTestDetectionRuleRequest(mux, decoder)
+		encodeResponse = EncodeTestDetectionRuleResponse(encoder)
+		encodeError    = EncodeTestDetectionRuleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "testDetectionRule")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

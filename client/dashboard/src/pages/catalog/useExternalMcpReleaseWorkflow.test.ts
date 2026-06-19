@@ -5,6 +5,12 @@ const mockEvolveDeployment = vi.fn();
 const mockToolsetsCreate = vi.fn();
 const mockToolsetsUpdateBySlug = vi.fn();
 const mockToolsetsGetBySlug = vi.fn();
+const mockToolsetsSetUserSessionIssuer = vi.fn();
+const mockUserSessionIssuersCreate = vi.fn();
+const mockRemoteSessionIssuersDiscover = vi.fn();
+const mockRemoteSessionIssuersCreate = vi.fn();
+const mockRemoteSessionClientsCreate = vi.fn();
+const mockAuthedFetch = vi.fn();
 
 // Return a stable client reference to avoid re-render loops from useCallback deps
 const mockClient = {
@@ -13,11 +19,26 @@ const mockClient = {
     create: mockToolsetsCreate,
     updateBySlug: mockToolsetsUpdateBySlug,
     getBySlug: mockToolsetsGetBySlug,
+    setUserSessionIssuer: mockToolsetsSetUserSessionIssuer,
+  },
+  userSessionIssuers: {
+    create: mockUserSessionIssuersCreate,
+  },
+  remoteSessionIssuers: {
+    discover: mockRemoteSessionIssuersDiscover,
+    create: mockRemoteSessionIssuersCreate,
+  },
+  remoteSessionClients: {
+    create: mockRemoteSessionClientsCreate,
   },
 };
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => mockClient,
+}));
+
+vi.mock("@/contexts/Fetcher", () => ({
+  useFetcher: () => ({ fetch: mockAuthedFetch }),
 }));
 
 vi.mock("@gram/client/react-query", () => ({
@@ -119,6 +140,33 @@ describe("useExternalMcpReleaseWorkflow", () => {
       data: undefined,
       isLoading: false,
     } as ReturnType<typeof useListToolsets>);
+    mockUserSessionIssuersCreate.mockResolvedValue({ id: "usi-1" });
+    mockRemoteSessionIssuersDiscover.mockResolvedValue({
+      issuer: "https://idp.example",
+      authorizationEndpoint: "https://idp.example/oauth/authorize",
+      tokenEndpoint: "https://idp.example/oauth/token",
+      registrationEndpoint: "https://idp.example/oauth/register",
+      scopesSupported: ["read"],
+      grantTypesSupported: ["authorization_code", "refresh_token"],
+      responseTypesSupported: ["code"],
+      tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
+      oidc: false,
+      passthrough: false,
+      discoveryWarnings: [],
+    });
+    mockRemoteSessionIssuersCreate.mockResolvedValue({ id: "rsi-1" });
+    mockRemoteSessionClientsCreate.mockResolvedValue({ id: "rsc-1" });
+    mockAuthedFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          client_id: "dcr-client-id",
+          client_secret: "dcr-client-secret",
+          token_endpoint_auth_method: "client_secret_basic",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    mockToolsetsSetUserSessionIssuer.mockResolvedValue({});
   });
 
   // -------------------------------------------------------------------------
@@ -163,8 +211,8 @@ describe("useExternalMcpReleaseWorkflow", () => {
     const state = result.current;
     if (state.phase !== "configure") throw new Error("unexpected phase");
     expect(state.serverConfigs).toHaveLength(1);
-    expect(state.serverConfigs[0].name).toBe("My Server");
-    expect(state.serverConfigs[0].server).toBe(servers[0]);
+    expect(state.serverConfigs[0]!.name).toBe("My Server");
+    expect(state.serverConfigs[0]!.server).toBe(servers[0]);
   });
 
   it("falls back to registrySpecifier when title is missing", () => {
@@ -176,7 +224,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
     );
     const state = result.current;
     if (state.phase !== "configure") throw new Error("unexpected phase");
-    expect(state.serverConfigs[0].name).toBe("org/fallback");
+    expect(state.serverConfigs[0]!.name).toBe("org/fallback");
   });
 
   it("re-initializes serverConfigs when servers prop changes", () => {
@@ -188,11 +236,11 @@ describe("useExternalMcpReleaseWorkflow", () => {
     );
     let state = result.current;
     if (state.phase !== "configure") throw new Error("unexpected phase");
-    expect(state.serverConfigs[0].name).toBe("First");
+    expect(state.serverConfigs[0]!.name).toBe("First");
     rerender({ servers: servers2 });
     state = result.current;
     if (state.phase !== "configure") throw new Error("unexpected phase");
-    expect(state.serverConfigs[0].name).toBe("Second");
+    expect(state.serverConfigs[0]!.name).toBe("Second");
   });
 
   // -------------------------------------------------------------------------
@@ -238,7 +286,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
     });
     const state = result.current;
     if (state.phase !== "configure") throw new Error("unexpected phase");
-    expect(state.serverConfigs[0].name).toBe("Renamed");
+    expect(state.serverConfigs[0]!.name).toBe("Renamed");
   });
 
   // -------------------------------------------------------------------------
@@ -358,7 +406,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
       const state = result.current;
       if (state.phase !== "configure") throw new Error("unexpected phase");
       expect(state.serverConfigs).toHaveLength(1);
-      expect(state.serverConfigs[0].name).toBe("Existing Copy");
+      expect(state.serverConfigs[0]!.name).toBe("Existing Copy");
     });
   });
 
@@ -448,7 +496,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
 
       let state = result.current;
       if (state.phase !== "configure") throw new Error("unexpected phase");
-      expect(state.serverConfigs[0].name).toBe("Pet Store");
+      expect(state.serverConfigs[0]!.name).toBe("Pet Store");
 
       await act(async () => {
         state = result.current;
@@ -747,8 +795,8 @@ describe("useExternalMcpReleaseWorkflow", () => {
       const state = result.current;
       if (state.phase !== "complete") throw new Error("unexpected phase");
       expect(state.toolsetStatuses).toHaveLength(1);
-      expect(state.toolsetStatuses[0].name).toBe("My Server");
-      expect(state.toolsetStatuses[0].slug).toBe("my-server");
+      expect(state.toolsetStatuses[0]!.name).toBe("My Server");
+      expect(state.toolsetStatuses[0]!.slug).toBe("my-server");
     });
 
     it("transitions to error when deployment status becomes failed", async () => {
@@ -814,7 +862,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
       await vi.waitFor(() => {
         const state = result.current;
         if (state.phase !== "complete") throw new Error("unexpected phase");
-        expect(state.toolsetStatuses[0].status).toBe("completed");
+        expect(state.toolsetStatuses[0]!.status).toBe("completed");
       });
 
       expect(mockToolsetsCreate).toHaveBeenCalledWith(
@@ -844,8 +892,8 @@ describe("useExternalMcpReleaseWorkflow", () => {
       );
       const state = result.current;
       if (state.phase !== "complete") throw new Error("unexpected phase");
-      expect(state.toolsetStatuses[0].toolsetSlug).toBe("my-server");
-      expect(state.toolsetStatuses[0].mcpSlug).toBe("mcp-my-server");
+      expect(state.toolsetStatuses[0]!.toolsetSlug).toBe("my-server");
+      expect(state.toolsetStatuses[0]!.mcpSlug).toBe("mcp-my-server");
     });
 
     it("creates a fork by deploying a new attachment under a distinct slug", async () => {
@@ -914,7 +962,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
       await vi.waitFor(() => {
         const state = result.current;
         if (state.phase !== "complete") throw new Error("unexpected phase");
-        expect(state.toolsetStatuses[0].status).toBe("completed");
+        expect(state.toolsetStatuses[0]!.status).toBe("completed");
       });
 
       expect(mockToolsetsCreate).toHaveBeenCalledWith(
@@ -959,7 +1007,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
       await vi.waitFor(() => {
         const state = result.current;
         if (state.phase !== "complete") throw new Error("unexpected phase");
-        expect(state.toolsetStatuses[0].status).toBe("completed");
+        expect(state.toolsetStatuses[0]!.status).toBe("completed");
       });
 
       expect(mockToolsetsCreate).toHaveBeenCalledWith(
@@ -979,6 +1027,207 @@ describe("useExternalMcpReleaseWorkflow", () => {
       );
     });
 
+    it("onboards OAuth 2.1 toolsets to user sessions when enabled", async () => {
+      mockEvolveDeployment.mockResolvedValue({});
+      mockToolsetsCreate.mockResolvedValue({ slug: "my-server" });
+      mockToolsetsUpdateBySlug.mockResolvedValue({});
+      mockToolsetsGetBySlug.mockResolvedValue({
+        slug: "my-server",
+        name: "My Server",
+        mcpSlug: "mcp-slug",
+        tools: [
+          {
+            externalMcpToolDefinition: {
+              requiresOauth: true,
+              slug: "my-server",
+              name: "proxy",
+              registryServerName: "My Server",
+              oauthAuthorizationEndpoint: "https://idp.example/oauth/authorize",
+              oauthTokenEndpoint: "https://idp.example/oauth/token",
+              oauthRegistrationEndpoint: "https://idp.example/oauth/register",
+              oauthScopesSupported: ["read"],
+            },
+          },
+        ],
+      });
+
+      const servers = [makeServer({ title: "My Server" })];
+      const { result } = renderHook(() =>
+        useExternalMcpReleaseWorkflow({
+          servers,
+          onboardExternalMcpToUserSessions: true,
+        }),
+      );
+      await act(async () => {
+        const state = result.current;
+        if (state.phase !== "configure") throw new Error("unexpected phase");
+        await state.startDeployment();
+      });
+
+      await vi.waitFor(() => {
+        const state = result.current;
+        if (state.phase !== "complete") throw new Error("unexpected phase");
+        expect(state.toolsetStatuses[0]!.status).toBe("completed");
+      });
+
+      expect(mockToolsetsUpdateBySlug).toHaveBeenNthCalledWith(
+        1,
+        {
+          slug: "my-server",
+          updateToolsetRequestBody: {
+            mcpEnabled: true,
+            mcpIsPublic: false,
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockUserSessionIssuersCreate).toHaveBeenCalledWith(
+        {
+          createUserSessionIssuerForm: {
+            slug: expect.stringMatching(/^my-server-[0-9a-f]{8}$/),
+            authnChallengeMode: "interactive",
+            sessionDurationHours: 24 * 14,
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockRemoteSessionIssuersDiscover).toHaveBeenCalledWith(
+        {
+          discoverRemoteSessionIssuerRequestBody: {
+            issuer: "https://idp.example/oauth",
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockRemoteSessionIssuersCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          createRemoteSessionIssuerForm: expect.objectContaining({
+            registrationEndpoint: "https://idp.example/oauth/register",
+          }),
+        }),
+        undefined,
+        undefined,
+      );
+      expect(mockAuthedFetch).toHaveBeenCalledWith(
+        "/oauth/proxy-register",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining(
+            '"registration_endpoint":"https://idp.example/oauth/register"',
+          ),
+        }),
+      );
+      expect(mockRemoteSessionClientsCreate).toHaveBeenCalledWith(
+        {
+          createRemoteSessionClientForm: expect.objectContaining({
+            remoteSessionIssuerId: "rsi-1",
+            userSessionIssuerId: "usi-1",
+            clientId: "dcr-client-id",
+            clientSecret: "dcr-client-secret",
+            tokenEndpointAuthMethod: "client_secret_basic",
+          }),
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockToolsetsUpdateBySlug).toHaveBeenNthCalledWith(
+        2,
+        {
+          slug: "my-server",
+          updateToolsetRequestBody: {
+            mcpIsPublic: false,
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockToolsetsSetUserSessionIssuer).toHaveBeenCalledWith(
+        {
+          slug: "my-server",
+          setUserSessionIssuerRequestBody: {
+            userSessionIssuerId: "usi-1",
+          },
+        },
+        undefined,
+        undefined,
+      );
+    });
+
+    it("keeps current behavior when onboarding is enabled but no registration endpoint exists", async () => {
+      mockEvolveDeployment.mockResolvedValue({});
+      mockToolsetsCreate.mockResolvedValue({ slug: "my-server" });
+      mockToolsetsUpdateBySlug.mockResolvedValue({});
+      mockToolsetsGetBySlug.mockResolvedValue({
+        slug: "my-server",
+        name: "My Server",
+        mcpSlug: "mcp-slug",
+        tools: [
+          {
+            externalMcpToolDefinition: {
+              requiresOauth: true,
+              slug: "my-server",
+              name: "proxy",
+              registryServerName: "My Server",
+              oauthAuthorizationEndpoint: "https://idp.example/oauth/authorize",
+              oauthTokenEndpoint: "https://idp.example/oauth/token",
+              oauthScopesSupported: ["read"],
+            },
+          },
+        ],
+      });
+
+      const servers = [makeServer({ title: "My Server" })];
+      const { result } = renderHook(() =>
+        useExternalMcpReleaseWorkflow({
+          servers,
+          onboardExternalMcpToUserSessions: true,
+        }),
+      );
+      await act(async () => {
+        const state = result.current;
+        if (state.phase !== "configure") throw new Error("unexpected phase");
+        await state.startDeployment();
+      });
+
+      await vi.waitFor(() => {
+        const state = result.current;
+        if (state.phase !== "complete") throw new Error("unexpected phase");
+        expect(state.toolsetStatuses[0]!.status).toBe("completed");
+      });
+
+      expect(mockToolsetsUpdateBySlug).toHaveBeenNthCalledWith(
+        1,
+        {
+          slug: "my-server",
+          updateToolsetRequestBody: {
+            mcpEnabled: true,
+            mcpIsPublic: false,
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockToolsetsUpdateBySlug).toHaveBeenNthCalledWith(
+        2,
+        {
+          slug: "my-server",
+          updateToolsetRequestBody: {
+            mcpIsPublic: true,
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockUserSessionIssuersCreate).not.toHaveBeenCalled();
+      expect(mockRemoteSessionIssuersCreate).not.toHaveBeenCalled();
+      expect(mockAuthedFetch).not.toHaveBeenCalled();
+      expect(mockRemoteSessionClientsCreate).not.toHaveBeenCalled();
+      expect(mockToolsetsSetUserSessionIssuer).not.toHaveBeenCalled();
+    });
+
     it("marks toolset as failed when creation throws", async () => {
       mockEvolveDeployment.mockResolvedValue({});
       mockToolsetsCreate.mockRejectedValue(new Error("quota exceeded"));
@@ -996,12 +1245,12 @@ describe("useExternalMcpReleaseWorkflow", () => {
       await vi.waitFor(() => {
         const state = result.current;
         if (state.phase !== "complete") throw new Error("unexpected phase");
-        expect(state.toolsetStatuses[0].status).toBe("failed");
+        expect(state.toolsetStatuses[0]!.status).toBe("failed");
       });
 
       const state = result.current;
       if (state.phase !== "complete") throw new Error("unexpected phase");
-      expect(state.toolsetStatuses[0].error).toBe("quota exceeded");
+      expect(state.toolsetStatuses[0]!.error).toBe("quota exceeded");
     });
 
     it("passes gram-project header during toolset creation", async () => {
@@ -1026,7 +1275,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
       await vi.waitFor(() => {
         const state = result.current;
         if (state.phase !== "complete") throw new Error("unexpected phase");
-        expect(state.toolsetStatuses[0].status).toBe("completed");
+        expect(state.toolsetStatuses[0]!.status).toBe("completed");
       });
 
       const reqOpts = { headers: { "gram-project": "proj-1" } };
@@ -1074,7 +1323,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
       expect(result.current.phase).toBe("configure");
       const state = result.current;
       if (state.phase !== "configure") throw new Error("unexpected phase");
-      expect(state.serverConfigs[0].name).toBe("S");
+      expect(state.serverConfigs[0]!.name).toBe("S");
     });
   });
 });

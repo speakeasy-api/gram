@@ -2,6 +2,7 @@ import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Dialog } from "@/components/ui/dialog";
 import { useSession } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
@@ -10,7 +11,6 @@ import {
   invalidateAllGetMcpMetadata,
   invalidateAllListEnvironments,
   invalidateAllToolset,
-  useGramContext,
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
@@ -86,7 +86,7 @@ function WizardBody({
   toolsetSlug: string;
   toolset: Toolset;
 }) {
-  const client = useGramContext();
+  const client = useSdkClient();
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const session = useSession();
@@ -99,22 +99,26 @@ function WizardBody({
       oauthWizardMachine.provide({
         actors: createWizardServices(client, queryClient, authedFetch),
         actions: {
-          invalidateOnExternalSuccess: () => invalidateAllToolset(queryClient),
-          invalidateOnProxyCreate: () => {
-            invalidateAllToolset(queryClient);
-            invalidateAllGetMcpMetadata(queryClient);
-            invalidateAllListEnvironments(queryClient);
+          invalidateOnExternalSuccess: () => {
+            void invalidateAllToolset(queryClient);
           },
-          captureExternalSuccess: () =>
-            telemetry.capture("mcp_event", {
+          invalidateOnProxyCreate: () => {
+            void invalidateAllToolset(queryClient);
+            void invalidateAllGetMcpMetadata(queryClient);
+            void invalidateAllListEnvironments(queryClient);
+          },
+          captureExternalSuccess: () => {
+            void telemetry.capture("mcp_event", {
               action: "external_oauth_configured",
               slug: toolsetSlug,
-            }),
-          captureProxyCreateSuccess: () =>
-            telemetry.capture("mcp_event", {
+            });
+          },
+          captureProxyCreateSuccess: () => {
+            void telemetry.capture("mcp_event", {
               action: "oauth_proxy_configured",
               slug: toolsetSlug,
-            }),
+            });
+          },
         },
       }),
     [client, queryClient, telemetry, toolsetSlug, authedFetch],
@@ -240,7 +244,7 @@ export function ConnectOAuthModal({
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
-}) {
+}): JSX.Element {
   const productTier = useProductTier();
   const isAccountUpgrade = productTier.includes("base");
 

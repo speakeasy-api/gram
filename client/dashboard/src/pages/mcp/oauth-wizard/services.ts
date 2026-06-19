@@ -4,12 +4,14 @@ import {
   buildCreateEnvironmentMutation,
   buildDeleteEnvironmentMutation,
   buildListEnvironmentsQuery,
-  useGramContext,
 } from "@gram/client/react-query";
+import type { Gram } from "@gram/client";
 import type { QueryClient } from "@tanstack/react-query";
 import { fromPromise } from "xstate";
 
-import { parseScopes } from "./machine-types";
+import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
+
+import { parseScopes, pickAuthMethodFromList } from "./machine-types";
 
 type SignalArg = { signal: AbortSignal };
 
@@ -47,8 +49,12 @@ export type DeleteEnvironmentInput = { envSlug: string };
 
 export type RegisterClientInput = {
   registrationEndpoint: string;
-  scopesSupported: string[];
-  tokenEndpointAuthMethodsSupported: string[];
+  // Method derived from the (often empty) discovered metadata. Used as the
+  // fallback when live discovery is skipped or fails.
+  tokenAuthMethod: string;
+  // Origin to run live RFC 8414 discovery against to recover the upstream's
+  // real token_endpoint_auth_methods_supported. Empty disables discovery.
+  issuer: string;
 };
 
 export type RegisterClientOutput = {
@@ -76,7 +82,7 @@ export type WizardServices = {
   >;
 };
 
-export type GramClient = ReturnType<typeof useGramContext>;
+export type GramClient = Gram;
 
 export function createWizardServices(
   client: GramClient,
@@ -168,36 +174,42 @@ export function createWizardServices(
 
   const registerClient = fromPromise<RegisterClientOutput, RegisterClientInput>(
     async ({ input, signal }) => {
-      const response = await authedFetch("/oauth/proxy-register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          registration_endpoint: input.registrationEndpoint,
-          scopes_supported: input.scopesSupported,
-          token_endpoint_auth_methods_supported:
-            input.tokenEndpointAuthMethodsSupported,
-        }),
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Registration failed (HTTP ${response.status})`);
+      // The synthesized remote-MCP metadata omits the supported-methods list,
+      // so run a live RFC 8414 discovery against the issuer origin to recover
+      // it (e.g. Make advertises only client_secret_post, and rejects DCR that
+      // omits it or sends client_secret_basic). Best-effort: any failure leaves
+      // the metadata-derived fallback method in place.
+      let authMethod = input.tokenAuthMethod;
+      if (input.issuer) {
+        try {
+          const draft = await client.remoteSessionIssuers.discover(
+            {
+              discoverRemoteSessionIssuerRequestBody: { issuer: input.issuer },
+            },
+            undefined,
+            { fetchOptions: { signal } },
+          );
+          const supported = draft.tokenEndpointAuthMethodsSupported ?? [];
+          if (supported.length > 0) {
+            authMethod = pickAuthMethodFromList(supported);
+          }
+        } catch {
+          // Keep the fallback method on discovery failure.
+        }
       }
 
-      const result = (await response.json()) as {
-        client_id?: string;
-        client_secret?: string;
-        token_endpoint_auth_method?: string;
-      };
-
-      if (!result.client_id) {
-        throw new Error("Upstream did not return a client_id");
-      }
-
+      const result = await proxyRegisterUpstreamClient(
+        authedFetch,
+        {
+          registrationEndpoint: input.registrationEndpoint,
+          tokenEndpointAuthMethod: authMethod || undefined,
+        },
+        { signal },
+      );
       return {
-        clientId: result.client_id,
-        clientSecret: result.client_secret ?? "",
-        tokenAuthMethod: result.token_endpoint_auth_method ?? null,
+        clientId: result.clientId,
+        clientSecret: result.clientSecret,
+        tokenAuthMethod: result.tokenEndpointAuthMethod,
       };
     },
   );

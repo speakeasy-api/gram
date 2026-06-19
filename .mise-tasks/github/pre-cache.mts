@@ -50,8 +50,44 @@ async function setupGoCaching() {
   console.log(`GitHub Go partial cache key: ${partialKey}`);
 }
 
+async function setupUVCaching() {
+  const uvVersion = execSync("uv --version", { encoding: "utf8" })
+    .trim()
+    .split(/\s+/)[1]; // "uv 0.11.21" -> "0.11.21"
+
+  // Keep the cache dir deterministic and inside the workspace so the
+  // actions/cache step and `uv sync` agree on the location.
+  const cacheDir = `${process.env["GITHUB_WORKSPACE"]}/.uv-cache`;
+  await fs.appendFile(env, `UV_CACHE_DIR=${cacheDir}\n`);
+
+  const os = process.platform;
+  const arch = process.arch;
+
+  const hash = crypto.createHash("sha256");
+
+  // Single workspace-wide lockfile: any member's dependency change busts it.
+  console.log("Hashing:", "uv.lock");
+  const uvLock = await fs.readFile("uv.lock");
+  hash.update(uvLock);
+
+  const uvHash = hash.digest("hex");
+
+  const version = 1; // Increment this if you need to bust the cache
+  const cacheKey = `${version}-${os}-${arch}-uv${uvVersion}-${uvHash}`;
+  const partialKey = `${version}-${os}-${arch}-uv${uvVersion}-`;
+  await fs.appendFile(env, `GH_CACHE_UV_KEY=uv-${cacheKey}\n`);
+  await fs.appendFile(env, `GH_CACHE_UV_KEY_PARTIAL=uv-${partialKey}\n`);
+
+  console.log(`uv cache dir: ${cacheDir}`);
+  console.log(`GitHub uv cache key: ${cacheKey}`);
+  console.log(`GitHub uv partial cache key: ${partialKey}`);
+}
+
 async function setupPNPMCaching() {
   const storePath = execSync("pnpm store path", { encoding: "utf8" }).trim();
+  const pnpmMajorVersion = execSync("pnpm --version", { encoding: "utf8" })
+    .trim()
+    .split(".")[0];
 
   await fs.appendFile(env, `PNPM_STORE_PATH=${storePath}\n`);
 
@@ -67,8 +103,8 @@ async function setupPNPMCaching() {
   const pnpmHash = hash.digest("hex");
 
   const version = 1; // Increment this if you need to bust the cache
-  const cacheKey = `${version}-${os}-${arch}-${pnpmHash}`;
-  const partialKey = `${version}-${os}-${arch}-`;
+  const cacheKey = `${version}-${os}-${arch}-pnpm${pnpmMajorVersion}-${pnpmHash}`;
+  const partialKey = `${version}-${os}-${arch}-pnpm${pnpmMajorVersion}-`;
   await fs.appendFile(env, `GH_CACHE_PNPM_KEY=pnpm-${cacheKey}\n`);
   await fs.appendFile(env, `GH_CACHE_PNPM_KEY_PARTIAL=pnpm-${partialKey}\n`);
 
@@ -78,4 +114,5 @@ async function setupPNPMCaching() {
 }
 
 await setupGoCaching();
+await setupUVCaching();
 await setupPNPMCaching();

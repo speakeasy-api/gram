@@ -5,19 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 type IsRBACEnabled func(ctx context.Context, organizationID string) (bool, error)
@@ -29,28 +24,6 @@ type MembershipFetcher interface {
 
 type EngineOpts struct {
 	DevMode bool
-}
-
-// roleSlugCache is the Redis cache entry for a resolved role slug.
-// Key is org-first so DeleteByPrefix on "role-slug:{orgID}:" invalidates the whole org.
-type roleSlugCache struct {
-	UserID string
-	OrgID  string
-	Slug   string
-}
-
-var _ cache.CacheableObject[roleSlugCache] = (*roleSlugCache)(nil)
-
-func (r roleSlugCache) CacheKey() string {
-	return "role-slug:" + r.OrgID + ":" + r.UserID
-}
-
-func (r roleSlugCache) TTL() time.Duration {
-	return 5 * time.Minute
-}
-
-func (r roleSlugCache) AdditionalCacheKeys() []string {
-	return nil
 }
 
 // ChallengeLoggingEnabled checks whether authz challenge logging to ClickHouse
@@ -65,10 +38,9 @@ type Engine struct {
 	challengeLoggingEnabled ChallengeLoggingEnabled
 	isDev                   bool
 	membership              MembershipFetcher
-	roleCache               cache.TypedCacheObject[roleSlugCache]
 }
 
-func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEnabled IsRBACEnabled, challengeLogging ChallengeLoggingEnabled, membership MembershipFetcher, roleCache cache.Cache, opts ...EngineOpts) *Engine {
+func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEnabled IsRBACEnabled, challengeLogging ChallengeLoggingEnabled, membership MembershipFetcher, opts ...EngineOpts) *Engine {
 	var devMode bool
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
@@ -84,7 +56,6 @@ func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEn
 		challengeLoggingEnabled: challengeLogging,
 		isDev:                   devMode,
 		membership:              membership,
-		roleCache:               cache.NewTypedObjectCache[roleSlugCache](logger.With(attr.SlogCacheNamespace("authz-role-slug")), roleCache, cache.SuffixNone),
 	}
 }
 
@@ -156,21 +127,22 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		}
 	}
 
-	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)}
-
-	roleSlug, err := e.resolveRoleSlug(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
+	principals, err := ResolveUserPrincipals(ctx, e.db, authCtx.ActiveOrganizationID, authCtx.UserID)
 	if err != nil {
+		if errors.Is(err, ErrPrincipalInvalid) {
+			return ctx, oops.E(oops.CodeUnauthorized, err, "invalid user principal")
+		}
+		if errors.Is(err, ErrPrincipalNotFound) {
+			return GrantsToContext(ctx, nil), nil
+		}
 		e.logger.ErrorContext(
 			ctx,
-			"failed to resolve role for authz grants",
+			"failed to resolve principals for authz grants",
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 			attr.SlogUserID(authCtx.UserID),
 			attr.SlogError(err),
 		)
-		return ctx, fmt.Errorf("resolve role slug: %w", err)
-	}
-	if roleSlug != "" {
-		principals = append(principals, urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug))
+		return ctx, fmt.Errorf("resolve principals: %w", err)
 	}
 
 	grants, err := LoadGrants(ctx, e.db, authCtx.ActiveOrganizationID, principals)
@@ -188,79 +160,6 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	return GrantsToContext(ctx, grants), nil
 }
 
-func (e *Engine) resolveRoleSlug(ctx context.Context, userID, orgID string) (string, error) {
-	cacheKey := roleSlugCache{UserID: userID, OrgID: orgID, Slug: ""}.CacheKey()
-	if cached, err := e.roleCache.Get(ctx, cacheKey); err == nil {
-		return cached.Slug, nil
-	}
-
-	user, err := usersrepo.New(e.db).GetUser(ctx, userID)
-	if err != nil {
-		return "", fmt.Errorf("get user: %w", err)
-	}
-	if !user.WorkosID.Valid || user.WorkosID.String == "" {
-		e.storeRoleSlugCache(ctx, userID, orgID, "")
-		return "", nil
-	}
-
-	org, err := orgrepo.New(e.db).GetOrganizationMetadata(ctx, orgID)
-	if err != nil {
-		return "", fmt.Errorf("get org: %w", err)
-	}
-	if !org.WorkosID.Valid || org.WorkosID.String == "" {
-		e.storeRoleSlugCache(ctx, userID, orgID, "")
-		return "", nil
-	}
-
-	member, err := e.membership.GetOrgMembership(ctx, user.WorkosID.String, org.WorkosID.String)
-	if err != nil {
-		return "", fmt.Errorf("get org membership: %w", err)
-	}
-	if member == nil {
-		e.storeRoleSlugCache(ctx, userID, orgID, "")
-		return "", nil
-	}
-
-	e.storeRoleSlugCache(ctx, userID, orgID, member.RoleSlug)
-
-	return member.RoleSlug, nil
-}
-
-func (e *Engine) storeRoleSlugCache(ctx context.Context, userID, orgID, slug string) {
-	entry := roleSlugCache{UserID: userID, OrgID: orgID, Slug: slug}
-	if err := e.roleCache.Store(ctx, entry); err != nil {
-		e.logger.WarnContext(ctx, "failed to cache role slug",
-			attr.SlogUserID(userID),
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-	}
-}
-
-// InvalidateRoleCache removes the cached role slug for a single user. Call
-// this after updating a specific member's role via UpdateMemberRole.
-func (e *Engine) InvalidateRoleCache(ctx context.Context, userID, orgID string) {
-	entry := roleSlugCache{UserID: userID, OrgID: orgID, Slug: ""}
-	if err := e.roleCache.Delete(ctx, entry); err != nil {
-		e.logger.WarnContext(ctx, "failed to invalidate cached role slug",
-			attr.SlogUserID(userID),
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-	}
-}
-
-// InvalidateAllRoleCaches removes all cached role slugs for an org. Call this
-// after bulk role reassignments where individual user IDs aren't tracked.
-func (e *Engine) InvalidateAllRoleCaches(ctx context.Context, orgID string) {
-	if err := e.roleCache.DeleteByPrefix(ctx, "role-slug:"+orgID+":"); err != nil {
-		e.logger.WarnContext(ctx, "failed to invalidate cached role slugs for org",
-			attr.SlogOrganizationID(orgID),
-			attr.SlogError(err),
-		)
-	}
-}
-
 func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
@@ -276,6 +175,17 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 	grants, ok := GrantsFromContext(ctx)
 	if !ok {
 		return e.mapError(ctx, ErrMissingGrants)
+	}
+
+	return e.EvaluateLoadedGrants(ctx, grants, checks...)
+}
+
+// EvaluateLoadedGrants evaluates explicit grants against checks without
+// consulting ShouldEnforce or reading grants from context. Request handlers
+// should use Require so normal request enforcement semantics apply.
+func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, checks ...Check) error {
+	if len(checks) == 0 {
+		return e.mapError(ctx, ErrNoChecks)
 	}
 
 	matches := make([]grantMatch, 0, len(checks))
@@ -297,10 +207,13 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 
 		expanded := check.expand()
 
-		matchedGrant, matchedCheck := findMatchingGrant(grants, expanded)
+		matchedGrant, matchedCheck, denied := evaluateGrants(grants, expanded)
 		if matchedGrant == nil {
 			reason := authzrepo.ReasonScopeUnsatisfied
-			if len(grants) == 0 {
+			switch {
+			case denied:
+				reason = authzrepo.ReasonDenyGrant
+			case len(grants) == 0:
 				reason = authzrepo.ReasonNoGrants
 			}
 			challengeLogger{
@@ -367,8 +280,14 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		}
 	}
 
+	anyDenied := false
 	for _, check := range checks {
-		if matchedGrant, matchedCheck := findMatchingGrant(grants, check.expand()); matchedGrant != nil {
+		matchedGrant, matchedCheck, denied := evaluateGrants(grants, check.expand())
+		if denied {
+			anyDenied = true
+			continue
+		}
+		if matchedGrant != nil {
 			challengeLogger{
 				Operation:            authzrepo.OperationRequireAny,
 				Outcome:              authzrepo.OutcomeAllow,
@@ -385,7 +304,10 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	}
 
 	reason := authzrepo.ReasonScopeUnsatisfied
-	if len(grants) == 0 {
+	switch {
+	case anyDenied:
+		reason = authzrepo.ReasonDenyGrant
+	case len(grants) == 0:
 		reason = authzrepo.ReasonNoGrants
 	}
 	challengeLogger{
@@ -425,6 +347,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 
 	allowed := make([]string, 0, len(checks))
 	matches := make([]grantMatch, 0, len(checks))
+	anyDenied := false
 	for _, c := range checks {
 		if err := validateInput(c); err != nil {
 			focus := c
@@ -442,7 +365,11 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 			return nil, e.mapError(ctx, err)
 		}
 
-		if matchedGrant, matchedCheck := findMatchingGrant(grants, c.expand()); matchedGrant != nil {
+		matchedGrant, matchedCheck, denied := evaluateGrants(grants, c.expand())
+		if denied {
+			anyDenied = true
+		}
+		if matchedGrant != nil {
 			allowed = append(allowed, c.ResourceID)
 			matches = append(matches, grantMatch{Grant: *matchedGrant, ViaCheck: *matchedCheck})
 		}
@@ -455,6 +382,8 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 		case len(allowed) > 0:
 			outcome = authzrepo.OutcomeAllow
 			reason = authzrepo.ReasonGrantMatched
+		case anyDenied:
+			reason = authzrepo.ReasonDenyGrant
 		case len(grants) == 0:
 			reason = authzrepo.ReasonNoGrants
 		}
@@ -472,6 +401,97 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	}
 
 	return allowed, nil
+}
+
+// FindMatched evaluates each check and returns a parallel slice of match
+// indicators aligned with the input order — matched[i] is true when checks[i]
+// is authorized for the caller. It exists alongside [Filter] for cases where
+// the caller needs per-check granularity that the ResourceID-keyed Filter
+// return can't express — for example, filtering an MCP tools/list response
+// where every check carries the same toolset/server ResourceID and per-tool
+// granularity lives in the Tool dimension.
+//
+// When RBAC is not enforced every entry is true. An empty input returns an
+// empty slice, no log. A single challenge-log entry is emitted for the batch
+// (same as [Filter]); per-check logs are intentionally avoided so callers can
+// safely use this with large input sets like a full tools/list.
+func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error) {
+	enforce, err := e.ShouldEnforce(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if !enforce {
+		out := make([]bool, len(checks))
+		for i := range out {
+			out[i] = true
+		}
+		return out, nil
+	}
+
+	grants, ok := GrantsFromContext(ctx)
+	if !ok {
+		return nil, e.mapError(ctx, ErrMissingGrants)
+	}
+
+	matched := make([]bool, len(checks))
+	matches := make([]grantMatch, 0, len(checks))
+	allowedCount := 0
+	anyDenied := false
+	for i, c := range checks {
+		if err := validateInput(c); err != nil {
+			focus := c
+			challengeLogger{
+				Operation:            authzrepo.OperationFilter,
+				Outcome:              authzrepo.OutcomeError,
+				Reason:               authzrepo.ReasonInvalidCheck,
+				Checks:               checks,
+				Focus:                &focus,
+				Matches:              nil,
+				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+				FilterAllowedCount:   0,
+			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+			return nil, e.mapError(ctx, err)
+		}
+
+		matchedGrant, matchedCheck, denied := evaluateGrants(grants, c.expand())
+		if denied {
+			anyDenied = true
+		}
+		if matchedGrant != nil {
+			matched[i] = true
+			matches = append(matches, grantMatch{Grant: *matchedGrant, ViaCheck: *matchedCheck})
+			allowedCount++
+		}
+	}
+
+	if len(checks) > 0 {
+		outcome := authzrepo.OutcomeDeny
+		reason := authzrepo.ReasonScopeUnsatisfied
+		switch {
+		case allowedCount > 0:
+			outcome = authzrepo.OutcomeAllow
+			reason = authzrepo.ReasonGrantMatched
+		case anyDenied:
+			reason = authzrepo.ReasonDenyGrant
+		case len(grants) == 0:
+			reason = authzrepo.ReasonNoGrants
+		}
+		challengeLogger{
+			Operation:            authzrepo.OperationFilter,
+			Outcome:              outcome,
+			Reason:               reason,
+			Checks:               checks,
+			Focus:                nil,
+			Matches:              matches,
+			EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+			FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+			FilterAllowedCount:   uint32(allowedCount),
+		}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
+	}
+
+	return matched, nil
 }
 
 func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
@@ -503,7 +523,7 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 
 	enabled, err := e.isEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, e.logger)
+		return false, oops.E(oops.CodeUnexpected, err, "check RBAC feature").LogError(ctx, e.logger)
 	}
 
 	return enabled, nil
@@ -525,10 +545,10 @@ func (e *Engine) mapError(ctx context.Context, err error) error {
 	case errors.Is(err, ErrDenied):
 		return oops.C(oops.CodeForbidden)
 	case errors.Is(err, ErrMissingGrants):
-		return oops.E(oops.CodeUnexpected, err, "authz grants missing from prepared context").Log(ctx, e.logger)
+		return oops.E(oops.CodeUnexpected, err, "authz grants missing from prepared context").LogError(ctx, e.logger)
 	case errors.Is(err, ErrInvalidCheck), errors.Is(err, ErrNoChecks):
-		return oops.E(oops.CodeUnexpected, err, "invalid authz check").Log(ctx, e.logger)
+		return oops.E(oops.CodeUnexpected, err, "invalid authz check").LogError(ctx, e.logger)
 	default:
-		return oops.E(oops.CodeUnexpected, err, "check authz").Log(ctx, e.logger)
+		return oops.E(oops.CodeUnexpected, err, "check authz").LogError(ctx, e.logger)
 	}
 }

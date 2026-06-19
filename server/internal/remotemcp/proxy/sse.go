@@ -10,11 +10,20 @@ import (
 	"strings"
 )
 
-// forEachSSEEvent scans an SSE stream from r, calling fn once per event. The
-// raw event bytes (including SSE framing, terminated with the blank-line
-// separator) and the event's concatenated "data:" payload are both passed to
-// fn so the caller can relay the raw bytes to the user verbatim while
-// separately inspecting or decoding the payload.
+// forEachSSEEvent scans an SSE stream from r, calling fn once per event with
+// three views of the event:
+//
+//   - rawEvent: the event's bytes as received, including SSE framing and the
+//     terminating blank-line separator. Callers that relay the upstream
+//     stream verbatim write these bytes to the client unchanged.
+//   - data: the event's concatenated "data:" field values, joined with "\n"
+//     when the event carried multiple data: lines. The caller decodes this
+//     as the event's payload (e.g. a JSON-RPC message).
+//   - nonData: all other lines from the event ("event:", "id:", "retry:",
+//     comment lines starting with ":") in their original order, each
+//     terminated with "\n". Callers that need to re-emit the event with a
+//     mutated payload pair this with [formatSSEEventWithData] so the
+//     non-data fields survive the swap.
 //
 // maxEventBytes bounds the accepted size of a single event. If an event's
 // raw bytes or concatenated data payload exceeds this, [ErrBodyTooLarge] is
@@ -22,11 +31,9 @@ import (
 // bodies — each SSE event is an independent allocation bounded by the same
 // rule.
 //
-// Only "data:" fields are accumulated for the payload; "event:", "id:",
-// "retry:", and comment lines are relayed verbatim but ignored for payload
-// purposes. If an event ends without a trailing blank line (abrupt stream
-// close), any pending buffered event is emitted before return.
-func forEachSSEEvent(r io.Reader, maxEventBytes int64, fn func(rawEvent []byte, data []byte) error) error {
+// If an event ends without a trailing blank line (abrupt stream close), any
+// pending buffered event is emitted before return.
+func forEachSSEEvent(r io.Reader, maxEventBytes int64, fn func(rawEvent []byte, data []byte, nonData []byte) error) error {
 	scanner := bufio.NewScanner(r)
 	// Initial + max line buffer sizes. Max is set to maxEventBytes+1 so a
 	// single oversized line (i.e. one gigantic data: value) trips the
@@ -34,19 +41,21 @@ func forEachSSEEvent(r io.Reader, maxEventBytes int64, fn func(rawEvent []byte, 
 	scanner.Buffer(make([]byte, 0, 64*1024), int(maxEventBytes+1))
 
 	var (
-		eventBuf bytes.Buffer // raw event bytes as received, for verbatim relay
-		dataBuf  bytes.Buffer // concatenated data: fields for parsing
+		eventBuf   bytes.Buffer // raw event bytes as received, for verbatim relay
+		dataBuf    bytes.Buffer // concatenated data: fields for parsing
+		nonDataBuf bytes.Buffer // non-data lines (event:, id:, retry:, comments), for re-emission with a mutated payload
 	)
 
 	emit := func() error {
 		defer func() {
 			eventBuf.Reset()
 			dataBuf.Reset()
+			nonDataBuf.Reset()
 		}()
 		if eventBuf.Len() == 0 {
 			return nil
 		}
-		if err := fn(eventBuf.Bytes(), dataBuf.Bytes()); err != nil {
+		if err := fn(eventBuf.Bytes(), dataBuf.Bytes(), nonDataBuf.Bytes()); err != nil {
 			return err
 		}
 		return nil
@@ -71,11 +80,6 @@ func forEachSSEEvent(r io.Reader, maxEventBytes int64, fn func(rawEvent []byte, 
 			continue
 		}
 
-		if line[0] == ':' {
-			// Comment line — retained in raw event for relay, not part of payload.
-			continue
-		}
-
 		if bytes.HasPrefix(line, []byte("data:")) {
 			val := line[len("data:"):]
 			if len(val) > 0 && val[0] == ' ' {
@@ -88,9 +92,20 @@ func forEachSSEEvent(r io.Reader, maxEventBytes int64, fn func(rawEvent []byte, 
 				dataBuf.WriteByte('\n')
 			}
 			dataBuf.Write(val)
+			continue
 		}
-		// Other SSE fields (event:, id:, retry:) are preserved in the raw
-		// event bytes for relay but not interpreted here.
+
+		// Anything that isn't a data: line — event:, id:, retry:, and
+		// comments (lines starting with ":") — is captured into nonDataBuf
+		// so it can be re-emitted alongside a mutated payload via
+		// formatSSEEventWithData. Capped against maxEventBytes alongside
+		// the raw event buffer so a runaway non-data field also trips
+		// ErrBodyTooLarge.
+		if int64(nonDataBuf.Len())+int64(len(line))+1 > maxEventBytes {
+			return ErrBodyTooLarge
+		}
+		nonDataBuf.Write(line)
+		nonDataBuf.WriteByte('\n')
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -106,6 +121,28 @@ func forEachSSEEvent(r io.Reader, maxEventBytes int64, fn func(rawEvent []byte, 
 	// Flush any event that was left open because the stream ended without a
 	// terminating blank line.
 	return emit()
+}
+
+// formatSSEEventWithData rebuilds an SSE event by combining the original
+// non-data lines from an upstream event (event:, id:, retry:, comments —
+// each terminated with "\n", as produced by [forEachSSEEvent]) with a
+// replacement payload that becomes the event's single "data:" field. The
+// result has the form:
+//
+//	<nonData>data: <payload>\n\n
+//
+// payload must not contain literal newlines; the proxy only re-emits
+// mutated events for JSON-RPC messages, whose marshaled bytes encode
+// newlines as "\n" escape sequences inside strings. The terminating blank
+// line is appended unconditionally so the event is well-framed even when
+// nonData is empty.
+func formatSSEEventWithData(nonData []byte, payload []byte) []byte {
+	out := make([]byte, 0, len(nonData)+len(payload)+8)
+	out = append(out, nonData...)
+	out = append(out, "data: "...)
+	out = append(out, payload...)
+	out = append(out, '\n', '\n')
+	return out
 }
 
 // isEventStream reports whether the given response headers indicate an MCP

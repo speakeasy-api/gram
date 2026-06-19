@@ -12,13 +12,13 @@ import {
 
 export type UpdateRoleForm = {
   /**
+   * Scope grants to add.
+   */
+  addGrants?: Array<RoleGrant> | undefined;
+  /**
    * Updated description.
    */
   description?: string | undefined;
-  /**
-   * Updated scope grants.
-   */
-  grants?: Array<RoleGrant> | undefined;
   /**
    * The ID of the role to update.
    */
@@ -31,15 +31,20 @@ export type UpdateRoleForm = {
    * Updated display name.
    */
   name?: string | undefined;
+  /**
+   * Scope grants to remove.
+   */
+  removeGrants?: Array<RoleGrant> | undefined;
 };
 
 /** @internal */
 export type UpdateRoleForm$Outbound = {
+  add_grants?: Array<RoleGrant$Outbound> | undefined;
   description?: string | undefined;
-  grants?: Array<RoleGrant$Outbound> | undefined;
   id: string;
   member_ids?: Array<string> | undefined;
   name?: string | undefined;
+  remove_grants?: Array<RoleGrant$Outbound> | undefined;
 };
 
 /** @internal */
@@ -48,15 +53,18 @@ export const UpdateRoleForm$outboundSchema: z.ZodMiniType<
   UpdateRoleForm
 > = z.pipe(
   z.object({
+    addGrants: z.optional(z.array(RoleGrant$outboundSchema)),
     description: z.optional(z.string()),
-    grants: z.optional(z.array(RoleGrant$outboundSchema)),
     id: z.string(),
     memberIds: z.optional(z.array(z.string())),
     name: z.optional(z.string()),
+    removeGrants: z.optional(z.array(RoleGrant$outboundSchema)),
   }),
   z.transform((v) => {
     return remap$(v, {
+      addGrants: "add_grants",
       memberIds: "member_ids",
+      removeGrants: "remove_grants",
     });
   }),
 );

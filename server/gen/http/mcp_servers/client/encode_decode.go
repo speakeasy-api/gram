@@ -297,7 +297,12 @@ func EncodeGetMcpServerRequest(encoder func(*http.Request) goahttp.Encoder) func
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		values.Add("id", p.ID)
+		if p.ID != nil {
+			values.Add("id", *p.ID)
+		}
+		if p.Slug != nil {
+			values.Add("slug", *p.Slug)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -990,6 +995,252 @@ func DecodeUpdateMcpServerResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildListToolFiltersRequest instantiates a HTTP request object with method
+// and path set to call the "mcpServers" service "listToolFilters" endpoint
+func (c *Client) BuildListToolFiltersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListToolFiltersMcpServersPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpServers", "listToolFilters", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListToolFiltersRequest returns an encoder for requests sent to the
+// mcpServers listToolFilters server.
+func EncodeListToolFiltersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpservers.ListToolFiltersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpServers", "listToolFilters", "*mcpservers.ListToolFiltersPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.ID != nil {
+			values.Add("id", *p.ID)
+		}
+		if p.Slug != nil {
+			values.Add("slug", *p.Slug)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListToolFiltersResponse returns a decoder for responses returned by
+// the mcpServers listToolFilters endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListToolFiltersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListToolFiltersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListToolFiltersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolFilters", err)
+			}
+			err = ValidateListToolFiltersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolFilters", err)
+			}
+			res := NewListToolFiltersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListToolFiltersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolFilters", err)
+			}
+			err = ValidateListToolFiltersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolFilters", err)
+			}
+			return nil, NewListToolFiltersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListToolFiltersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolFilters", err)
+			}
+			err = ValidateListToolFiltersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolFilters", err)
+			}
+			return nil, NewListToolFiltersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListToolFiltersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolFilters", err)
+			}
+			err = ValidateListToolFiltersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolFilters", err)
+			}
+			return nil, NewListToolFiltersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListToolFiltersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolFilters", err)
+			}
+			err = ValidateListToolFiltersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolFilters", err)
+			}
+			return nil, NewListToolFiltersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListToolFiltersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolFilters", err)
+			}
+			err = ValidateListToolFiltersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolFilters", err)
+			}
+			return nil, NewListToolFiltersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListToolFiltersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolFilters", err)
+			}
+			err = ValidateListToolFiltersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolFilters", err)
+			}
+			return nil, NewListToolFiltersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListToolFiltersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolFilters", err)
+			}
+			err = ValidateListToolFiltersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolFilters", err)
+			}
+			return nil, NewListToolFiltersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListToolFiltersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "listToolFilters", err)
+				}
+				err = ValidateListToolFiltersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "listToolFilters", err)
+				}
+				return nil, NewListToolFiltersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListToolFiltersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "listToolFilters", err)
+				}
+				err = ValidateListToolFiltersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "listToolFilters", err)
+				}
+				return nil, NewListToolFiltersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpServers", "listToolFilters", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListToolFiltersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "listToolFilters", err)
+			}
+			err = ValidateListToolFiltersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "listToolFilters", err)
+			}
+			return nil, NewListToolFiltersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpServers", "listToolFilters", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteMcpServerRequest instantiates a HTTP request object with method
 // and path set to call the "mcpServers" service "deleteMcpServer" endpoint
 func (c *Client) BuildDeleteMcpServerRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1224,14 +1475,47 @@ func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *t
 	res := &types.McpServer{
 		ID:                    *v.ID,
 		ProjectID:             *v.ProjectID,
+		Name:                  v.Name,
+		Slug:                  v.Slug,
 		EnvironmentID:         v.EnvironmentID,
-		ExternalOauthServerID: v.ExternalOauthServerID,
-		OauthProxyServerID:    v.OauthProxyServerID,
+		UserSessionIssuerID:   v.UserSessionIssuerID,
 		RemoteMcpServerID:     v.RemoteMcpServerID,
 		ToolsetID:             v.ToolsetID,
+		ToolVariationsGroupID: v.ToolVariationsGroupID,
 		Visibility:            types.McpServerVisibility(*v.Visibility),
 		CreatedAt:             *v.CreatedAt,
 		UpdatedAt:             *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalToolFilterScopeResponseBodyToTypesToolFilterScope builds a value of
+// type *types.ToolFilterScope from a value of type
+// *ToolFilterScopeResponseBody.
+func unmarshalToolFilterScopeResponseBodyToTypesToolFilterScope(v *ToolFilterScopeResponseBody) *types.ToolFilterScope {
+	res := &types.ToolFilterScope{
+		Tag:       *v.Tag,
+		ToolCount: *v.ToolCount,
+	}
+	res.Tools = make([]*types.ToolFilterTool, len(v.Tools))
+	for i, val := range v.Tools {
+		if val == nil {
+			res.Tools[i] = nil
+			continue
+		}
+		res.Tools[i] = unmarshalToolFilterToolResponseBodyToTypesToolFilterTool(val)
+	}
+
+	return res
+}
+
+// unmarshalToolFilterToolResponseBodyToTypesToolFilterTool builds a value of
+// type *types.ToolFilterTool from a value of type *ToolFilterToolResponseBody.
+func unmarshalToolFilterToolResponseBodyToTypesToolFilterTool(v *ToolFilterToolResponseBody) *types.ToolFilterTool {
+	res := &types.ToolFilterTool{
+		ToolUrn: *v.ToolUrn,
+		Name:    *v.Name,
 	}
 
 	return res

@@ -16,16 +16,21 @@ import (
 // CreateMcpServerRequestBody is the type of the "mcpServers" service
 // "createMcpServer" endpoint HTTP request body.
 type CreateMcpServerRequestBody struct {
+	// A human-readable display name for the server
+	Name string `form:"name" json:"name" xml:"name"`
 	// The ID of the environment to associate with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	// The ID of the external OAuth server to associate with the server
-	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
-	// The ID of the OAuth proxy server to associate with the server
-	OauthProxyServerID *string `form:"oauth_proxy_server_id,omitempty" json:"oauth_proxy_server_id,omitempty" xml:"oauth_proxy_server_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication. When set, MCP clients are required to authenticate against
+	// this issuer before connecting.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset to use as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server. Omit to leave filtering disabled.
+	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
 	// The visibility of the server
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 }
@@ -35,16 +40,22 @@ type CreateMcpServerRequestBody struct {
 type UpdateMcpServerRequestBody struct {
 	// The ID of the MCP server to update
 	ID string `form:"id" json:"id" xml:"id"`
+	// A human-readable display name for the server. Omit to leave the existing
+	// name unchanged; if provided, must be non-empty.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The ID of the environment to associate with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	// The ID of the external OAuth server to associate with the server
-	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
-	// The ID of the OAuth proxy server to associate with the server
-	OauthProxyServerID *string `form:"oauth_proxy_server_id,omitempty" json:"oauth_proxy_server_id,omitempty" xml:"oauth_proxy_server_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication. Omit to disable issuer-gated OAuth.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server to use as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset to use as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server. Omit to disable filtering (cleared to null, consistent with the
+	// full-record replace semantics of the other UUID references).
+	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
 	// The visibility of the server
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 }
@@ -56,16 +67,22 @@ type CreateMcpServerResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID this MCP server belongs to
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	// The ID of the external OAuth server associated with the server
-	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
-	// The ID of the OAuth proxy server associated with the server
-	OauthProxyServerID *string `form:"oauth_proxy_server_id,omitempty" json:"oauth_proxy_server_id,omitempty" xml:"oauth_proxy_server_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication for this server, if any.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server, if any.
+	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// When the MCP server was created
@@ -81,16 +98,22 @@ type GetMcpServerResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID this MCP server belongs to
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	// The ID of the external OAuth server associated with the server
-	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
-	// The ID of the OAuth proxy server associated with the server
-	OauthProxyServerID *string `form:"oauth_proxy_server_id,omitempty" json:"oauth_proxy_server_id,omitempty" xml:"oauth_proxy_server_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication for this server, if any.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server, if any.
+	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// When the MCP server was created
@@ -112,22 +135,48 @@ type UpdateMcpServerResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID this MCP server belongs to
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	// The ID of the external OAuth server associated with the server
-	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
-	// The ID of the OAuth proxy server associated with the server
-	OauthProxyServerID *string `form:"oauth_proxy_server_id,omitempty" json:"oauth_proxy_server_id,omitempty" xml:"oauth_proxy_server_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication for this server, if any.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server, if any.
+	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ListToolFiltersResponseBody is the type of the "mcpServers" service
+// "listToolFilters" endpoint HTTP response body.
+type ListToolFiltersResponseBody struct {
+	// Whether tool filtering is enabled, i.e. the resolution chain (mcp_servers
+	// then toolsets) yields a non-null tool variations group. When false, scopes
+	// and excluded are empty. A project-default (source-level) variations group is
+	// not treated as filtering here.
+	FilteringEnabled *bool `form:"filtering_enabled,omitempty" json:"filtering_enabled,omitempty" xml:"filtering_enabled,omitempty"`
+	// The ID of the resolved tool variations group, if filtering is enabled.
+	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// The name of the resolved tool variations group, if filtering is enabled.
+	ToolVariationsGroupName *string `form:"tool_variations_group_name,omitempty" json:"tool_variations_group_name,omitempty" xml:"tool_variations_group_name,omitempty"`
+	// The available filter scopes (tags), each with its member tools. Union of
+	// effective tags across the server's tools.
+	Scopes []*ToolFilterScopeResponseBody `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
+	// Tools whose effective tag set is empty: reachable only without a ?tags=
+	// filter.
+	Excluded []*ToolFilterToolResponseBody `form:"excluded,omitempty" json:"excluded,omitempty" xml:"excluded,omitempty"`
 }
 
 // CreateMcpServerUnauthorizedResponseBody is the type of the "mcpServers"
@@ -868,6 +917,192 @@ type UpdateMcpServerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListToolFiltersUnauthorizedResponseBody is the type of the "mcpServers"
+// service "listToolFilters" endpoint HTTP response body for the "unauthorized"
+// error.
+type ListToolFiltersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolFiltersForbiddenResponseBody is the type of the "mcpServers" service
+// "listToolFilters" endpoint HTTP response body for the "forbidden" error.
+type ListToolFiltersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolFiltersBadRequestResponseBody is the type of the "mcpServers"
+// service "listToolFilters" endpoint HTTP response body for the "bad_request"
+// error.
+type ListToolFiltersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolFiltersNotFoundResponseBody is the type of the "mcpServers" service
+// "listToolFilters" endpoint HTTP response body for the "not_found" error.
+type ListToolFiltersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolFiltersConflictResponseBody is the type of the "mcpServers" service
+// "listToolFilters" endpoint HTTP response body for the "conflict" error.
+type ListToolFiltersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolFiltersUnsupportedMediaResponseBody is the type of the "mcpServers"
+// service "listToolFilters" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListToolFiltersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolFiltersInvalidResponseBody is the type of the "mcpServers" service
+// "listToolFilters" endpoint HTTP response body for the "invalid" error.
+type ListToolFiltersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolFiltersInvariantViolationResponseBody is the type of the
+// "mcpServers" service "listToolFilters" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListToolFiltersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolFiltersUnexpectedResponseBody is the type of the "mcpServers"
+// service "listToolFilters" endpoint HTTP response body for the "unexpected"
+// error.
+type ListToolFiltersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListToolFiltersGatewayErrorResponseBody is the type of the "mcpServers"
+// service "listToolFilters" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListToolFiltersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DeleteMcpServerUnauthorizedResponseBody is the type of the "mcpServers"
 // service "deleteMcpServer" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1060,16 +1295,22 @@ type McpServerResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID this MCP server belongs to
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
-	// The ID of the external OAuth server associated with the server
-	ExternalOauthServerID *string `form:"external_oauth_server_id,omitempty" json:"external_oauth_server_id,omitempty" xml:"external_oauth_server_id,omitempty"`
-	// The ID of the OAuth proxy server associated with the server
-	OauthProxyServerID *string `form:"oauth_proxy_server_id,omitempty" json:"oauth_proxy_server_id,omitempty" xml:"oauth_proxy_server_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication for this server, if any.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server, if any.
+	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// When the MCP server was created
@@ -1078,15 +1319,35 @@ type McpServerResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// ToolFilterScopeResponseBody is used to define fields on response body types.
+type ToolFilterScopeResponseBody struct {
+	// The filter tag
+	Tag *string `form:"tag,omitempty" json:"tag,omitempty" xml:"tag,omitempty"`
+	// The number of tools under this scope
+	ToolCount *int `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	// The tools under this scope
+	Tools []*ToolFilterToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+}
+
+// ToolFilterToolResponseBody is used to define fields on response body types.
+type ToolFilterToolResponseBody struct {
+	// The URN of the tool
+	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
+	// The display name of the tool, with any variation rename from the resolved
+	// group applied (matching the runtime wire)
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
 // NewCreateMcpServerRequestBody builds the HTTP request body from the payload
 // of the "createMcpServer" endpoint of the "mcpServers" service.
 func NewCreateMcpServerRequestBody(p *mcpservers.CreateMcpServerPayload) *CreateMcpServerRequestBody {
 	body := &CreateMcpServerRequestBody{
+		Name:                  p.Name,
 		EnvironmentID:         p.EnvironmentID,
-		ExternalOauthServerID: p.ExternalOauthServerID,
-		OauthProxyServerID:    p.OauthProxyServerID,
+		UserSessionIssuerID:   p.UserSessionIssuerID,
 		RemoteMcpServerID:     p.RemoteMcpServerID,
 		ToolsetID:             p.ToolsetID,
+		ToolVariationsGroupID: p.ToolVariationsGroupID,
 		Visibility:            string(p.Visibility),
 	}
 	return body
@@ -1097,11 +1358,12 @@ func NewCreateMcpServerRequestBody(p *mcpservers.CreateMcpServerPayload) *Create
 func NewUpdateMcpServerRequestBody(p *mcpservers.UpdateMcpServerPayload) *UpdateMcpServerRequestBody {
 	body := &UpdateMcpServerRequestBody{
 		ID:                    p.ID,
+		Name:                  p.Name,
 		EnvironmentID:         p.EnvironmentID,
-		ExternalOauthServerID: p.ExternalOauthServerID,
-		OauthProxyServerID:    p.OauthProxyServerID,
+		UserSessionIssuerID:   p.UserSessionIssuerID,
 		RemoteMcpServerID:     p.RemoteMcpServerID,
 		ToolsetID:             p.ToolsetID,
+		ToolVariationsGroupID: p.ToolVariationsGroupID,
 		Visibility:            string(p.Visibility),
 	}
 	return body
@@ -1113,11 +1375,13 @@ func NewCreateMcpServerMcpServerOK(body *CreateMcpServerResponseBody) *types.Mcp
 	v := &types.McpServer{
 		ID:                    *body.ID,
 		ProjectID:             *body.ProjectID,
+		Name:                  body.Name,
+		Slug:                  body.Slug,
 		EnvironmentID:         body.EnvironmentID,
-		ExternalOauthServerID: body.ExternalOauthServerID,
-		OauthProxyServerID:    body.OauthProxyServerID,
+		UserSessionIssuerID:   body.UserSessionIssuerID,
 		RemoteMcpServerID:     body.RemoteMcpServerID,
 		ToolsetID:             body.ToolsetID,
+		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		Visibility:            types.McpServerVisibility(*body.Visibility),
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
@@ -1282,11 +1546,13 @@ func NewGetMcpServerMcpServerOK(body *GetMcpServerResponseBody) *types.McpServer
 	v := &types.McpServer{
 		ID:                    *body.ID,
 		ProjectID:             *body.ProjectID,
+		Name:                  body.Name,
+		Slug:                  body.Slug,
 		EnvironmentID:         body.EnvironmentID,
-		ExternalOauthServerID: body.ExternalOauthServerID,
-		OauthProxyServerID:    body.OauthProxyServerID,
+		UserSessionIssuerID:   body.UserSessionIssuerID,
 		RemoteMcpServerID:     body.RemoteMcpServerID,
 		ToolsetID:             body.ToolsetID,
+		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		Visibility:            types.McpServerVisibility(*body.Visibility),
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
@@ -1617,11 +1883,13 @@ func NewUpdateMcpServerMcpServerOK(body *UpdateMcpServerResponseBody) *types.Mcp
 	v := &types.McpServer{
 		ID:                    *body.ID,
 		ProjectID:             *body.ProjectID,
+		Name:                  body.Name,
+		Slug:                  body.Slug,
 		EnvironmentID:         body.EnvironmentID,
-		ExternalOauthServerID: body.ExternalOauthServerID,
-		OauthProxyServerID:    body.OauthProxyServerID,
+		UserSessionIssuerID:   body.UserSessionIssuerID,
 		RemoteMcpServerID:     body.RemoteMcpServerID,
 		ToolsetID:             body.ToolsetID,
+		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		Visibility:            types.McpServerVisibility(*body.Visibility),
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
@@ -1768,6 +2036,184 @@ func NewUpdateMcpServerUnexpected(body *UpdateMcpServerUnexpectedResponseBody) *
 // NewUpdateMcpServerGatewayError builds a mcpServers service updateMcpServer
 // endpoint gateway_error error.
 func NewUpdateMcpServerGatewayError(body *UpdateMcpServerGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolFiltersResultOK builds a "mcpServers" service "listToolFilters"
+// endpoint result from a HTTP "OK" response.
+func NewListToolFiltersResultOK(body *ListToolFiltersResponseBody) *types.ListToolFiltersResult {
+	v := &types.ListToolFiltersResult{
+		FilteringEnabled:        *body.FilteringEnabled,
+		ToolVariationsGroupID:   body.ToolVariationsGroupID,
+		ToolVariationsGroupName: body.ToolVariationsGroupName,
+	}
+	v.Scopes = make([]*types.ToolFilterScope, len(body.Scopes))
+	for i, val := range body.Scopes {
+		if val == nil {
+			v.Scopes[i] = nil
+			continue
+		}
+		v.Scopes[i] = unmarshalToolFilterScopeResponseBodyToTypesToolFilterScope(val)
+	}
+	v.Excluded = make([]*types.ToolFilterTool, len(body.Excluded))
+	for i, val := range body.Excluded {
+		if val == nil {
+			v.Excluded[i] = nil
+			continue
+		}
+		v.Excluded[i] = unmarshalToolFilterToolResponseBodyToTypesToolFilterTool(val)
+	}
+
+	return v
+}
+
+// NewListToolFiltersUnauthorized builds a mcpServers service listToolFilters
+// endpoint unauthorized error.
+func NewListToolFiltersUnauthorized(body *ListToolFiltersUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolFiltersForbidden builds a mcpServers service listToolFilters
+// endpoint forbidden error.
+func NewListToolFiltersForbidden(body *ListToolFiltersForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolFiltersBadRequest builds a mcpServers service listToolFilters
+// endpoint bad_request error.
+func NewListToolFiltersBadRequest(body *ListToolFiltersBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolFiltersNotFound builds a mcpServers service listToolFilters
+// endpoint not_found error.
+func NewListToolFiltersNotFound(body *ListToolFiltersNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolFiltersConflict builds a mcpServers service listToolFilters
+// endpoint conflict error.
+func NewListToolFiltersConflict(body *ListToolFiltersConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolFiltersUnsupportedMedia builds a mcpServers service
+// listToolFilters endpoint unsupported_media error.
+func NewListToolFiltersUnsupportedMedia(body *ListToolFiltersUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolFiltersInvalid builds a mcpServers service listToolFilters
+// endpoint invalid error.
+func NewListToolFiltersInvalid(body *ListToolFiltersInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolFiltersInvariantViolation builds a mcpServers service
+// listToolFilters endpoint invariant_violation error.
+func NewListToolFiltersInvariantViolation(body *ListToolFiltersInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolFiltersUnexpected builds a mcpServers service listToolFilters
+// endpoint unexpected error.
+func NewListToolFiltersUnexpected(body *ListToolFiltersUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListToolFiltersGatewayError builds a mcpServers service listToolFilters
+// endpoint gateway_error error.
+func NewListToolFiltersGatewayError(body *ListToolFiltersGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1957,17 +2403,17 @@ func ValidateCreateMcpServerResponseBody(body *CreateMcpServerResponseBody) (err
 	if body.EnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 	}
-	if body.ExternalOauthServerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_oauth_server_id", *body.ExternalOauthServerID, goa.FormatUUID))
-	}
-	if body.OauthProxyServerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.oauth_proxy_server_id", *body.OauthProxyServerID, goa.FormatUUID))
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	if body.RemoteMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.ToolVariationsGroupID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
 	}
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
@@ -2010,17 +2456,17 @@ func ValidateGetMcpServerResponseBody(body *GetMcpServerResponseBody) (err error
 	if body.EnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 	}
-	if body.ExternalOauthServerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_oauth_server_id", *body.ExternalOauthServerID, goa.FormatUUID))
-	}
-	if body.OauthProxyServerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.oauth_proxy_server_id", *body.OauthProxyServerID, goa.FormatUUID))
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	if body.RemoteMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.ToolVariationsGroupID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
 	}
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
@@ -2079,17 +2525,17 @@ func ValidateUpdateMcpServerResponseBody(body *UpdateMcpServerResponseBody) (err
 	if body.EnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 	}
-	if body.ExternalOauthServerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_oauth_server_id", *body.ExternalOauthServerID, goa.FormatUUID))
-	}
-	if body.OauthProxyServerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.oauth_proxy_server_id", *body.OauthProxyServerID, goa.FormatUUID))
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	if body.RemoteMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.ToolVariationsGroupID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
 	}
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
@@ -2101,6 +2547,38 @@ func ValidateUpdateMcpServerResponseBody(body *UpdateMcpServerResponseBody) (err
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListToolFiltersResponseBody runs the validations defined on
+// ListToolFiltersResponseBody
+func ValidateListToolFiltersResponseBody(body *ListToolFiltersResponseBody) (err error) {
+	if body.FilteringEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("filtering_enabled", "body"))
+	}
+	if body.Scopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
+	}
+	if body.Excluded == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("excluded", "body"))
+	}
+	if body.ToolVariationsGroupID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
+	}
+	for _, e := range body.Scopes {
+		if e != nil {
+			if err2 := ValidateToolFilterScopeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Excluded {
+		if e != nil {
+			if err2 := ValidateToolFilterToolResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -3065,6 +3543,246 @@ func ValidateUpdateMcpServerGatewayErrorResponseBody(body *UpdateMcpServerGatewa
 	return
 }
 
+// ValidateListToolFiltersUnauthorizedResponseBody runs the validations defined
+// on listToolFilters_unauthorized_response_body
+func ValidateListToolFiltersUnauthorizedResponseBody(body *ListToolFiltersUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolFiltersForbiddenResponseBody runs the validations defined on
+// listToolFilters_forbidden_response_body
+func ValidateListToolFiltersForbiddenResponseBody(body *ListToolFiltersForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolFiltersBadRequestResponseBody runs the validations defined
+// on listToolFilters_bad_request_response_body
+func ValidateListToolFiltersBadRequestResponseBody(body *ListToolFiltersBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolFiltersNotFoundResponseBody runs the validations defined on
+// listToolFilters_not_found_response_body
+func ValidateListToolFiltersNotFoundResponseBody(body *ListToolFiltersNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolFiltersConflictResponseBody runs the validations defined on
+// listToolFilters_conflict_response_body
+func ValidateListToolFiltersConflictResponseBody(body *ListToolFiltersConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolFiltersUnsupportedMediaResponseBody runs the validations
+// defined on listToolFilters_unsupported_media_response_body
+func ValidateListToolFiltersUnsupportedMediaResponseBody(body *ListToolFiltersUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolFiltersInvalidResponseBody runs the validations defined on
+// listToolFilters_invalid_response_body
+func ValidateListToolFiltersInvalidResponseBody(body *ListToolFiltersInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolFiltersInvariantViolationResponseBody runs the validations
+// defined on listToolFilters_invariant_violation_response_body
+func ValidateListToolFiltersInvariantViolationResponseBody(body *ListToolFiltersInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolFiltersUnexpectedResponseBody runs the validations defined
+// on listToolFilters_unexpected_response_body
+func ValidateListToolFiltersUnexpectedResponseBody(body *ListToolFiltersUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListToolFiltersGatewayErrorResponseBody runs the validations defined
+// on listToolFilters_gateway_error_response_body
+func ValidateListToolFiltersGatewayErrorResponseBody(body *ListToolFiltersGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDeleteMcpServerUnauthorizedResponseBody runs the validations defined
 // on deleteMcpServer_unauthorized_response_body
 func ValidateDeleteMcpServerUnauthorizedResponseBody(body *DeleteMcpServerUnauthorizedResponseBody) (err error) {
@@ -3332,17 +4050,17 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 	if body.EnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 	}
-	if body.ExternalOauthServerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_oauth_server_id", *body.ExternalOauthServerID, goa.FormatUUID))
-	}
-	if body.OauthProxyServerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.oauth_proxy_server_id", *body.OauthProxyServerID, goa.FormatUUID))
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	if body.RemoteMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.ToolVariationsGroupID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
 	}
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
@@ -3354,6 +4072,40 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateToolFilterScopeResponseBody runs the validations defined on
+// ToolFilterScopeResponseBody
+func ValidateToolFilterScopeResponseBody(body *ToolFilterScopeResponseBody) (err error) {
+	if body.Tag == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tag", "body"))
+	}
+	if body.ToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
+	}
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	for _, e := range body.Tools {
+		if e != nil {
+			if err2 := ValidateToolFilterToolResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateToolFilterToolResponseBody runs the validations defined on
+// ToolFilterToolResponseBody
+func ValidateToolFilterToolResponseBody(body *ToolFilterToolResponseBody) (err error) {
+	if body.ToolUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	return
 }

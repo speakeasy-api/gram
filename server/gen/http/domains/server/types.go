@@ -17,6 +17,15 @@ import (
 type CreateDomainRequestBody struct {
 	// The custom domain
 	Domain *string `form:"domain,omitempty" json:"domain,omitempty" xml:"domain,omitempty"`
+	// IP addresses or CIDR ranges to allow. Leave empty for unrestricted access.
+	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
+}
+
+// UpdateDomainRequestBody is the type of the "domains" service "updateDomain"
+// endpoint HTTP request body.
+type UpdateDomainRequestBody struct {
+	// Replacement IP allowlist. Pass an empty list to remove all restrictions.
+	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
 }
 
 // GetDomainResponseBody is the type of the "domains" service "getDomain"
@@ -38,6 +47,39 @@ type GetDomainResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 	// The custom domain is actively being registered
 	IsUpdating bool `form:"is_updating" json:"is_updating" xml:"is_updating"`
+	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
+	// unrestricted.
+	IPAllowlist []string `form:"ip_allowlist" json:"ip_allowlist" xml:"ip_allowlist"`
+}
+
+// UpdateDomainResponseBody is the type of the "domains" service "updateDomain"
+// endpoint HTTP response body.
+type UpdateDomainResponseBody struct {
+	// The ID of the custom domain
+	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the organization this domain belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The custom domain name
+	Domain string `form:"domain" json:"domain" xml:"domain"`
+	// Whether the domain is verified
+	Verified bool `form:"verified" json:"verified" xml:"verified"`
+	// Whether the domain is activated in ingress
+	Activated bool `form:"activated" json:"activated" xml:"activated"`
+	// When the custom domain was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the custom domain was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The custom domain is actively being registered
+	IsUpdating bool `form:"is_updating" json:"is_updating" xml:"is_updating"`
+	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
+	// unrestricted.
+	IPAllowlist []string `form:"ip_allowlist" json:"ip_allowlist" xml:"ip_allowlist"`
+}
+
+// ListMcpEndpointsResponseBody is the type of the "domains" service
+// "listMcpEndpoints" endpoint HTTP response body.
+type ListMcpEndpointsResponseBody struct {
+	McpEndpoints []*CustomDomainMcpEndpointResponseBody `form:"mcp_endpoints" json:"mcp_endpoints" xml:"mcp_endpoints"`
 }
 
 // GetDomainUnauthorizedResponseBody is the type of the "domains" service
@@ -402,6 +444,188 @@ type CreateDomainGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UpdateDomainUnauthorizedResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "unauthorized" error.
+type UpdateDomainUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateDomainForbiddenResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "forbidden" error.
+type UpdateDomainForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateDomainBadRequestResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "bad_request" error.
+type UpdateDomainBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateDomainNotFoundResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "not_found" error.
+type UpdateDomainNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateDomainConflictResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "conflict" error.
+type UpdateDomainConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateDomainUnsupportedMediaResponseBody is the type of the "domains"
+// service "updateDomain" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UpdateDomainUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateDomainInvalidResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "invalid" error.
+type UpdateDomainInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateDomainInvariantViolationResponseBody is the type of the "domains"
+// service "updateDomain" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdateDomainInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateDomainUnexpectedResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "unexpected" error.
+type UpdateDomainUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateDomainGatewayErrorResponseBody is the type of the "domains" service
+// "updateDomain" endpoint HTTP response body for the "gateway_error" error.
+type UpdateDomainGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteDomainUnauthorizedResponseBody is the type of the "domains" service
 // "deleteDomain" endpoint HTTP response body for the "unauthorized" error.
 type DeleteDomainUnauthorizedResponseBody struct {
@@ -584,6 +808,213 @@ type DeleteDomainGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListMcpEndpointsUnauthorizedResponseBody is the type of the "domains"
+// service "listMcpEndpoints" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListMcpEndpointsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpEndpointsForbiddenResponseBody is the type of the "domains" service
+// "listMcpEndpoints" endpoint HTTP response body for the "forbidden" error.
+type ListMcpEndpointsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpEndpointsBadRequestResponseBody is the type of the "domains" service
+// "listMcpEndpoints" endpoint HTTP response body for the "bad_request" error.
+type ListMcpEndpointsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpEndpointsNotFoundResponseBody is the type of the "domains" service
+// "listMcpEndpoints" endpoint HTTP response body for the "not_found" error.
+type ListMcpEndpointsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpEndpointsConflictResponseBody is the type of the "domains" service
+// "listMcpEndpoints" endpoint HTTP response body for the "conflict" error.
+type ListMcpEndpointsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpEndpointsUnsupportedMediaResponseBody is the type of the "domains"
+// service "listMcpEndpoints" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListMcpEndpointsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpEndpointsInvalidResponseBody is the type of the "domains" service
+// "listMcpEndpoints" endpoint HTTP response body for the "invalid" error.
+type ListMcpEndpointsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpEndpointsInvariantViolationResponseBody is the type of the "domains"
+// service "listMcpEndpoints" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListMcpEndpointsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpEndpointsUnexpectedResponseBody is the type of the "domains" service
+// "listMcpEndpoints" endpoint HTTP response body for the "unexpected" error.
+type ListMcpEndpointsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpEndpointsGatewayErrorResponseBody is the type of the "domains"
+// service "listMcpEndpoints" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListMcpEndpointsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CustomDomainMcpEndpointResponseBody is used to define fields on response
+// body types.
+type CustomDomainMcpEndpointResponseBody struct {
+	// The ID of the MCP endpoint
+	ID string `form:"id" json:"id" xml:"id"`
+	// The endpoint slug
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The ID of the project the endpoint belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The display name of the project the endpoint belongs to
+	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
+	// The url-friendly slug of the project the endpoint belongs to
+	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
+	// The ID of the parent MCP server
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The display name of the parent MCP server. May be empty if the parent has no
+	// configured name.
+	McpServerName *string `form:"mcp_server_name,omitempty" json:"mcp_server_name,omitempty" xml:"mcp_server_name,omitempty"`
+	// The url-friendly slug of the parent MCP server. May be empty if the parent
+	// has no configured slug.
+	McpServerSlug *string `form:"mcp_server_slug,omitempty" json:"mcp_server_slug,omitempty" xml:"mcp_server_slug,omitempty"`
+}
+
 // NewGetDomainResponseBody builds the HTTP response body from the result of
 // the "getDomain" endpoint of the "domains" service.
 func NewGetDomainResponseBody(res *domains.CustomDomain) *GetDomainResponseBody {
@@ -596,6 +1027,57 @@ func NewGetDomainResponseBody(res *domains.CustomDomain) *GetDomainResponseBody 
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
 		IsUpdating:     res.IsUpdating,
+	}
+	if res.IPAllowlist != nil {
+		body.IPAllowlist = make([]string, len(res.IPAllowlist))
+		for i, val := range res.IPAllowlist {
+			body.IPAllowlist[i] = val
+		}
+	} else {
+		body.IPAllowlist = []string{}
+	}
+	return body
+}
+
+// NewUpdateDomainResponseBody builds the HTTP response body from the result of
+// the "updateDomain" endpoint of the "domains" service.
+func NewUpdateDomainResponseBody(res *domains.CustomDomain) *UpdateDomainResponseBody {
+	body := &UpdateDomainResponseBody{
+		ID:             res.ID,
+		OrganizationID: res.OrganizationID,
+		Domain:         res.Domain,
+		Verified:       res.Verified,
+		Activated:      res.Activated,
+		CreatedAt:      res.CreatedAt,
+		UpdatedAt:      res.UpdatedAt,
+		IsUpdating:     res.IsUpdating,
+	}
+	if res.IPAllowlist != nil {
+		body.IPAllowlist = make([]string, len(res.IPAllowlist))
+		for i, val := range res.IPAllowlist {
+			body.IPAllowlist[i] = val
+		}
+	} else {
+		body.IPAllowlist = []string{}
+	}
+	return body
+}
+
+// NewListMcpEndpointsResponseBody builds the HTTP response body from the
+// result of the "listMcpEndpoints" endpoint of the "domains" service.
+func NewListMcpEndpointsResponseBody(res *domains.ListCustomDomainMcpEndpointsResult) *ListMcpEndpointsResponseBody {
+	body := &ListMcpEndpointsResponseBody{}
+	if res.McpEndpoints != nil {
+		body.McpEndpoints = make([]*CustomDomainMcpEndpointResponseBody, len(res.McpEndpoints))
+		for i, val := range res.McpEndpoints {
+			if val == nil {
+				body.McpEndpoints[i] = nil
+				continue
+			}
+			body.McpEndpoints[i] = marshalDomainsCustomDomainMcpEndpointToCustomDomainMcpEndpointResponseBody(val)
+		}
+	} else {
+		body.McpEndpoints = []*CustomDomainMcpEndpointResponseBody{}
 	}
 	return body
 }
@@ -880,6 +1362,146 @@ func NewCreateDomainGatewayErrorResponseBody(res *goa.ServiceError) *CreateDomai
 	return body
 }
 
+// NewUpdateDomainUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "updateDomain" endpoint of the "domains" service.
+func NewUpdateDomainUnauthorizedResponseBody(res *goa.ServiceError) *UpdateDomainUnauthorizedResponseBody {
+	body := &UpdateDomainUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDomainForbiddenResponseBody builds the HTTP response body from the
+// result of the "updateDomain" endpoint of the "domains" service.
+func NewUpdateDomainForbiddenResponseBody(res *goa.ServiceError) *UpdateDomainForbiddenResponseBody {
+	body := &UpdateDomainForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDomainBadRequestResponseBody builds the HTTP response body from the
+// result of the "updateDomain" endpoint of the "domains" service.
+func NewUpdateDomainBadRequestResponseBody(res *goa.ServiceError) *UpdateDomainBadRequestResponseBody {
+	body := &UpdateDomainBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDomainNotFoundResponseBody builds the HTTP response body from the
+// result of the "updateDomain" endpoint of the "domains" service.
+func NewUpdateDomainNotFoundResponseBody(res *goa.ServiceError) *UpdateDomainNotFoundResponseBody {
+	body := &UpdateDomainNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDomainConflictResponseBody builds the HTTP response body from the
+// result of the "updateDomain" endpoint of the "domains" service.
+func NewUpdateDomainConflictResponseBody(res *goa.ServiceError) *UpdateDomainConflictResponseBody {
+	body := &UpdateDomainConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDomainUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "updateDomain" endpoint of the "domains" service.
+func NewUpdateDomainUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateDomainUnsupportedMediaResponseBody {
+	body := &UpdateDomainUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDomainInvalidResponseBody builds the HTTP response body from the
+// result of the "updateDomain" endpoint of the "domains" service.
+func NewUpdateDomainInvalidResponseBody(res *goa.ServiceError) *UpdateDomainInvalidResponseBody {
+	body := &UpdateDomainInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDomainInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "updateDomain" endpoint of the "domains" service.
+func NewUpdateDomainInvariantViolationResponseBody(res *goa.ServiceError) *UpdateDomainInvariantViolationResponseBody {
+	body := &UpdateDomainInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDomainUnexpectedResponseBody builds the HTTP response body from the
+// result of the "updateDomain" endpoint of the "domains" service.
+func NewUpdateDomainUnexpectedResponseBody(res *goa.ServiceError) *UpdateDomainUnexpectedResponseBody {
+	body := &UpdateDomainUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDomainGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "updateDomain" endpoint of the "domains" service.
+func NewUpdateDomainGatewayErrorResponseBody(res *goa.ServiceError) *UpdateDomainGatewayErrorResponseBody {
+	body := &UpdateDomainGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteDomainUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "deleteDomain" endpoint of the "domains" service.
 func NewDeleteDomainUnauthorizedResponseBody(res *goa.ServiceError) *DeleteDomainUnauthorizedResponseBody {
@@ -1020,6 +1642,148 @@ func NewDeleteDomainGatewayErrorResponseBody(res *goa.ServiceError) *DeleteDomai
 	return body
 }
 
+// NewListMcpEndpointsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listMcpEndpoints" endpoint of the "domains" service.
+func NewListMcpEndpointsUnauthorizedResponseBody(res *goa.ServiceError) *ListMcpEndpointsUnauthorizedResponseBody {
+	body := &ListMcpEndpointsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpEndpointsForbiddenResponseBody builds the HTTP response body from
+// the result of the "listMcpEndpoints" endpoint of the "domains" service.
+func NewListMcpEndpointsForbiddenResponseBody(res *goa.ServiceError) *ListMcpEndpointsForbiddenResponseBody {
+	body := &ListMcpEndpointsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpEndpointsBadRequestResponseBody builds the HTTP response body from
+// the result of the "listMcpEndpoints" endpoint of the "domains" service.
+func NewListMcpEndpointsBadRequestResponseBody(res *goa.ServiceError) *ListMcpEndpointsBadRequestResponseBody {
+	body := &ListMcpEndpointsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpEndpointsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listMcpEndpoints" endpoint of the "domains" service.
+func NewListMcpEndpointsNotFoundResponseBody(res *goa.ServiceError) *ListMcpEndpointsNotFoundResponseBody {
+	body := &ListMcpEndpointsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpEndpointsConflictResponseBody builds the HTTP response body from
+// the result of the "listMcpEndpoints" endpoint of the "domains" service.
+func NewListMcpEndpointsConflictResponseBody(res *goa.ServiceError) *ListMcpEndpointsConflictResponseBody {
+	body := &ListMcpEndpointsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpEndpointsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listMcpEndpoints" endpoint of the "domains"
+// service.
+func NewListMcpEndpointsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListMcpEndpointsUnsupportedMediaResponseBody {
+	body := &ListMcpEndpointsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpEndpointsInvalidResponseBody builds the HTTP response body from
+// the result of the "listMcpEndpoints" endpoint of the "domains" service.
+func NewListMcpEndpointsInvalidResponseBody(res *goa.ServiceError) *ListMcpEndpointsInvalidResponseBody {
+	body := &ListMcpEndpointsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpEndpointsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listMcpEndpoints" endpoint of the "domains"
+// service.
+func NewListMcpEndpointsInvariantViolationResponseBody(res *goa.ServiceError) *ListMcpEndpointsInvariantViolationResponseBody {
+	body := &ListMcpEndpointsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpEndpointsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listMcpEndpoints" endpoint of the "domains" service.
+func NewListMcpEndpointsUnexpectedResponseBody(res *goa.ServiceError) *ListMcpEndpointsUnexpectedResponseBody {
+	body := &ListMcpEndpointsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpEndpointsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listMcpEndpoints" endpoint of the "domains" service.
+func NewListMcpEndpointsGatewayErrorResponseBody(res *goa.ServiceError) *ListMcpEndpointsGatewayErrorResponseBody {
+	body := &ListMcpEndpointsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetDomainPayload builds a domains service getDomain endpoint payload.
 func NewGetDomainPayload(sessionToken *string) *domains.GetDomainPayload {
 	v := &domains.GetDomainPayload{}
@@ -1033,6 +1797,25 @@ func NewGetDomainPayload(sessionToken *string) *domains.GetDomainPayload {
 func NewCreateDomainPayload(body *CreateDomainRequestBody, sessionToken *string) *domains.CreateDomainPayload {
 	v := &domains.CreateDomainPayload{
 		Domain: *body.Domain,
+	}
+	if body.IPAllowlist != nil {
+		v.IPAllowlist = make([]string, len(body.IPAllowlist))
+		for i, val := range body.IPAllowlist {
+			v.IPAllowlist[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewUpdateDomainPayload builds a domains service updateDomain endpoint
+// payload.
+func NewUpdateDomainPayload(body *UpdateDomainRequestBody, sessionToken *string) *domains.UpdateDomainPayload {
+	v := &domains.UpdateDomainPayload{}
+	v.IPAllowlist = make([]string, len(body.IPAllowlist))
+	for i, val := range body.IPAllowlist {
+		v.IPAllowlist[i] = val
 	}
 	v.SessionToken = sessionToken
 
@@ -1048,11 +1831,29 @@ func NewDeleteDomainPayload(sessionToken *string) *domains.DeleteDomainPayload {
 	return v
 }
 
+// NewListMcpEndpointsPayload builds a domains service listMcpEndpoints
+// endpoint payload.
+func NewListMcpEndpointsPayload(sessionToken *string) *domains.ListMcpEndpointsPayload {
+	v := &domains.ListMcpEndpointsPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // ValidateCreateDomainRequestBody runs the validations defined on
 // CreateDomainRequestBody
 func ValidateCreateDomainRequestBody(body *CreateDomainRequestBody) (err error) {
 	if body.Domain == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("domain", "body"))
+	}
+	return
+}
+
+// ValidateUpdateDomainRequestBody runs the validations defined on
+// UpdateDomainRequestBody
+func ValidateUpdateDomainRequestBody(body *UpdateDomainRequestBody) (err error) {
+	if body.IPAllowlist == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
 	}
 	return
 }

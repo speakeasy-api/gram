@@ -1,21 +1,16 @@
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import {
-  resolutionBgColors,
-  resolutionStrokeColors,
-  resolutionStrokeMutedColors,
-} from "@/lib/resolution-colors";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
-import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
+import type { ChatOverview } from "@gram/client/models/components";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { useCallback, useState } from "react";
 
 interface ChatLogsTableProps {
-  chats: ChatOverviewWithResolutions[];
+  chats: ChatOverview[];
   selectedChatId?: string;
-  onSelectChat: (chat: ChatOverviewWithResolutions) => void;
+  onSelectChat: (chat: ChatOverview) => void;
   onDeleteChat: (chatId: string) => void;
   isLoading: boolean;
   error: Error | null;
@@ -25,28 +20,37 @@ function getTraceId(chatId: string): string {
   return chatId.slice(0, 8);
 }
 
-function getOverallResolutionStatus(
-  resolutions: ChatOverviewWithResolutions["resolutions"],
-): "success" | "failure" | "partial" | "unresolved" {
-  if (resolutions.length === 0) return "unresolved";
-
-  const hasFailure = resolutions.some((r) => r.resolution === "failure");
-  const hasSuccess = resolutions.some((r) => r.resolution === "success");
-
-  if (hasFailure) return "failure";
-  if (hasSuccess) return "success";
-  return "partial";
+function RiskIndicator({ count, size = 44 }: { count: number; size?: number }) {
+  const hasRisk = count > 0;
+  return (
+    <SimpleTooltip
+      tooltip={
+        hasRisk
+          ? `${count} risk finding${count === 1 ? "" : "s"} on this session`
+          : "No risk findings on this session"
+      }
+    >
+      <div className="flex flex-col items-center gap-1">
+        <div
+          className={cn(
+            "flex items-center justify-center rounded-full border-[3px]",
+            hasRisk
+              ? "border-destructive/40 text-destructive bg-destructive/5"
+              : "border-muted-foreground/30 text-muted-foreground/70",
+          )}
+          style={{ width: size, height: size }}
+        >
+          <span className="text-sm font-semibold tabular-nums">{count}</span>
+        </div>
+        <span className="text-muted-foreground text-[9px] font-medium tracking-wider uppercase">
+          Risk
+        </span>
+      </div>
+    </SimpleTooltip>
+  );
 }
 
-function getAverageScore(
-  resolutions: ChatOverviewWithResolutions["resolutions"],
-): number {
-  if (resolutions.length === 0) return 0;
-  const sum = resolutions.reduce((acc, r) => acc + r.score, 0);
-  return Math.round(sum / resolutions.length);
-}
-
-function formatDuration(chat: ChatOverviewWithResolutions): string {
+function formatDuration(chat: ChatOverview): string {
   // Use lastMessageTimestamp if available, otherwise fall back to updatedAt
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const seconds = Math.round(
@@ -75,12 +79,11 @@ function CopyButton({
   const handleCopy = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation(); // Don't trigger row selection
-      // Copy with the label prefix
-      navigator.clipboard.writeText(`${label}: ${value}`);
+      void navigator.clipboard.writeText(value);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     },
-    [value, label],
+    [value],
   );
 
   return (
@@ -112,88 +115,6 @@ function CopyButton({
   );
 }
 
-// Circular progress indicator component with label
-function ScoreRing({
-  score,
-  status,
-  size = 44,
-}: {
-  score: number;
-  status: "success" | "failure" | "partial" | "unresolved";
-  size?: number;
-}) {
-  const strokeWidth = 3;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = radius * 2 * Math.PI;
-  const offset = circumference - (score / 100) * circumference;
-
-  const colorMap = {
-    ...resolutionStrokeColors,
-    unresolved: "stroke-muted-foreground/30",
-  };
-
-  const bgColorMap = {
-    ...resolutionStrokeMutedColors,
-    unresolved: "stroke-muted-foreground/10",
-  };
-
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="relative" style={{ width: size, height: size }}>
-        <svg className="-rotate-90 transform" width={size} height={size}>
-          {/* Background circle */}
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            strokeWidth={strokeWidth}
-            fill="none"
-            className={bgColorMap[status]}
-          />
-          {/* Progress circle */}
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            strokeWidth={strokeWidth}
-            fill="none"
-            strokeLinecap="round"
-            className={cn(colorMap[status], "transition-all duration-500")}
-            style={{
-              strokeDasharray: circumference,
-              strokeDashoffset: offset,
-            }}
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-xs font-semibold tabular-nums">{score}</span>
-        </div>
-      </div>
-      <span className="text-muted-foreground text-[9px] font-medium tracking-wider uppercase">
-        Score
-      </span>
-    </div>
-  );
-}
-
-// Status indicator dot
-function StatusDot({
-  status,
-}: {
-  status: "success" | "failure" | "partial" | "unresolved";
-}) {
-  const colorMap = {
-    ...resolutionBgColors,
-    unresolved: "bg-muted-foreground/40",
-  };
-
-  return (
-    <span
-      className={cn("inline-flex h-2 w-2 rounded-full", colorMap[status])}
-    />
-  );
-}
-
 export function ChatLogsTable({
   chats,
   selectedChatId,
@@ -201,7 +122,7 @@ export function ChatLogsTable({
   onDeleteChat,
   isLoading,
   error,
-}: ChatLogsTableProps) {
+}: ChatLogsTableProps): JSX.Element {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   if (isLoading && chats.length === 0) {
     return (
@@ -260,11 +181,11 @@ export function ChatLogsTable({
     <>
       <div className="divide-border/50 divide-y">
         {chats.map((chat) => {
-          const status = getOverallResolutionStatus(chat.resolutions);
-          const averageScore = getAverageScore(chat.resolutions);
           const isSelected = selectedChatId === chat.id;
-          const hasResolutions = chat.resolutions.length > 0;
           const source = chat.source;
+          const riskCount = chat.riskFindingsCount ?? 0;
+          const lastActivityTimestamp =
+            chat.lastMessageTimestamp ?? chat.createdAt;
 
           return (
             <button
@@ -274,42 +195,31 @@ export function ChatLogsTable({
                 "group w-full px-5 py-4 text-left transition-all duration-150",
                 "hover:bg-muted/50",
                 "focus-visible:bg-muted/50 focus:outline-none",
-                isSelected && "bg-primary/[0.03] hover:bg-primary/[0.05]",
+                isSelected && "bg-primary/3 hover:bg-primary/5",
               )}
             >
               <div className="flex items-center gap-5">
-                {/* Left: Score ring or N/A indicator */}
+                {/* Left: Risk findings indicator */}
                 <div className="shrink-0">
-                  {hasResolutions ? (
-                    <ScoreRing score={averageScore} status={status} size={44} />
-                  ) : (
-                    <SimpleTooltip tooltip="This session hasn't been analyzed yet. Scores are generated automatically after a conversation ends.">
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="border-muted-foreground/30 flex size-[44px] items-center justify-center rounded-full border-[3px]">
-                          <span className="text-muted-foreground text-[10px] font-semibold">
-                            N/A
-                          </span>
-                        </div>
-                        <span className="text-muted-foreground text-[9px] font-medium tracking-wider uppercase">
-                          Score
-                        </span>
-                      </div>
-                    </SimpleTooltip>
-                  )}
+                  <RiskIndicator count={riskCount} size={44} />
                 </div>
 
                 {/* Center: Main content */}
                 <div className="min-w-0 flex-1">
                   {/* Header row */}
                   <div className="mb-1.5 flex items-center gap-2">
-                    <StatusDot status={status} />
                     <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
                       {getTraceId(chat.id)}
                     </span>
                     <CopyButton value={chat.id} label="Chat ID" />
                     <span className="text-muted-foreground/40">·</span>
                     <span className="text-muted-foreground text-sm">
-                      {format(chat.createdAt, "MMM d, HH:mm")}
+                      Created {format(chat.createdAt, "MMM d, HH:mm")}
+                    </span>
+                    <span className="text-muted-foreground/40">·</span>
+                    <span className="text-muted-foreground text-sm">
+                      Last activity{" "}
+                      {format(lastActivityTimestamp, "MMM d, HH:mm")}
                     </span>
                   </div>
 
@@ -393,7 +303,9 @@ export function ChatLogsTable({
 
       <Dialog
         open={deleteConfirmId !== null}
-        onOpenChange={(open) => !open && setDeleteConfirmId(null)}
+        onOpenChange={(open) => {
+          void (!open && setDeleteConfirmId(null));
+        }}
       >
         <Dialog.Content>
           <Dialog.Header>

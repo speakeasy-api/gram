@@ -105,7 +105,7 @@ func TestCheckRevocation_active(t *testing.T) {
 	f := newFixture(t, "tokens_active")
 	m := New("test-secret", f.conn, nil)
 
-	require.NoError(t, m.checkRevocation(t.Context(), f.threadID, f.assistantID))
+	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID))
 }
 
 func TestCheckRevocation_threadDeleted(t *testing.T) {
@@ -120,7 +120,7 @@ func TestCheckRevocation_threadDeleted(t *testing.T) {
 
 	m := New("test-secret", f.conn, nil)
 
-	err = m.checkRevocation(t.Context(), f.threadID, f.assistantID)
+	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
 	requireUnauthorized(t, err)
 }
 
@@ -136,7 +136,7 @@ func TestCheckRevocation_assistantDeleted(t *testing.T) {
 
 	m := New("test-secret", f.conn, nil)
 
-	err = m.checkRevocation(t.Context(), f.threadID, f.assistantID)
+	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
 	requireUnauthorized(t, err)
 }
 
@@ -153,7 +153,7 @@ func TestCheckRevocation_assistantPaused(t *testing.T) {
 
 	m := New("test-secret", f.conn, nil)
 
-	err = m.checkRevocation(t.Context(), f.threadID, f.assistantID)
+	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
 	requireUnauthorized(t, err)
 }
 
@@ -163,8 +163,56 @@ func TestCheckRevocation_threadMissing(t *testing.T) {
 	f := newFixture(t, "tokens_thread_missing")
 	m := New("test-secret", f.conn, nil)
 
-	err := m.checkRevocation(t.Context(), uuid.New(), f.assistantID)
+	err := m.checkRevocation(t.Context(), f.projectID, f.assistantID, uuid.New())
 	requireUnauthorized(t, err)
+}
+
+func TestCheckRevocation_assistantScoped(t *testing.T) {
+	t.Parallel()
+
+	// v2 tokens omit ThreadID — revocation must fall back to an
+	// assistant-only lookup and pass when the assistant is active.
+	f := newFixture(t, "tokens_assistant_scoped")
+	m := New("test-secret", f.conn, nil)
+
+	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, uuid.Nil))
+}
+
+func TestCheckRevocation_assistantScoped_assistantPaused(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "tokens_assistant_scoped_paused")
+	err := assistantsrepo.New(f.conn).SetAssistantStatus(t.Context(), assistantsrepo.SetAssistantStatusParams{
+		Status:    "paused",
+		ID:        f.assistantID,
+		ProjectID: f.projectID,
+	})
+	require.NoError(t, err)
+
+	m := New("test-secret", f.conn, nil)
+
+	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, uuid.Nil)
+	requireUnauthorized(t, err)
+}
+
+func TestGenerate_assistantScopedOmitsThreadClaim(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "tokens_generate_v2")
+	m := New("test-secret", f.conn, nil)
+
+	token, err := m.Generate(GenerateInput{
+		OrgID:       "org",
+		ProjectID:   f.projectID,
+		UserID:      "user",
+		AssistantID: f.assistantID,
+		ThreadID:    uuid.Nil,
+		TTL:         time.Minute,
+	})
+	require.NoError(t, err)
+	claims, err := m.Validate(token)
+	require.NoError(t, err)
+	require.Empty(t, claims.ThreadID, "v2 tokens must omit the ThreadID claim")
 }
 
 func TestCheckRevocation_cacheHitSkipsDB(t *testing.T) {
@@ -174,7 +222,7 @@ func TestCheckRevocation_cacheHitSkipsDB(t *testing.T) {
 	m := New("test-secret", f.conn, nil)
 
 	// Prime cache with the active path.
-	require.NoError(t, m.checkRevocation(t.Context(), f.threadID, f.assistantID))
+	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID))
 
 	// Pause the assistant out from under us; the cached "allowed" answer must
 	// continue to be honoured until revocationCacheTTL expires.
@@ -185,7 +233,7 @@ func TestCheckRevocation_cacheHitSkipsDB(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, m.checkRevocation(t.Context(), f.threadID, f.assistantID))
+	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID))
 }
 
 func TestCheckRevocation_cacheRespectsTTL(t *testing.T) {
@@ -197,7 +245,7 @@ func TestCheckRevocation_cacheRespectsTTL(t *testing.T) {
 	// Force a tiny TTL so we can observe expiry in the test.
 	m.revocation = newRevocationCache(50 * time.Millisecond)
 
-	require.NoError(t, m.checkRevocation(t.Context(), f.threadID, f.assistantID))
+	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID))
 
 	err := assistantsrepo.New(f.conn).DeleteAssistant(t.Context(), assistantsrepo.DeleteAssistantParams{
 		AssistantID: f.assistantID,
@@ -207,7 +255,7 @@ func TestCheckRevocation_cacheRespectsTTL(t *testing.T) {
 
 	time.Sleep(75 * time.Millisecond)
 
-	err = m.checkRevocation(t.Context(), f.threadID, f.assistantID)
+	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
 	requireUnauthorized(t, err)
 }
 

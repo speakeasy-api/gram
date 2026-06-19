@@ -3290,8 +3290,8 @@ func ValidateGetTriggerInstanceResponseBody(body *GetTriggerInstanceResponseBody
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 	}
 	if body.Status != nil {
-		if !(*body.Status == "active" || *body.Status == "paused") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
+		if !(*body.Status == "active" || *body.Status == "paused" || *body.Status == "fired" || *body.Status == "cancelled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused", "fired", "cancelled"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3349,8 +3349,8 @@ func ValidateCreateTriggerInstanceResponseBody(body *CreateTriggerInstanceRespon
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 	}
 	if body.Status != nil {
-		if !(*body.Status == "active" || *body.Status == "paused") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
+		if !(*body.Status == "active" || *body.Status == "paused" || *body.Status == "fired" || *body.Status == "cancelled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused", "fired", "cancelled"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3408,8 +3408,8 @@ func ValidateUpdateTriggerInstanceResponseBody(body *UpdateTriggerInstanceRespon
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 	}
 	if body.Status != nil {
-		if !(*body.Status == "active" || *body.Status == "paused") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
+		if !(*body.Status == "active" || *body.Status == "paused" || *body.Status == "fired" || *body.Status == "cancelled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused", "fired", "cancelled"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3467,8 +3467,8 @@ func ValidatePauseTriggerInstanceResponseBody(body *PauseTriggerInstanceResponse
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 	}
 	if body.Status != nil {
-		if !(*body.Status == "active" || *body.Status == "paused") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
+		if !(*body.Status == "active" || *body.Status == "paused" || *body.Status == "fired" || *body.Status == "cancelled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused", "fired", "cancelled"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3526,8 +3526,8 @@ func ValidateResumeTriggerInstanceResponseBody(body *ResumeTriggerInstanceRespon
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 	}
 	if body.Status != nil {
-		if !(*body.Status == "active" || *body.Status == "paused") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
+		if !(*body.Status == "active" || *body.Status == "paused" || *body.Status == "fired" || *body.Status == "cancelled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused", "fired", "cancelled"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -5561,8 +5561,8 @@ func ValidateTriggerInstanceResponseBody(body *TriggerInstanceResponseBody) (err
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
 	}
 	if body.Status != nil {
-		if !(*body.Status == "active" || *body.Status == "paused") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
+		if !(*body.Status == "active" || *body.Status == "paused" || *body.Status == "fired" || *body.Status == "cancelled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused", "fired", "cancelled"}))
 		}
 	}
 	if body.CreatedAt != nil {

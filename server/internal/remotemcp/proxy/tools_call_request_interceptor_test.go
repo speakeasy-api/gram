@@ -2,6 +2,8 @@ package proxy_test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
@@ -29,6 +31,28 @@ func (m *mockToolsCallRequestInterceptor) InterceptToolsCallRequest(_ context.Co
 	}
 	if m.lastCall != nil {
 		*m.lastCall = call
+	}
+	return m.err
+}
+
+// mutatingToolsCallRequestInterceptor is a [proxy.ToolsCallRequestInterceptor]
+// that calls [proxy.ToolsCallRequest.SetArguments] with the result of
+// argsFn(currentArguments). When err is non-nil, the interceptor returns
+// it AFTER mutating — used by tests covering the "mutate-then-reject"
+// composition.
+type mutatingToolsCallRequestInterceptor struct {
+	name   string
+	argsFn func(json.RawMessage) json.RawMessage
+	err    error
+}
+
+func (m *mutatingToolsCallRequestInterceptor) Name() string { return m.name }
+
+func (m *mutatingToolsCallRequestInterceptor) InterceptToolsCallRequest(_ context.Context, call *proxy.ToolsCallRequest) error {
+	if m.argsFn != nil {
+		if err := call.SetArguments(m.argsFn(call.Params.Arguments)); err != nil {
+			return fmt.Errorf("mutating interceptor %s: %w", m.name, err)
+		}
 	}
 	return m.err
 }

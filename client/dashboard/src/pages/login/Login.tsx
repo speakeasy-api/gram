@@ -6,7 +6,7 @@ import { LoginSection } from "./components/login-section";
 import { useSearchParams, useNavigate } from "react-router";
 import { useEffect } from "react";
 
-export default function Login() {
+export default function Login(): JSX.Element {
   const routes = useRoutes();
   const session = useSession();
   const [searchParams] = useSearchParams();
@@ -27,7 +27,7 @@ export default function Login() {
         return;
       }
       if (redirectTo) {
-        navigate(redirectTo, { replace: true });
+        void navigate(redirectTo, { replace: true });
       } else {
         routes.home.goTo();
       }

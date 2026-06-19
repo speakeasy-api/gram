@@ -11,20 +11,24 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 
 	keys_gen "github.com/speakeasy-api/gram/server/gen/keys"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -38,6 +42,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -73,20 +79,51 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *mcp.Service
-	conn           *pgxpool.Pool
-	sessionManager *sessions.Manager
-	serverURL      *url.URL
-	siteURL        *url.URL
-	logger         *slog.Logger
-	tracerProvider trace.TracerProvider
-	cacheAdapter   cache.Cache
-	enc            *encryption.Client
-	authzEngine    *authz.Engine
-	audit          *audit.Logger
+	service             *mcp.Service
+	conn                *pgxpool.Pool
+	sessionManager      *sessions.Manager
+	serverURL           *url.URL
+	siteURL             *url.URL
+	logger              *slog.Logger
+	tracerProvider      trace.TracerProvider
+	cacheAdapter        cache.Cache
+	authnChallengeCache cache.TypedCacheObject[mcp.AuthnChallengeState]
+	enc                 *encryption.Client
+	authzEngine         *authz.Engine
+	audit               *audit.Logger
 }
 
+// newTestMCPService wires a permissive identity resolver. Tests asserting
+// non-member behaviour or specific IDP responses must use
+// newTestMCPServiceWithIdentityResolver with their own mock.
 func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{hasAccessOK: true})
+}
+
+// newTestMCPServiceWithDevIDP launches an in-process dev-idp instance and
+// wires the service with a real *identity.Resolver pointing at it. Use this
+// for tests exercising HandleAuthorize / HandleIDPCallback that need a real
+// BuildAuthorizationURL (redirect_uri shape, oauth21 authorize endpoint)
+// rather than the static-return mockIdentityResolver.
+func newTestMCPServiceWithDevIDP(t *testing.T) (context.Context, *testInstance, *devidptest.Instance) {
+	t.Helper()
+	idp := devidptest.Launch(t, devidptest.LaunchOpts{})
+	resolver := identity.NewResolver(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		cache.NoopCache,
+		idp.OAuth21URL,
+		"devidp-test-client", // non-"client_" prefix routes through idpBaseURL
+		nil,                  // idpClient — BuildAuthorizationURL doesn't touch it
+		nil, nil, nil, nil, nil,
+		cache.SuffixNone,
+	)
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, resolver)
+	return ctx, ti, idp
+}
+
+func newTestMCPServiceWithIdentityResolver(t *testing.T, identityResolver mcp.IdentityResolver) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -105,7 +142,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -120,10 +157,10 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, guardianPolicy)
+	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, nil, guardianPolicy)
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
-	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, nil, nil, nil, nil, nil)
+	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
@@ -133,9 +170,9 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled)
+	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cacheAdapter))
 	telemService := telemetry.NewService(
 		logger,
 		tracerProvider,
@@ -156,24 +193,33 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
 	_ = featClient
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
+	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
 	auditLogger := audit.NewLogger()
-	idpClient := speakeasyclient.NewClient(logger, tracerProvider, guardianPolicy, "http://idp.test", "test-secret-key", conn, nil, posthog)
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, idpClient, userSessionSigner)
+	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, conn, enc, guardianPolicy, cacheAdapter, serverURL)
+	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, guardianPolicy, authzEngine, shadowMCPClient, posthog, telemLogger, billingStub, billingStub)
+	managedLogsTools := platformtoolsruntime.ManagedAssistantLogsTools(telemService)
+	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
+		ManagedAssistantInsightsTools: managedLogsTools,
+	})
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager)
+
+	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 
 	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		sessionManager: sessionManager,
-		serverURL:      serverURL,
-		siteURL:        siteURL,
-		logger:         logger,
-		tracerProvider: tracerProvider,
-		cacheAdapter:   cacheAdapter,
-		enc:            enc,
-		authzEngine:    authzEngine,
-		audit:          auditLogger,
+		service:             svc,
+		conn:                conn,
+		sessionManager:      sessionManager,
+		serverURL:           serverURL,
+		siteURL:             siteURL,
+		logger:              logger,
+		tracerProvider:      tracerProvider,
+		cacheAdapter:        cacheAdapter,
+		authnChallengeCache: authnCache,
+		enc:                 enc,
+		authzEngine:         authzEngine,
+		audit:               auditLogger,
 	}
 }
 

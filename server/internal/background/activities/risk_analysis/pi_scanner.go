@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
@@ -15,54 +14,103 @@ import (
 // action='block' policies).
 const SourcePromptInjection = "prompt_injection"
 
-// RulePromptInjectionClassifierDeberta is the rule id stored in
-// risk_policies.prompt_injection_rules to opt a policy in to L1
-// classifier-backed detection on top of the always-on L0 heuristics.
-const RulePromptInjectionClassifierDeberta = "deberta-v3-classifier"
+// LabelInjection is the positive class an engine returns for a flagged message.
+const LabelInjection = "INJECTION"
 
-// promptInjectionClassifierFindingDescription is the human-readable description carried
-// on the Finding emitted when the L1 model flags a text. Kept short — the
-// dashboard renders this verbatim under the policy result row.
-const promptInjectionClassifierFindingDescription = "ML classifier flagged prompt injection"
+// LabelSafe is the negative class: the message is not a prompt attack. It is
+// also the fail-open verdict an engine returns when it cannot reach a decision
+// (timeout, error, rate limit) so a judge outage degrades to the L0 heuristics.
+const LabelSafe = "SAFE"
 
-// PromptInjectionScanner runs the always-on L0 heuristic rules and, when a
-// policy opts in via prompt_injection_rules, the L1 ML classifier.
+// PromptInjectionRequest carries the messages to evaluate plus the org/project context
+// the L1 engine needs for per-org billing and rate limiting. Messages are
+// structured (actor, tool attribution, body kind) so the engine can reason
+// about a tool call vs a user prompt vs a tool result, not just raw text.
+type PromptInjectionRequest struct {
+	Messages  []JudgeMessage
+	OrgID     string
+	ProjectID string
+}
+
+// PromptInjectionResult is one prediction. Label decides whether to emit an L1 finding
+// (LabelInjection => emit); Score is retained as confidence metadata; Rationale is the
+// judge's one-sentence explanation (empty for engines that emit none), used as the
+// finding description so a flagged event is explainable for triage.
+type PromptInjectionResult struct {
+	Label     string
+	Score     float64
+	Rationale string
+}
+
+// PromptInjectionEngine is the L1 prompt-injection engine: it scores each message in the
+// request and returns one result per message, aligned by index. The production
+// implementation is the OpenRouter LLM judge (server/internal/pijudge). The
+// scanner takes it as a plain function rather than an interface so risk_analysis
+// stays free of the openrouter dependency chain (openrouter -> productfeatures
+// -> authz), and so "no L1 engine" is simply a nil func — no stub type needed.
+type PromptInjectionEngine func(ctx context.Context, req PromptInjectionRequest) ([]PromptInjectionResult, error)
+
+// DescribePromptInjection returns the canonical (rule_id, description) for any
+// prompt-injection finding. The same rule id is emitted regardless of whether
+// the match came from the L1 engine or an L0 heuristic.
+func DescribePromptInjection() (string, string) {
+	return guard(RulePromptInjection), "Detected a prompt injection attempt."
+}
+
+// PromptInjectionScanner combines two detection layers that emit the same
+// canonical rule_id (`prompt_injection`):
 //
-// Construction always wires a non-nil classifier (StubClassifier when
-// --pi-classifier-url is empty), so callers don't branch on availability.
+//   - L0 heuristic regex/keyword rules — always run, cheap, in-process.
+//   - L1 engine (the LLM judge) — opt-in per org via the
+//     feature.FlagPromptInjectionUseClassifier flag.
+//
+// L1 findings are appended to L0 findings, not substituted. The L1 opt-in flag
+// is resolved by the caller (once per scan, with the org/project PostHog groups)
+// and passed in as l1Enabled — mirroring how the realtime scanner and batch
+// analyzer resolve the prompt-policies flag once and fan out. The scanner skips
+// L1 when no engine is wired (classify is nil) so local-dev and tests run
+// heuristics only regardless of the flag.
 type PromptInjectionScanner struct {
-	classifier PromptInjectionClassifier
-	logger     *slog.Logger
+	classify PromptInjectionEngine // nil => L1 disabled (L0 heuristics only)
+	logger   *slog.Logger
 }
 
-// NewPromptInjectionScanner returns a scanner that calls the given classifier
-// for L1 detection. The classifier's binary label decides whether to emit an
-// L1 finding; the score is carried as confidence metadata.
-//
-// logger must be non-nil; pass an explicit *slog.Logger so log lines carry the
-// caller's component attrs (forbidigo blocks slog.Default in this codebase).
-func NewPromptInjectionScanner(logger *slog.Logger, classifier PromptInjectionClassifier) *PromptInjectionScanner {
-	return &PromptInjectionScanner{classifier: classifier, logger: logger}
+// NewPromptInjectionScanner constructs a scanner that always runs L0
+// heuristics. Pass the L1 engine's Classify function to additionally run L1
+// (opt-in per scan via l1Enabled), or nil to run heuristics only.
+func NewPromptInjectionScanner(logger *slog.Logger, classify PromptInjectionEngine) *PromptInjectionScanner {
+	return &PromptInjectionScanner{classify: classify, logger: logger}
 }
 
-// Scan runs the heuristic rules unconditionally; runs the L1 classifier when
-// rules contains RulePromptInjectionClassifierDeberta. Used by the realtime risk scanner.
-func (s *PromptInjectionScanner) Scan(ctx context.Context, text string, rules []string) ([]Finding, error) {
-	if text == "" {
+// l1Active reports whether the L1 engine should run for this scan: the caller
+// opted this org/project in (l1Enabled) AND an engine is wired (classify != nil).
+func (s *PromptInjectionScanner) l1Active(l1Enabled bool) bool {
+	return s.classify != nil && l1Enabled
+}
+
+// Scan runs L0 heuristics on a single text and, when l1Enabled and an engine is
+// wired, appends an L1 finding if the engine flags the message. text is the
+// flattened body the L0 heuristics scan; msg is the structured event (actor,
+// tool attribution, body kind) the L1 engine reasons over. orgID/projectID
+// identify the caller for per-org billing and rate limiting. Used by the
+// realtime risk scanner on the hook path.
+func (s *PromptInjectionScanner) Scan(ctx context.Context, text, orgID, projectID string, msg JudgeMessage, l1Enabled bool) ([]Finding, error) {
+	if text == "" && !msg.HasContent() {
 		return nil, nil
 	}
 
 	findings := runHeuristics(text)
 
-	if !slices.Contains(rules, RulePromptInjectionClassifierDeberta) {
+	if !s.l1Active(l1Enabled) {
 		return findings, nil
 	}
 
-	results, err := s.classifier.Classify(ctx, []string{text})
+	results, err := s.classify(ctx, PromptInjectionRequest{Messages: []JudgeMessage{msg}, OrgID: orgID, ProjectID: projectID})
 	if err != nil {
-		// Don't fail the scan on classifier errors — surface L0 findings and
-		// let the per-batch error counter pick up the failure.
-		s.logger.WarnContext(ctx, "pi_classifier scan failed, continuing with heuristics only", attr.SlogError(err))
+		s.logger.WarnContext(ctx, "pi L1 scan failed; returning L0 findings only",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
 		return findings, nil
 	}
 	if len(results) != 1 {
@@ -75,13 +123,12 @@ func (s *PromptInjectionScanner) Scan(ctx context.Context, text string, rules []
 	return findings, nil
 }
 
-// ScanBatch is the batched counterpart used by AnalyzeBatch. When the L1
-// classifier is enabled, all texts go through a single Classify call so the
-// HTTP cost is paid once per activity, not once per message.
-func (s *PromptInjectionScanner) ScanBatch(ctx context.Context, texts []string, rules []string) ([][]Finding, error) {
+// ScanBatch is the batched counterpart used by AnalyzeBatch. L0 runs over every
+// text; when l1Enabled and an engine is wired, a single batched Classify call
+// over the structured messages is folded in on top. texts and msgs are aligned
+// by index (texts[i] is the flattened body of msgs[i]).
+func (s *PromptInjectionScanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, msgs []JudgeMessage, l1Enabled bool) ([][]Finding, error) {
 	out := make([][]Finding, len(texts))
-
-	// L0 — always.
 	for i, t := range texts {
 		if t == "" {
 			continue
@@ -89,18 +136,20 @@ func (s *PromptInjectionScanner) ScanBatch(ctx context.Context, texts []string, 
 		out[i] = runHeuristics(t)
 	}
 
-	if !slices.Contains(rules, RulePromptInjectionClassifierDeberta) {
+	if !s.l1Active(l1Enabled) {
 		return out, nil
 	}
 
-	// L1 — single batched HTTP call.
-	results, err := s.classifier.Classify(ctx, texts)
+	results, err := s.classify(ctx, PromptInjectionRequest{Messages: msgs, OrgID: orgID, ProjectID: projectID})
 	if err != nil {
-		s.logger.WarnContext(ctx, "pi_classifier batch scan failed, continuing with heuristics only", attr.SlogError(err))
+		s.logger.WarnContext(ctx, "pi L1 batch scan failed; returning L0 findings only",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
 		return out, nil
 	}
 	if len(results) != len(texts) {
-		s.logger.WarnContext(ctx, "pi_classifier returned mismatched batch size, dropping L1 findings",
+		s.logger.WarnContext(ctx, "pi engine returned mismatched batch size, dropping L1 findings",
 			attr.SlogError(errors.New("len(results) != len(texts)")),
 		)
 		return out, nil
@@ -117,27 +166,32 @@ func (s *PromptInjectionScanner) ScanBatch(ctx context.Context, texts []string, 
 	return out, nil
 }
 
-func (s *PromptInjectionScanner) findingFromResult(text string, r ClassifierResult) *Finding {
+func (s *PromptInjectionScanner) findingFromResult(text string, r PromptInjectionResult) *Finding {
 	if r.Label != LabelInjection {
 		return nil
 	}
+	ruleID, description := DescribePromptInjection()
+	// Prefer the judge's specific rationale as the description when present; fall
+	// back to the canonical label for L0 heuristic findings (which emit none).
+	if r.Rationale != "" {
+		description = r.Rationale
+	}
 	return &Finding{
-		RuleID:           "pi." + RulePromptInjectionClassifierDeberta,
-		Description:      promptInjectionClassifierFindingDescription,
+		RuleID:           ruleID,
+		Description:      description,
 		Match:            text,
 		StartPos:         0,
 		EndPos:           len(text),
-		Tags:             []string{"ml", "layer-1"},
+		Tags:             []string{"llm-judge", "layer-1"},
 		Source:           SourcePromptInjection,
 		Confidence:       r.Score,
 		DeadLetterReason: "",
+		toolCallID:       "",
 	}
 }
 
-// DetectPromptInjection runs the L0 heuristic rules only. Kept for tests and
-// for code paths that don't have a scanner instance (none in production —
-// production callers must use PromptInjectionScanner so policy.prompt_injection_rules
-// is honored). Returns one Finding per heuristic match.
+// DetectPromptInjection runs the L0 heuristic rules only. Kept for tests and for
+// code paths that don't have a scanner instance.
 func DetectPromptInjection(_ context.Context, text string) ([]Finding, error) {
 	if text == "" {
 		return nil, nil

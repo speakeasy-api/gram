@@ -19,7 +19,7 @@ export type GetMcpMetadataQueryData = components.GetMcpMetadataResponseBody;
 export function prefetchGetMcpMetadata(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetMcpMetadataRequest,
+  request?: operations.GetMcpMetadataRequest | undefined,
   security?: operations.GetMcpMetadataSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -35,7 +35,7 @@ export function prefetchGetMcpMetadata(
 
 export function buildGetMcpMetadataQuery(
   client$: GramCore,
-  request: operations.GetMcpMetadataRequest,
+  request?: operations.GetMcpMetadataRequest | undefined,
   security?: operations.GetMcpMetadataSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -44,10 +44,11 @@ export function buildGetMcpMetadataQuery(
 } {
   return {
     queryKey: queryKeyGetMcpMetadata({
-      toolsetSlug: request.toolsetSlug,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
+      toolsetSlug: request?.toolsetSlug,
+      mcpServerId: request?.mcpServerId,
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
     }),
     queryFn: async function getMcpMetadataQueryFn(
       ctx,
@@ -75,7 +76,8 @@ export function buildGetMcpMetadataQuery(
 
 export function queryKeyGetMcpMetadata(
   parameters: {
-    toolsetSlug: string;
+    toolsetSlug?: string | undefined;
+    mcpServerId?: string | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

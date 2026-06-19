@@ -46,7 +46,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) ([]*gen.Se
 			oops.CodeUnexpected,
 			err,
 			"failed to list hooks server name overrides",
-		).Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
+		).LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
 	}
 
 	result := make([]*gen.ServerNameOverride, len(rows))
@@ -94,7 +94,7 @@ func (s *Service) Upsert(ctx context.Context, payload *gen.UpsertPayload) (*gen.
 			oops.CodeUnexpected,
 			err,
 			"failed to upsert hooks server name override",
-		).Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
+		).LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
 	}
 
 	return &gen.ServerNameOverride{
@@ -133,7 +133,7 @@ func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error 
 			oops.CodeUnexpected,
 			err,
 			"failed to delete hooks server name override",
-		).Log(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogHookServerNameOverrideID(payload.OverrideID))
+		).LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogHookServerNameOverrideID(payload.OverrideID))
 	}
 
 	return nil

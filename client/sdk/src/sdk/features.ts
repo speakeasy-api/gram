@@ -20,7 +20,7 @@ export class Features extends ClientSDK {
     request?: operations.GetProductFeaturesRequest | undefined,
     security?: operations.GetProductFeaturesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.GramProductFeatures> {
+  ): Promise<components.GetProductFeaturesResponseBody> {
     return unwrapAsync(featuresGet(
       this,
       request,

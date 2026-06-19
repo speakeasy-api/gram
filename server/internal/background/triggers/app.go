@@ -2,6 +2,8 @@ package triggers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -20,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -33,7 +37,12 @@ const (
 	StatusFired         = "fired"
 	StatusCancelled     = "cancelled"
 
-	DefinitionSlugWake = "wake"
+	DefinitionSlugSlack     = "slack"
+	DefinitionSlugLinear    = "linear"
+	DefinitionSlugGithub    = "github"
+	DefinitionSlugCron      = "cron"
+	DefinitionSlugWake      = "wake"
+	DefinitionSlugDashboard = "dashboard"
 )
 
 var (
@@ -130,6 +139,7 @@ type App struct {
 	serverURL      *url.URL
 	dispatchers    map[string]Dispatcher
 	audit          *audit.Logger
+	slackClient    *slackclient.SlackClient
 }
 
 // InstanceDBHook runs inside the transaction that mutates a trigger instance,
@@ -176,6 +186,7 @@ func NewApp(
 	deliveryLogger DeliveryLogger,
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
+	slackClient *slackclient.SlackClient,
 	dispatchers ...Dispatcher,
 ) *App {
 	logger = logger.With(attr.SlogComponent("background_triggers"))
@@ -195,6 +206,7 @@ func NewApp(
 		serverURL:      serverURL,
 		dispatchers:    dispatcherMap,
 		audit:          auditLogger,
+		slackClient:    slackClient,
 	}
 }
 
@@ -235,6 +247,9 @@ func (a *App) Create(ctx context.Context, params CreateParams, hooks ...Instance
 	definition, config, err := a.validateInstance(ctx, params.ProjectID, nullUUIDToUUID(params.EnvironmentID), params.DefinitionSlug, params.Config)
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: validate trigger instance: %w", ErrBadRequest, err)
+	}
+	if definition.Kind == KindDirect {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %q triggers are system-managed and cannot be created directly", ErrBadRequest, params.DefinitionSlug)
 	}
 
 	configJSON, err := marshalConfigJSON(params.Config)
@@ -307,6 +322,9 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 	definition, config, err := a.validateInstance(ctx, params.ProjectID, nullUUIDToUUID(params.EnvironmentID), params.DefinitionSlug, params.Config)
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: validate trigger instance: %w", ErrBadRequest, err)
+	}
+	if definition.Kind == KindDirect {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %q triggers are system-managed and cannot be updated directly", ErrBadRequest, params.DefinitionSlug)
 	}
 
 	configJSON, err := marshalConfigJSON(params.Config)
@@ -717,6 +735,16 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 	result.Event.TriggerInstanceID = instance.ID.String()
 	result.Event.DefinitionSlug = instance.DefinitionSlug
 
+	// Scope the dedup event id to this trigger instance now that it's known —
+	// vendor-supplied id or content-hash fallback alike. A delivery targets
+	// exactly one instance, so two instances must never dedupe each other's
+	// deliveries on the dispatch workflow id or the assistant enqueue key and
+	// silently drop one.
+	result.Event.EventID = scopeWebhookEventID(result.Event.TriggerInstanceID, result.Event.EventID, body)
+	if result.Event.CorrelationID == "" {
+		result.Event.CorrelationID = result.Event.EventID
+	}
+
 	task, err := a.ProcessEvent(ctx, instance, *result.Event)
 	if err != nil {
 		return nil, fmt.Errorf("process event: %w", err)
@@ -726,11 +754,46 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 		return result, nil
 	}
 
+	a.ackSlackThreadStatus(ctx, instance, envMap, *result.Event)
+
 	if err := ExecuteTriggerDispatchWorkflow(ctx, a.temporalEnv, TriggerDispatchWorkflowInput{Task: *task}); err != nil {
 		return nil, fmt.Errorf("execute trigger dispatch workflow: %w", err)
 	}
 
 	return result, nil
+}
+
+// ackSlackThreadStatus shows Slack's native loading indicator on the thread the
+// moment a slack-triggered event is dispatched, so the user sees the assistant
+// is working while its (cold-starting) runtime spins up. The assistant refines
+// the status itself once it's running via the set_thread_status platform tool.
+// Only events the assistant always replies to get the indicator: ambient
+// events may end in a silent turn (no reply ever posted), which would strand
+// the indicator until Slack's two-minute timeout.
+// Best-effort: a failure here only costs the indicator.
+func (a *App) ackSlackThreadStatus(ctx context.Context, instance triggerrepo.TriggerInstance, env map[string]string, event EventEnvelope) {
+	if a.slackClient == nil || instance.DefinitionSlug != DefinitionSlugSlack {
+		return
+	}
+	if !slackEventExpectsReply(event) {
+		return
+	}
+	channelID, threadTS, ok := slackThreadStatusTarget(event)
+	if !ok {
+		return
+	}
+	token := toolconfig.CIEnvFrom(env).Get("SLACK_BOT_TOKEN")
+	if token == "" {
+		return
+	}
+	if err := a.slackClient.SetThreadStatus(ctx, token, slackclient.SlackSetThreadStatusInput{
+		ChannelID:       channelID,
+		ThreadTS:        threadTS,
+		Status:          slackThinkingStatus,
+		LoadingMessages: slackInitialLoadingMessages,
+	}); err != nil {
+		a.logger.WarnContext(ctx, "set slack thread status", attr.SlogError(err))
+	}
 }
 
 func (a *App) ProcessScheduled(ctx context.Context, input ProcessScheduledInput) (*Task, error) {
@@ -775,6 +838,29 @@ func (a *App) ProcessScheduled(ctx context.Context, input ProcessScheduledInput)
 	return task, nil
 }
 
+// maxAssistantKeyLen mirrors the assistant tables' CHECKs
+// (CHAR_LENGTH(correlation_id) <= 300 and CHAR_LENGTH(event_id) <= 300). A key
+// over the limit (e.g. a GitHub push to a repo + branch whose names are long)
+// would otherwise be accepted and dispatched but rejected at assistant enqueue,
+// never reaching the assistant.
+const maxAssistantKeyLen = 300
+
+// boundAssistantKey caps an assistant key (the event id or correlation id) at
+// maxAssistantKeyLen characters, keeping a readable prefix and replacing the
+// overflow with a short content hash so the result stays deterministic (the
+// same input always maps to the same dedup key / conversation) and
+// collision-free. Truncation is rune-aware so a multibyte character is never
+// split into invalid UTF-8 (which a UTF8 database would itself reject).
+func boundAssistantKey(id string) string {
+	if utf8.RuneCountInString(id) <= maxAssistantKeyLen {
+		return id
+	}
+	sum := sha256.Sum256([]byte(id))
+	suffix := ":" + hex.EncodeToString(sum[:8])
+	runes := []rune(id)
+	return string(runes[:maxAssistantKeyLen-utf8.RuneCountInString(suffix)]) + suffix
+}
+
 func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInstance, envelope EventEnvelope) (*Task, error) {
 	rawConfig, err := configJSONToMap(instance.ConfigJson)
 	if err != nil {
@@ -814,8 +900,8 @@ func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInst
 		TargetKind:        instance.TargetKind,
 		TargetRef:         instance.TargetRef,
 		TargetDisplay:     instance.TargetDisplay,
-		EventID:           envelope.EventID,
-		CorrelationID:     envelope.CorrelationID,
+		EventID:           boundAssistantKey(envelope.EventID),
+		CorrelationID:     boundAssistantKey(envelope.CorrelationID),
 		EventJSON:         nil,
 		RawPayload:        envelope.RawPayload,
 	}
@@ -829,6 +915,50 @@ func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInst
 	}
 
 	a.emitDeliveryLog(instance, envelope, DeliveryStatusSent, "trigger event enqueued", nil)
+	return task, nil
+}
+
+// IngestDirect handles a synchronous, app-invoked trigger event (e.g. a message
+// from the dashboard assistant sidebar) through the same path as webhook and
+// schedule ingress: it builds the event from the instance's direct-ingress
+// definition, runs ProcessEvent (status/filter/target checks + delivery log),
+// and dispatches the resulting task inline. Returns the dispatched task, or nil
+// when the instance is paused or the event was filtered out.
+func (a *App) IngestDirect(ctx context.Context, instanceID uuid.UUID, payload []byte, receivedAt time.Time) (*Task, error) {
+	instance, err := a.repo.GetTriggerInstanceByIDPublic(ctx, instanceID)
+	if err != nil {
+		return nil, fmt.Errorf("get trigger instance: %w", err)
+	}
+
+	rawConfig, err := configJSONToMap(instance.ConfigJson)
+	if err != nil {
+		return nil, fmt.Errorf("decode trigger config: %w", err)
+	}
+
+	definition, config, err := a.validateInstance(ctx, instance.ProjectID, nullUUIDToUUID(instance.EnvironmentID), instance.DefinitionSlug, rawConfig)
+	if err != nil {
+		return nil, fmt.Errorf("validate trigger instance: %w", err)
+	}
+	if definition.BuildDirectEvent == nil {
+		return nil, fmt.Errorf("trigger definition %q does not implement direct ingress", instance.DefinitionSlug)
+	}
+
+	envelope, err := definition.BuildDirectEvent(instance, config, payload, receivedAt)
+	if err != nil {
+		return nil, fmt.Errorf("build direct event: %w", err)
+	}
+
+	task, err := a.ProcessEvent(ctx, instance, *envelope)
+	if err != nil {
+		return nil, fmt.Errorf("process event: %w", err)
+	}
+	if task == nil {
+		return nil, nil
+	}
+
+	if err := a.Dispatch(ctx, *task); err != nil {
+		return nil, err
+	}
 	return task, nil
 }
 

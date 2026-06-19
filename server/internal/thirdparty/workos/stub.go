@@ -20,6 +20,7 @@ type StubClient struct {
 	eventPages            [][]events.Event
 	eventCalls            []events.ListEventsOpts
 	userExternalIDUpdates []UserExternalIDUpdate
+	orgExternalIDUpdates  []OrgExternalIDUpdate
 	next                  int
 	nowFn                 func() time.Time
 }
@@ -27,6 +28,11 @@ type StubClient struct {
 type UserExternalIDUpdate struct {
 	WorkOSUserID string
 	ExternalID   string
+}
+
+type OrgExternalIDUpdate struct {
+	WorkOSOrgID string
+	ExternalID  string
 }
 
 type stubOrgState struct {
@@ -49,6 +55,7 @@ func NewStubClient() *StubClient {
 		eventPages:            nil,
 		eventCalls:            make([]events.ListEventsOpts, 0),
 		userExternalIDUpdates: make([]UserExternalIDUpdate, 0),
+		orgExternalIDUpdates:  make([]OrgExternalIDUpdate, 0),
 		next:                  1,
 		nowFn:                 time.Now,
 	}
@@ -73,6 +80,17 @@ func (s *StubClient) GetOrganization(_ context.Context, orgID string) (*Organiza
 
 	org := state.organization
 	return &org, nil
+}
+
+func (s *StubClient) GetOrganizationDomainPolicy(_ context.Context, orgID string) (*OrganizationDomainPolicy, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	if _, ok := s.orgs[orgID]; !ok {
+		return nil, &APIError{Method: "GET", Path: "/stub/organizations/" + orgID, StatusCode: 404, Body: "organization not found"}
+	}
+
+	return &OrganizationDomainPolicy{Domains: nil}, nil
 }
 
 func (s *StubClient) ListOrganizations(_ context.Context) ([]Organization, error) {
@@ -107,6 +125,13 @@ func (s *StubClient) UserExternalIDUpdates() []UserExternalIDUpdate {
 	defer s.mut.Unlock()
 
 	return append([]UserExternalIDUpdate(nil), s.userExternalIDUpdates...)
+}
+
+func (s *StubClient) OrgExternalIDUpdates() []OrgExternalIDUpdate {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	return append([]OrgExternalIDUpdate(nil), s.orgExternalIDUpdates...)
 }
 
 func (s *StubClient) ListEvents(_ context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error) {
@@ -202,10 +227,17 @@ func (s *StubClient) DeleteRole(_ context.Context, orgID string, roleSlug string
 		}
 	}
 	for membershipID, member := range state.memberships {
-		if member.RoleSlug == roleSlug {
-			member.RoleSlug = "member"
-			state.memberships[membershipID] = member
+		filtered := make([]string, 0, len(member.RoleSlugs))
+		for _, s := range member.RoleSlugs {
+			if s != roleSlug {
+				filtered = append(filtered, s)
+			}
 		}
+		if len(filtered) == 0 {
+			filtered = []string{"member"}
+		}
+		member.RoleSlugs = filtered
+		state.memberships[membershipID] = member
 	}
 
 	return nil
@@ -232,7 +264,7 @@ func (s *StubClient) UpsertOrganizationMembership(member Member) {
 	state.memberships[member.ID] = member
 }
 
-func (s *StubClient) UpdateMemberRole(_ context.Context, membershipID string, roleSlug string) (*Member, error) {
+func (s *StubClient) UpdateMemberRoles(_ context.Context, membershipID string, roleSlugs []string) (*Member, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -241,10 +273,12 @@ func (s *StubClient) UpdateMemberRole(_ context.Context, membershipID string, ro
 		if !ok {
 			continue
 		}
-		if _, ok := state.roles[roleSlug]; !ok {
-			return nil, fmt.Errorf("role %q not found", roleSlug)
+		for _, slug := range roleSlugs {
+			if _, ok := state.roles[slug]; !ok {
+				return nil, fmt.Errorf("role %q not found", slug)
+			}
 		}
-		member.RoleSlug = roleSlug
+		member.RoleSlugs = roleSlugs
 		state.memberships[membershipID] = member
 		return &member, nil
 	}
@@ -274,6 +308,41 @@ func (s *StubClient) UpdateUserExternalID(_ context.Context, workosUserID, exter
 	return nil
 }
 
+func (s *StubClient) UpdateOrganizationExternalID(_ context.Context, workosOrgID, externalID string) error {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state := s.orgState(workosOrgID)
+	state.organization.ExternalID = externalID
+	s.orgExternalIDUpdates = append(s.orgExternalIDUpdates, OrgExternalIDUpdate{WorkOSOrgID: workosOrgID, ExternalID: externalID})
+	return nil
+}
+
+func (s *StubClient) GenerateAdminPortalLink(_ context.Context, workosOrgID string, intent PortalIntent, _ GenerateAdminPortalLinkOpts) (string, error) {
+	return fmt.Sprintf("https://stub.workos.com/portal?intent=%s&organization=%s", string(intent), workosOrgID), nil
+}
+
+func (s *StubClient) ListConnections(_ context.Context, _ string) ([]Connection, error) {
+	return nil, nil
+}
+
+func (s *StubClient) ListDirectories(_ context.Context, _ string) ([]Directory, error) {
+	return nil, nil
+}
+
+func (s *StubClient) EnsureOrgExternalID(_ context.Context, workosOrgID, gramOrgID string) error {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state := s.orgState(workosOrgID)
+	if state.organization.ExternalID != "" && state.organization.ExternalID != gramOrgID {
+		return fmt.Errorf("workos org %s external_id mismatch: got %q, want %q", workosOrgID, state.organization.ExternalID, gramOrgID)
+	}
+	state.organization.ExternalID = gramOrgID
+	s.orgExternalIDUpdates = append(s.orgExternalIDUpdates, OrgExternalIDUpdate{WorkOSOrgID: workosOrgID, ExternalID: gramOrgID})
+	return nil
+}
+
 func (s *StubClient) ListUsersInOrg(_ context.Context, orgID string) ([]User, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
@@ -287,109 +356,22 @@ func (s *StubClient) ListUsersInOrg(_ context.Context, orgID string) ([]User, er
 	return users, nil
 }
 
-func (s *StubClient) SendInvitation(_ context.Context, opts SendInvitationOpts) (*Invitation, error) {
-	s.mut.Lock()
-	defer s.mut.Unlock()
-
-	state := s.orgState(opts.OrganizationID)
-	now := s.nowFn().UTC().Format(time.RFC3339)
-	invite := Invitation{
-		ID:                  s.nextInviteID(),
-		Email:               opts.Email,
-		State:               InvitationStatePending,
-		AcceptedAt:          "",
-		RevokedAt:           "",
-		Token:               fmt.Sprintf("token_%d", s.next),
-		AcceptInvitationURL: "",
-		OrganizationID:      opts.OrganizationID,
-		InviterUserID:       opts.InviterUserID,
-		ExpiresAt:           now,
-		CreatedAt:           now,
-		UpdatedAt:           now,
-	}
-	state.invites[invite.ID] = invite
-	state.inviteOrder = append(state.inviteOrder, invite.ID)
-
-	return &invite, nil
+func (s *StubClient) CreatePasswordlessSession(_ context.Context, opts CreatePasswordlessSessionOpts) (*PasswordlessSession, error) {
+	return &PasswordlessSession{
+		ID:        fmt.Sprintf("stub_pwl_%d", s.next),
+		Email:     opts.Email,
+		ExpiresAt: s.nowFn().UTC().Add(time.Duration(opts.ExpiresIn) * time.Second).Format(time.RFC3339),
+		Link:      fmt.Sprintf("https://stub.workos.com/passwordless/%d", s.next),
+	}, nil
 }
 
-func (s *StubClient) ListInvitations(_ context.Context, orgID string) ([]Invitation, error) {
-	s.mut.Lock()
-	defer s.mut.Unlock()
-
-	state := s.orgState(orgID)
-	invites := make([]Invitation, 0, len(state.inviteOrder))
-	for _, inviteID := range state.inviteOrder {
-		invites = append(invites, state.invites[inviteID])
-	}
-
-	return invites, nil
-}
-
-func (s *StubClient) RevokeInvitation(_ context.Context, invitationID string) (*Invitation, error) {
-	s.mut.Lock()
-	defer s.mut.Unlock()
-
-	for _, state := range s.orgs {
-		invite, ok := state.invites[invitationID]
-		if !ok {
-			continue
-		}
-		now := s.nowFn().UTC().Format(time.RFC3339)
-		invite.State = InvitationStateRevoked
-		invite.RevokedAt = now
-		invite.UpdatedAt = now
-		state.invites[invitationID] = invite
-		return &invite, nil
-	}
-
-	return nil, fmt.Errorf("invitation %q not found", invitationID)
-}
-
-func (s *StubClient) ResendInvitation(_ context.Context, invitationID string) (*Invitation, error) {
-	s.mut.Lock()
-	defer s.mut.Unlock()
-
-	for _, state := range s.orgs {
-		invite, ok := state.invites[invitationID]
-		if !ok {
-			continue
-		}
-		invite.UpdatedAt = s.nowFn().UTC().Format(time.RFC3339)
-		state.invites[invitationID] = invite
-		return &invite, nil
-	}
-
-	return nil, fmt.Errorf("invitation %q not found", invitationID)
-}
-
-func (s *StubClient) FindInvitationByToken(_ context.Context, token string) (*Invitation, error) {
-	s.mut.Lock()
-	defer s.mut.Unlock()
-
-	for _, state := range s.orgs {
-		for _, invite := range state.invites {
-			if invite.Token == token {
-				return &invite, nil
-			}
-		}
-	}
-
-	return nil, &APIError{Method: "GET", Path: "find_invitation_by_token", StatusCode: 404, Body: "invitation not found"}
-}
-
-func (s *StubClient) GetInvitation(_ context.Context, invitationID string) (*Invitation, error) {
-	s.mut.Lock()
-	defer s.mut.Unlock()
-
-	for _, state := range s.orgs {
-		invite, ok := state.invites[invitationID]
-		if ok {
-			return &invite, nil
-		}
-	}
-
-	return nil, &APIError{Method: "GET", Path: "get_invitation", StatusCode: 404, Body: "invitation not found"}
+func (s *StubClient) AuthenticateWithInviteLink(_ context.Context, _ string) (*InviteLinkProfile, error) {
+	return &InviteLinkProfile{
+		ID:        "stub_user_invite",
+		Email:     "stub@example.com",
+		FirstName: "Stub",
+		LastName:  "User",
+	}, nil
 }
 
 func (s *StubClient) DeleteOrganizationMembership(_ context.Context, membershipID string) error {
@@ -428,6 +410,39 @@ func (s *StubClient) GetOrgMembership(_ context.Context, workOSUserID, workOSOrg
 	return nil, nil
 }
 
+func (s *StubClient) CreateOrganization(_ context.Context, name, _ string) (string, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	workosOrgID := fmt.Sprintf("org_workos_%d", s.next)
+	s.next++
+	state := s.orgState(workosOrgID)
+	state.organization.Name = name
+
+	return workosOrgID, nil
+}
+
+func (s *StubClient) CreateOrganizationMembership(_ context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state := s.orgState(workosOrgID)
+	membershipID := fmt.Sprintf("om_%d", s.next)
+	s.next++
+	state.memberships[membershipID] = Member{
+		ID:             membershipID,
+		UserID:         workosUserID,
+		OrganizationID: workosOrgID,
+		Organization:   "",
+		RoleSlugs:      []string{roleSlug},
+		Status:         "active",
+		CreatedAt:      "",
+		UpdatedAt:      "",
+	}
+
+	return membershipID, nil
+}
+
 func (s *StubClient) ListOrgUsers(_ context.Context, orgID string) (map[string]User, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
@@ -437,6 +452,21 @@ func (s *StubClient) ListOrgUsers(_ context.Context, orgID string) (map[string]U
 	maps.Copy(users, state.users)
 
 	return users, nil
+}
+
+func (s *StubClient) GetUserByEmail(_ context.Context, email string) (*User, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	for _, state := range s.orgs {
+		for _, user := range state.users {
+			if user.Email == email {
+				return &user, nil
+			}
+		}
+	}
+
+	return nil, nil
 }
 
 func (s *StubClient) orgState(orgID string) *stubOrgState {
@@ -455,7 +485,7 @@ func (s *StubClient) orgState(orgID string) *stubOrgState {
 		memberships: make(map[string]Member),
 		users:       make(map[string]User),
 		invites:     make(map[string]Invitation),
-		inviteOrder: make([]string, 0),
+		inviteOrder: nil,
 	}
 	s.orgs[orgID] = state
 	s.orgOrder = append(s.orgOrder, orgID)
@@ -472,12 +502,6 @@ func stubDefaultGlobalRoles() map[string]Role {
 
 func (s *StubClient) nextRoleID() string {
 	id := fmt.Sprintf("stub_role_%d", s.next)
-	s.next++
-	return id
-}
-
-func (s *StubClient) nextInviteID() string {
-	id := fmt.Sprintf("stub_invite_%d", s.next)
 	s.next++
 	return id
 }

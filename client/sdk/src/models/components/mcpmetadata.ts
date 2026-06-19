@@ -13,7 +13,7 @@ import {
 } from "./mcpenvironmentconfig.js";
 
 /**
- * Metadata used to configure the MCP install page.
+ * Metadata used to configure the MCP install page. Exactly one of toolset_id or mcp_server_id identifies which backend the metadata belongs to.
  */
 export type McpMetadata = {
   /**
@@ -53,9 +53,13 @@ export type McpMetadata = {
    */
   logoAssetId?: string | undefined;
   /**
-   * The toolset associated with this install page metadata
+   * The MCP server associated with this install page metadata. Mutually exclusive with toolset_id.
    */
-  toolsetId: string;
+  mcpServerId?: string | undefined;
+  /**
+   * The toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
+   */
+  toolsetId?: string | undefined;
   /**
    * When the metadata entry was last updated
    */
@@ -80,7 +84,8 @@ export const McpMetadata$inboundSchema: z.ZodMiniType<McpMetadata, unknown> = z
       installation_override_url: z.optional(z.string()),
       instructions: z.optional(z.string()),
       logo_asset_id: z.optional(z.string()),
-      toolset_id: z.string(),
+      mcp_server_id: z.optional(z.string()),
+      toolset_id: z.optional(z.string()),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -95,6 +100,7 @@ export const McpMetadata$inboundSchema: z.ZodMiniType<McpMetadata, unknown> = z
         "external_documentation_url": "externalDocumentationUrl",
         "installation_override_url": "installationOverrideUrl",
         "logo_asset_id": "logoAssetId",
+        "mcp_server_id": "mcpServerId",
         "toolset_id": "toolsetId",
         "updated_at": "updatedAt",
       });

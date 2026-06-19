@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -28,9 +29,8 @@ func TestService_UpdateRole(t *testing.T) {
 	name := "Platform Builder"
 	description := "Updated description"
 
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"),
-	}, nil).Once()
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"))
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_member", "Member", authz.SystemRoleMember))
 	ti.roles.On("UpdateRole", mock.Anything, mockidp.MockOrgID, "custom-builder", thirdpartyworkos.UpdateRoleOpts{
 		Name:        &name,
 		Description: &description,
@@ -42,59 +42,93 @@ func TestService_UpdateRole(t *testing.T) {
 		CreatedAt:   mockRoleTimestamp,
 		UpdatedAt:   mockRoleTimestamp,
 	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "member"),
-		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "member"),
-		mockMember(mockidp.MockOrgID, "membership_3", "user_3", "custom-builder"),
-	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "custom-builder").Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", mock.Anything).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "custom-builder",
+		RoleSlugs:      []string{"custom-builder", authz.SystemRoleMember},
 		CreatedAt:      mockMembershipTimestamp,
 	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", "custom-builder").Return(&thirdpartyworkos.Member{
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_2", mock.Anything).Return(&thirdpartyworkos.Member{
 		ID:             "membership_2",
 		UserID:         "user_2",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "custom-builder",
+		RoleSlugs:      []string{"custom-builder", authz.SystemRoleMember},
 		CreatedAt:      mockMembershipTimestamp,
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"),
-		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "custom-builder"),
-		mockMember(mockidp.MockOrgID, "membership_3", "user_3", "custom-builder"),
-		// user_workos_only has never logged into Gram — should not be counted
-		mockMember(mockidp.MockOrgID, "membership_workos_only", "user_workos_only", "custom-builder"),
 	}, nil).Once()
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "user2@test.com", "User 2", "user_2", "membership_2")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_3", "user3@test.com", "User 3", "user_3", "membership_3")
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember(mockidp.MockOrgID, "membership_1", "user_1", authz.SystemRoleMember))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", mockMember(mockidp.MockOrgID, "membership_2", "user_2", authz.SystemRoleMember))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_3", mockMember(mockidp.MockOrgID, "membership_3", "user_3", "custom-builder"))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "", mockMember(mockidp.MockOrgID, "membership_workos_only", "user_workos_only", "custom-builder"))
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-old")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID), authz.ScopeRiskPolicyEvaluate, "policy-1")
 	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
-		ID:          "role_custom",
+		ID:          roleID,
 		Name:        &name,
 		Description: &description,
-		Grants: []*gen.RoleGrant{
+		AddGrants: []*gen.RoleGrant{
 			{Scope: string(authz.ScopeProjectWrite), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}, {ResourceKind: "project", ResourceID: "project-2"}}},
 			{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
+		},
+		RemoveGrants: []*gen.RoleGrant{
+			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-old"}}},
 		},
 		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "role_custom", role.ID)
+	require.Equal(t, roleID, role.ID)
 	require.Equal(t, name, role.Name)
 	require.Equal(t, description, role.Description)
 	require.False(t, role.IsSystem)
 	require.Equal(t, 3, role.MemberCount)
 	require.Equal(t, mockRoleTimestamp, role.CreatedAt)
-	require.Equal(t, mockRoleTimestamp, role.UpdatedAt)
-	require.Len(t, role.Grants, 2)
+	require.NotEmpty(t, role.UpdatedAt)
+	require.NotEqual(t, mockRoleTimestamp, role.UpdatedAt)
+	require.Len(t, role.Grants, 3)
 
-	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
-	require.Len(t, grants, 3)
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID))
+	require.Len(t, grants, 4)
+	scopes := make([]string, 0, len(grants))
+	for _, grant := range grants {
+		scopes = append(scopes, grant.Scope)
+	}
+	require.Contains(t, scopes, string(authz.ScopeRiskPolicyEvaluate))
+}
+
+func TestService_UpdateRole_RejectsRiskPolicyGrantMutation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"))
+
+	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID: roleID,
+		AddGrants: []*gen.RoleGrant{
+			{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
+		},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.ErrorContains(t, err, `managed by "risk_policy" grants`)
+
+	_, err = ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID: roleID,
+		RemoveGrants: []*gen.RoleGrant{
+			{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
+		},
+	})
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.ErrorContains(t, err, `managed by "risk_policy" grants`)
+	ti.roles.AssertNotCalled(t, "UpdateRole", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestService_UpdateRole_SystemRole_MemberAssignment(t *testing.T) {
@@ -106,34 +140,27 @@ func TestService_UpdateRole_SystemRole_MemberAssignment(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	// admin and member are system roles — WorkOS UpdateRole must NOT be called.
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockRole("role_admin", "Admin", "admin", "Full access"),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "member"),
-		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "member"),
-	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "admin").Return(&thirdpartyworkos.Member{
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_member", "Member", authz.SystemRoleMember))
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", mock.Anything).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "admin",
+		RoleSlugs:      []string{"admin", authz.SystemRoleMember},
 		CreatedAt:      mockMembershipTimestamp,
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
-		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "member"),
 	}, nil).Once()
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "user2@test.com", "User 2", "user_2", "membership_2")
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember(mockidp.MockOrgID, "membership_1", "user_1", authz.SystemRoleMember))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", mockMember(mockidp.MockOrgID, "membership_2", "user_2", authz.SystemRoleMember))
 
 	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
-		ID:        "role_admin",
+		ID:        roleID,
 		MemberIds: []string{"local_user_1"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "role_admin", role.ID)
+	require.Equal(t, roleID, role.ID)
 	require.True(t, role.IsSystem)
 	require.Equal(t, 1, role.MemberCount)
 
@@ -145,14 +172,14 @@ func TestService_UpdateRole_SystemRole_RejectsPropertyChanges(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockRole("role_member", "Member", "member", "Default role"),
-	}, nil)
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_member", "Member", authz.SystemRoleMember))
 
 	name := "Custom Name"
 	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
-		ID:   "role_member",
+		ID:   roleID,
 		Name: &name,
 	})
 	require.Error(t, err)
@@ -160,15 +187,15 @@ func TestService_UpdateRole_SystemRole_RejectsPropertyChanges(t *testing.T) {
 
 	description := "Custom description"
 	_, err = ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
-		ID:          "role_member",
+		ID:          roleID,
 		Description: &description,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "system role properties cannot be updated")
 
 	_, err = ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
-		ID:     "role_member",
-		Grants: []*gen.RoleGrant{{Scope: string(authz.ScopeProjectRead)}},
+		ID:        roleID,
+		AddGrants: []*gen.RoleGrant{{Scope: string(authz.ScopeProjectRead)}},
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "system role properties cannot be updated")
@@ -178,13 +205,13 @@ func TestService_UpdateRole_SystemRole_RejectsNoopUpdate(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockRole("role_admin", "Admin", "admin", "Full access"),
-	}, nil).Once()
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
 
 	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
-		ID: "role_admin",
+		ID: roleID,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "system role update requires member_ids")
@@ -200,27 +227,21 @@ func TestService_UpdateRole_SystemRole_AuditLog(t *testing.T) {
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessRoleUpdate)
 	require.NoError(t, err)
 
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockRole("role_admin", "Admin", "admin", "Full access"),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "member"),
-	}, nil).Once()
-	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "admin").Return(&thirdpartyworkos.Member{
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_member", "Member", authz.SystemRoleMember))
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", mock.Anything).Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
-		RoleSlug:       "admin",
+		RoleSlugs:      []string{"admin", authz.SystemRoleMember},
 		CreatedAt:      mockMembershipTimestamp,
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
 	}, nil).Once()
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember(mockidp.MockOrgID, "membership_1", "user_1", authz.SystemRoleMember))
 
 	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
-		ID:        "role_admin",
+		ID:        roleID,
 		MemberIds: []string{"local_user_1"},
 	})
 	require.NoError(t, err)
@@ -240,9 +261,8 @@ func TestService_UpdateRole_NotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{}, nil).Once()
 
-	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: "role_missing"})
+	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: "00000000-0000-0000-0000-000000000001"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "role not found")
 }
@@ -251,15 +271,14 @@ func TestService_UpdateRole_WorkOSUpdateFailure(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{}, nil).Once()
-	ti.roles.On("UpdateRole", mock.Anything, mockidp.MockOrgID, "custom-builder", thirdpartyworkos.UpdateRoleOpts{}).Return((*thirdpartyworkos.Role)(nil), errors.New("workos unavailable")).Once()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"))
+	ti.roles.On("UpdateRole", mock.Anything, mockidp.MockOrgID, "custom-builder", thirdpartyworkos.UpdateRoleOpts{}).Return((*thirdpartyworkos.Role)(nil), errors.New("workos unavailable")).Times(3)
 
-	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: "role_custom"})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "update role in workos")
+	role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: roleID})
+	require.NoError(t, err)
+	require.Equal(t, roleID, role.ID)
 }
 
 func TestService_UpdateRole_AuditLog(t *testing.T) {
@@ -274,12 +293,7 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 
 	name := "Audit Builder"
 	description := "After description"
-	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
-		mockRole("role_custom", "Before Builder", "custom-builder", "Before description"),
-	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"),
-	}, nil).Once()
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Before Builder", "custom-builder", "Before description"))
 	ti.roles.On("UpdateRole", mock.Anything, mockidp.MockOrgID, "custom-builder", thirdpartyworkos.UpdateRoleOpts{
 		Name:        &name,
 		Description: &description,
@@ -291,22 +305,24 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 		CreatedAt:   mockRoleTimestamp,
 		UpdatedAt:   mockRoleTimestamp,
 	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
-		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"),
-		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "custom-builder"),
-	}, nil).Once()
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "user2@test.com", "User 2", "user_2", "membership_2")
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", mockMember(mockidp.MockOrgID, "membership_2", "user_2", "custom-builder"))
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-old")
 
 	updated, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
-		ID:          "role_custom",
+		ID:          roleID,
 		Name:        &name,
 		Description: &description,
-		Grants: []*gen.RoleGrant{{
+		AddGrants: []*gen.RoleGrant{{
 			Scope:     string(authz.ScopeProjectWrite),
 			Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}},
+		}},
+		RemoveGrants: []*gen.RoleGrant{{
+			Scope:     string(authz.ScopeProjectRead),
+			Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-old"}},
 		}},
 	})
 	require.NoError(t, err)

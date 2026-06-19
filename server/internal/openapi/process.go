@@ -136,7 +136,7 @@ func (p *ToolExtractor) Do(
 		"openapi doc id set", openapiDocID != uuid.Nil,
 		"doc info set", docInfo != nil && docInfo.Name != "" && docInfo.Slug != "",
 	); err != nil {
-		return nil, oops.E(oops.CodeInvariantViolation, oops.Permanent(err), "unable to process openapi document").Log(ctx, p.logger)
+		return nil, oops.E(oops.CodeInvariantViolation, oops.Permanent(err), "unable to process openapi document").LogError(ctx, p.logger)
 	}
 
 	doc, readErr := readDoc(ctx, readDocParams{
@@ -151,7 +151,7 @@ func (p *ToolExtractor) Do(
 
 	dbtx, err := p.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error opening database transaction").Log(ctx, p.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error opening database transaction").LogError(ctx, p.logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -198,7 +198,7 @@ func (p *ToolExtractor) Do(
 		Openapiv3DocumentID: openapiDocID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error clearing deployment http tools").Log(ctx, p.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error clearing deployment http tools").LogError(ctx, p.logger)
 	}
 	if deletedTools > 0 {
 		logger.InfoContext(ctx, "cleared http tools from previous deployment attempt", attr.SlogDBDeletedRowsCount(deletedTools))
@@ -210,7 +210,7 @@ func (p *ToolExtractor) Do(
 		Openapiv3DocumentID: uuid.NullUUID{UUID: openapiDocID, Valid: openapiDocID != uuid.Nil},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error clearing deployment http tools").Log(ctx, p.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error clearing deployment http tools").LogError(ctx, p.logger)
 	}
 	if deletedSecurity > 0 {
 		logger.InfoContext(ctx, "cleared http security from previous deployment attempt", attr.SlogDBDeletedRowsCount(deletedSecurity))
@@ -227,7 +227,7 @@ func (p *ToolExtractor) Do(
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error saving processed deployment").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error saving processed deployment").LogError(ctx, logger)
 	}
 
 	return res, nil
@@ -410,7 +410,7 @@ func readDoc(ctx context.Context, params readDocParams) ([]byte, error) {
 			oops.CodeUnexpected,
 			err,
 			"error fetching openapi document",
-		).Log(ctx, params.logger)
+		).LogError(ctx, params.logger)
 	}
 
 	defer o11y.LogDefer(ctx, params.logger, func() error {
@@ -423,7 +423,7 @@ func readDoc(ctx context.Context, params readDocParams) ([]byte, error) {
 			oops.CodeUnexpected,
 			err,
 			"error reading openapi document",
-		).Log(ctx, params.logger)
+		).LogError(ctx, params.logger)
 	}
 
 	return doc, nil

@@ -25,7 +25,7 @@ export function FeatureRequestModal({
   icon: Icon,
   telemetryData,
   accountUpgrade,
-}: FeatureRequestModalProps) {
+}: FeatureRequestModalProps): JSX.Element {
   const telemetry = useTelemetry();
   const routes = useOrgRoutes();
 
@@ -70,14 +70,14 @@ export function FeatureRequestModal({
             <Button
               variant="brand"
               onClick={() => {
-                handleAccountUpgradeClick();
+                void handleAccountUpgradeClick();
                 window.open(routes.billing.href(), "_self");
               }}
             >
               UPGRADE
             </Button>
           ) : (
-            <Button variant="brand" onClick={handleRequestFeature}>
+            <Button variant="brand" onClick={() => void handleRequestFeature()}>
               REQUEST FEATURE
             </Button>
           )}

@@ -3,20 +3,14 @@
 #MISE description="Generate SDK from OpenAPI spec"
 
 #USAGE flag "-c --check" help="Check if the Gram-Internal OpenAPI output is up-to-date"
-#USAGE flag "-s --skip-versioning" help="Skip automatic SDK version increments"
-#USAGE flag "-u --skip-upload-spec" help="Skip uploading the spec to the Speakeasy registry"
 
 set -e
 
 generate() {
-  args=()
-  if [[ "${usage_skip_versioning:-}" == "true" ]]; then
-    args+=(--skip-versioning)
-  fi
-  if [[ "${usage_skip_upload_spec:-}" == "true" ]]; then
-    args+=(--skip-upload-spec)
-  fi
-  speakeasy run "${args[@]}"
+  # Speakeasy's TypeScript target compiles the generated SDK by invoking pnpm
+  # directly in client/sdk. Without CI=true, pnpm prompts to purge node_modules
+  # and aborts when there's no TTY. See ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY.
+  CI=true speakeasy run --skip-versioning --skip-upload-spec --minimal
 }
 
 check_inputs() {

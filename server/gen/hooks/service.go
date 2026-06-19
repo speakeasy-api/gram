@@ -68,6 +68,12 @@ type ClaudeHookResult struct {
 	SystemMessage *string
 	// Hook-specific output as JSON object
 	HookSpecificOutput any
+	// Top-level block decision for UserPromptSubmit / PostToolUse / Stop /
+	// SubagentStop. Use 'block' to halt processing.
+	Decision *string
+	// Reason accompanying decision; shown to the user (UserPromptSubmit) or Claude
+	// (PostToolUse/Stop).
+	Reason *string
 }
 
 // ClaudePayload is the payload type of the hooks service claude method.
@@ -76,6 +82,8 @@ type ClaudePayload struct {
 	ApikeyToken *string
 	// Optional project slug for plugin-driven attribution.
 	ProjectSlugInput *string
+	// Optional endpoint hostname supplied by the Gram hook plugin.
+	HookHostname *string
 	// The type of hook event
 	HookEventName string
 	// The name of the tool (for tool-related events)
@@ -92,6 +100,8 @@ type ClaudePayload struct {
 	IsInterrupt *bool
 	// The Claude Code session ID
 	SessionID *string
+	// Email of the authenticated user from the Speakeasy device agent, if available
+	UserEmail *string
 	// The working directory when the event fired
 	Cwd *string
 	// Path to the conversation transcript file
@@ -131,10 +141,16 @@ type CodexHookResult struct {
 type CodexPayload struct {
 	ApikeyToken      *string
 	ProjectSlugInput *string
+	// Optional endpoint hostname supplied by the Gram hook plugin.
+	HookHostname *string
 	// The type of hook event
 	HookEventName string
 	// The Codex session ID
 	SessionID *string
+	// Email of the authenticated Codex user, if available
+	UserEmail *string
+	// Additional hook-specific data
+	AdditionalData map[string]any
 	// Path to the conversation transcript file
 	TranscriptPath *string
 	// The working directory when the event fired
@@ -151,6 +167,8 @@ type CodexPayload struct {
 	PermissionType *string
 	// The user's prompt text (UserPromptSubmit only)
 	Prompt *string
+	// The final assistant message text for the turn (Stop only)
+	LastAssistantMessage *string
 }
 
 // CursorHookResult is the result type of the hooks service cursor method.
@@ -169,6 +187,8 @@ type CursorHookResult struct {
 type CursorPayload struct {
 	ApikeyToken      *string
 	ProjectSlugInput *string
+	// Optional endpoint hostname supplied by the Gram hook plugin.
+	HookHostname *string
 	// The type of hook event (e.g. beforeSubmitPrompt, stop, afterAgentResponse,
 	// afterAgentThought, preToolUse, postToolUse, postToolUseFailure,
 	// beforeMCPExecution, afterMCPExecution)
@@ -289,6 +309,10 @@ type OTELLogRecord struct {
 	TimeUnixNano *string
 	// Observed timestamp in nanoseconds
 	ObservedTimeUnixNano *string
+	// Trace ID
+	TraceID *string
+	// Span ID
+	SpanID *string
 	// Log body content
 	Body *OTELLogBody
 	// Log attributes

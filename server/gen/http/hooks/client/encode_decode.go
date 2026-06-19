@@ -49,6 +49,10 @@ func EncodeClaudeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		if p.HookHostname != nil {
+			head := *p.HookHostname
+			req.Header.Set("X-Gram-Hook-Hostname", head)
+		}
 		body := NewClaudeRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("hooks", "claude", err)
@@ -283,6 +287,10 @@ func EncodeCursorRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		if p.HookHostname != nil {
+			head := *p.HookHostname
+			req.Header.Set("X-Gram-Hook-Hostname", head)
+		}
 		body := NewCursorRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("hooks", "cursor", err)
@@ -516,6 +524,10 @@ func EncodeCodexRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 		if p.ProjectSlugInput != nil {
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
+		}
+		if p.HookHostname != nil {
+			head := *p.HookHostname
+			req.Header.Set("X-Gram-Hook-Hostname", head)
 		}
 		body := NewCodexRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -1301,6 +1313,8 @@ func marshalHooksOTELLogRecordToOTELLogRecordRequestBody(v *hooks.OTELLogRecord)
 	res := &OTELLogRecordRequestBody{
 		TimeUnixNano:           v.TimeUnixNano,
 		ObservedTimeUnixNano:   v.ObservedTimeUnixNano,
+		TraceID:                v.TraceID,
+		SpanID:                 v.SpanID,
 		DroppedAttributesCount: v.DroppedAttributesCount,
 	}
 	if v.Body != nil {
@@ -1480,6 +1494,8 @@ func marshalOTELLogRecordRequestBodyToHooksOTELLogRecord(v *OTELLogRecordRequest
 	res := &hooks.OTELLogRecord{
 		TimeUnixNano:           v.TimeUnixNano,
 		ObservedTimeUnixNano:   v.ObservedTimeUnixNano,
+		TraceID:                v.TraceID,
+		SpanID:                 v.SpanID,
 		DroppedAttributesCount: v.DroppedAttributesCount,
 	}
 	if v.Body != nil {

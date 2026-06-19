@@ -6,6 +6,7 @@ import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
+import { attachmentToURNPrefix } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
@@ -19,7 +20,7 @@ import { useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
-export default function ExternalMCPDetails() {
+export default function ExternalMCPDetails(): JSX.Element {
   const { sourceSlug } = useParams<{
     sourceSlug: string;
   }>();
@@ -59,15 +60,39 @@ export default function ExternalMCPDetails() {
       (mcp) => mcp.slug === sourceSlug,
     );
   }, [deployment, sourceSlug]);
+  const sourceOrigin = useMemo(() => {
+    if (source?.organizationMcpCollectionRegistryId) {
+      return {
+        id: source.organizationMcpCollectionRegistryId,
+        label: "Collection",
+      };
+    }
+
+    if (source?.registryId) {
+      return {
+        id: source.registryId,
+        label: "Catalog",
+      };
+    }
+
+    return {
+      id: undefined,
+      label: "External MCP",
+    };
+  }, [source]);
 
   const { data: toolsets, isLoading: isLoadingToolsets } = useListToolsets();
 
-  // Find ALL toolsets that use this external MCP source (could be multiple)
+  // Find ALL toolsets that use this external MCP source (could be multiple).
+  // A catalog-imported source contributes one URN per registry tool
+  // (`tools:externalmcp:<slug>:<toolName>`); only the no-tools fallback uses
+  // `:proxy`. Match the source-scoped prefix so both shapes are detected.
   const associatedToolsets = useMemo(() => {
     if (!toolsets?.toolsets || !source) return [];
 
+    const urnPrefix = attachmentToURNPrefix("externalmcp", source.slug);
     return toolsets.toolsets.filter((t) =>
-      t.toolUrns?.includes(`tools:externalmcp:${source.slug}:proxy`),
+      t.toolUrns?.some((urn) => urn.startsWith(urnPrefix)),
     );
   }, [toolsets, source]);
 
@@ -85,7 +110,7 @@ export default function ExternalMCPDetails() {
       });
       await refetch();
       toast.success("External MCP source deleted successfully");
-      navigate(routes.sources.href());
+      void navigate(routes.sources.href());
     } catch (error) {
       console.error("Failed to delete external MCP source:", error);
       toast.error("Failed to delete external MCP source. Please try again.");
@@ -184,10 +209,13 @@ export default function ExternalMCPDetails() {
           </div>
 
           {/* Overview Tab */}
-          <TabsContent value="overview" className="mt-0 flex-1">
+          <TabsContent
+            value="overview"
+            className="mt-0 min-h-0 flex-1 overflow-y-auto"
+          >
             <div className="mx-auto w-full max-w-[1270px] space-y-6 px-8 py-8">
-              {/* Row 1: Name, Registry ID */}
-              <div className="flex gap-16">
+              {/* Row 1: Name, Origin, Origin ID */}
+              <div className="flex flex-wrap gap-x-16 gap-y-6">
                 <div>
                   <Type muted small className="mb-1">
                     Name
@@ -196,9 +224,19 @@ export default function ExternalMCPDetails() {
                 </div>
                 <div>
                   <Type muted small className="mb-1">
-                    Registry ID
+                    Created from
                   </Type>
-                  <Type className="font-mono">{source?.registryId || "—"}</Type>
+                  <Badge variant="neutral">
+                    <Badge.Text>{sourceOrigin.label}</Badge.Text>
+                  </Badge>
+                </div>
+                <div>
+                  <Type muted small className="mb-1">
+                    Origin ID
+                  </Type>
+                  <Type className="font-mono break-all">
+                    {sourceOrigin.id || "—"}
+                  </Type>
                 </div>
               </div>
 
@@ -234,7 +272,10 @@ export default function ExternalMCPDetails() {
           </TabsContent>
 
           {/* MCP Servers Tab */}
-          <TabsContent value="mcp-servers" className="mt-0 flex-1">
+          <TabsContent
+            value="mcp-servers"
+            className="mt-0 min-h-0 flex-1 overflow-y-auto"
+          >
             <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
               {isLoadingToolsets ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -269,7 +310,10 @@ export default function ExternalMCPDetails() {
           </TabsContent>
 
           {/* Settings Tab */}
-          <TabsContent value="settings" className="mt-0 flex-1">
+          <TabsContent
+            value="settings"
+            className="mt-0 min-h-0 flex-1 overflow-y-auto"
+          >
             <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
               {/* Danger Zone */}
               <div className="border-destructive/30 rounded-lg border p-6">

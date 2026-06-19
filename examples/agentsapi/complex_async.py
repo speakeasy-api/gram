@@ -53,7 +53,7 @@ while True:
     poll_data = poll_resp.json()
     status = poll_data.get("status")
     print(f"Status: {status}")
-    
+
     if status != "in_progress":
         if "output" in poll_data and poll_data["output"]:
             for item in poll_data["output"]:
@@ -64,7 +64,7 @@ while True:
 
             print("\n=== Final Response ===")
             print(poll_data["output"][-1]["content"][-1]["text"])
-        
+
         if verbose:
             print("\nFull response:")
             print(json.dumps(poll_data, indent=2))

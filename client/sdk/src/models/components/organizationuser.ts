@@ -19,6 +19,10 @@ export type OrganizationUser = {
    */
   id: string;
   /**
+   * Timestamp of the user's most recent login.
+   */
+  lastLogin?: Date | undefined;
+  /**
    * User display name.
    */
   name: string;
@@ -53,6 +57,9 @@ export const OrganizationUser$inboundSchema: z.ZodMiniType<
     ),
     email: z.string(),
     id: z.string(),
+    last_login: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     name: z.string(),
     organization_id: z.string(),
     photo_url: z.optional(z.string()),
@@ -66,6 +73,7 @@ export const OrganizationUser$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
+      "last_login": "lastLogin",
       "organization_id": "organizationId",
       "photo_url": "photoUrl",
       "updated_at": "updatedAt",

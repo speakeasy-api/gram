@@ -3,9 +3,7 @@
 //MISE description="Seed the local database with data"
 
 import assert from "node:assert";
-import { createServer } from "node:http";
 import crypto from "node:crypto";
-import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -84,116 +82,42 @@ const SEED_PROJECTS: {
   },
 ];
 
-async function authenticateViaMockIDP(serverURL: string): Promise<string> {
-  const idpAddress = process.env["SPEAKEASY_SERVER_ADDRESS"];
-  if (!idpAddress) {
-    throw new Error("SPEAKEASY_SERVER_ADDRESS is not set");
-  }
-
-  const secretKey = process.env["SPEAKEASY_SECRET_KEY"];
-  if (!secretKey) {
-    throw new Error("SPEAKEASY_SECRET_KEY is not set");
-  }
-
-  // Step 1: Hit the mock IDP login endpoint to get an auth code.
-  // Use a dummy return_url — we only need the code from the redirect Location.
-  const loginURL = `${idpAddress}/v1/speakeasy_provider/login?return_url=http://localhost/callback`;
-  const loginRes = await fetch(loginURL, { redirect: "manual" });
-  const location = loginRes.headers.get("location");
-  if (!location) {
-    throw new Error("Mock IDP login did not return a redirect");
-  }
-
-  // Check if the redirect contains a code (mock mode) or points elsewhere (OIDC mode).
-  const redirectUrl = new URL(location);
-  const code = redirectUrl.searchParams.get("code");
-
-  if (code) {
-    // Mock mode: the IDP returned a code directly.
-    return exchangeCodeWithServer(serverURL, code);
-  }
-
-  // OIDC mode: the IDP redirected to an external provider (e.g. WorkOS).
-  // We need a browser-based flow to complete authentication.
-  log.info("OIDC mode detected — opening browser for authentication...");
-  return authenticateViaBrowser(serverURL, idpAddress);
-}
-
-/**
- * Opens a browser for the user to complete OIDC authentication.
- * Starts a temporary local HTTP server to capture the redirect code.
- */
-async function authenticateViaBrowser(
-  serverURL: string,
-  idpAddress: string,
-): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    const server = createServer((req, res) => {
-      const url = new URL(req.url!, `http://localhost`);
-      const code = url.searchParams.get("code");
-
-      if (!code) {
-        res.writeHead(400, { "Content-Type": "text/html" });
-        res.end("<h1>Error</h1><p>No code received. Please try again.</p>");
-        return;
-      }
-
-      res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(
-        "<h1>Authenticated!</h1><p>You can close this tab and return to the terminal.</p>",
-      );
-
-      server.close();
-
-      exchangeCodeWithServer(serverURL, code).then(resolve).catch(reject);
-    });
-
-    // Listen on a random available port
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address();
-      if (!addr || typeof addr === "string") {
-        reject(new Error("Failed to start local callback server"));
-        return;
-      }
-      const callbackUrl = `http://127.0.0.1:${addr.port}/callback`;
-      const loginURL = `${idpAddress}/v1/speakeasy_provider/login?return_url=${encodeURIComponent(callbackUrl)}`;
-
-      // Open the browser
-      const openCmd =
-        process.platform === "darwin"
-          ? "open"
-          : process.platform === "win32"
-            ? "start"
-            : "xdg-open";
-      exec(`${openCmd} '${loginURL}'`, (err) => {
-        if (err) {
-          log.warn(
-            `Could not open browser automatically. Please visit:\n${loginURL}`,
-          );
-        }
-      });
-    });
-
-    // Timeout after 2 minutes (unref so it doesn't block exit)
-    const timeout = setTimeout(() => {
-      server.close();
-      reject(new Error("Authentication timed out after 2 minutes"));
-    }, 120_000);
-    timeout.unref();
+async function authenticateViaDevIDP(serverURL: string): Promise<string> {
+  // Step 1: Hit auth.login to get the OAuth2 authorize URL and nonce cookie.
+  const loginRes = await fetch(`${serverURL}/rpc/auth.login`, {
+    redirect: "manual",
   });
-}
+  const authorizeURL = loginRes.headers.get("location");
+  if (!authorizeURL) {
+    throw new Error("auth.login did not return a redirect");
+  }
 
-/** Exchange an auth code with the Gram server's callback endpoint. */
-async function exchangeCodeWithServer(
-  serverURL: string,
-  code: string,
-): Promise<string> {
-  const callbackURL = `${serverURL}/rpc/auth.callback?code=${encodeURIComponent(code)}`;
-  const callbackRes = await fetch(callbackURL, { redirect: "manual" });
+  // Extract the gram_auth_nonce cookie — needed for callback validation.
+  const nonceCookie = loginRes.headers
+    .getSetCookie()
+    .find((c) => c.startsWith("gram_auth_nonce="));
+  if (!nonceCookie) {
+    throw new Error("auth.login did not set gram_auth_nonce cookie");
+  }
+  const nonceCookieValue = nonceCookie.split(";")[0]; // "gram_auth_nonce=<value>"
+
+  // Step 2: Follow the redirect to dev-idp's /oauth2/authorize.
+  // dev-idp auto-resolves the current user and redirects back with code+state.
+  const authorizeRes = await fetch(authorizeURL, { redirect: "manual" });
+  const callbackLocation = authorizeRes.headers.get("location");
+  if (!callbackLocation) {
+    throw new Error("dev-idp authorize did not return a redirect");
+  }
+
+  // Step 3: Hit auth.callback with the code, state, and nonce cookie.
+  const callbackRes = await fetch(callbackLocation, {
+    redirect: "manual",
+    headers: { cookie: nonceCookieValue },
+  });
   const sessionToken = callbackRes.headers.get("gram-session");
   if (!sessionToken) {
     throw new Error(
-      `Server callback did not return a session (status=${callbackRes.status})`,
+      `auth.callback did not return a session (status=${callbackRes.status})`,
     );
   }
   return sessionToken;
@@ -221,9 +145,9 @@ async function seed() {
 
   const gram = new GramCore({ serverURL });
 
-  // Authenticate via the mock IDP to get a session token.
-  log.info("Authenticating via mock IDP...");
-  const sessionId = await authenticateViaMockIDP(serverURL);
+  // Authenticate via the dev-idp to get a session token.
+  log.info("Authenticating via dev-idp...");
+  const sessionId = await authenticateViaDevIDP(serverURL);
   log.info("Authenticated successfully.");
 
   const res = await authInfo(gram, undefined, {
@@ -266,6 +190,19 @@ async function seed() {
     const err = e as { stderr?: string; message?: string };
     log.warn(
       `Failed to seed MCP registry: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
+  }
+
+  // Set active org as whitelisted
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "UPDATE organization_metadata SET whitelisted = TRUE, gram_account_type = 'pro' WHERE id = '${activeOrgID}';"`.quiet();
+    log.info("Set active org as whitelisted (downgraded to pro for seeding)");
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; message?: string };
+    log.warn(
+      `Failed to set org whitelisted: ${err.message || err.stderr || JSON.stringify(e)}`,
     );
   }
 
@@ -388,6 +325,19 @@ async function seed() {
       organizationId: activeOrgID,
       toolUrns,
     });
+  }
+
+  // Set enterprise account type last so RBAC enforcement doesn't block seeding.
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "UPDATE organization_metadata SET gram_account_type = 'enterprise' WHERE id = '${activeOrgID}';"`.quiet();
+    log.info("Set active org to enterprise account type");
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; message?: string };
+    log.warn(
+      `Failed to set enterprise account type: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
   }
 
   success = true;
@@ -1390,7 +1340,6 @@ const MCP_LOGS_TOOL_URNS = new Set([
   "tools:http:gram:gram_get_observability_overview",
   "tools:http:gram:gram_list_toolsets",
   "tools:http:gram:gram_get_mcp_metadata",
-  "tools:http:gram:gram_list_chats_with_resolutions",
   "tools:http:gram:gram_get_deployment_logs",
   "tools:http:gram:gram_list_chats",
   // Audit log tools
@@ -1579,6 +1528,91 @@ async function seedObservabilityData(init: {
 
   const RESOLUTIONS = ["success", "partial", "failure"] as const;
   const RESOLUTION_WEIGHTS = [65, 15, 20]; // success: 65%, partial: 15%, failure: 20%
+
+  // Models attached to chat completion token usage events
+  const MODELS: [model: string, provider: string][] = [
+    ["claude-sonnet-4-6", "anthropic"],
+    ["claude-haiku-4-5", "anthropic"],
+    ["gpt-4", "openai"],
+    ["gpt-4o-mini", "openai"],
+  ];
+  const MODEL_WEIGHTS = [45, 25, 20, 10];
+  const MODEL_WEIGHT_TOTAL = MODEL_WEIGHTS.reduce((s, w) => s + w, 0);
+
+  // WorkOS-style user attributes stamped onto telemetry, powering the
+  // attribute_metrics_summaries rollup and the telemetry.query endpoint
+  // (group/filter by department, role, etc.). Attributes are derived
+  // deterministically from the user index so each synthetic user is stable.
+  const DEPARTMENTS = [
+    "Engineering",
+    "Sales",
+    "Marketing",
+    "Support",
+    "Finance",
+    "Product",
+  ];
+  const JOB_TITLES = [
+    "Software Engineer",
+    "Engineering Manager",
+    "Account Executive",
+    "Data Analyst",
+    "Director",
+    "Support Specialist",
+  ];
+  const EMPLOYEE_TYPES = ["full_time", "contractor", "part_time"];
+  const DIVISIONS = ["R&D", "Go-To-Market", "Operations"];
+  const COST_CENTERS = ["CC-1000", "CC-2000", "CC-3000", "CC-4000"];
+  const ROLE_POOL = ["admin", "developer", "viewer", "billing", "analyst"];
+  const GROUP_POOL = ["platform", "growth", "enterprise", "core"];
+  // The consuming surface (gram.hook.source) for chat rows, exposed as the
+  // "provider" dimension on telemetry.query. (The hooks seeding block below has
+  // its own HOOK_SOURCES list for hook events.)
+  const CHAT_HOOK_SOURCES = ["claude-code", "cursor", "cowork", "codex"];
+
+  // Stable non-negative hash so attributes can be derived from a string key
+  // (e.g. an email) as well as a numeric user index.
+  function hashToIndex(s: string): number {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return h;
+  }
+
+  // WorkOS-style attribute key/value pairs for a synthetic user, derived
+  // deterministically from a numeric seed so each user is stable across runs.
+  function workosAttrObject(n: number): Record<string, unknown> {
+    const roles = [ROLE_POOL[n % ROLE_POOL.length]];
+    if (n % 3 === 0) roles.push(ROLE_POOL[(n + 2) % ROLE_POOL.length]);
+    return {
+      "user.attributes.department_name": DEPARTMENTS[n % DEPARTMENTS.length],
+      "user.attributes.job_title": JOB_TITLES[n % JOB_TITLES.length],
+      "user.attributes.employee_type":
+        EMPLOYEE_TYPES[n % EMPLOYEE_TYPES.length],
+      "user.attributes.division_name": DIVISIONS[n % DIVISIONS.length],
+      "user.attributes.cost_center_name": COST_CENTERS[n % COST_CENTERS.length],
+      "user.roles": [...new Set(roles)],
+      "user.groups": [GROUP_POOL[n % GROUP_POOL.length]],
+    };
+  }
+
+  // Builds the JSON attribute fragment (email + WorkOS attrs + hook source)
+  // spliced into the main-loop tool-call and chat-completion rows so every
+  // measure groups consistently by user attribute.
+  function userAttrsJSONFragment(n: number, hookSource: string): string {
+    const obj: Record<string, unknown> = {
+      "user.email": `user${n}@example.com`,
+      ...workosAttrObject(n),
+      "gram.hook.source": hookSource,
+    };
+    return Object.entries(obj)
+      .map(([k, v]) => `${JSON.stringify(k)}: ${JSON.stringify(v)}`)
+      .join(", ");
+  }
+
+  // OTEL-forwarded-only sessions: token usage captured by org-wide OTEL
+  // forwarding for users who don't have Gram installed. These produce raw
+  // token metrics but no stored chats or tool calls, so they must be
+  // EXCLUDED from tokens under management on the billing page.
+  const NUM_FORWARDED_ONLY_SESSIONS = 150;
 
   // Sample user messages for chat content
   const USER_MESSAGES = [
@@ -2055,8 +2089,12 @@ async function seedObservabilityData(init: {
   for (let i = 0; i < NUM_CHATS; i++) {
     const chatId = generateChatUUID(i);
     const extUserId = `ext-user-${i % 80}`;
-    const userId = `user-${i % 200}`;
+    const userIndex = i % 200;
+    const userId = `user-${userIndex}`;
     const apiKeyId = `key-${i % 5}`;
+    // Consuming surface + WorkOS user attributes, shared across this chat's rows.
+    const hookSource = CHAT_HOOK_SOURCES[i % CHAT_HOOK_SOURCES.length];
+    const uaFrag = userAttrsJSONFragment(userIndex, hookSource);
 
     const daysAgo = Math.random() * DAYS_BACK;
     const eventTime = new Date(now - daysAgo * msPerDay);
@@ -2066,6 +2104,8 @@ async function seedObservabilityData(init: {
     const traceId = crypto.randomBytes(16).toString("hex");
 
     // Tool call event - TOOLS now contains full URNs like "tools:http:gram:operation"
+    // Carries gen_ai.conversation.id so the chat registers as a stored session
+    // in chat_token_summaries (the tokens-under-management evidence signal).
     const toolUrn = TOOLS[Math.floor(Math.random() * TOOLS.length)];
     const statusCode =
       Math.random() < 0.92
@@ -2074,17 +2114,28 @@ async function seedObservabilityData(init: {
     const latency = (0.05 + Math.random() * 2).toFixed(3);
 
     chInserts.push(
-      `(${timeNano}, ${timeNano}, 'INFO', 'Tool call: ${toolUrn}', '${traceId}', '{"http.response.status_code": ${statusCode}, "http.server.request.duration": ${latency}, "gram.tool.urn": "${toolUrn}", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', '${toolUrn}', 'gram-mcp-gateway', '${chatId}')`,
+      `(${timeNano}, ${timeNano}, 'INFO', 'Tool call: ${toolUrn}', '${traceId}', '{"http.response.status_code": ${statusCode}, "http.server.request.duration": ${latency}, "gram.tool.urn": "${toolUrn}", "gen_ai.conversation.id": "${chatId}", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", ${uaFrag}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', '${toolUrn}', 'gram-mcp-gateway', '${chatId}')`,
     );
 
-    // Chat completion event - same trace ID links it to the tool call
+    // Chat completion event - same trace ID links it to the tool call.
+    // Token usage attributes feed metrics_summaries (raw "total tokens") and
+    // chat_token_summaries (tokens under management).
     const finishReason =
       Math.random() < 0.65 ? "stop" : Math.random() < 0.9 ? "length" : "error";
     const duration = 30 + Math.floor(Math.random() * 150);
     const completionStatus = Math.random() < 0.92 ? 200 : 500;
+    const [model, provider] = weightedPick(
+      MODELS,
+      MODEL_WEIGHTS,
+      MODEL_WEIGHT_TOTAL,
+    );
+    const inputTokens = 500 + Math.floor(Math.random() * 4500);
+    const outputTokens = 100 + Math.floor(Math.random() * 1900);
+    // Rough blended price ($3/M input, $15/M output) so cost charts are non-zero.
+    const cost = ((inputTokens * 3 + outputTokens * 15) / 1_000_000).toFixed(6);
 
     chInserts.push(
-      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '${traceId}', '{"gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
+      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '${traceId}', '{"gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.total_tokens": ${inputTokens + outputTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${provider}", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}, ${uaFrag}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
     );
 
     // Resolution event (70% of chats) - same trace ID
@@ -2106,6 +2157,39 @@ async function seedObservabilityData(init: {
 
       chInserts.push(
         `(${timeNano + BigInt(2000000)}, ${timeNano + BigInt(2000000)}, 'INFO', 'Chat resolution: ${resolution}', '${traceId}', '{"gen_ai.evaluation.name": "chat_resolution", "gen_ai.evaluation.score.label": "${resolution}", "gen_ai.evaluation.score.value": ${score}, "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'chat_resolution', 'gram-resolution-analyzer', '${chatId}')`,
+      );
+    }
+  }
+
+  // OTEL-forwarded-only sessions: token usage rows with a conversation id but
+  // no stored chats, tool calls, or hook events. The billing page's tokens
+  // under management number should stay below the raw total tokens shown on
+  // the insights page by roughly the sum of these.
+  for (let i = 0; i < NUM_FORWARDED_ONLY_SESSIONS; i++) {
+    const chatId = generateChatUUID(100_000 + i);
+    const daysAgo = Math.random() * DAYS_BACK;
+    const sessionTime = new Date(now - daysAgo * msPerDay);
+    const [model, provider] = weightedPick(
+      MODELS,
+      MODEL_WEIGHTS,
+      MODEL_WEIGHT_TOTAL,
+    );
+
+    // 1-3 completion events per forwarded session
+    const numCompletions = 1 + Math.floor(Math.random() * 3);
+    for (let j = 0; j < numCompletions; j++) {
+      const traceId = crypto.randomBytes(16).toString("hex");
+      const timeNano =
+        BigInt(sessionTime.getTime()) * BigInt(1000000) +
+        BigInt(j) * BigInt(60_000_000_000); // one minute apart
+      const inputTokens = 500 + Math.floor(Math.random() * 4500);
+      const outputTokens = 100 + Math.floor(Math.random() * 1900);
+      const cost = ((inputTokens * 3 + outputTokens * 15) / 1_000_000).toFixed(
+        6,
+      );
+
+      chInserts.push(
+        `(${timeNano}, ${timeNano}, 'INFO', 'Chat completion (OTEL forwarded)', '${traceId}', '{"gen_ai.conversation.id": "${chatId}", "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.total_tokens": ${inputTokens + outputTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${provider}", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}"}', '{}', '${projectId}', 'agents:chat:completion', 'otel-collector', '${chatId}')`,
       );
     }
   }
@@ -2374,7 +2458,10 @@ async function seedObservabilityData(init: {
         "gram.project.id": projectId,
         "gen_ai.conversation.id": sessionId,
       };
-      if (userEmail) attrs["user.email"] = userEmail;
+      if (userEmail) {
+        attrs["user.email"] = userEmail;
+        Object.assign(attrs, workosAttrObject(hashToIndex(userEmail)));
+      }
 
       chInserts.push(
         `(${baseTimeNano}, ${baseTimeNano}, 'INFO', 'Hook: SessionStart', '${traceId}', '${sqlAttrs(attrs)}', '{}', '${projectId}', 'SessionStart', '${hookSource}', '${sessionId}')`,
@@ -2395,7 +2482,10 @@ async function seedObservabilityData(init: {
         "gen_ai.conversation.id": sessionId,
         "gen_ai.tool_call.id": toolUseId,
       };
-      if (userEmail) preToolAttrs["user.email"] = userEmail;
+      if (userEmail) {
+        preToolAttrs["user.email"] = userEmail;
+        Object.assign(preToolAttrs, workosAttrObject(hashToIndex(userEmail)));
+      }
       if (mcpServer && toolName !== "Skill")
         preToolAttrs["gram.tool_call.source"] = mcpServer;
       if (skillName)
@@ -2421,7 +2511,10 @@ async function seedObservabilityData(init: {
         "gen_ai.conversation.id": sessionId,
         "gen_ai.tool_call.id": toolUseId,
       };
-      if (userEmail) postToolAttrs["user.email"] = userEmail;
+      if (userEmail) {
+        postToolAttrs["user.email"] = userEmail;
+        Object.assign(postToolAttrs, workosAttrObject(hashToIndex(userEmail)));
+      }
       if (mcpServer && toolName !== "Skill")
         postToolAttrs["gram.tool_call.source"] = mcpServer;
       if (skillName)
@@ -2441,6 +2534,7 @@ async function seedObservabilityData(init: {
     SET mutations_sync = 1;
     ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}';
     ALTER TABLE trace_summaries DELETE WHERE gram_project_id = '${projectId}';
+    ALTER TABLE chat_token_summaries DELETE WHERE gram_project_id = '${projectId}';
     INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
     ${chInserts.join(",\n")};
   `;

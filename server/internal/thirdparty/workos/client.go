@@ -9,10 +9,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
+	"github.com/workos/workos-go/v6/pkg/directorysync"
 	"github.com/workos/workos-go/v6/pkg/events"
 	"github.com/workos/workos-go/v6/pkg/organizations"
+	"github.com/workos/workos-go/v6/pkg/sso"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
 
@@ -55,11 +58,14 @@ func wrapSDKError(err error, context string) error {
 // It is designed to have a caching layer added later.
 type Client struct {
 	apiKey     string
+	clientID   string // IDP client ID (GRAM_IDP_CLIENT_ID), needed for SSO code exchange
 	endpoint   string // base URL for raw HTTP calls; defaults to workosBaseURL
 	httpClient *guardian.HTTPClient
 	orgs       *organizations.Client
 	um         *usermanagement.Client
 	events     *events.Client
+	sso        *sso.Client
+	dsync      *directorysync.Client
 }
 
 // ClientOpts configures optional overrides for New.
@@ -69,6 +75,8 @@ type ClientOpts struct {
 	Endpoint string
 	// HTTPClient overrides the default retryable HTTP client.
 	HTTPClient *guardian.HTTPClient
+	// ClientID is the IDP client ID (GRAM_IDP_CLIENT_ID), needed for SSO code exchange.
+	ClientID string
 }
 
 func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpts) *Client {
@@ -97,11 +105,14 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 
 	return &Client{
 		apiKey:     apiKey,
+		clientID:   opt.ClientID,
 		endpoint:   endpoint,
 		httpClient: httpClient,
 		orgs:       &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
 		um:         um,
 		events:     &events.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
+		sso:        &sso.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil, ClientID: opt.ClientID},
+		dsync:      &directorysync.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
 	}
 }
 
@@ -142,10 +153,18 @@ func (wc *Client) do(ctx context.Context, method, path string, body []byte, out 
 }
 
 // newRequest builds an authenticated HTTP request targeting the WorkOS API.
+// The path may include a query string (e.g. "/connections?organization_id=abc");
+// the query is preserved after joining with the base endpoint.
 func (wc *Client) newRequest(ctx context.Context, method, path string, body []byte) (*http.Request, error) {
-	reqURL, err := url.JoinPath(wc.endpoint, path)
+	// Split path from query string before JoinPath (which escapes '?').
+	pathOnly, query, _ := strings.Cut(path, "?")
+
+	reqURL, err := url.JoinPath(wc.endpoint, pathOnly)
 	if err != nil {
 		return nil, fmt.Errorf("build url: %w", err)
+	}
+	if query != "" {
+		reqURL += "?" + query
 	}
 
 	var bodyReader io.Reader
@@ -171,16 +190,62 @@ func convertUser(u usermanagement.User) User {
 		LastName:          u.LastName,
 		Email:             u.Email,
 		ProfilePictureURL: u.ProfilePictureURL,
+		ExternalID:        u.ExternalID,
 	}
 }
 
+// EnsureUserExternalID sets the WorkOS user's external_id to gramUserID if it
+// is not already set. Returns an error if the existing external_id doesn't
+// match gramUserID (indicates a data inconsistency that needs investigation).
+func (wc *Client) EnsureUserExternalID(ctx context.Context, workosUserID, gramUserID string) error {
+	u, err := wc.um.GetUser(ctx, usermanagement.GetUserOpts{User: workosUserID})
+	if err != nil {
+		return fmt.Errorf("get workos user: %w", err)
+	}
+
+	if u.ExternalID == gramUserID {
+		return nil // already correct
+	}
+	if u.ExternalID != "" {
+		return fmt.Errorf("workos user %s external_id mismatch: got %q, want %q", workosUserID, u.ExternalID, gramUserID)
+	}
+
+	if _, err := wc.um.UpdateUser(ctx, usermanagement.UpdateUserOpts{
+		User:             workosUserID,
+		Email:            "",
+		FirstName:        "",
+		LastName:         "",
+		EmailVerified:    false,
+		Password:         "",
+		PasswordHash:     "",
+		PasswordHashType: "",
+		ExternalID:       gramUserID,
+		Metadata:         nil,
+	}); err != nil {
+		return fmt.Errorf("set workos user external_id: %w", err)
+	}
+
+	return nil
+}
+
 func convertMember(m usermanagement.OrganizationMembership) Member {
+	roleSlugs := make([]string, 0, len(m.Roles))
+	for _, r := range m.Roles {
+		if r.Slug != "" {
+			roleSlugs = append(roleSlugs, r.Slug)
+		}
+	}
+	// Fall back to the single Role field when Roles is empty (pre-multi-role WorkOS environments).
+	if len(roleSlugs) == 0 && m.Role.Slug != "" {
+		roleSlugs = []string{m.Role.Slug}
+	}
+
 	return Member{
 		ID:             m.ID,
 		UserID:         m.UserID,
 		OrganizationID: m.OrganizationID,
 		Organization:   m.OrganizationName,
-		RoleSlug:       m.Role.Slug,
+		RoleSlugs:      roleSlugs,
 		Status:         string(m.Status),
 		CreatedAt:      m.CreatedAt,
 		UpdatedAt:      m.UpdatedAt,

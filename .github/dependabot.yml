@@ -43,7 +43,50 @@ updates:
       aws:
         patterns:
           - "github.com/aws/aws-sdk-go-v2/*"
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      ai-sdk:
+        patterns:
+          - "@ai-sdk/*"
+          - "ai"
+      assistant-ui:
+        patterns:
+          - "@assistant-ui/*"
+      class-names:
+        patterns:
+          - "clsx"
+          - "tailwind-merge"
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      tanstack:
+        patterns:
+          - "@tanstack/*"
+      tailwind:
+        patterns:
+          - "tailwindcss"
+          - "@tailwindcss/postcss"
+          - "@tailwindcss/typography"
+          - "@tailwindcss/vite"
+      vite:
+        patterns:
+          - "vite"
+          - "@vitejs/*"
+          - "vitest"
   - package-ecosystem: "docker"
-    directory: "/server"
+    directories:
+      - "/server"
+      - "/agents/runtime-image"
+      - "/client/dashboard"
+      - "/otel-collector"
+      - "/pystreams"
     schedule:
       interval: "weekly"

@@ -3,6 +3,8 @@ import { assign, fromPromise, setup, type SnapshotFrom } from "xstate";
 
 import { checkCreds, checkExternal, checkProxyMeta } from "./guards";
 import {
+  authServerOrigin,
+  pickAuthMethodFromList,
   type Context,
   type DiscoveredOAuth,
   type Input,
@@ -62,6 +64,19 @@ function externalFromDiscovered(
   };
 }
 
+// Picks the preferred token auth method from the discovered metadata's
+// advertised list, falling back to client_secret_basic. Note the synthesized
+// metadata in the remote-MCP wizard rarely carries the list, so this usually
+// returns the fallback; the auto-register service additionally runs a live RFC
+// 8414 discovery to recover the upstream's real methods before DCR.
+function pickTokenAuthMethod(m: Record<string, unknown>): string {
+  const raw = m.token_endpoint_auth_methods_supported;
+  const supported = Array.isArray(raw)
+    ? raw.filter((v): v is string => typeof v === "string")
+    : [];
+  return pickAuthMethodFromList(supported);
+}
+
 function proxyFieldsFromDiscovered(
   d: DiscoveredOAuth,
 ): Partial<Context["proxy"]> {
@@ -73,6 +88,7 @@ function proxyFieldsFromDiscovered(
     out.tokenEndpoint = m.token_endpoint;
   if (Array.isArray(m.scopes_supported))
     out.scopes = m.scopes_supported.join(", ");
+  out.tokenAuthMethod = pickTokenAuthMethod(m);
   return out;
 }
 
@@ -85,11 +101,6 @@ function discoveredRegistrationEndpoint(
 ): string | null {
   const v = d?.metadata.registration_endpoint;
   return typeof v === "string" && v.length > 0 ? v : null;
-}
-
-function discoveredAuthMethods(d: DiscoveredOAuth | null): string[] {
-  const v = d?.metadata.token_endpoint_auth_methods_supported;
-  return Array.isArray(v) ? (v as string[]) : [];
 }
 
 export function canAutoConfigureFromDiscovered(
@@ -175,22 +186,24 @@ export const oauthWizardMachine = setup({
                 : context.proxy,
           }),
         },
-        SELECT_PROXY_AUTO: {
-          guard: "canAutoConfigure",
-          target: "proxy.registering",
-          actions: assign({
-            proxy: ({ context }) =>
-              context.discovered
-                ? {
-                    ...context.proxy,
-                    ...proxyFieldsFromDiscovered(context.discovered),
-                    prefilled: true,
-                  }
-                : context.proxy,
-            autoRegistering: () => true,
-            error: () => null,
-          }),
-        },
+        SELECT_PROXY_AUTO: [
+          {
+            guard: "canAutoConfigure",
+            target: "proxy.registering",
+            actions: assign({
+              proxy: ({ context }) =>
+                context.discovered
+                  ? {
+                      ...context.proxy,
+                      ...proxyFieldsFromDiscovered(context.discovered),
+                      prefilled: true,
+                    }
+                  : context.proxy,
+              autoRegistering: () => true,
+              error: () => null,
+            }),
+          },
+        ],
       },
     },
 
@@ -343,12 +356,15 @@ export const oauthWizardMachine = setup({
             input: ({ context }): RegisterClientInput => ({
               registrationEndpoint:
                 discoveredRegistrationEndpoint(context.discovered) ?? "",
-              scopesSupported: context.proxy.scopes
-                .split(",")
-                .map((s) => s.trim())
-                .filter((s) => s.length > 0),
-              tokenEndpointAuthMethodsSupported: discoveredAuthMethods(
-                context.discovered,
+              tokenAuthMethod: context.proxy.tokenAuthMethod,
+              // Origin to run live auth-method discovery against. Derived from
+              // the discovered endpoints since the synthesized metadata omits
+              // the supported-methods list. Empty when no endpoint parses, in
+              // which case the service skips discovery and uses tokenAuthMethod.
+              issuer: authServerOrigin(
+                context.proxy.authorizationEndpoint,
+                context.proxy.tokenEndpoint,
+                discoveredRegistrationEndpoint(context.discovered) ?? "",
               ),
             }),
             onDone: {
@@ -555,10 +571,7 @@ export const oauthWizardMachine = setup({
     },
   },
 });
-
-export type OAuthWizardMachine = typeof oauthWizardMachine;
 export type WizardSnapshot = SnapshotFrom<typeof oauthWizardMachine>;
-export type WizardSend = (event: WizardEvent) => void;
 
 export const WizardContext = createActorContext(oauthWizardMachine);
 

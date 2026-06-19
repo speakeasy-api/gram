@@ -323,6 +323,48 @@ func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSes
 	return v, nil
 }
 
+// BuildListToolFiltersPayload builds the payload for the toolsets
+// listToolFilters endpoint from CLI flags.
+func BuildListToolFiltersPayload(toolsetsListToolFiltersSlug string, toolsetsListToolFiltersSessionToken string, toolsetsListToolFiltersApikeyToken string, toolsetsListToolFiltersProjectSlugInput string) (*toolsets.ListToolFiltersPayload, error) {
+	var err error
+	var slug string
+	{
+		slug = toolsetsListToolFiltersSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsListToolFiltersSessionToken != "" {
+			sessionToken = &toolsetsListToolFiltersSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsListToolFiltersApikeyToken != "" {
+			apikeyToken = &toolsetsListToolFiltersApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsListToolFiltersProjectSlugInput != "" {
+			projectSlugInput = &toolsetsListToolFiltersProjectSlugInput
+		}
+	}
+	v := &toolsets.ListToolFiltersPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildCheckMCPSlugAvailabilityPayload builds the payload for the toolsets
 // checkMCPSlugAvailability endpoint from CLI flags.
 func BuildCheckMCPSlugAvailabilityPayload(toolsetsCheckMCPSlugAvailabilitySlug string, toolsetsCheckMCPSlugAvailabilitySessionToken string, toolsetsCheckMCPSlugAvailabilityApikeyToken string, toolsetsCheckMCPSlugAvailabilityProjectSlugInput string) (*toolsets.CheckMCPSlugAvailabilityPayload, error) {
@@ -629,6 +671,120 @@ func BuildUpdateOAuthProxyServerPayload(toolsetsUpdateOAuthProxyServerBody strin
 	v := &toolsets.UpdateOAuthProxyServerPayload{}
 	if body.OauthProxyServer != nil {
 		v.OauthProxyServer = marshalOAuthProxyServerUpdateFormRequestBodyToTypesOAuthProxyServerUpdateForm(body.OauthProxyServer)
+	}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetUserSessionIssuerPayload builds the payload for the toolsets
+// setUserSessionIssuer endpoint from CLI flags.
+func BuildSetUserSessionIssuerPayload(toolsetsSetUserSessionIssuerBody string, toolsetsSetUserSessionIssuerSlug string, toolsetsSetUserSessionIssuerSessionToken string, toolsetsSetUserSessionIssuerApikeyToken string, toolsetsSetUserSessionIssuerProjectSlugInput string) (*toolsets.SetUserSessionIssuerPayload, error) {
+	var err error
+	var body SetUserSessionIssuerRequestBody
+	{
+		err = json.Unmarshal([]byte(toolsetsSetUserSessionIssuerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		if body.UserSessionIssuerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var slug string
+	{
+		slug = toolsetsSetUserSessionIssuerSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsSetUserSessionIssuerSessionToken != "" {
+			sessionToken = &toolsetsSetUserSessionIssuerSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsSetUserSessionIssuerApikeyToken != "" {
+			apikeyToken = &toolsetsSetUserSessionIssuerApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsSetUserSessionIssuerProjectSlugInput != "" {
+			projectSlugInput = &toolsetsSetUserSessionIssuerProjectSlugInput
+		}
+	}
+	v := &toolsets.SetUserSessionIssuerPayload{
+		UserSessionIssuerID: body.UserSessionIssuerID,
+	}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetToolVariationsGroupPayload builds the payload for the toolsets
+// setToolVariationsGroup endpoint from CLI flags.
+func BuildSetToolVariationsGroupPayload(toolsetsSetToolVariationsGroupBody string, toolsetsSetToolVariationsGroupSlug string, toolsetsSetToolVariationsGroupSessionToken string, toolsetsSetToolVariationsGroupApikeyToken string, toolsetsSetToolVariationsGroupProjectSlugInput string) (*toolsets.SetToolVariationsGroupPayload, error) {
+	var err error
+	var body SetToolVariationsGroupRequestBody
+	{
+		err = json.Unmarshal([]byte(toolsetsSetToolVariationsGroupBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		if body.ToolVariationsGroupID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var slug string
+	{
+		slug = toolsetsSetToolVariationsGroupSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsSetToolVariationsGroupSessionToken != "" {
+			sessionToken = &toolsetsSetToolVariationsGroupSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsSetToolVariationsGroupApikeyToken != "" {
+			apikeyToken = &toolsetsSetToolVariationsGroupApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsSetToolVariationsGroupProjectSlugInput != "" {
+			projectSlugInput = &toolsetsSetToolVariationsGroupProjectSlugInput
+		}
+	}
+	v := &toolsets.SetToolVariationsGroupPayload{
+		ToolVariationsGroupID: body.ToolVariationsGroupID,
 	}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken

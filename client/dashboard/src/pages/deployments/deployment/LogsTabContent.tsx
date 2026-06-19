@@ -82,7 +82,7 @@ function formatLogTimestamp(createdAt: string): string {
 }
 
 function parseLogMessage(message: string, event: string): ParsedLogEntry {
-  let source: string | undefined;
+  const source: string | undefined = undefined;
   let cleanMessage = message;
 
   const lowerMsg = message.toLowerCase();
@@ -159,7 +159,7 @@ export const LogsTabContent = ({
   deploymentId?: string;
   embeddedMode?: boolean;
   attachmentType?: string;
-} = {}) => {
+} = {}): React.JSX.Element | null => {
   const { deploymentId: paramDeploymentId } = useParams();
   const deploymentId = propDeploymentId ?? paramDeploymentId!;
   const { data: deploymentLogs } = useDeploymentLogsSuspense(
@@ -262,15 +262,23 @@ export const LogsTabContent = ({
       }));
   }, [deploymentLogs.events, assetNameMap]);
 
-  const activeSourceFilter =
-    attachmentType ?? (selectedSource !== "all" ? selectedSource : undefined);
+  const activeAttachmentIdFilter =
+    selectedSource !== "all" ? selectedSource : undefined;
 
   const visibleEvents = useMemo(() => {
-    if (!activeSourceFilter) return deploymentLogs.events;
-    return deploymentLogs.events.filter(
-      (event) => event.attachmentId === activeSourceFilter,
-    );
-  }, [deploymentLogs.events, activeSourceFilter]);
+    let events = deploymentLogs.events;
+    if (attachmentType) {
+      events = events.filter(
+        (event) => event.attachmentType === attachmentType,
+      );
+    }
+    if (activeAttachmentIdFilter) {
+      events = events.filter(
+        (event) => event.attachmentId === activeAttachmentIdFilter,
+      );
+    }
+    return events;
+  }, [deploymentLogs.events, attachmentType, activeAttachmentIdFilter]);
 
   const parsedLogs = useMemo(
     () =>

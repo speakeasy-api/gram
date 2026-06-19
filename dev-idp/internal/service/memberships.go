@@ -2,10 +2,10 @@ package service
 
 import (
 	"context"
-	"time"
 	"database/sql"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"

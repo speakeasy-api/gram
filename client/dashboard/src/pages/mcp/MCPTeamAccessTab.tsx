@@ -9,14 +9,14 @@ import {
 import { Type } from "@/components/ui/type";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
-import type { Tool, Toolset } from "@/lib/toolTypes";
+import type { Tool } from "@/lib/toolTypes";
 import { resourceKindForScope, selectorMatches } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { Column, Table } from "@speakeasy-api/moonshine";
 import { SkeletonTable } from "@/components/ui/skeleton";
-import { useMemo, useState } from "react";
+import { useMemo, useState, ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@speakeasy-api/moonshine";
 
@@ -33,7 +33,7 @@ type AccessLevel = "full" | "server" | "tools" | "none";
 
 interface MemberAccess {
   member: AccessMember;
-  role: Role;
+  roles: Role[];
   scopes: {
     read: AccessLevel;
     write: AccessLevel;
@@ -44,7 +44,7 @@ interface MemberAccess {
 function getAccessLevel(
   role: Role,
   scope: string,
-  toolsetSlug: string,
+  resourceId: string,
 ): AccessLevel {
   const grant = role.grants.find((g) => g.scope === scope);
   if (!grant) return "none";
@@ -54,7 +54,7 @@ function getAccessLevel(
 
   const check: Record<string, string> = {
     resourceKind: resourceKindForScope(scope),
-    resourceId: toolsetSlug,
+    resourceId,
   };
 
   // Check if any selector matches this server (without tool constraint)
@@ -74,13 +74,13 @@ function getAccessLevel(
 function getToolIdsForScope(
   role: Role,
   scope: string,
-  toolsetSlug: string,
+  resourceId: string,
 ): string[] {
   const grant = role.grants.find((g) => g.scope === scope);
   if (!grant?.selectors) return [];
   const check: Record<string, string> = {
     resourceKind: resourceKindForScope(scope),
-    resourceId: toolsetSlug,
+    resourceId,
   };
   return grant.selectors
     .filter((s) => selectorMatches(s, check) && s.tool)
@@ -93,6 +93,23 @@ function resolveTools(toolIds: string[], tools: Tool[]): Tool[] {
   return tools.filter(
     (t) => ("id" in t && idSet.has(t.id)) || ("name" in t && idSet.has(t.name)),
   );
+}
+
+const ACCESS_LEVEL_PRIORITY: Record<AccessLevel, number> = {
+  full: 3,
+  server: 2,
+  tools: 1,
+  none: 0,
+};
+
+function bestAccessLevel(levels: AccessLevel[]): AccessLevel {
+  let best: AccessLevel = "none";
+  for (const level of levels) {
+    if (ACCESS_LEVEL_PRIORITY[level] > ACCESS_LEVEL_PRIORITY[best]) {
+      best = level;
+    }
+  }
+  return best;
 }
 
 const METHOD_COLORS: Record<string, string> = {
@@ -198,13 +215,34 @@ function AccessBadge({
 
 interface ToolDetailSheet {
   member: AccessMember;
-  role: Role;
+  roles: Role[];
   scope: string;
   scopeLabel: string;
+  // Rich Tool objects resolved against a toolset catalog. Empty for
+  // mcp_servers-backed servers (no Gram-side tool catalog), in which case
+  // toolNames carries the per-grant tool identifiers verbatim.
   tools: Tool[];
+  toolNames: string[];
 }
 
-export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
+// MCPTeamAccessTab renders the per-server team access matrix for any MCP
+// server identified by its resource id. Both toolset-backed and
+// mcp_servers-backed (Remote MCP) servers grant under the same `mcp:*` scope
+// family and the same `"mcp"` resource kind today, so the same component
+// serves both — the caller just supplies the resource id and, when
+// available, the toolset's tool catalog for rich per-tool drilldowns.
+//
+// TODO(AGE-1902): once toolset-backed MCP data moves to mcp_servers, the
+// resourceId on every callsite should already be an mcp_servers id and the
+// `tools` prop will be sourced from whatever tool-catalog primitive replaces
+// `toolset.tools` for both backing kinds.
+export function MCPTeamAccessTab({
+  resourceId,
+  tools,
+}: {
+  resourceId: string;
+  tools?: Tool[];
+}): ReactElement | null {
   const orgRoutes = useOrgRoutes();
   const { data: membersData, isLoading: membersLoading } = useMembers();
   const { data: rolesData, isLoading: rolesLoading } = useRoles();
@@ -217,14 +255,22 @@ export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
     const roleMap = new Map(roles.map((r) => [r.id, r]));
     return members
       .map((member) => {
-        const role = roleMap.get(member.roleId);
-        if (!role) return null;
+        const roles = member.roleIds
+          .map((id) => roleMap.get(id))
+          .filter((r): r is Role => r !== undefined);
+        if (roles.length === 0) return null;
         const scopes = {
-          read: getAccessLevel(role, "mcp:read", toolset.id),
-          write: getAccessLevel(role, "mcp:write", toolset.id),
-          connect: getAccessLevel(role, "mcp:connect", toolset.id),
+          read: bestAccessLevel(
+            roles.map((r) => getAccessLevel(r, "mcp:read", resourceId)),
+          ),
+          write: bestAccessLevel(
+            roles.map((r) => getAccessLevel(r, "mcp:write", resourceId)),
+          ),
+          connect: bestAccessLevel(
+            roles.map((r) => getAccessLevel(r, "mcp:connect", resourceId)),
+          ),
         };
-        return { member, role, scopes };
+        return { member, roles, scopes };
       })
       .filter((m): m is MemberAccess => m !== null)
       .filter(
@@ -234,21 +280,26 @@ export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
           m.scopes.connect !== "none",
       )
       .sort((a, b) => a.member.name.localeCompare(b.member.name));
-  }, [membersData?.members, rolesData?.roles, toolset.id]);
+  }, [membersData?.members, rolesData?.roles, resourceId]);
 
   const openToolSheet = (
     row: MemberAccess,
     scope: string,
     scopeLabel: string,
   ) => {
-    const toolIds = getToolIdsForScope(row.role, scope, toolset.id);
-    const matched = resolveTools(toolIds, toolset.tools);
+    const toolNames = [
+      ...new Set(
+        row.roles.flatMap((r) => getToolIdsForScope(r, scope, resourceId)),
+      ),
+    ];
+    const matched = tools ? resolveTools(toolNames, tools) : [];
     setSheetData({
       member: row.member,
-      role: row.role,
+      roles: row.roles,
       scope,
       scopeLabel,
-      tools: matched.length > 0 ? matched : [],
+      tools: matched,
+      toolNames,
     });
   };
 
@@ -290,9 +341,13 @@ export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
       header: "Role",
       width: "1fr",
       render: (row) => (
-        <Type variant="body" className="text-sm">
-          {row.role.name}
-        </Type>
+        <div className="flex flex-wrap gap-1">
+          {row.roles.map((role) => (
+            <Type key={role.id} variant="body" className="text-sm">
+              {role.name}
+            </Type>
+          ))}
+        </div>
       ),
     },
     {
@@ -390,21 +445,40 @@ export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
                     {sheetData.member.name}
                   </span>{" "}
                   can {sheetData.scopeLabel.toLowerCase()}{" "}
-                  {sheetData.tools.length} tool
-                  {sheetData.tools.length !== 1 ? "s" : ""} on this server via
-                  the{" "}
+                  {sheetData.toolNames.length} tool
+                  {sheetData.toolNames.length !== 1 ? "s" : ""} on this server
+                  via the{" "}
                   <span className="text-foreground font-medium">
-                    {sheetData.role.name}
+                    {sheetData.roles.map((r) => r.name).join(", ")}
                   </span>{" "}
-                  role.
+                  {sheetData.roles.length === 1 ? "role" : "roles"}.
                 </SheetDescription>
               </SheetHeader>
               <div className="flex-1 overflow-y-auto px-4 pb-4">
                 <div className="space-y-2">
-                  {sheetData.tools.map((tool, i) => (
-                    <ToolRow key={i} tool={tool} />
-                  ))}
-                  {sheetData.tools.length === 0 && (
+                  {sheetData.tools.length > 0 ? (
+                    sheetData.tools.map((tool, i) => (
+                      <ToolRow key={i} tool={tool} />
+                    ))
+                  ) : sheetData.toolNames.length > 0 ? (
+                    // No catalog available (mcp_servers-backed servers don't
+                    // expose tools through Gram). Surface the raw tool
+                    // identifiers from the grant selectors so the user can
+                    // at least see what they have access to.
+                    sheetData.toolNames.map((name) => (
+                      <div
+                        key={name}
+                        className="border-border rounded-lg border p-3"
+                      >
+                        <Type
+                          variant="body"
+                          className="font-mono text-sm font-medium"
+                        >
+                          {name}
+                        </Type>
+                      </div>
+                    ))
+                  ) : (
                     <div className="text-muted-foreground py-8 text-center text-sm">
                       Could not resolve tool names from grants.
                     </div>

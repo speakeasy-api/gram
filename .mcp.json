@@ -3,6 +3,13 @@
     "madprocs": {
       "type": "http",
       "url": "https://localhost:35294/mcp"
+    },
+    "mise": {
+      "command": "mise",
+      "args": ["mcp"],
+      "env": {
+        "MISE_EXPERIMENTAL": "1"
+      }
     }
   }
 }

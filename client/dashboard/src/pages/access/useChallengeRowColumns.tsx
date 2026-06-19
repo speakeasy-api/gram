@@ -11,12 +11,17 @@ import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { useMembers } from "@gram/client/react-query/members.js";
+import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { Column } from "@speakeasy-api/moonshine";
 import { KeyRound } from "lucide-react";
 import { useMemo } from "react";
 import { OutcomeBadge } from "./ChallengesTab";
 import { ResourceLink } from "./ResourceLink";
-import { getInitials, reasonLabel } from "./challengeHelpers";
+import {
+  getInitials,
+  principalDisplayName,
+  reasonLabel,
+} from "./challengeHelpers";
 
 export function useChallengeRowColumns(
   animatingOutIds?: Set<string>,
@@ -28,6 +33,7 @@ export function useChallengeRowColumns(
   const { orgSlug } = useSlugs();
   const { organization } = useSession();
   const { data: membersData } = useMembers();
+  const { data: toolsetsData } = useListToolsetsForOrg();
   const projectMap = useMemo(() => {
     const m = new Map<string, { slug: string; name: string }>();
     for (const p of organization.projects) {
@@ -35,6 +41,16 @@ export function useChallengeRowColumns(
     }
     return m;
   }, [organization.projects]);
+  const toolsetMap = useMemo(() => {
+    const m = new Map<
+      string,
+      { slug: string; name: string; projectId: string }
+    >();
+    for (const t of toolsetsData?.toolsets ?? []) {
+      m.set(t.id, { slug: t.slug, name: t.name, projectId: t.projectId });
+    }
+    return m;
+  }, [toolsetsData]);
   const memberMap = useMemo(() => {
     const m = new Map<string, { email: string; photoUrl?: string }>();
     for (const member of membersData?.members ?? []) {
@@ -64,7 +80,7 @@ export function useChallengeRowColumns(
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
           const isApiKey = row.principalType === "api_key";
-          const display = row.userEmail ?? row.principalUrn;
+          const display = principalDisplayName(row.userEmail, row.principalUrn);
           return (
             <div className={cn(rowFade(row))}>
               <Avatar className="h-8 w-8">
@@ -89,6 +105,7 @@ export function useChallengeRowColumns(
         width: "1.2fr",
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
+          const display = principalDisplayName(row.userEmail, row.principalUrn);
           return (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -99,7 +116,7 @@ export function useChallengeRowColumns(
                     rowFade(row),
                   )}
                 >
-                  {row.userEmail ?? row.principalUrn}
+                  {display}
                 </Type>
               </TooltipTrigger>
               {row.roleSlugs.length > 0 && (
@@ -162,6 +179,7 @@ export function useChallengeRowColumns(
               challenge={row}
               orgSlug={orgSlug ?? ""}
               projectMap={projectMap}
+              toolsetMap={toolsetMap}
             />
           </div>
         ),
@@ -234,6 +252,7 @@ export function useChallengeRowColumns(
   }, [
     orgSlug,
     projectMap,
+    toolsetMap,
     memberMap,
     animatingOutIds,
     outcomeFilter,

@@ -22,8 +22,9 @@ var CustomDomain = Type("CustomDomain", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("is_updating", Boolean, "The custom domain is actively being registered")
+	Attribute("ip_allowlist", ArrayOf(String), "IP addresses or CIDR ranges allowed to access this domain. Empty list means unrestricted.")
 
-	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating")
+	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating", "ip_allowlist")
 })
 
 var _ = Service("domains", func() {
@@ -57,6 +58,7 @@ var _ = Service("domains", func() {
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("domain", String, "The custom domain")
+			Attribute("ip_allowlist", ArrayOf(String), "IP addresses or CIDR ranges to allow. Leave empty for unrestricted access.")
 			Required("domain")
 		})
 
@@ -69,6 +71,28 @@ var _ = Service("domains", func() {
 		Meta("openapi:operationId", "registerDomain")
 		Meta("openapi:extension:x-speakeasy-name-override", "registerDomain")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "registerDomain"}`)
+	})
+
+	Method("updateDomain", func() {
+		Description("Update the IP allowlist for the organization's custom domain")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("ip_allowlist", ArrayOf(String), "Replacement IP allowlist. Pass an empty list to remove all restrictions.")
+			Required("ip_allowlist")
+		})
+
+		Result(CustomDomain)
+
+		HTTP(func() {
+			POST("/rpc/domain.update")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateDomain")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateDomain")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "updateDomain"}`)
 	})
 
 	Method("deleteDomain", func() {
@@ -88,4 +112,52 @@ var _ = Service("domains", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteDomain")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "deleteDomain"}`)
 	})
+
+	Method("listMcpEndpoints", func() {
+		Description("List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListCustomDomainMcpEndpointsResult)
+
+		HTTP(func() {
+			GET("/rpc/domain.listMcpEndpoints")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listCustomDomainMcpEndpoints")
+		Meta("openapi:extension:x-speakeasy-name-override", "listMcpEndpoints")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CustomDomainMcpEndpoints"}`)
+	})
+})
+
+var CustomDomainMcpEndpoint = Type("CustomDomainMcpEndpoint", func() {
+	Description("An MCP endpoint registered under a custom domain, with its parent MCP server and project denormalised for display in the dashboard's delete-impact preview.")
+
+	Attribute("id", String, "The ID of the MCP endpoint", func() {
+		Format(FormatUUID)
+	})
+	Attribute("slug", String, "The endpoint slug")
+	Attribute("project_id", String, "The ID of the project the endpoint belongs to", func() {
+		Format(FormatUUID)
+	})
+	Attribute("project_name", String, "The display name of the project the endpoint belongs to")
+	Attribute("project_slug", String, "The url-friendly slug of the project the endpoint belongs to")
+	Attribute("mcp_server_id", String, "The ID of the parent MCP server", func() {
+		Format(FormatUUID)
+	})
+	Attribute("mcp_server_name", String, "The display name of the parent MCP server. May be empty if the parent has no configured name.")
+	Attribute("mcp_server_slug", String, "The url-friendly slug of the parent MCP server. May be empty if the parent has no configured slug.")
+
+	Required("id", "slug", "project_id", "project_name", "project_slug", "mcp_server_id")
+})
+
+var ListCustomDomainMcpEndpointsResult = Type("ListCustomDomainMcpEndpointsResult", func() {
+	Description("Result of listing the MCP endpoints registered under an organization's custom domain.")
+
+	Attribute("mcp_endpoints", ArrayOf(CustomDomainMcpEndpoint))
+	Required("mcp_endpoints")
 })

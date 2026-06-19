@@ -1,6 +1,7 @@
 import { DetailHero } from "@/components/detail-hero";
 import MonacoEditorLazy from "@/components/monaco-editor.lazy";
 import { Page } from "@/components/page-layout";
+import { computeTelemetrySummary } from "@/components/sources/sourceTelemetrySummary";
 import { useFetchSourceContent } from "@/components/sources/useFetchSourceContent";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import {
@@ -22,13 +23,16 @@ import {
 } from "@gram/client/react-query/index.js";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { useGramContext } from "@gram/client/react-query/_context";
-import { useQuery } from "@tanstack/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useListTools } from "@/hooks/toolTypes";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useToolUpdate } from "@/hooks/useToolUpdate";
+import { invalidateAllListTools } from "@gram/client/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, Button } from "@speakeasy-api/moonshine";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { SourceDeploymentsPanel } from "./SourceDeploymentsPanel";
 import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
@@ -38,7 +42,22 @@ import { SourceToolsTab } from "./SourceToolsTab";
 import { SourceMCPServersTab } from "./SourceMCPServersTab";
 import { SourceSettingsTab } from "./SourceSettingsTab";
 
-export default function SourceDetails() {
+// Map dashboard source kinds to backend deployment_logs.attachment_type values.
+// See server/internal/deployments/events/log.go.
+function attachmentTypeForSourceKind(sourceKind: string | undefined): string {
+  switch (sourceKind) {
+    case "function":
+      return "functions";
+    case "externalmcp":
+    case "remotemcp":
+      return "external_mcp";
+    case undefined:
+    default:
+      return "openapi";
+  }
+}
+
+export default function SourceDetails(): JSX.Element {
   const { sourceKind, sourceSlug } = useParams<{
     sourceKind: string;
     sourceSlug: string;
@@ -152,29 +171,25 @@ export default function SourceDetails() {
     return telemetryData.topToolsByCount.filter((m) => urnSet.has(m.gramUrn));
   }, [telemetryData, sourceToolUrnsArray]);
 
-  const sourceTelemetrySummary = useMemo(() => {
-    if (sourceToolMetrics.length === 0) return null;
-    const totalCalls = sourceToolMetrics.reduce(
-      (sum, m) => sum + m.callCount,
-      0,
-    );
-    const totalFailures = sourceToolMetrics.reduce(
-      (sum, m) => sum + m.failureCount,
-      0,
-    );
-    const avgLatency =
-      totalCalls > 0
-        ? sourceToolMetrics.reduce(
-            (sum, m) => sum + m.avgLatencyMs * m.callCount,
-            0,
-          ) / totalCalls
-        : 0;
-    const errorRate = totalCalls > 0 ? (totalFailures / totalCalls) * 100 : 0;
-    return { totalCalls, totalFailures, avgLatency, errorRate };
-  }, [sourceToolMetrics]);
+  const sourceTelemetrySummary = useMemo(
+    () => computeTelemetrySummary(sourceToolMetrics),
+    [sourceToolMetrics],
+  );
 
   const isOpenAPI = sourceKind === "http" || sourceKind === "openapi";
   const sourceType = isOpenAPI ? "OpenAPI" : "Function";
+
+  const { hasScope } = useRBAC();
+  const canWriteTools = hasScope("mcp:write");
+  const queryClient = useQueryClient();
+  const refetchTools = useCallback(
+    () => invalidateAllListTools(queryClient),
+    [queryClient],
+  );
+  const { updateTool, isUpdating } = useToolUpdate({
+    telemetryEvent: "source_event",
+    onSuccess: () => void refetchTools(),
+  });
 
   const uniqueRuntimes = useMemo(() => {
     if (isOpenAPI) return [];
@@ -310,6 +325,8 @@ export default function SourceDetails() {
               relatedTools={relatedTools}
               isOpenAPI={isOpenAPI}
               uniqueRuntimes={uniqueRuntimes}
+              onToolUpdate={canWriteTools ? updateTool : undefined}
+              isToolUpdating={isUpdating}
             />
           </TabsContent>
 
@@ -334,7 +351,9 @@ export default function SourceDetails() {
                     variant="secondary"
                     size="sm"
                     className="mt-4"
-                    onClick={() => refetchSpec()}
+                    onClick={() => {
+                      void refetchSpec();
+                    }}
                   >
                     <Button.Text>Retry</Button.Text>
                   </Button>
@@ -360,9 +379,7 @@ export default function SourceDetails() {
             >
               <SourceDeploymentsPanel
                 sourceKind={sourceKind}
-                attachmentType={
-                  sourceKind === "function" ? "function" : "openapi"
-                }
+                attachmentType={attachmentTypeForSourceKind(sourceKind)}
               />
             </Suspense>
           </TabsContent>

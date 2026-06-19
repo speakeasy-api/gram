@@ -32,6 +32,12 @@ type ProcessAssistantThreadResult struct {
 	RuntimeActive     bool
 	RetryAdmission    bool
 	ProcessedAnyEvent bool
+	// BootstrappedRuntime is true when this run brought the v2 runtime row
+	// from `starting` to `active`. Cold v2 admit only fans out the first
+	// pending thread to avoid two thread workflows racing the Fly machine
+	// launch; the workflow signals the coordinator on this flag so the
+	// remaining pending threads get admitted against the now-active row.
+	BootstrappedRuntime bool
 }
 
 type ExpireAssistantThreadRuntimeInput struct {
@@ -130,6 +136,28 @@ func (a *AdmitAssistantThreads) Do(ctx context.Context, input AdmitAssistantThre
 	return result, nil
 }
 
+// startActivityHeartbeat ticks RecordHeartbeat until the returned stop
+// function runs, so a worker crash mid-activity is detected within
+// HeartbeatTimeout instead of the full StartToCloseTimeout.
+func startActivityHeartbeat(ctx context.Context) func() {
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				activity.RecordHeartbeat(ctx)
+			}
+		}
+	}()
+	return func() { close(done) }
+}
+
 func (a *ProcessAssistantThread) Do(ctx context.Context, input ProcessAssistantThreadInput) (*ProcessAssistantThreadResult, error) {
 	threadID, err := uuid.Parse(input.ThreadID)
 	if err != nil {
@@ -140,34 +168,21 @@ func (a *ProcessAssistantThread) Do(ctx context.Context, input ProcessAssistantT
 		return nil, fmt.Errorf("parse project id: %w", err)
 	}
 
-	// Heartbeat periodically so a worker crash is detected within HeartbeatTimeout
-	// instead of waiting the full 20-minute StartToCloseTimeout.
-	hbCtx, hbCancel := context.WithCancel(ctx)
-	defer hbCancel()
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-hbCtx.Done():
-				return
-			case <-ticker.C:
-				activity.RecordHeartbeat(ctx)
-			}
-		}
-	}()
+	stopHeartbeat := startActivityHeartbeat(ctx)
+	defer stopHeartbeat()
 
 	result, err := a.core.ProcessThreadEventsByThreadID(ctx, projectID, threadID)
 	if err != nil {
 		return nil, fmt.Errorf("process assistant thread: %w", err)
 	}
 	out := &ProcessAssistantThreadResult{
-		AssistantID:       result.AssistantID.String(),
-		WarmUntil:         "",
-		WarmTTLSeconds:    result.WarmTTLSeconds,
-		RuntimeActive:     result.RuntimeActive,
-		RetryAdmission:    result.RetryAdmission,
-		ProcessedAnyEvent: result.ProcessedAnyEvent,
+		AssistantID:         result.AssistantID.String(),
+		WarmUntil:           "",
+		WarmTTLSeconds:      result.WarmTTLSeconds,
+		RuntimeActive:       result.RuntimeActive,
+		RetryAdmission:      result.RetryAdmission,
+		ProcessedAnyEvent:   result.ProcessedAnyEvent,
+		BootstrappedRuntime: result.BootstrappedRuntime,
 	}
 	if !result.WarmUntil.IsZero() {
 		out.WarmUntil = result.WarmUntil.UTC().Format(time.RFC3339Nano)

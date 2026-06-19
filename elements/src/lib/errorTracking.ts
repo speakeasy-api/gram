@@ -75,10 +75,7 @@ export function initErrorTracking(config: ErrorTrackingConfig = {}): void {
  * Track an error to Datadog RUM.
  * Includes context about where the error originated.
  */
-export function trackError(
-  error: Error | unknown,
-  context: ErrorContext,
-): void {
+export function trackError(error: unknown, context: ErrorContext): void {
   if (!enabled || !initialized) {
     return;
   }

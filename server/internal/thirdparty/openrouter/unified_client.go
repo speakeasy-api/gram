@@ -29,11 +29,6 @@ type ChatTitleGenerator interface {
 	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error
 }
 
-// ChatResolutionAnalyzer schedules async chat resolution analysis.
-type ChatResolutionAnalyzer interface {
-	ScheduleChatResolutionAnalysis(ctx context.Context, chatID, projectID uuid.UUID, orgID, apiKeyID string) error
-}
-
 // TelemetryLogger emits telemetry events for observability.
 type TelemetryLogger interface {
 	Log(ctx context.Context, params telemetry.LogParams)
@@ -52,7 +47,6 @@ type ChatClient struct {
 	messageCaptureStrategy MessageCaptureStrategy
 	usageTrackingStrategy  UsageTrackingStrategy
 	chatTitleGenerator     ChatTitleGenerator
-	chatResolutionAnalyzer ChatResolutionAnalyzer
 	telemetryLogger        TelemetryLogger
 }
 
@@ -64,7 +58,6 @@ func NewUnifiedClient(
 	captureStrategy MessageCaptureStrategy,
 	trackingStrategy UsageTrackingStrategy,
 	chatTitleGenerator ChatTitleGenerator,
-	chatResolutionAnalyzer ChatResolutionAnalyzer,
 	telemetryLogger TelemetryLogger,
 ) *ChatClient {
 	return &ChatClient{
@@ -74,7 +67,6 @@ func NewUnifiedClient(
 		messageCaptureStrategy: captureStrategy,
 		usageTrackingStrategy:  trackingStrategy,
 		chatTitleGenerator:     chatTitleGenerator,
-		chatResolutionAnalyzer: chatResolutionAnalyzer,
 		telemetryLogger:        telemetryLogger,
 	}
 }
@@ -143,6 +135,34 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		Tools:          req.Tools,
 		Temperature:    temp,
 		ResponseFormat: nil,
+		Reasoning:      req.Reasoning,
+		CacheControl:   req.CacheControl,
+		SessionID:      "",
+		User:           req.OrgID,
+		Metadata:       nil,
+		Trace:          nil,
+	}
+
+	if req.ChatID != uuid.Nil {
+		reqBody.SessionID = req.ChatID.String()
+	}
+
+	if req.UsageSource != "" {
+		reqBody.Metadata = map[string]string{"source": string(req.UsageSource)}
+	}
+
+	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.HasTraceID() {
+		var parentSpanID string
+		if spanCtx.HasSpanID() {
+			parentSpanID = spanCtx.SpanID().String()
+		}
+		reqBody.Trace = &TraceConfig{
+			TraceID:        spanCtx.TraceID().String(),
+			TraceName:      "",
+			SpanName:       "",
+			GenerationName: "",
+			ParentSpanID:   parentSpanID,
+		}
 	}
 
 	// Add JSON schema if provided
@@ -242,19 +262,6 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 		}
 	}
 
-	// Schedule chat resolution analysis (will reset timer if already scheduled)
-	if c.chatResolutionAnalyzer != nil && req.ChatID != uuid.Nil {
-		if err := c.chatResolutionAnalyzer.ScheduleChatResolutionAnalysis(
-			context.WithoutCancel(ctx),
-			req.ChatID,
-			projectID,
-			req.OrgID,
-			req.APIKeyID,
-		); err != nil {
-			c.logger.WarnContext(ctx, "failed to schedule chat resolution analysis", attr.SlogError(err))
-		}
-	}
-
 	// Emit telemetry
 	c.emitGenAITelemetry(
 		ctx,
@@ -270,6 +277,33 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 	)
 }
 
+// requestCompletion issues a single non-streaming completion request and
+// returns the parsed response alongside the raw body (kept for diagnostics).
+// The response body lifetime is fully contained here so callers can retry.
+func (c *ChatClient) requestCompletion(ctx context.Context, apiKey string, reqBody OpenAIChatRequest) (OpenAIChatResponse, []byte, error) {
+	httpResp, err := c.makeHTTPRequest(ctx, apiKey, reqBody)
+	if err != nil {
+		return OpenAIChatResponse{}, nil, err
+	}
+	defer o11y.NoLogDefer(func() error { return httpResp.Body.Close() })
+
+	body, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return OpenAIChatResponse{}, nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	if httpResp.StatusCode != http.StatusOK {
+		return OpenAIChatResponse{}, body, classifyHTTPError(httpResp.StatusCode, body)
+	}
+
+	var chatResp OpenAIChatResponse
+	if err := json.Unmarshal(body, &chatResp); err != nil {
+		return OpenAIChatResponse{}, body, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return chatResp, body, nil
+}
+
 // GetCompletion makes a non-streaming completion request to OpenRouter and applies capture/tracking strategies.
 func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
 	start := time.Now()
@@ -282,33 +316,47 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	reqBody := initResult.requestBody
 	reqBody.Stream = false
 
-	// Make HTTP request
-	httpResp, err := c.makeHTTPRequest(ctx, initResult.apiKey, reqBody)
-	if err != nil {
-		return nil, err
-	}
-	defer o11y.NoLogDefer(func() error { return httpResp.Body.Close() })
+	// OpenRouter intermittently returns 200 OK with an empty choices array when
+	// the upstream provider produces nothing. A fresh request usually re-routes
+	// to a healthy provider, so retry a bounded number of times before failing.
+	const maxAttempts = 2
 
-	// Read response body
-	body, err := io.ReadAll(httpResp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
+	var (
+		chatResp OpenAIChatResponse
+		body     []byte
+	)
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		var err error
+		chatResp, body, err = c.requestCompletion(ctx, initResult.apiKey, reqBody)
+		if err != nil {
+			return nil, err
+		}
+		if len(chatResp.Choices) > 0 {
+			break
+		}
+		if attempt < maxAttempts {
+			c.logger.WarnContext(ctx, "openrouter completion returned no choices; retrying",
+				attr.SlogGenAIResponseID(chatResp.ID),
+				attr.SlogRetryAttempt(attempt),
+			)
+		}
 	}
 
-	// Handle non-200 responses
-	if httpResp.StatusCode != http.StatusOK {
-		return nil, classifyHTTPError(httpResp.StatusCode, body)
-	}
-
-	// Parse response
-	var chatResp OpenAIChatResponse
-	if err := json.Unmarshal(body, &chatResp); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
-	}
-
-	// Check for choices
+	// A well-formed completion's bulk is choices[0]; with it absent the body is
+	// small and carries no generated content, so embed it whole — it holds the
+	// generation id and any error envelope OpenRouter returned in lieu of
+	// choices, which is otherwise discarded here.
 	if len(chatResp.Choices) == 0 {
-		return nil, fmt.Errorf("no choices in response")
+		const maxLoggedBody = 2048
+		snippet := strings.TrimSpace(string(body))
+		if len(snippet) > maxLoggedBody {
+			snippet = snippet[:maxLoggedBody]
+		}
+		trace.SpanFromContext(ctx).SetAttributes(
+			attr.OpenRouterResponseBody(snippet),
+			attr.GenAIResponseIDKey.String(chatResp.ID),
+		)
+		return nil, fmt.Errorf("no choices in response after %d attempts: generation_id=%q body=%s", maxAttempts, chatResp.ID, snippet)
 	}
 
 	// Extract response data
@@ -445,8 +493,10 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		UserEmail:                 "",
 		HTTPMetadata:              req.HTTPMetadata,
 		JSONSchema:                req.JSONSchema,
+		CacheControl:              nil,
 		ChatID:                    uuid.Nil,
 		APIKeyID:                  "",
+		Reasoning:                 &Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 		NormalizeOutboundMessages: false,
 	}
 
@@ -666,16 +716,6 @@ func (c *ChatClient) emitGenAITelemetry(
 		toolCallsJSON, _ := json.Marshal(toolCalls)
 		attrs[attr.GenAIToolCallsKey] = string(toolCallsJSON)
 	}
-	if userID != "" {
-		attrs[attr.UserIDKey] = userID
-	}
-	if externalUserID != "" {
-		attrs[attr.ExternalUserIDKey] = externalUserID
-	}
-	if userEmail != "" {
-		attrs[attr.UserEmailKey] = userEmail
-	}
-
 	// Extract trace context from the request context
 	spanCtx := trace.SpanContextFromContext(ctx)
 	if spanCtx.HasTraceID() {
@@ -683,6 +723,9 @@ func (c *ChatClient) emitGenAITelemetry(
 	}
 	if spanCtx.HasSpanID() {
 		attrs[attr.SpanIDKey] = spanCtx.SpanID().String()
+	}
+	if externalUserID != "" {
+		attrs[attr.ExternalUserIDKey] = externalUserID
 	}
 
 	toolInfo := telemetry.ToolInfo{
@@ -698,6 +741,7 @@ func (c *ChatClient) emitGenAITelemetry(
 	c.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  time.Now(),
 		ToolInfo:   toolInfo,
+		UserInfo:   telemetry.UserInfoByID(userID),
 		Attributes: attrs,
 	})
 }
