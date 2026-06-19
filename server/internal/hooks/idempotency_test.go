@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -99,4 +100,15 @@ func TestClaimHookIdempotency_Guard(t *testing.T) {
 
 	assert.True(t, ti.service.claimHookIdempotency(ctx, ""), "empty token always proceeds")
 	assert.True(t, ti.service.claimHookIdempotency(ctx, "   "), "blank token always proceeds")
+}
+
+// TestHookDuplicateContextFlag verifies the flag that gates the block-path
+// write side-effects (block-reason telemetry, shadow-MCP findings) on a
+// redelivery: untagged contexts are live, tagged ones are duplicates.
+func TestHookDuplicateContextFlag(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+
+	assert.False(t, ti.service.isHookDuplicate(context.Background()), "untagged context is a live delivery")
+	assert.True(t, ti.service.isHookDuplicate(withHookDuplicate(context.Background())), "tagged context is a duplicate")
 }

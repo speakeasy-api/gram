@@ -68,6 +68,14 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		attr.SlogEvent("cursor_hook"),
 	)
 
+	// Claim the per-invocation idempotency token before persistence. A retry
+	// re-sends the same token: the decision still re-runs so the user stays
+	// blocked, but tagging the context as a duplicate suppresses the duplicate
+	// writes in recordCursorHook.
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+		ctx = withHookDuplicate(ctx)
+	}
+
 	result := &gen.CursorHookResult{
 		Permission:        nil,
 		UserMessage:       nil,
@@ -173,8 +181,8 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 		return
 	}
 
-	// Claim before persist so a redelivery (retry) is stored once.
-	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+	// Skip persistence for a redelivery (the token was claimed in Cursor()).
+	if s.isHookDuplicate(ctx) {
 		return
 	}
 

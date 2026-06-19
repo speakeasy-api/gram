@@ -20,6 +20,25 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 )
 
+// hookDuplicateContextKey marks a request whose idempotency token was already
+// claimed by an earlier delivery (a retry). Write side-effects that run outside
+// the persistence path — block-reason telemetry, shadow-MCP findings — check it
+// so a retried *blocked* hook doesn't duplicate dashboard rows even though it
+// still re-derives and returns the same block decision.
+type hookDuplicateContextKey struct{}
+
+// withHookDuplicate tags ctx as a redelivery so downstream write side-effects
+// can skip themselves.
+func withHookDuplicate(ctx context.Context) context.Context {
+	return context.WithValue(ctx, hookDuplicateContextKey{}, true)
+}
+
+// isHookDuplicate reports whether ctx was tagged as a redelivery.
+func (s *Service) isHookDuplicate(ctx context.Context) bool {
+	dup, _ := ctx.Value(hookDuplicateContextKey{}).(bool)
+	return dup
+}
+
 // claimHookIdempotency reports whether this delivery should be persisted. The
 // sender stamps one idempotency token per hook invocation and reuses it across
 // retries, so a transient reset that triggers a retry re-sends the same token.
