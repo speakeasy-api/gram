@@ -1897,19 +1897,24 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				// the thread must get a fresh runtime rather than sit idle.
 				if teardownExhausted {
 					s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event exceeded runtime teardown limit", "ERROR", runErr)
-					// Mark the event failed first, on its own budget: this is the
-					// step that actually stops the loop, so the best-effort runtime
-					// teardown below must not be able to starve it of time.
+					// Each step gets its own detached budget so a slow best-effort
+					// runtime Stop cannot starve the two writes that actually break
+					// the loop: failEvent makes the event terminal, and
+					// stopRuntimeRecord frees the per-thread runtime slot so the
+					// re-admission below reserves a fresh VM instead of redispatching
+					// onto this dead one.
 					failCtx, cancelFail := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
 					err := s.failEvent(failCtx, thread.ProjectID, event.ID, fmt.Errorf("exceeded %d runtime teardowns: %w", maxRuntimeTeardowns, runErr))
 					cancelFail()
 					if err != nil {
 						return ProcessThreadEventsResult{}, err
 					}
-					cleanupCtx, cancelCleanup := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
-					_ = s.runtime.Stop(cleanupCtx, runtimeRecord)
-					_ = s.stopRuntimeRecord(cleanupCtx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
-					cancelCleanup()
+					stopCtx, cancelStop := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
+					_ = s.runtime.Stop(stopCtx, runtimeRecord)
+					cancelStop()
+					recordCtx, cancelRecord := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
+					_ = s.stopRuntimeRecord(recordCtx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
+					cancelRecord()
 					return ProcessThreadEventsResult{
 						AssistantID:         assistant.ID,
 						WarmUntil:           time.Time{},
