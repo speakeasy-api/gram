@@ -9,19 +9,16 @@ name>`` — so messages are interoperable across languages.
 from __future__ import annotations
 
 import threading
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 import anyio
 import anyio.from_thread
-
 from google.protobuf.message import Message
 from opentelemetry import propagate
 
 from .broker import PublisherBroker, PublisherHandle
 
-__all__ = ["Publisher", "pubsub_publisher_for_message", "CONTENT_TYPE"]
-
-M = TypeVar("M", bound=Message)
+__all__ = ["CONTENT_TYPE", "Publisher", "pubsub_publisher_for_message"]
 
 # Attribute value mirrored from publisher.go; identifies the body encoding.
 CONTENT_TYPE = "application/x-protobuf"
@@ -42,7 +39,7 @@ def _message_attributes(schema: str) -> dict[str, str]:
     return attributes
 
 
-class Publisher(Generic[M]):
+class Publisher[M: Message]:
     """Publishes messages of a single proto type to a fixed topic."""
 
     def __init__(self, handle: PublisherHandle, schema: str) -> None:
@@ -98,7 +95,7 @@ class Publisher(Generic[M]):
                     # trip per completion, serializing batch-resolved publishes
                     # at loop latency apiece.
                     portal.start_task_soon(done.set)
-                except BaseException:  # noqa: BLE001 - never raise into the commit thread
+                except BaseException:
                     # The portal is gone: the publish was cancelled or the loop
                     # is tearing down, so no waiter remains. The send itself
                     # still proceeds on the commit thread.
@@ -111,7 +108,7 @@ class Publisher(Generic[M]):
         return future.result()
 
 
-def pubsub_publisher_for_message(
+def pubsub_publisher_for_message[M: Message](
     broker: PublisherBroker, message_type: type[M]
 ) -> Publisher[M]:
     """Return a publisher for the topic declared by ``message_type``'s topic option.

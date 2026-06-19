@@ -1,13 +1,57 @@
-"""Shared test fakes for the google-cloud-pubsub surfaces the library touches.
+"""Shared test fakes and the event-loop blocking guard for the test suite.
 
-These were previously duplicated (and had drifted) between test_backends.py and
-test_handle.py; keeping one copy here is what stops the next divergence.
+The fakes stand in for the google-cloud-pubsub surfaces the library touches; they
+were previously duplicated (and had drifted) between test_backends.py and
+test_handle.py, so keeping one copy here is what stops the next divergence.
+
+The aiocop fixtures fail any test whose async handler blocks the event loop —
+this library bridges blocking google-cloud-pubsub threads onto an anyio loop, so
+a stray synchronous call there would silently saturate it in production. aiocop
+patches the *running* asyncio loop, so it only applies to the ``async def`` tests
+(pytest-asyncio, asyncio backend); the trio coverage in test_backends.py runs as
+sync functions via ``anyio.run`` and is left untouched, which is correct since
+aiocop is asyncio-only.
 """
 
 from __future__ import annotations
 
 import threading
 from typing import Any
+
+import aiocop
+import pytest
+
+# Tasks that run this long without yielding are treated as blocking the loop.
+# Matches the threshold the consuming services use (see pystreams.deps.blocking).
+DEFAULT_THRESHOLD_MS = 50
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _configure_aiocop():
+    """Register the audit hook and slow-task detection once for the session.
+
+    These are loop-independent globals; ``detect_slow_tasks`` itself guards
+    against being configured more than once.
+    """
+    aiocop.patch_audit_functions()
+    aiocop.start_blocking_io_detection()
+    aiocop.detect_slow_tasks(threshold_ms=DEFAULT_THRESHOLD_MS)
+    return
+
+
+@pytest.fixture(autouse=True)
+async def _enforce_no_blocking(_configure_aiocop):
+    """Patch this test's running loop and raise on high-severity blocking IO.
+
+    ``activate()`` runs aiocop's on-activate hooks against the loop that is live
+    right now (idempotent per loop); ``enable_raise_on_violations`` arms the raise
+    for this test's context, so a high-severity blocking call surfaces as a
+    ``HighSeverityBlockingIoException`` that fails the test. Async-only: pytest
+    skips this fixture for the sync trio tests, which have no asyncio loop to patch.
+    """
+    aiocop.activate()
+    aiocop.enable_raise_on_violations()
+    return
 
 
 class FakeMessage:

@@ -12,25 +12,23 @@ from __future__ import annotations
 
 import concurrent.futures as cf
 import threading
+from datetime import timedelta
 from typing import Any, cast
 
 import anyio
+import anyio.lowlevel
 import pytest
 import structlog
-
-from datetime import timedelta
-
-from google.protobuf.duration_pb2 import Duration
-
 from conftest import FakeMessage, FakeSubscriberClient
 from gcp.pubsub.v1 import options_pb2
-from gram.ping.v1 import processor_pb2
-from gram.ping.v1 import ping_pb2
+from google.protobuf.duration_pb2 import Duration
+from gram.ping.v1 import ping_pb2, processor_pb2
+
 from gram_infra.pubsub import (
     EmulatedPubSubBroker,
-    PubSubBroker,
     Publisher,
     PublisherHandle,
+    PubSubBroker,
     Subscriber,
     SubscriberHandle,
 )
@@ -329,7 +327,7 @@ def test_receive_acks_messages_on_backend(backend) -> None:
                 await done.wait()
                 # Let the in-flight handlers ack before we tear down.
                 while not all(message.acked for message in messages):
-                    await anyio.sleep(0)
+                    await anyio.lowlevel.checkpoint()
             tg.cancel_scope.cancel()
 
         return seen
