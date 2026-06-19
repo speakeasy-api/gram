@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// insertAttributeUsageLog inserts a chat-completion telemetry row carrying the
+// insertAttributeUsageLog inserts a usage-metrics telemetry row carrying the
 // user/request attributes the attribute_metrics_summaries MV breaks down by.
 func insertAttributeUsageLog(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string, cost float64, totalTokens int, model, provider, email, department string, roles []string) {
 	t.Helper()
@@ -26,6 +26,7 @@ func insertAttributeUsageLog(t *testing.T, ctx context.Context, projectID string
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
+	usageURN := provider + ":usage:metrics"
 	attributes := map[string]any{
 		"gen_ai.conversation.id":          chatID,
 		"gen_ai.usage.input_tokens":       totalTokens,
@@ -33,7 +34,7 @@ func insertAttributeUsageLog(t *testing.T, ctx context.Context, projectID string
 		"gen_ai.usage.cost":               cost,
 		"gen_ai.response.model":           model,
 		"gram.hook.source":                provider,
-		"gram.resource.urn":               "agents:chat:completion",
+		"gram.resource.urn":               usageURN,
 		"user.email":                      email,
 		"user.attributes.department_name": department,
 	}
@@ -52,7 +53,7 @@ func insertAttributeUsageLog(t *testing.T, ctx context.Context, projectID string
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat completion",
 		nil, nil, string(attrsJSON), "{}",
-		projectID, "agents:chat:completion", "gram-agents")
+		projectID, usageURN, "gram-agents")
 	require.NoError(t, err)
 }
 
@@ -95,7 +96,7 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 
 	// Engineering: admin+dev ($0.25) and dev ($0.10). Sales: no roles ($0.50).
 	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.25, 15, "opus", "claude-code", "a@x.com", "Engineering", []string{"admin", "dev"})
-	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.10, 5, "opus", "cowork", "b@x.com", "Engineering", []string{"dev"})
+	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.10, 5, "opus", "cursor", "b@x.com", "Engineering", []string{"dev"})
 	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.50, 50, "sonnet", "claude-code", "c@x.com", "Sales", nil)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
@@ -136,13 +137,13 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 
 	// dimension_values: each group carries the distinct values of every other
 	// allowlisted dimension observed within it. Engineering had two users
-	// (a@x.com on opus/claude-code with roles admin+dev, b@x.com on opus/cowork
+	// (a@x.com on opus/claude-code with roles admin+dev, b@x.com on opus/cursor
 	// with role dev). The group_by dimension (department_name) is absent.
 	eng := rowByGroup(t, deptResult.Table, "Engineering")
 	require.NotContains(t, eng.DimensionValues, "department_name", "group_by dimension must be excluded")
 	require.ElementsMatch(t, []string{"a@x.com", "b@x.com"}, eng.DimensionValues["email"])
 	require.ElementsMatch(t, []string{"opus"}, eng.DimensionValues["model"])
-	require.ElementsMatch(t, []string{"claude-code", "cowork"}, eng.DimensionValues["hook_source"])
+	require.ElementsMatch(t, []string{"claude-code", "cursor"}, eng.DimensionValues["hook_source"])
 	require.ElementsMatch(t, []string{"admin", "dev"}, eng.DimensionValues["role"])
 	// Unset dimensions are present as keys with empty (filtered) lists.
 	require.Empty(t, eng.DimensionValues["job_title"])
