@@ -7,6 +7,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
+import { cn } from "@/lib/utils";
 import { Dimension, type QueryRow } from "@gram/client/models/components";
 import type { ReactNode } from "react";
 import {
@@ -17,6 +18,8 @@ import {
   Building2,
   ChevronLeft,
   Cpu,
+  Download,
+  Home,
   type LucideIcon,
   Network,
   Shield,
@@ -44,6 +47,65 @@ function formatCost(value: number): string {
 
 function displayValue(groupValue: string): string {
   return groupValue === "" ? "(unset)" : groupValue;
+}
+
+// ── CSV export ──────────────────────────────────────────────────────────────
+
+// Quote a field only when it contains a comma, quote, or newline (RFC 4180).
+function csvField(value: string | number): string {
+  const s = String(value);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Serialize the current table rows to CSV — same columns the table shows
+// (minus the Trend sparkline), with raw numbers so the file is spreadsheet-ready.
+function buildCostCsv(rows: QueryRow[], groupLabel: string): string {
+  const total = rows.reduce((sum, r) => sum + (r.measures.totalCost ?? 0), 0);
+  const header = [
+    groupLabel,
+    "Total Cost",
+    "% Share",
+    "Cost / Session",
+    "Chats",
+    "Tool Calls",
+    "Tokens",
+  ];
+  const body = rows.map((r) => {
+    const cost = r.measures.totalCost ?? 0;
+    const chats = r.measures.totalChats ?? 0;
+    return [
+      displayValue(r.groupValue),
+      cost.toFixed(2),
+      total > 0 ? ((cost / total) * 100).toFixed(1) : "0.0",
+      chats > 0 ? (cost / chats).toFixed(2) : "0.00",
+      chats,
+      r.measures.totalToolCalls ?? 0,
+      r.measures.totalTokens ?? 0,
+    ];
+  });
+  return [header, ...body]
+    .map((cols) => cols.map(csvField).join(","))
+    .join("\n");
+}
+
+// Trigger a client-side download of a CSV string.
+function downloadCsv(filename: string, csv: string): void {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function slugify(value: string): string {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "") || "all-costs"
+  );
 }
 
 // Initials for the avatar: email local-part tokens (olivia.novak → ON) or the
@@ -157,6 +219,8 @@ export type EntityProfileProps = {
   entity: Crumb | null;
   // Navigate up one ancestor. No-op at the root.
   onBack: () => void;
+  // Jump straight back to the org root.
+  onHome: () => void;
   // The immediate parent's value, for the subtitle (e.g. Team · Engineering).
   parentValue: string | null;
   // Headline measures summed over this entity's children.
@@ -172,6 +236,8 @@ export type EntityProfileProps = {
   seriesByGroup: Map<string, number[]>;
   // The date-range picker control, rendered next to the row count.
   rangePicker: ReactNode;
+  // Human date-range label (e.g. "June 15–19") for the CSV export filename.
+  rangeLabel: string;
   // The summary widgets row (trend chart, mix, KPIs), rendered above the table.
   widgets: ReactNode;
   isLoading: boolean;
@@ -187,6 +253,7 @@ export type EntityProfileProps = {
 export function EntityProfile({
   entity,
   onBack,
+  onHome,
   parentValue,
   stats,
   groupBy,
@@ -196,6 +263,7 @@ export function EntityProfile({
   onDrill,
   seriesByGroup,
   rangePicker,
+  rangeLabel,
   widgets,
   isLoading,
   isError,
@@ -208,6 +276,12 @@ export function EntityProfile({
   const subtitle = entitySubtitle(entity, parentValue);
   const palette = entityPalette(title);
   const Icon = entityIcon(entity);
+
+  const handleExportCsv = () =>
+    downloadCsv(
+      `${slugify(title)}-by-${slugify(groupLabel)}-${slugify(rangeLabel)}.csv`,
+      buildCostCsv(rows, groupLabel),
+    );
 
   return (
     <div className="flex w-full flex-col">
@@ -224,11 +298,37 @@ export function EntityProfile({
           />
         </div>
         <div className="relative mx-auto w-full max-w-7xl px-8 pt-24 pb-6">
-          {entity && (
+          {/* Cost Home (jump to root) + Back (one level up). Always mounted so
+              they animate in/out across drills — conditional rendering would
+              pop. The EntityProfile instance persists across drills, so the
+              class swap triggers a real transition. */}
+          <div
+            aria-hidden={!entity}
+            className={cn(
+              "absolute top-5 left-8 flex items-center gap-2 transition-all duration-200 ease-out",
+              entity
+                ? "translate-x-0 opacity-100"
+                : "pointer-events-none -translate-x-1 opacity-0",
+            )}
+          >
+            {/* Only useful below depth 1 — at the root's immediate child,
+                "Back to All costs" already jumps home. */}
+            {parentValue !== null && (
+              <button
+                type="button"
+                onClick={onHome}
+                tabIndex={entity ? 0 : -1}
+                className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1 rounded-md border bg-transparent py-1.5 pr-3 pl-2.5 text-sm transition-colors"
+              >
+                <Home className="size-3.5 shrink-0" />
+                <span>Cost Overview</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={onBack}
-              className="text-muted-foreground hover:text-foreground border-border hover:bg-muted absolute top-5 left-8 inline-flex items-center gap-1 rounded-md border bg-transparent py-1.5 pr-3 pl-2.5 text-sm transition-colors"
+              tabIndex={entity ? 0 : -1}
+              className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1 rounded-md border bg-transparent py-1.5 pr-3 pl-2.5 text-sm transition-colors"
             >
               <ChevronLeft className="size-3.5 shrink-0" />
               <span className="max-w-[220px] truncate">
@@ -238,7 +338,7 @@ export function EntityProfile({
                 </span>
               </span>
             </button>
-          )}
+          </div>
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-4">
               <div className="border-border bg-background flex size-16 shrink-0 items-center justify-center rounded-2xl border">
@@ -281,24 +381,35 @@ export function EntityProfile({
         {widgets}
         <div className="flex flex-col gap-3">
           <div className="mb-3 flex items-center justify-between gap-4">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              Breakdown by
-              <Select
-                value={groupBy}
-                onValueChange={(value) => onGroupByChange(value as Dimension)}
+            <div className="flex items-center gap-3">
+              <h2 className="flex items-center gap-2 text-sm font-semibold">
+                Breakdown by
+                <Select
+                  value={groupBy}
+                  onValueChange={(value) => onGroupByChange(value as Dimension)}
+                >
+                  <SelectTrigger className="border-border hover:bg-muted data-[state=open]:bg-muted !h-auto w-auto -my-1 cursor-pointer gap-1.5 rounded-md border bg-transparent py-1.5 pr-2.5 pl-3 text-sm font-semibold shadow-none transition-colors focus-visible:ring-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pivotOptions.map((p) => (
+                      <SelectItem key={p.dim} value={p.dim}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </h2>
+              <button
+                type="button"
+                onClick={handleExportCsv}
+                disabled={rows.length === 0}
+                className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1.5 rounded-md border bg-transparent px-2.5 py-1.5 text-sm transition-colors disabled:pointer-events-none disabled:opacity-40"
               >
-                <SelectTrigger className="border-border hover:bg-muted data-[state=open]:bg-muted !h-auto w-auto -my-1 cursor-pointer gap-1.5 rounded-md border bg-transparent py-1.5 pr-2.5 pl-3 text-sm font-semibold shadow-none transition-colors focus-visible:ring-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {pivotOptions.map((p) => (
-                    <SelectItem key={p.dim} value={p.dim}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </h2>
+                <Download className="size-3.5 shrink-0" />
+                Export CSV
+              </button>
+            </div>
             {rangePicker}
           </div>
           {isError ? (

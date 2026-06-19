@@ -121,14 +121,24 @@ function AreaChart({ values }: { values: number[] }): JSX.Element {
 
 function Card({
   title,
+  range,
   children,
 }: {
   title: string;
+  // Optional muted date-range suffix, e.g. "Total cost (June 15–19)".
+  range?: string;
   children: React.ReactNode;
 }): JSX.Element {
   return (
     <div className="border-border rounded-lg border p-4">
-      <div className="text-sm font-semibold">{title}</div>
+      <div className="text-sm font-semibold">
+        {title}
+        {range && (
+          <span className="text-muted-foreground ml-1 font-normal">
+            {range}
+          </span>
+        )}
+      </div>
       {children}
     </div>
   );
@@ -138,11 +148,13 @@ function TrendCard({
   values,
   total,
   prevTotal,
+  range,
   loading,
 }: {
   values: number[];
   total: number;
   prevTotal: number;
+  range: string;
   loading: boolean;
 }): JSX.Element {
   const delta = relDelta(total, prevTotal);
@@ -151,14 +163,14 @@ function TrendCard({
     deltaColor = delta > 0 ? UP : DOWN;
   if (loading) {
     return (
-      <Card title="Total cost">
+      <Card title="Total cost" range={range}>
         <Skeleton className="mt-1 h-8 w-28" />
         <Skeleton className="mt-3 h-20 w-full" />
       </Card>
     );
   }
   return (
-    <Card title="Total cost">
+    <Card title="Total cost" range={range}>
       <div className="mt-1 flex items-baseline gap-2">
         <span className="text-2xl font-semibold tabular-nums">
           {formatCost(total)}
@@ -204,7 +216,9 @@ function MixRowItem({
           {formatCost(cost)}
         </span>
       </div>
-      <div className="bg-muted h-2.5 overflow-hidden rounded-full">
+      {/* Track is muted by default; on row hover the row itself goes muted, so
+          flip the track to the page background (white) to keep it legible. */}
+      <div className="bg-muted group-hover:bg-background h-2.5 overflow-hidden rounded-full">
         <div
           className="h-full rounded-full"
           style={{ width: `${barPct}%`, backgroundColor: barColor }}
@@ -219,7 +233,7 @@ function MixRowItem({
     <button
       type="button"
       onClick={onSelect}
-      className="hover:bg-muted -mx-2 block w-full cursor-pointer space-y-1 rounded-md px-2 py-1.5 text-left transition-colors"
+      className="group hover:bg-muted -mx-2 block w-full cursor-pointer space-y-1 rounded-md px-2 py-1.5 text-left transition-colors"
     >
       {inner}
     </button>
@@ -244,7 +258,6 @@ function MixCard({
   const top = rows.slice(0, 5);
   const costs = top.map((r) => r.cost);
   const max = Math.max(...costs, 0) || 1;
-  const min = costs.length ? Math.min(...costs) : 0;
   const canDrill = drillable && !!onDrill;
   return (
     <Card title={title}>
@@ -265,8 +278,11 @@ function MixCard({
         ) : top.length === 0 ? (
           <div className="text-muted-foreground/60 text-sm">No data</div>
         ) : (
-          top.map((r) => {
-            const t = max > min ? (r.cost - min) / (max - min) : 1;
+          top.map((r, i) => {
+            // Colour by rank, not magnitude: rows are sorted by cost desc, so a
+            // single outlier won't collapse everyone else to one colour. Top
+            // rank → rose, last → emerald, middle ranks → slate/grey.
+            const t = top.length > 1 ? 1 - i / (top.length - 1) : 1;
             const selectable =
               canDrill && r.label !== "" && r.label !== "Other";
             return (
@@ -291,17 +307,22 @@ function KpiTile({
   value,
   series,
   delta,
+  range,
   loading,
 }: {
   label: string;
   value: string;
   series: number[];
   delta: number | null;
+  range: string;
   loading: boolean;
 }): JSX.Element {
   return (
     <div className="border-border rounded-lg border p-3">
-      <div className="text-muted-foreground text-xs">{label}</div>
+      <div className="text-muted-foreground text-xs">
+        {label}
+        <span className="text-muted-foreground/60 ml-1">{range}</span>
+      </div>
       {loading ? (
         <Skeleton className="mt-2 h-6 w-16" />
       ) : (
@@ -381,6 +402,7 @@ export function CostWidgets({
   totals,
   prevTotals,
   cards,
+  rangeLabel,
   onDrill,
   loading,
 }: {
@@ -389,6 +411,8 @@ export function CostWidgets({
   prevTotals: Measures;
   // Per-level secondary cards (mix breakdowns + stats); varies by the axis.
   cards: CardSpec[];
+  // Human date-range label shown beside the headline metric titles.
+  rangeLabel: string;
   // Drill into a mix-card row by its (dimension, value).
   onDrill?: (dim: Dimension, value: string) => void;
   // True while the main slice is still loading (trend + KPI skeletons).
@@ -401,6 +425,7 @@ export function CostWidgets({
           values={series.cost}
           total={totals.cost}
           prevTotal={prevTotals.cost}
+          range={rangeLabel}
           loading={loading}
         />
         {cards.map((c) =>
@@ -431,6 +456,7 @@ export function CostWidgets({
           value={formatCompact(totals.sessions)}
           series={series.chats}
           delta={relDelta(totals.sessions, prevTotals.sessions)}
+          range={rangeLabel}
           loading={loading}
         />
         <KpiTile
@@ -438,6 +464,7 @@ export function CostWidgets({
           value={formatCompact(totals.tools)}
           series={series.tools}
           delta={relDelta(totals.tools, prevTotals.tools)}
+          range={rangeLabel}
           loading={loading}
         />
         <KpiTile
@@ -445,6 +472,7 @@ export function CostWidgets({
           value={formatCompact(totals.tokens)}
           series={series.tokens}
           delta={relDelta(totals.tokens, prevTotals.tokens)}
+          range={rangeLabel}
           loading={loading}
         />
       </div>

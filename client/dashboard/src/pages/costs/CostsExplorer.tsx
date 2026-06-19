@@ -1,3 +1,4 @@
+import { telemetryListAttributeKeys } from "@gram/client/funcs/telemetryListAttributeKeys";
 import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
 import {
   Dimension,
@@ -11,19 +12,27 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { InsightsConfig } from "@/components/insights-dock";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useSlugs } from "@/contexts/Sdk";
+import {
+  type CostEntityLevel,
+  costExplorerSuggestions,
+} from "@/lib/insights-suggestions";
 import { useRoutes } from "@/routes";
 import { type CardSpec, CostWidgets } from "./CostWidgets";
 import { EntityProfile } from "./EntityProfile";
 import {
+  availableDimensions,
   BREAKDOWN_PARAM,
   type Crumb,
   defaultGroupBy,
+  displayName,
   encodeCrumb,
   isDimension,
   LABELS,
   type Measures,
+  nextAvailableDimension,
   nextDimension,
   parseDrillPath,
   PIVOTS,
@@ -47,6 +56,35 @@ const MIX_DIMS: Partial<Record<Dimension, Dimension[]>> = {
   [Dimension.Role]: [Dimension.Email, Dimension.DepartmentName],
   [Dimension.Model]: [Dimension.Email, Dimension.HookSource],
 };
+
+// Which kind of taxonomy node is in view — drives the assistant-dock prompts.
+function entityLevel(entity: Crumb | null): CostEntityLevel {
+  if (!entity) return "org";
+  if (entity.dim === Dimension.Email) return "user";
+  if (entity.dim === Dimension.HookSource) return "agent";
+  return "group";
+}
+
+function formatDollars(value: number): string {
+  return `$${value.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+// Compact human date range for the widget titles, e.g. "June 15–19" within a
+// month or "Jun 28 – Jul 4" across months.
+function formatDateRange(from: Date, to: Date): string {
+  const sameMonth =
+    from.getFullYear() === to.getFullYear() &&
+    from.getMonth() === to.getMonth();
+  if (sameMonth) {
+    const month = from.toLocaleDateString(undefined, { month: "long" });
+    return `${month} ${from.getDate()}–${to.getDate()}`;
+  }
+  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  return `${from.toLocaleDateString(undefined, opts)} – ${to.toLocaleDateString(undefined, opts)}`;
+}
 
 /**
  * Top-level cost explorer — the org bird's-eye view that walks the taxonomy.
@@ -75,7 +113,6 @@ export function CostsExplorer(): JSX.Element {
   }, [location.pathname, costsBase]);
 
   const byParam = searchParams.get(BREAKDOWN_PARAM);
-  const groupBy = isDimension(byParam) ? byParam : defaultGroupBy(path);
 
   // Navigate to a node: encode its filter path into the URL and pin the
   // breakdown axis in `?by=`. `replace` for view-only changes (re-pivoting)
@@ -110,6 +147,29 @@ export function CostsExplorer(): JSX.Element {
   // ignores the request body — so every drill would return the first cached
   // result. Drive useQuery directly with a key that encodes the payload.
   const client = useGramContext();
+
+  // Which dimensions the org actually has data for in this range — drives both
+  // the breakdown dropdown (hide empties) and the default axis (so a customer
+  // whose IDP omits the default chain doesn't land on an empty view). Fail open
+  // while loading/empty: availableDims is undefined and nothing gets hidden.
+  const { data: attrKeysData } = useQuery({
+    queryKey: ["costs-attr-keys", from.toISOString(), to.toISOString()],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryListAttributeKeys(client, {
+          getProjectMetricsSummaryPayload: { from, to },
+        }),
+      ),
+  });
+  const availableDims = useMemo(
+    () => availableDimensions(attrKeysData?.keys),
+    [attrKeysData],
+  );
+
+  const groupBy = isDimension(byParam)
+    ? byParam
+    : defaultGroupBy(path, availableDims);
+
   const { data, isFetching, isError } = useQuery({
     queryKey: [
       "costs-explorer",
@@ -258,6 +318,7 @@ export function CostsExplorer(): JSX.Element {
     (d) =>
       d !== groupBy &&
       !path.some((c) => c.dim === d) &&
+      (!availableDims || availableDims.has(d)) &&
       (!attributes || (attributes[d]?.length ?? 0) > 1),
   );
   const mixDimA = mixDims[0];
@@ -385,7 +446,10 @@ export function CostsExplorer(): JSX.Element {
   // Used by both the main table (current axis) and the mix-card rows (their own
   // cross-cut axis, e.g. drilling a department straight from the Division view).
   const drillIntoDim = (dim: Dimension, value: string) => {
-    const next = nextDimension(dim);
+    // Land on the next chain axis that actually has data, skipping empty links
+    // (e.g. divisions → users when the org has no departments).
+    const next =
+      nextAvailableDimension(dim, availableDims) ?? nextDimension(dim);
     if (next === null) return;
     if (value === "" || value === "Other") return;
     goToNode([...path, { dim, value }], next);
@@ -402,6 +466,9 @@ export function CostsExplorer(): JSX.Element {
     goToNode(path.slice(0, -1), removed.dim);
   };
 
+  // Jump straight back to the org root (clear all filters).
+  const goHome = () => goToNode([], defaultGroupBy([], availableDims));
+
   // Re-pivot the current node's breakdown axis without drilling (view-only).
   const changeGroupBy = (dim: Dimension) => goToNode(path, dim, true);
 
@@ -414,12 +481,51 @@ export function CostsExplorer(): JSX.Element {
   const pivotOptions = PIVOTS.filter((p) => {
     if (filteredDims.has(p.dim)) return false;
     if (p.dim === groupBy) return true;
+    // Hide dimensions the org has no data for at all (IDP doesn't populate them).
+    if (availableDims && !availableDims.has(p.dim)) return false;
     if (!attributes) return true;
     return (attributes[p.dim]?.length ?? 0) > 1;
   });
 
   const currentEntity = path.length ? path[path.length - 1]! : null;
   const parentValue = path.length >= 2 ? path[path.length - 2]!.value : null;
+
+  // Project Assistant dock config — recomputed per render, so drilling into a
+  // new entity re-registers fresh prompts + context (InsightsConfig diffs on the
+  // serialized options). Prompts are framed for the node in view; contextInfo
+  // hands the assistant the current slice's numbers so its answers are grounded.
+  const level = entityLevel(currentEntity);
+  const entityLabel = currentEntity
+    ? displayName(currentEntity.dim, currentEntity.value)
+    : null;
+  const entityType = currentEntity
+    ? (LABELS[currentEntity.dim] ?? "entity")
+    : "Organization";
+  const childLabel = LABELS[groupBy] ?? "group";
+  const rangeDays = Math.max(
+    1,
+    Math.round((to.getTime() - from.getTime()) / 86_400_000),
+  );
+  const rangeLabel = `the last ${rangeDays} days`;
+  const assistantTitle = entityLabel
+    ? `Ask about ${entityLabel}'s AI spend`
+    : "What would you like to know about your AI spend?";
+  const assistantSubtitle = entityLabel
+    ? `Cost drivers, top spenders, and trends for this ${entityType.toLowerCase()}.`
+    : "Cost drivers, top spenders, and trends across the organization.";
+  const filterSummary =
+    path.map((c) => `${LABELS[c.dim] ?? c.dim}=${c.value}`).join(", ") ||
+    "none";
+  const scope = entityLabel
+    ? `the ${entityType.toLowerCase()} "${entityLabel}"`
+    : "the whole organization";
+  const assistantContext = `Cost dashboard — viewing ${scope}, broken down by ${childLabel.toLowerCase()}. Over ${rangeLabel}: ${formatDollars(stats.cost)} total cost, ${stats.sessions.toLocaleString()} chat sessions, ${stats.tools.toLocaleString()} tool calls, ${stats.tokens.toLocaleString()} tokens. Active filters: ${filterSummary}.`;
+  const assistantSuggestions = costExplorerSuggestions({
+    level,
+    entityLabel,
+    childLabel,
+    rangeLabel,
+  });
 
   const rangePicker = (
     <TimeRangePicker
@@ -440,27 +546,38 @@ export function CostsExplorer(): JSX.Element {
       totals={stats}
       prevTotals={prevTotals}
       cards={cards}
+      rangeLabel={formatDateRange(from, to)}
       onDrill={drillIntoDim}
       loading={isFetching && !data}
     />
   );
 
   return (
-    <EntityProfile
-      entity={currentEntity}
-      widgets={widgets}
-      onBack={goUp}
-      parentValue={parentValue}
-      stats={stats}
-      groupBy={groupBy}
-      pivotOptions={pivotOptions}
-      onGroupByChange={changeGroupBy}
-      rows={rows}
-      onDrill={drillInto}
-      seriesByGroup={seriesByGroup}
-      rangePicker={rangePicker}
-      isLoading={isFetching && !data}
-      isError={isError}
-    />
+    <>
+      <InsightsConfig
+        title={assistantTitle}
+        subtitle={assistantSubtitle}
+        contextInfo={assistantContext}
+        suggestions={assistantSuggestions}
+      />
+      <EntityProfile
+        entity={currentEntity}
+        widgets={widgets}
+        onBack={goUp}
+        onHome={goHome}
+        parentValue={parentValue}
+        stats={stats}
+        groupBy={groupBy}
+        pivotOptions={pivotOptions}
+        onGroupByChange={changeGroupBy}
+        rows={rows}
+        onDrill={drillInto}
+        seriesByGroup={seriesByGroup}
+        rangePicker={rangePicker}
+        rangeLabel={formatDateRange(from, to)}
+        isLoading={isFetching && !data}
+        isError={isError}
+      />
+    </>
   );
 }

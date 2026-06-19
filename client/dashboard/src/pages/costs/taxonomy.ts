@@ -94,12 +94,71 @@ export function parseDrillPath(tail: string): Crumb[] {
     });
 }
 
+// ── Data availability ───────────────────────────────────────────────────────
+// telemetry.listAttributeKeys returns the raw OTel attribute paths present in a
+// time range. Directory-sync user attributes pass through as `user.attributes.*`
+// (only `app.*` custom attrs get the `@` rename), so each taxonomy dimension
+// maps to a fixed key. A dimension whose key is absent has no data for the org —
+// we hide it from the breakdown dropdown and skip it when picking a default.
+export const DIM_ATTRIBUTE_KEY: Partial<Record<Dimension, string>> = {
+  [Dimension.DivisionName]: "user.attributes.division_name",
+  [Dimension.DepartmentName]: "user.attributes.department_name",
+  [Dimension.JobTitle]: "user.attributes.job_title",
+  [Dimension.EmployeeType]: "user.attributes.employee_type",
+  [Dimension.CostCenterName]: "user.attributes.cost_center_name",
+  [Dimension.Email]: "user.email",
+  [Dimension.Group]: "user.groups",
+  [Dimension.Role]: "user.roles",
+  [Dimension.Model]: "gen_ai.response.model",
+  [Dimension.HookSource]: "gram.hook.source",
+};
+
+// Build the set of dimensions that actually have data from the attribute keys.
+// Returns undefined when keys are unavailable (loading/empty/errored) so callers
+// fail open — never hide a breakdown we're unsure about.
+export function availableDimensions(
+  keys: string[] | undefined,
+): Set<Dimension> | undefined {
+  if (!keys || keys.length === 0) return undefined;
+  const present = new Set(keys);
+  const out = new Set<Dimension>();
+  for (const p of PIVOTS) {
+    const key = DIM_ATTRIBUTE_KEY[p.dim];
+    if (key && present.has(key)) out.add(p.dim);
+  }
+  return out;
+}
+
+// The next chain step below `dim` that actually has data, skipping any empty
+// links (e.g. an org with divisions and users but no departments). Falls back to
+// the raw next dimension when availability is unknown.
+export function nextAvailableDimension(
+  dim: Dimension,
+  available?: Set<Dimension>,
+): Dimension | null {
+  let next = nextDimension(dim);
+  if (!available) return next;
+  while (next !== null && !available.has(next)) {
+    next = nextDimension(next);
+  }
+  return next;
+}
+
 // The breakdown axis a node defaults to: the next chain step below the deepest
-// filter, or the top of the chain at the org root.
-export function defaultGroupBy(path: Crumb[]): Dimension {
+// filter, or — at the org root — the first dimension in pivot order that has
+// data (so a customer whose IDP omits the default chain still lands on a
+// populated breakdown instead of an empty Division view).
+export function defaultGroupBy(
+  path: Crumb[],
+  available?: Set<Dimension>,
+): Dimension {
   const last = path[path.length - 1];
-  if (!last) return CHAIN[0]!.dim;
-  return nextDimension(last.dim) ?? last.dim;
+  if (last) return nextDimension(last.dim) ?? last.dim;
+  if (available && available.size > 0) {
+    const hit = PIVOTS.find((p) => available.has(p.dim));
+    if (hit) return hit.dim;
+  }
+  return CHAIN[0]!.dim;
 }
 
 // Human label for an entity value: title-cased name for emails, the raw value

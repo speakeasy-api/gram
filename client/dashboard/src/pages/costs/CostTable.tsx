@@ -16,7 +16,7 @@ import {
   ChevronUp,
   Info,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import {
   ClaudeCodeIcon,
   CodexIcon,
@@ -80,6 +80,18 @@ function LegendTooltip({
   );
 }
 
+// A plain info icon + tooltip for explaining a column header.
+function InfoTooltip({ text }: { text: string }): JSX.Element {
+  return (
+    <Tooltip>
+      <TooltipTrigger className="text-muted-foreground inline-flex cursor-help">
+        <Info className="size-3.5" />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-56">{text}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 const GREEN = "#10b981";
 const RED = "#f43f5e";
 const GREY = "#94a3b8";
@@ -109,28 +121,27 @@ function ModelIcon({
   return <Box className={className} />;
 }
 
-// Shared grid template so the header and every row align.
-const GRID = "grid items-center gap-3 px-6";
+// One parent grid owns the column tracks; the header and every row opt into
+// them via `grid-template-columns: subgrid`, so each column auto-sizes to the
+// widest cell across the whole table and stays aligned — no hardcoded widths.
+// Track order: gutter | name | Total Cost | % Share | Cost/session | Chats |
+// Tool calls | Tokens | Trend | gutter. Name sizes to its content (min 120px so
+// short names aren't cramped, capped at 24rem so long emails truncate rather
+// than dominate). The 7 numeric/trend columns are `minmax(max-content,1fr)`:
+// never narrower than their content, but they grow equally to fill the row, so
+// leftover width on wide viewports spreads across the columns instead of pooling
+// in a dead right gutter. Fixed 8px gutters keep row hover + dividers full-bleed.
+const COLUMNS = "8px minmax(120px,24rem) repeat(7,minmax(max-content,1fr)) 8px";
 
-// Fixed widths keep the header and every row aligned (separate grids can't share
-// a `max-content` track). The name column is sized per breakdown level so emails
-// fit without leaving short names (divisions, roles) in a sea of whitespace.
-const NAME_WIDTH: Partial<Record<Dimension, number>> = {
-  [Dimension.Email]: 260,
-  [Dimension.JobTitle]: 215,
-  [Dimension.DepartmentName]: 190,
-  [Dimension.Model]: 180,
-  [Dimension.DivisionName]: 160,
-  [Dimension.Group]: 160,
-  [Dimension.CostCenterName]: 150,
-  [Dimension.HookSource]: 150,
-  [Dimension.EmployeeType]: 140,
-  [Dimension.Role]: 130,
+// Header/row span all parent tracks and re-use them via subgrid.
+const SUBGRID_ROW: CSSProperties = {
+  gridColumn: "1 / -1",
+  gridTemplateColumns: "subgrid",
 };
 
-function gridTemplate(groupBy: Dimension): string {
-  const nameW = NAME_WIDTH[groupBy] ?? 170;
-  return `${nameW}px 88px 120px 110px 90px 104px 150px 1fr`;
+// Empty cell occupying an edge gutter track.
+function Gutter(): JSX.Element {
+  return <span aria-hidden="true" />;
 }
 
 const PAGE_SIZE = 10;
@@ -138,6 +149,7 @@ const PAGE_SIZE = 10;
 type SortKey =
   | "name"
   | "cost"
+  | "share"
   | "perSession"
   | "chats"
   | "tools"
@@ -155,6 +167,8 @@ function sortValue(
     case "name":
       return displayValue(row.groupValue).toLowerCase();
     case "cost":
+    // Share is cost ÷ a constant total, so it sorts identically to cost.
+    case "share":
       return row.measures.totalCost ?? 0;
     case "perSession":
       return costPerSession(row);
@@ -268,7 +282,6 @@ export function CostTable({
 
   const showModelIcon = groupBy === Dimension.Model;
   const showAgentIcon = groupBy === Dimension.HookSource;
-  const cols = gridTemplate(groupBy);
 
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
   const safePage = Math.min(page, Math.max(totalPages - 1, 0));
@@ -283,13 +296,23 @@ export function CostTable({
     .map((r) => r.measures.totalCost ?? 0);
   const minCost = realCosts.length ? Math.min(...realCosts) : 0;
   const maxCost = realCosts.length ? Math.max(...realCosts) : 0;
+  // Denominator for % share — all rows incl. the "Other" rollup, so shares sum
+  // to ~100% of the slice's cost.
+  const totalCost = sorted.reduce(
+    (sum, r) => sum + (r.measures.totalCost ?? 0),
+    0,
+  );
 
   return (
-    <div className="border-border divide-border divide-y overflow-x-auto rounded-lg border">
+    <div
+      className="border-border divide-border grid gap-x-3 gap-y-0 divide-y overflow-x-auto rounded-lg border"
+      style={{ gridTemplateColumns: COLUMNS }}
+    >
       <div
-        className={cn(GRID, "text-muted-foreground py-3.5 text-sm font-medium")}
-        style={{ gridTemplateColumns: cols }}
+        className="text-muted-foreground grid items-center py-3.5 text-sm font-medium"
+        style={SUBGRID_ROW}
       >
+        <Gutter />
         <span className="flex">
           <HeaderButton
             label={groupLabel}
@@ -306,6 +329,17 @@ export function CostTable({
             onSort={onSort}
           />
         </span>
+        <span className="flex items-center gap-1">
+          <HeaderButton
+            label="% Share"
+            sortKey="share"
+            sort={sort}
+            onSort={onSort}
+          />
+          <InfoTooltip
+            text={`Share of total cost across all ${groupLabel.toLowerCase()}s in this view.`}
+          />
+        </span>
         <span className="flex">
           <HeaderButton
             label="Cost / session"
@@ -316,7 +350,7 @@ export function CostTable({
         </span>
         <span className="flex">
           <HeaderButton
-            label="Chat sessions"
+            label="Chats"
             sortKey="chats"
             sort={sort}
             onSort={onSort}
@@ -354,10 +388,14 @@ export function CostTable({
             ]}
           />
         </span>
+        <Gutter />
       </div>
 
       {sorted.length === 0 ? (
-        <div className="px-4 py-10 text-center">
+        <div
+          className="px-6 py-10 text-center"
+          style={{ gridColumn: "1 / -1" }}
+        >
           <Type className="text-muted-foreground">
             No cost data for this slice.
           </Type>
@@ -378,13 +416,13 @@ export function CostTable({
                 if (drillable) onDrill(row);
               }}
               className={cn(
-                GRID,
-                "w-full py-4 text-left text-sm transition-colors",
+                "grid w-full items-center py-4 text-left text-sm transition-colors",
                 (safePage * PAGE_SIZE + i) % 2 === 1 && "bg-muted/25",
                 drillable ? "hover:bg-muted cursor-pointer" : "cursor-default",
               )}
-              style={{ gridTemplateColumns: cols }}
+              style={SUBGRID_ROW}
             >
+              <Gutter />
               <div className="flex min-w-0 items-center gap-2">
                 {showModelIcon && (
                   <ModelIcon
@@ -398,7 +436,7 @@ export function CostTable({
                     className="size-4 shrink-0"
                   />
                 )}
-                <span className="max-w-[22rem] truncate font-medium">
+                <span className="truncate font-medium">
                   {displayValue(row.groupValue)}
                 </span>
                 {drillable && (
@@ -406,35 +444,47 @@ export function CostTable({
                 )}
               </div>
               <span
-                className="text-left font-medium tabular-nums"
+                className="text-left font-medium tabular-nums whitespace-nowrap"
                 style={isOther ? undefined : { color: costColor(costT) }}
               >
                 {formatCost(cost)}
               </span>
-              <span className="text-muted-foreground text-left tabular-nums">
+              <span
+                className="text-left tabular-nums whitespace-nowrap"
+                style={isOther ? undefined : { color: costColor(costT) }}
+              >
+                {totalCost > 0
+                  ? `${((cost / totalCost) * 100).toFixed(1)}%`
+                  : "—"}
+              </span>
+              <span className="text-muted-foreground text-left tabular-nums whitespace-nowrap">
                 {(row.measures.totalChats ?? 0) > 0
                   ? formatCost(costPerSession(row))
                   : "—"}
               </span>
-              <span className="text-left tabular-nums">
+              <span className="text-left tabular-nums whitespace-nowrap">
                 {(row.measures.totalChats ?? 0).toLocaleString()}
               </span>
-              <span className="text-left tabular-nums">
+              <span className="text-left tabular-nums whitespace-nowrap">
                 {(row.measures.totalToolCalls ?? 0).toLocaleString()}
               </span>
-              <span className="text-left tabular-nums">
+              <span className="text-left tabular-nums whitespace-nowrap">
                 {(row.measures.totalTokens ?? 0).toLocaleString()}
               </span>
               <span className="flex">
                 <Sparkline values={seriesByGroup.get(row.groupValue) ?? []} />
               </span>
+              <Gutter />
             </button>
           );
         })
       )}
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-6 py-3">
+        <div
+          className="flex items-center justify-between px-6 py-3"
+          style={{ gridColumn: "1 / -1" }}
+        >
           <p className="text-muted-foreground text-sm">
             {safePage * PAGE_SIZE + 1}–
             {Math.min((safePage + 1) * PAGE_SIZE, sorted.length)} of{" "}
