@@ -421,6 +421,10 @@ SELECT
     -- Tool call count
     countIfState(startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS total_tool_calls
 FROM telemetry_logs
+WHERE (
+    startsWith(gram_urn, 'claude-code:usage') OR
+    startsWith(gram_urn, 'codex:usage') OR
+    startsWith(gram_urn, 'cursor:usage'))
 GROUP BY
     gram_project_id,
     time_bucket,
