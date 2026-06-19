@@ -48,6 +48,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$script_dir/identity.sh" ]; then
   . "$script_dir/identity.sh"
 fi
+. "$script_dir/http.sh"
 if type gram_enrich_identity_payload >/dev/null 2>&1; then
   payload=$(gram_enrich_identity_payload "$payload")
 fi
@@ -142,12 +143,10 @@ p["additional_data"] = ad
 print(json.dumps(p))
 ') || enriched="$payload"
 
-curl -s -o /dev/null -X POST \
-  -H "Content-Type: application/json" \
+# Fire-and-forget through the shared helper so a transient reset retries (see
+# http.sh) instead of dropping the inventory. The result is ignored.
+gram_http_post "${server_url}/rpc/hooks.claude" "$enriched" 30 \
   ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
-  ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
-  -d "$enriched" \
-  --max-time 30 \
-  "${server_url}/rpc/hooks.claude" >/dev/null 2>&1 || true
+  ${auth_config_arg[@]+"${auth_config_arg[@]}"} >/dev/null 2>&1 || true
 
 exit 0

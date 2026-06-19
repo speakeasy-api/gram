@@ -91,7 +91,7 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Now().UTC()
+	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
 	// Engineering: admin+dev ($0.25) and dev ($0.10). Sales: no roles ($0.50).
@@ -212,7 +212,7 @@ func TestQuery_TopNRollupIntoOther(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Now().UTC()
+	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
 	// Four departments with distinct costs; top_n=2 keeps the two priciest and

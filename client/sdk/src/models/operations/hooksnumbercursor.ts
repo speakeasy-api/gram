@@ -24,6 +24,10 @@ export type HooksNumberCursorRequest = {
    * Optional endpoint hostname supplied by the Gram hook plugin.
    */
   xGramHookHostname?: string | undefined;
+  /**
+   * Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
+   */
+  idempotencyKey?: string | undefined;
   cursorHookPayload: components.CursorHookPayload;
 };
 
@@ -63,6 +67,7 @@ export type HooksNumberCursorRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "X-Gram-Hook-Hostname"?: string | undefined;
+  "Idempotency-Key"?: string | undefined;
   CursorHookPayload: components.CursorHookPayload$Outbound;
 };
 
@@ -75,6 +80,7 @@ export const HooksNumberCursorRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     xGramHookHostname: z.optional(z.string()),
+    idempotencyKey: z.optional(z.string()),
     cursorHookPayload: components.CursorHookPayload$outboundSchema,
   }),
   z.transform((v) => {
@@ -82,6 +88,7 @@ export const HooksNumberCursorRequest$outboundSchema: z.ZodMiniType<
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
       xGramHookHostname: "X-Gram-Hook-Hostname",
+      idempotencyKey: "Idempotency-Key",
       cursorHookPayload: "CursorHookPayload",
     });
   }),

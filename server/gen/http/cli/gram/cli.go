@@ -805,18 +805,21 @@ func ParseEndpoint(
 		hooksClaudeApikeyTokenFlag      = hooksClaudeFlags.String("apikey-token", "", "")
 		hooksClaudeProjectSlugInputFlag = hooksClaudeFlags.String("project-slug-input", "", "")
 		hooksClaudeHookHostnameFlag     = hooksClaudeFlags.String("hook-hostname", "", "")
+		hooksClaudeIdempotencyKeyFlag   = hooksClaudeFlags.String("idempotency-key", "", "")
 
 		hooksCursorFlags                = flag.NewFlagSet("cursor", flag.ExitOnError)
 		hooksCursorBodyFlag             = hooksCursorFlags.String("body", "REQUIRED", "")
 		hooksCursorApikeyTokenFlag      = hooksCursorFlags.String("apikey-token", "", "")
 		hooksCursorProjectSlugInputFlag = hooksCursorFlags.String("project-slug-input", "", "")
 		hooksCursorHookHostnameFlag     = hooksCursorFlags.String("hook-hostname", "", "")
+		hooksCursorIdempotencyKeyFlag   = hooksCursorFlags.String("idempotency-key", "", "")
 
 		hooksCodexFlags                = flag.NewFlagSet("codex", flag.ExitOnError)
 		hooksCodexBodyFlag             = hooksCodexFlags.String("body", "REQUIRED", "")
 		hooksCodexApikeyTokenFlag      = hooksCodexFlags.String("apikey-token", "", "")
 		hooksCodexProjectSlugInputFlag = hooksCodexFlags.String("project-slug-input", "", "")
 		hooksCodexHookHostnameFlag     = hooksCodexFlags.String("hook-hostname", "", "")
+		hooksCodexIdempotencyKeyFlag   = hooksCodexFlags.String("idempotency-key", "", "")
 
 		hooksLogsFlags                = flag.NewFlagSet("logs", flag.ExitOnError)
 		hooksLogsBodyFlag             = hooksLogsFlags.String("body", "REQUIRED", "")
@@ -4371,13 +4374,13 @@ func ParseEndpoint(
 			switch epn {
 			case "claude":
 				endpoint = c.Claude()
-				data, err = hooksc.BuildClaudePayload(*hooksClaudeBodyFlag, *hooksClaudeApikeyTokenFlag, *hooksClaudeProjectSlugInputFlag, *hooksClaudeHookHostnameFlag)
+				data, err = hooksc.BuildClaudePayload(*hooksClaudeBodyFlag, *hooksClaudeApikeyTokenFlag, *hooksClaudeProjectSlugInputFlag, *hooksClaudeHookHostnameFlag, *hooksClaudeIdempotencyKeyFlag)
 			case "cursor":
 				endpoint = c.Cursor()
-				data, err = hooksc.BuildCursorPayload(*hooksCursorBodyFlag, *hooksCursorApikeyTokenFlag, *hooksCursorProjectSlugInputFlag, *hooksCursorHookHostnameFlag)
+				data, err = hooksc.BuildCursorPayload(*hooksCursorBodyFlag, *hooksCursorApikeyTokenFlag, *hooksCursorProjectSlugInputFlag, *hooksCursorHookHostnameFlag, *hooksCursorIdempotencyKeyFlag)
 			case "codex":
 				endpoint = c.Codex()
-				data, err = hooksc.BuildCodexPayload(*hooksCodexBodyFlag, *hooksCodexApikeyTokenFlag, *hooksCodexProjectSlugInputFlag, *hooksCodexHookHostnameFlag)
+				data, err = hooksc.BuildCodexPayload(*hooksCodexBodyFlag, *hooksCodexApikeyTokenFlag, *hooksCodexProjectSlugInputFlag, *hooksCodexHookHostnameFlag, *hooksCodexIdempotencyKeyFlag)
 			case "logs":
 				endpoint = c.Logs()
 				data, err = hooksc.BuildLogsPayload(*hooksLogsBodyFlag, *hooksLogsApikeyTokenFlag, *hooksLogsProjectSlugInputFlag)
@@ -8106,6 +8109,7 @@ func hooksClaudeUsage() {
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprint(os.Stderr, " -hook-hostname STRING")
+	fmt.Fprint(os.Stderr, " -idempotency-key STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -8117,10 +8121,11 @@ func hooksClaudeUsage() {
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 	fmt.Fprintln(os.Stderr, `    -hook-hostname STRING: `)
+	fmt.Fprintln(os.Stderr, `    -idempotency-key STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"ConfigChange\",\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"ConfigChange\",\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\" --idempotency-key \"abc123\"")
 }
 
 func hooksCursorUsage() {
@@ -8130,6 +8135,7 @@ func hooksCursorUsage() {
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprint(os.Stderr, " -hook-hostname STRING")
+	fmt.Fprint(os.Stderr, " -idempotency-key STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -8141,10 +8147,11 @@ func hooksCursorUsage() {
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 	fmt.Fprintln(os.Stderr, `    -hook-hostname STRING: `)
+	fmt.Fprintln(os.Stderr, `    -idempotency-key STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks cursor --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cache_read_tokens\": 1,\n      \"cache_write_tokens\": 1,\n      \"command\": \"abc123\",\n      \"composer_mode\": \"abc123\",\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"duration\": 1,\n      \"duration_ms\": 1,\n      \"error\": \"abc123\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"abc123\",\n      \"input_tokens\": 1,\n      \"is_interrupt\": false,\n      \"loop_count\": 1,\n      \"model\": \"abc123\",\n      \"output_tokens\": 1,\n      \"prompt\": \"abc123\",\n      \"result_json\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"status\": \"abc123\",\n      \"text\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"url\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks cursor --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cache_read_tokens\": 1,\n      \"cache_write_tokens\": 1,\n      \"command\": \"abc123\",\n      \"composer_mode\": \"abc123\",\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"duration\": 1,\n      \"duration_ms\": 1,\n      \"error\": \"abc123\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"abc123\",\n      \"input_tokens\": 1,\n      \"is_interrupt\": false,\n      \"loop_count\": 1,\n      \"model\": \"abc123\",\n      \"output_tokens\": 1,\n      \"prompt\": \"abc123\",\n      \"result_json\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"status\": \"abc123\",\n      \"text\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"url\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\" --idempotency-key \"abc123\"")
 }
 
 func hooksCodexUsage() {
@@ -8154,6 +8161,7 @@ func hooksCodexUsage() {
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprint(os.Stderr, " -hook-hostname STRING")
+	fmt.Fprint(os.Stderr, " -idempotency-key STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -8165,10 +8173,11 @@ func hooksCodexUsage() {
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 	fmt.Fprintln(os.Stderr, `    -hook-hostname STRING: `)
+	fmt.Fprintln(os.Stderr, `    -idempotency-key STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks codex --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"last_assistant_message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"permission_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_output\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks codex --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"last_assistant_message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"permission_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_output\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\" --idempotency-key \"abc123\"")
 }
 
 func hooksLogsUsage() {

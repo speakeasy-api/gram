@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: eea4f843beb5df0e53900de43f6ea2c2
+  docChecksum: f703b5b6f0c00a6bd6c661787a86e963
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -2289,13 +2289,13 @@ trackedFiles:
   docs/models/operations/hasrisk.md:
     last_write_checksum: sha1:76c9013597780a0d352e7017e3408921b9d88a82
   docs/models/operations/hooksnumberclauderequest.md:
-    last_write_checksum: sha1:4563e3aae412dc5d77936eaeedbcf51d49458563
+    last_write_checksum: sha1:4e27620fc69f47403ff04f1e6e63b77183c3eb60
   docs/models/operations/hooksnumbercodexrequest.md:
-    last_write_checksum: sha1:944773a8a9a68d3111939c8aa5550002aaddf9f3
+    last_write_checksum: sha1:e06e789c2ab603f320cbc24cb8f7b6e7fd0147e0
   docs/models/operations/hooksnumbercodexsecurity.md:
     last_write_checksum: sha1:d1ca0fa9e36948e80ced7dc6fefed2d87a1848fd
   docs/models/operations/hooksnumbercursorrequest.md:
-    last_write_checksum: sha1:d7307642e9e0cc14fda73fc806cdc7f75e8afd28
+    last_write_checksum: sha1:3ef60ebc29507a4f533a3be1af7d192d39b418da
   docs/models/operations/hooksnumbercursorsecurity.md:
     last_write_checksum: sha1:a111411fdeb6fd7d0224a332c1853bd55ccf2c45
   docs/models/operations/hooksnumberlogsrequest.md:
@@ -3717,11 +3717,11 @@ trackedFiles:
   src/funcs/featuresSet.ts:
     last_write_checksum: sha1:e7e9879ac653fabe88e32a86fdec4a034365ca33
   src/funcs/hooksHooksNumberClaude.ts:
-    last_write_checksum: sha1:1cf1633aa781baac65c29b0520a88f126ee602ff
+    last_write_checksum: sha1:c4344337cef79a7745dbc165df00f4015f25c18d
   src/funcs/hooksHooksNumberCodex.ts:
-    last_write_checksum: sha1:e3058a75a2f79ac71e553d93e458bf6223ff671d
+    last_write_checksum: sha1:a2b2f32c3fe1737f623e805a31011ffd4618b369
   src/funcs/hooksHooksNumberCursor.ts:
-    last_write_checksum: sha1:4a69502b7be3a87d37afb9603b6a28d526a6d5da
+    last_write_checksum: sha1:b45fd09626573e284c4c16ff736fd4a259762064
   src/funcs/hooksHooksNumberLogs.ts:
     last_write_checksum: sha1:f3332525a9f55f7594772f83f9c88117ca39e5cb
   src/funcs/hooksHooksNumberMetrics.ts:
@@ -5545,11 +5545,11 @@ trackedFiles:
   src/models/operations/getusersessionissuer.ts:
     last_write_checksum: sha1:48d1b30f84969345f3c30a8540b7355954106781
   src/models/operations/hooksnumberclaude.ts:
-    last_write_checksum: sha1:50fbac14d8c83e0d9a19e886efaa04ba247e76d4
+    last_write_checksum: sha1:749fcbb8db219045da2c07f93a8f709633bcf17c
   src/models/operations/hooksnumbercodex.ts:
-    last_write_checksum: sha1:cde32f95a54606ad7cdf6d6844d9d8da2f64dd4f
+    last_write_checksum: sha1:0ec369fe46cb348590e56c835b4296062df7a689
   src/models/operations/hooksnumbercursor.ts:
-    last_write_checksum: sha1:d6a6e9beb2a0594b73b95bc7956c7d1f1ebbd8b7
+    last_write_checksum: sha1:b9bd6b5a83b3c36cdfe9b841d79e6a673954e7fc
   src/models/operations/hooksnumberlogs.ts:
     last_write_checksum: sha1:4a0ef004b5f7db12dc269786c10dea7f9af79b1d
   src/models/operations/hooksnumbermetrics.ts:

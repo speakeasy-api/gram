@@ -384,6 +384,8 @@ SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated cost/token/usage metrics broken down by user-identity and request dimensions, powering the generic telemetry.query analytics endpoint.';
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribute_metrics_summaries AS
+-- Cutoff separates live MV ingestion from one-time historical backfill.
+WITH toUnixTimestamp64Nano(toDateTime64('2026-06-20 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano
 SELECT
     gram_project_id,
     toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
@@ -421,7 +423,8 @@ SELECT
     -- Tool call count
     countIfState(startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS total_tool_calls
 FROM telemetry_logs
-WHERE (
+WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
+  AND (
     startsWith(gram_urn, 'claude-code:usage') OR
     startsWith(gram_urn, 'codex:usage') OR
     startsWith(gram_urn, 'cursor:usage'))

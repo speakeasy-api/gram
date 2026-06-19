@@ -2227,6 +2227,8 @@ func (s *ServiceCore) processEventTurn(
 	runtime assistantRuntimeRecord,
 	event assistantThreadEventRecord,
 ) error {
+	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
+
 	if prompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
 		// MCP auth resumption is a system event with no human sender — act as
 		// the assistant's creator.
@@ -2234,7 +2236,7 @@ func (s *ServiceCore) processEventTurn(
 		if err != nil {
 			return err
 		}
-		if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt); err != nil {
+		if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, mcpServers); err != nil {
 			return fmt.Errorf("run assistant turn: %w", err)
 		}
 		return nil
@@ -2252,10 +2254,53 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return err
 	}
-	if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt); err != nil {
+	if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, mcpServers); err != nil {
 		return fmt.Errorf("run assistant turn: %w", err)
 	}
 	return nil
+}
+
+// currentRuntimeMCPServers builds the MCP server set the runner should be
+// running with right now. The runner reconciles its live thread state
+// against this list on every turn, so toolset edits (added/removed MCP
+// servers) take effect on the next event without recycling the VM. Falls
+// back to nil when the runtime server URL is not configured — the runner
+// already has the bootstrap-time set and we'd rather skip reconcile than
+// dispatch a turn with bogus URLs. Platform toolsets must be included so
+// the reconcile target matches what bootstrap granted — otherwise the
+// runner would treat them as removed and disconnect them mid-thread.
+func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant assistantRecord) []runtimeMCPServer {
+	serverURL := s.runtime.ServerURL()
+	if serverURL == nil {
+		return nil
+	}
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve platform toolsets for mcp reconcile failed; skipping reconcile",
+			attr.SlogError(err),
+		)
+		return nil
+	}
+	return resolveAssistantMCPServers(ctx, s.logger, serverURL, assistant.Toolsets, platformSlugs)
+}
+
+// assistantPlatformSlugs returns the platform toolset slugs granted to this
+// assistant's runtime. Every assistant gets the base assistants toolset; the
+// project's managed assistant additionally gets the managed-only toolset,
+// which must never be reachable by any other assistant.
+func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord) ([]string, error) {
+	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
+	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
+	case mErr == nil:
+		if managed.ID == assistant.ID {
+			platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
+		}
+	case errors.Is(mErr, pgx.ErrNoRows):
+		// Project has no managed assistant; managed-only tools stay ungranted.
+	default:
+		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
+	}
+	return platformSlugs, nil
 }
 
 // turnUserID returns the Gram user whose identity a turn should act under.
@@ -2404,16 +2449,9 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// The managed-assistant platform toolset is granted only to the project's
 	// managed assistant; tools in it must not be reachable by any other
 	// assistant.
-	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
-	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
-	case mErr == nil:
-		if managed.ID == assistant.ID {
-			platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
-		}
-	case errors.Is(mErr, pgx.ErrNoRows):
-		// Project has no managed assistant; managed-only tools stay ungranted.
-	default:
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, mErr, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	// Misconfigured toolsets (no MCP slug, MCP disabled) are surfaced as

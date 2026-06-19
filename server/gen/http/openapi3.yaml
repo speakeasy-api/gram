@@ -10444,6 +10444,13 @@ paths:
                   schema:
                     type: string
                     description: Optional endpoint hostname supplied by the Gram hook plugin.
+                - name: Idempotency-Key
+                  in: header
+                  description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
             requestBody:
                 required: true
                 content:
@@ -10540,6 +10547,13 @@ paths:
                   schema:
                     type: string
                     description: Optional endpoint hostname supplied by the Gram hook plugin.
+                - name: Idempotency-Key
+                  in: header
+                  description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
             requestBody:
                 required: true
                 content:
@@ -10639,6 +10653,13 @@ paths:
                   schema:
                     type: string
                     description: Optional endpoint hostname supplied by the Gram hook plugin.
+                - name: Idempotency-Key
+                  in: header
+                  description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
             requestBody:
                 required: true
                 content:

@@ -53,6 +53,10 @@ func EncodeClaudeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 			head := *p.HookHostname
 			req.Header.Set("X-Gram-Hook-Hostname", head)
 		}
+		if p.IdempotencyKey != nil {
+			head := *p.IdempotencyKey
+			req.Header.Set("Idempotency-Key", head)
+		}
 		body := NewClaudeRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("hooks", "claude", err)
@@ -291,6 +295,10 @@ func EncodeCursorRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 			head := *p.HookHostname
 			req.Header.Set("X-Gram-Hook-Hostname", head)
 		}
+		if p.IdempotencyKey != nil {
+			head := *p.IdempotencyKey
+			req.Header.Set("Idempotency-Key", head)
+		}
 		body := NewCursorRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("hooks", "cursor", err)
@@ -528,6 +536,10 @@ func EncodeCodexRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 		if p.HookHostname != nil {
 			head := *p.HookHostname
 			req.Header.Set("X-Gram-Hook-Hostname", head)
+		}
+		if p.IdempotencyKey != nil {
+			head := *p.IdempotencyKey
+			req.Header.Set("Idempotency-Key", head)
 		}
 		body := NewCodexRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {

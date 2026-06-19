@@ -722,7 +722,7 @@ func newStartCommand() *cli.Command {
 			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage)
 			shutdownFuncs = append(shutdownFuncs, chatWriterShutdown)
 
-			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, db, chatWriter)
+			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter)
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
@@ -1143,6 +1143,17 @@ func newStartCommand() *cli.Command {
 				Addr:              c.String("address"),
 				Handler:           mux,
 				ReadHeaderTimeout: 10 * time.Second,
+				// IdleTimeout must exceed the fronting GCLB's backend keepalive
+				// timeout so the backend retires an idle connection AFTER the LB
+				// would, never before. If the backend closes first the LB can
+				// still have an outstanding request on that connection and the
+				// client sees a TCP RST — the transient reset this change set is
+				// hardening against. GCLB's backend keepalive is a fixed 600s and
+				// not configurable, and Google explicitly requires the backend's
+				// value to be > 600s, so 620s. No WriteTimeout: it is an absolute
+				// deadline on the whole response and would sever the long-lived
+				// SSE/MCP streams this mux also serves.
+				IdleTimeout: 620 * time.Second,
 				BaseContext: func(net.Listener) context.Context {
 					return ctx
 				},
