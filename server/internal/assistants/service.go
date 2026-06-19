@@ -77,6 +77,12 @@ const (
 	// advances on every claim, so it doubles as the teardown counter here.
 	maxRuntimeTeardowns = 10
 
+	// teardownCapCleanupTimeout bounds the detached cleanup (stop runtime,
+	// fail event) on the exhausted-teardown path. The turn that triggered it
+	// already failed — often because its context was canceled — so the cleanup
+	// runs on a fresh deadline rather than the dead request context.
+	teardownCapCleanupTimeout = 30 * time.Second
+
 	meterAssistantTurnClassified = "assistant.turn.classified"
 
 	runtimeStartupReapGrace = 2 * time.Minute
@@ -1891,9 +1897,12 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				// the thread must get a fresh runtime rather than sit idle.
 				if teardownExhausted {
 					s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event exceeded runtime teardown limit", "ERROR", runErr)
-					_ = s.runtime.Stop(ctx, runtimeRecord)
-					_ = s.stopRuntimeRecord(ctx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
-					if err := s.failEvent(ctx, thread.ProjectID, event.ID, fmt.Errorf("exceeded %d runtime teardowns: %w", maxRuntimeTeardowns, runErr)); err != nil {
+					cleanupCtx, cancelCleanup := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
+					_ = s.runtime.Stop(cleanupCtx, runtimeRecord)
+					_ = s.stopRuntimeRecord(cleanupCtx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
+					err := s.failEvent(cleanupCtx, thread.ProjectID, event.ID, fmt.Errorf("exceeded %d runtime teardowns: %w", maxRuntimeTeardowns, runErr))
+					cancelCleanup()
+					if err != nil {
 						return ProcessThreadEventsResult{}, err
 					}
 					return ProcessThreadEventsResult{
@@ -1966,10 +1975,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			}
 
 			// Upstream completion provider rejected the request (Anthropic 400
-			// on a malformed message, OpenRouter rate limit, etc). The runtime
-			// is fine — replaying the same input would just produce the same
-			// failure, so terminally fail the event and keep the VM warm for
-			// subsequent ones rather than churning Fly on every retry.
+			// on a malformed message, OpenRouter rate limit, etc), or a live
+			// runtime returned a deterministic 4xx. The runtime is fine —
+			// replaying the same input would just reproduce it, so terminally
+			// fail the event and keep the VM warm. Request admission so any
+			// other pending event on the thread is drained on the warm runtime
+			// instead of waiting out the warm timer; the failed event is no
+			// longer claimable, so this cannot loop on it.
 			if errors.Is(runErr, ErrCompletionFailed) || errors.Is(runErr, ErrHistoryCorrupted) {
 				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event failed at completion provider", "ERROR", runErr)
 				if err := s.failEvent(ctx, thread.ProjectID, event.ID, runErr); err != nil {
@@ -1984,7 +1996,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 					WarmUntil:           warmUntil,
 					WarmTTLSeconds:      assistant.WarmTTLSeconds,
 					RuntimeActive:       true,
-					RetryAdmission:      false,
+					RetryAdmission:      true,
 					ProcessedAnyEvent:   processedAny,
 					BootstrappedRuntime: bootstrappedRuntime,
 				}, nil
