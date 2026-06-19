@@ -29,11 +29,12 @@ func E(code Code, cause error, public string, args ...any) *ShareableError {
 	}
 
 	return &ShareableError{
-		Code:    code,
-		id:      goa.NewErrorID(),
-		cause:   cause,
-		private: "",
-		public:  msg,
+		spanHandled: false,
+		Code:        code,
+		id:          goa.NewErrorID(),
+		cause:       cause,
+		private:     "",
+		public:      msg,
 	}
 }
 
@@ -44,11 +45,12 @@ func E(code Code, cause error, public string, args ...any) *ShareableError {
 //go:noinline
 func C(code Code) *ShareableError {
 	return &ShareableError{
-		Code:    code,
-		id:      goa.NewErrorID(),
-		cause:   nil,
-		private: "",
-		public:  code.UserMessage(),
+		spanHandled: false,
+		Code:        code,
+		id:          goa.NewErrorID(),
+		cause:       nil,
+		private:     "",
+		public:      code.UserMessage(),
 	}
 }
 
