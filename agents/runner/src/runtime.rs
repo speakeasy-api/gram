@@ -606,7 +606,10 @@ async fn reconcile_servers(
                 continue;
             }
         };
-        manager.register_server(config);
+        manager.register_server_with_options(
+            config,
+            McpServerOptions::new().with_timeout(MCP_HANDSHAKE_TIMEOUT),
+        );
         let server_uid = McpServerId::new(server.id.clone());
         match connect_and_log(manager, &server_uid, "reconcile_add").await {
             Ok(()) => {
