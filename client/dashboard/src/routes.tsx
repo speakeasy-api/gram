@@ -25,7 +25,6 @@ import Environments, {
   EnvironmentsRoot,
 } from "./pages/environments/Environments";
 import Home from "./pages/home/Home";
-import TelemetryQueryDemo from "./pages/demo/TelemetryQuery";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
@@ -415,12 +414,6 @@ const ROUTE_STRUCTURE = {
     icon: "layout-dashboard",
     component: InsightsRoot,
     indexComponent: InsightsHooksPage,
-  },
-  telemetryQueryDemo: {
-    title: "Analytics Query (demo)",
-    url: "telemetry-query-demo",
-    icon: "flask-conical",
-    component: TelemetryQueryDemo,
   },
   employees: {
     title: "Employee Enrollment",
