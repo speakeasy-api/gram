@@ -113,11 +113,20 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     -- multi-identity user resolution) directly from this MV instead of scanning raw
     -- telemetry_logs. toolset_slug/external_user_id/user_id are materialized columns
     -- on telemetry_logs; mcp_match/mcp_server_url are read from attributes.
-    toolset_slug SimpleAggregateFunction(any, String),
-    external_user_id SimpleAggregateFunction(any, String),
-    user_id SimpleAggregateFunction(any, String),
-    mcp_match SimpleAggregateFunction(any, String),
-    mcp_server_url SimpleAggregateFunction(any, String),
+    --
+    -- These attributes are only present on a subset of a trace's rows (e.g. Cursor
+    -- MCP traces carry gram.mcp.server_url/match only on the before/after MCP
+    -- execution rows, while sibling rows in the same trace carry empty strings).
+    -- Using any() lets ClickHouse persist or merge an empty string from a sibling
+    -- row/part instead of the populated value, which would randomly misclassify a
+    -- trace as shadow/local or drop its user identity. max() ensures empty strings
+    -- ("") always lose to non-empty values during part merges, mirroring the
+    -- block_reason treatment below.
+    toolset_slug SimpleAggregateFunction(max, String),
+    external_user_id SimpleAggregateFunction(max, String),
+    user_id SimpleAggregateFunction(max, String),
+    mcp_match SimpleAggregateFunction(max, String),
+    mcp_server_url SimpleAggregateFunction(max, String),
 
     -- Aggregates
     start_time_unix_nano SimpleAggregateFunction(min, Int64),
@@ -163,11 +172,11 @@ SELECT
     any(user_email) AS user_email,
     any(hook_source) AS hook_source,
     any(skill_name) AS skill_name,
-    any(toolset_slug) AS toolset_slug,
-    any(external_user_id) AS external_user_id,
-    any(user_id) AS user_id,
-    any(toString(attributes.gram.mcp.match)) AS mcp_match,
-    any(toString(attributes.gram.mcp.server_url)) AS mcp_server_url,
+    anyIf(toolset_slug, toolset_slug != '') AS toolset_slug,
+    anyIf(external_user_id, external_user_id != '') AS external_user_id,
+    anyIf(user_id, user_id != '') AS user_id,
+    anyIf(toString(attributes.gram.mcp.match), toString(attributes.gram.mcp.match) != '') AS mcp_match,
+    anyIf(toString(attributes.gram.mcp.server_url), toString(attributes.gram.mcp.server_url) != '') AS mcp_server_url,
     min(time_unix_nano) AS start_time_unix_nano,
     toUInt64(count(*)) AS log_count,
     anyIfState(

@@ -1,9 +1,0 @@
-ALTER TABLE `trace_summaries` ADD COLUMN `toolset_slug` SimpleAggregateFunction(any, String);
-ALTER TABLE `trace_summaries` ADD COLUMN `external_user_id` SimpleAggregateFunction(any, String);
-ALTER TABLE `trace_summaries` ADD COLUMN `user_id` SimpleAggregateFunction(any, String);
-ALTER TABLE `trace_summaries` ADD COLUMN `mcp_match` SimpleAggregateFunction(any, String);
-ALTER TABLE `trace_summaries` ADD COLUMN `mcp_server_url` SimpleAggregateFunction(any, String);
--- Drop "trace_summaries_mv" view
-DROP VIEW `trace_summaries_mv`;
--- Create "trace_summaries_mv" view
-CREATE MATERIALIZED VIEW `trace_summaries_mv` TO `trace_summaries` AS SELECT trace_id, gram_project_id, any(gram_deployment_id) AS gram_deployment_id, any(gram_function_id) AS gram_function_id, any(gram_urn) AS gram_urn, any(tool_name) AS tool_name, any(tool_source) AS tool_source, any(event_source) AS event_source, any(user_email) AS user_email, any(hook_source) AS hook_source, any(skill_name) AS skill_name, any(toolset_slug) AS toolset_slug, any(external_user_id) AS external_user_id, any(user_id) AS user_id, any(toString(attributes.gram.mcp.match)) AS mcp_match, any(toString(attributes.gram.mcp.server_url)) AS mcp_server_url, min(time_unix_nano) AS start_time_unix_nano, toUInt64(count(*)) AS log_count, anyIfState(toInt32OrNull(toString(attributes.http.response.status_code)), toString(attributes.http.response.status_code) != '') AS http_status_code, max(if(toString(attributes.gen_ai.tool.call.result) != '', 1, 0)) AS has_result, max(if(toString(attributes.gram.hook.error) != '', 1, 0)) AS has_error, max(if(toString(attributes.gram.hook.block_reason) != '', 1, 0)) AS has_block, anyIf(toString(attributes.gram.hook.block_reason), toString(attributes.gram.hook.block_reason) != '') AS block_reason FROM telemetry_logs WHERE (trace_id IS NOT NULL) AND (trace_id != '') AND (NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')) GROUP BY trace_id, gram_project_id;
