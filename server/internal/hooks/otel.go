@@ -228,7 +228,7 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				params = append(params, telemetry.WithOTELMetadata(telemetry.LogParams{
 					Timestamp:  timestamp,
 					ToolInfo:   claudeOTELLogToolInfo(orgID, parsedProjectID.String()),
-					UserInfo:   telemetry.UserInfo{},
+					UserInfo:   telemetry.UserInfoByEmail(stringAttr(logAttrs, attr.UserEmailKey)),
 					Attributes: logAttrs,
 				}, observedTimestamp, resourceAttrs))
 			}

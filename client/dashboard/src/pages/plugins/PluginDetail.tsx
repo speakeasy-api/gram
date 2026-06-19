@@ -41,7 +41,6 @@ import type {
   ToolsetEntry,
 } from "@gram/client/models/components";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { toast } from "sonner";
 
 // A selectable server for a plugin, sourced from either a toolset (Hosted) or
@@ -68,9 +67,6 @@ export default function PluginDetail(): JSX.Element | null {
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
 
   const client = useSdkClient();
-  const telemetry = useTelemetry();
-  const isRemoteMcpEnabled =
-    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
 
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
     useListToolsets();
@@ -79,10 +75,10 @@ export default function PluginDetail(): JSX.Element | null {
     [toolsetsData?.toolsets],
   );
 
-  // Remote MCP-backed mcp_servers for this project, gated on the remote-mcp
-  // feature. Only remote-backed, non-disabled servers are publishable today.
+  // Remote MCP-backed mcp_servers for this project. Only remote-backed,
+  // non-disabled servers are publishable today.
   const { data: mcpServersData, isLoading: isLoadingMcpServers } =
-    useMcpServers({}, undefined, { enabled: isRemoteMcpEnabled });
+    useMcpServers({});
   const mcpServers = useMemo(
     () =>
       (mcpServersData?.mcpServers ?? []).filter(
