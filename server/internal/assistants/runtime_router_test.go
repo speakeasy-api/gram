@@ -53,7 +53,7 @@ func (s *stubRuntimeBackend) RecycleImage(_ context.Context, _ assistantRuntimeR
 	return RuntimeBackendRecycleResult{Recycled: false, BackendMetadataJSON: nil}, nil
 }
 
-func (s *stubRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord, _ uuid.UUID, _ string, _ string, _ string) error {
+func (s *stubRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord, _ uuid.UUID, _ string, _ string, _ string, _ []runtimeMCPServer) error {
 	s.runTurnCount++
 	return nil
 }

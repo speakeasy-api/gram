@@ -85,8 +85,9 @@ type runtimeToolCall struct {
 }
 
 type runtimeTurnRequest struct {
-	Input     string `json:"input"`
-	AuthToken string `json:"auth_token,omitempty"`
+	Input      string             `json:"input"`
+	AuthToken  string             `json:"auth_token,omitempty"`
+	MCPServers []runtimeMCPServer `json:"mcp_servers,omitempty"`
 	// AssistantID lets a runner that booted without GRAM_ASSISTANT_ID env
 	// (e.g. a generic warm-pool sandbox on GKE) learn which assistant it serves
 	// from the turn. Boot env wins when present, so it is harmless and unused

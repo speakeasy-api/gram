@@ -221,7 +221,7 @@ func TestLinearIngestRejectsStaleTimestamp(t *testing.T) {
 	// A captured-and-replayed signed body carries an old webhookTimestamp; it
 	// must be rejected even though the (body) signature would still verify.
 	stale := time.Now().Add(-10 * time.Minute).UnixMilli()
-	body := []byte(fmt.Sprintf(`{"type":"Issue","action":"update","data":{"id":"i1"},"webhookTimestamp":%d}`, stale))
+	body := fmt.Appendf(nil, `{"type":"Issue","action":"update","data":{"id":"i1"},"webhookTimestamp":%d}`, stale)
 
 	_, err = definition.HandleWebhook(body, http.Header{}, config)
 	require.Error(t, err)
@@ -238,7 +238,7 @@ func TestLinearIngestAcceptsFreshTimestamp(t *testing.T) {
 	require.NoError(t, err)
 
 	fresh := time.Now().UnixMilli()
-	body := []byte(fmt.Sprintf(`{"type":"Issue","action":"update","data":{"id":"i1"},"webhookTimestamp":%d}`, fresh))
+	body := fmt.Appendf(nil, `{"type":"Issue","action":"update","data":{"id":"i1"},"webhookTimestamp":%d}`, fresh)
 
 	result, err := definition.HandleWebhook(body, http.Header{}, config)
 	require.NoError(t, err)

@@ -379,7 +379,7 @@ func (g *GKERuntimeBackend) waitForHealth(ctx context.Context, metadata gkeRunti
 	}
 }
 
-func (g *GKERuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string) error {
+func (g *GKERuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, mcpServers []runtimeMCPServer) error {
 	if err := validateRuntimeBackend(g, runtime.Backend); err != nil {
 		return err
 	}
@@ -394,6 +394,7 @@ func (g *GKERuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	reqBody, err := json.Marshal(runtimeTurnRequest{
 		Input:       prompt,
 		AuthToken:   authToken,
+		MCPServers:  mcpServers,
 		AssistantID: runtime.AssistantID.String(),
 	})
 	if err != nil {
