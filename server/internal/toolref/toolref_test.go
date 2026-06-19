@@ -1,11 +1,11 @@
-package mcpname_test
+package toolref_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/mcpname"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 func TestAttributeTool(t *testing.T) {
@@ -28,7 +28,7 @@ func TestAttributeTool(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			server, function, isMCP := mcpname.AttributeTool(tc.in)
+			server, function, isMCP := toolref.AttributeTool(tc.in)
 			require.Equal(t, tc.isMCP, isMCP)
 			require.Equal(t, tc.server, server)
 			require.Equal(t, tc.function, function)
@@ -57,7 +57,7 @@ func TestMCPServerOf(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.want, mcpname.MCPServerOf(tc.in))
+			require.Equal(t, tc.want, toolref.MCPServerOf(tc.in))
 		})
 	}
 }
