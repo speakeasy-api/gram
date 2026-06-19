@@ -25,18 +25,14 @@ import (
 // chat is treated as deliberately titled and never retitled.
 const DefaultChatTitle = "New Chat"
 
-// meterChatDroppedGenerations counts assistant generations dropped at capture
-// because the model produced malformed tool_call arguments.
-const meterChatDroppedGenerations = "chat.capture.dropped_generations"
-
 // ChatMessageCaptureStrategy captures completion messages to the database.
 // It implements the MessageCaptureStrategy interface.
 type ChatMessageCaptureStrategy struct {
-	logger             *slog.Logger
-	db                 *pgxpool.Pool
-	repo               *repo.Queries
-	writer             *ChatMessageWriter
-	droppedGenerations metric.Int64Counter
+	logger  *slog.Logger
+	db      *pgxpool.Pool
+	repo    *repo.Queries
+	writer  *ChatMessageWriter
+	metrics *captureMetrics
 }
 
 var _ openrouter.MessageCaptureStrategy = (*ChatMessageCaptureStrategy)(nil)
@@ -59,22 +55,12 @@ func NewChatMessageCaptureStrategy(
 	db *pgxpool.Pool,
 	writer *ChatMessageWriter,
 ) *ChatMessageCaptureStrategy {
-	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/chat")
-	droppedGenerations, err := meter.Int64Counter(
-		meterChatDroppedGenerations,
-		metric.WithDescription("Assistant generations dropped at capture because the model produced malformed tool_call arguments"),
-		metric.WithUnit("{generation}"),
-	)
-	if err != nil {
-		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterChatDroppedGenerations), attr.SlogError(err))
-	}
-
 	return &ChatMessageCaptureStrategy{
-		logger:             logger,
-		db:                 db,
-		repo:               repo.New(db),
-		writer:             writer,
-		droppedGenerations: droppedGenerations,
+		logger:  logger,
+		db:      db,
+		repo:    repo.New(db),
+		writer:  writer,
+		metrics: newCaptureMetrics(meterProvider, logger),
 	}
 }
 
@@ -448,12 +434,7 @@ func (s *ChatMessageCaptureStrategy) recordDroppedGeneration(ctx context.Context
 		attr.SlogProjectID(projectID.String()),
 		attr.SlogToolName(toolName),
 	)
-	if s.droppedGenerations != nil {
-		s.droppedGenerations.Add(ctx, 1, metric.WithAttributes(
-			attr.ProjectID(projectID.String()),
-			attr.ToolName(toolName),
-		))
-	}
+	s.metrics.RecordDroppedGeneration(ctx, projectID, toolName)
 }
 
 // dropPoisonedAssistantMessages removes incoming assistant messages whose
