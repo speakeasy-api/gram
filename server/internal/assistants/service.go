@@ -1897,14 +1897,19 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				// the thread must get a fresh runtime rather than sit idle.
 				if teardownExhausted {
 					s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event exceeded runtime teardown limit", "ERROR", runErr)
-					cleanupCtx, cancelCleanup := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
-					_ = s.runtime.Stop(cleanupCtx, runtimeRecord)
-					_ = s.stopRuntimeRecord(cleanupCtx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
-					err := s.failEvent(cleanupCtx, thread.ProjectID, event.ID, fmt.Errorf("exceeded %d runtime teardowns: %w", maxRuntimeTeardowns, runErr))
-					cancelCleanup()
+					// Mark the event failed first, on its own budget: this is the
+					// step that actually stops the loop, so the best-effort runtime
+					// teardown below must not be able to starve it of time.
+					failCtx, cancelFail := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
+					err := s.failEvent(failCtx, thread.ProjectID, event.ID, fmt.Errorf("exceeded %d runtime teardowns: %w", maxRuntimeTeardowns, runErr))
+					cancelFail()
 					if err != nil {
 						return ProcessThreadEventsResult{}, err
 					}
+					cleanupCtx, cancelCleanup := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
+					_ = s.runtime.Stop(cleanupCtx, runtimeRecord)
+					_ = s.stopRuntimeRecord(cleanupCtx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
+					cancelCleanup()
 					return ProcessThreadEventsResult{
 						AssistantID:         assistant.ID,
 						WarmUntil:           time.Time{},

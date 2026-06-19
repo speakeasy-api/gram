@@ -1087,7 +1087,7 @@ func TestServiceCoreProcessThreadEventsMarksRuntimeFailedOnUnhealthyTurn(t *test
 
 // An event that has already torn down its runtime maxRuntimeTeardowns times is
 // failed terminally instead of being re-admitted forever — the bound that stops
-// a deterministic error misclassified as unhealthy from looping (DNO-290).
+// a deterministic error misclassified as unhealthy from looping.
 func TestServiceCoreProcessThreadEventsCapsRuntimeTeardowns(t *testing.T) {
 	t.Parallel()
 
