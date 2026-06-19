@@ -2,11 +2,14 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	goa "goa.design/goa/v3/pkg"
+
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TraceMethods(tracer trace.Tracer) func(goa.Endpoint) goa.Endpoint {
@@ -27,7 +30,12 @@ func TraceMethods(tracer trace.Tracer) func(goa.Endpoint) goa.Endpoint {
 
 			val, err := next(ctx, req)
 			if err != nil {
-				span.SetStatus(codes.Error, err.Error())
+				if se, ok := errors.AsType[*oops.ShareableError](err); ok {
+					span.SetStatus(codes.Error, se.String())
+				} else {
+					span.SetStatus(codes.Error, err.Error())
+				}
+				span.RecordError(err, trace.WithStackTrace(true))
 				return nil, err
 			}
 

@@ -2300,6 +2300,8 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	logger := s.logger
+
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
 	if err != nil {
 		return nil, err
@@ -2332,7 +2334,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 
 	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers").LogError(ctx, logger)
 	}
 
 	rows, err := s.chRepo.ListToolUsageTraces(ctx, repo.ListToolUsageTracesParams{
@@ -2353,7 +2355,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		Limit:              params.limit + 1,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage traces")
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage traces").LogError(ctx, logger)
 	}
 
 	nextCursor := ""
