@@ -62,6 +62,19 @@ type ShareableError struct {
 	cause   error
 	public  string
 	private string
+	// spanHandled records that a boundary logging helper (LogError/LogWarn/
+	// LogInfo) has already applied this error's OpenTelemetry span treatment,
+	// including any deliberate suppression. Outer tracing middleware uses this to
+	// avoid recording the same error on the same span twice.
+	spanHandled bool
+}
+
+// SpanHandled reports whether a boundary logging helper has already decided this
+// error's span treatment. Tracing middleware should not record the error on the
+// span again when this is true, to avoid duplicate exception events and to
+// preserve the helpers' cancellation- and client-fault-noise suppression.
+func (e *ShareableError) SpanHandled() bool {
+	return e.spanHandled
 }
 
 // Error implements the error interface.
@@ -148,6 +161,7 @@ func (e *ShareableError) effectiveCode(ctx context.Context) Code {
 // faults in disconnect noise. Server- and application-initiated cancellations,
 // where the request context is still live, keep full error severity.
 func (e *ShareableError) LogError(ctx context.Context, logger *slog.Logger, args ...slog.Attr) *ShareableError {
+	e.spanHandled = true
 	canceled := e.effectiveCode(ctx) == CodeCanceled
 
 	span := trace.SpanFromContext(ctx)
@@ -186,6 +200,7 @@ func (e *ShareableError) LogError(ctx context.Context, logger *slog.Logger, args
 // request context) is demoted to info level, mirroring LogError's cancellation
 // handling.
 func (e *ShareableError) LogWarn(ctx context.Context, logger *slog.Logger, args ...slog.Attr) *ShareableError {
+	e.spanHandled = true
 	level := slog.LevelWarn
 	if e.effectiveCode(ctx) == CodeCanceled {
 		level = slog.LevelInfo
@@ -214,6 +229,7 @@ func (e *ShareableError) LogWarn(ctx context.Context, logger *slog.Logger, args 
 // already info and the span is never touched) but is kept for symmetry with
 // LogError and LogWarn.
 func (e *ShareableError) LogInfo(ctx context.Context, logger *slog.Logger, args ...slog.Attr) *ShareableError {
+	e.spanHandled = true
 	level := slog.LevelInfo
 	if e.effectiveCode(ctx) == CodeCanceled {
 		level = slog.LevelInfo
