@@ -72,15 +72,11 @@ const (
 	// maxRuntimeTeardowns caps how many times one event may tear down and
 	// re-admit its runtime (the ErrRuntimeUnhealthy path) before it is failed
 	// terminally. Higher than maxEventAttempts because a genuine infra blip
-	// deserves generous retries — but a deterministic error misclassified as
-	// unhealthy must not keep killing fresh VMs forever (the DNO-290 hazard).
-	// event.Attempts advances on every claim, so it doubles as the teardown
-	// counter on this path.
+	// deserves generous retries, while a deterministic error misclassified as
+	// unhealthy still cannot churn fresh runtimes without bound. event.Attempts
+	// advances on every claim, so it doubles as the teardown counter here.
 	maxRuntimeTeardowns = 10
 
-	// meterAssistantTurnClassified counts turn failures by classifyTurnError
-	// outcome so a runaway teardown loop is visible (the DNO-290 incident ran
-	// ~13h silent).
 	meterAssistantTurnClassified = "assistant.turn.classified"
 
 	runtimeStartupReapGrace = 2 * time.Minute
@@ -1878,7 +1874,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			if teardownExhausted {
 				outcome = turnOutcomeRuntimeUnhealthyExhausted
 			}
-			s.recordTurnClassification(turnCtx, outcome)
+			s.recordTurnClassification(turnCtx, assistant.ID, thread.ID, outcome)
 
 			// Runtime-level failure (dead VM, connection refused, missing
 			// state). Tear down the runtime row and leave the event in
@@ -1887,10 +1883,12 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			// A reaper reclaims stuck 'processing' events after a grace
 			// window so they flow through cleanly under a fresh VM.
 			if errors.Is(runErr, ErrRuntimeUnhealthy) {
-				// An event that has torn down this many runtimes is almost
-				// certainly a deterministic failure misread as infra (the
-				// DNO-290 hazard), not a transient blip. Stop re-admitting it
-				// and fail it terminally instead of churning VMs forever.
+				// An event that has torn down this many runtimes is far more
+				// likely a deterministic failure misread as infra than a
+				// transient blip, so fail it terminally instead of re-admitting
+				// it forever. Still request admission afterwards: the failed
+				// event is no longer claimable, but any other pending event on
+				// the thread must get a fresh runtime rather than sit idle.
 				if teardownExhausted {
 					s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event exceeded runtime teardown limit", "ERROR", runErr)
 					_ = s.runtime.Stop(ctx, runtimeRecord)
@@ -1903,7 +1901,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 						WarmUntil:           time.Time{},
 						WarmTTLSeconds:      assistant.WarmTTLSeconds,
 						RuntimeActive:       false,
-						RetryAdmission:      false,
+						RetryAdmission:      true,
 						ProcessedAnyEvent:   processedAny,
 						BootstrappedRuntime: bootstrappedRuntime,
 					}, nil
@@ -2742,12 +2740,15 @@ func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid
 }
 
 // recordTurnClassification counts a failed turn by its classifyTurnError
-// bucket so teardown loops are alertable.
-func (s *ServiceCore) recordTurnClassification(ctx context.Context, outcome turnOutcome) {
-	if s.turnClassified == nil {
-		return
-	}
-	s.turnClassified.Add(ctx, 1, metric.WithAttributes(attr.AssistantTurnOutcome(string(outcome))))
+// bucket. The thread and assistant ids are attached explicitly — metric
+// instruments do not inherit them from the context — so a runaway teardown
+// loop can be grouped to a single thread.
+func (s *ServiceCore) recordTurnClassification(ctx context.Context, assistantID, threadID uuid.UUID, outcome turnOutcome) {
+	s.turnClassified.Add(ctx, 1, metric.WithAttributes(
+		attr.AssistantTurnOutcome(string(outcome)),
+		attr.AssistantID(assistantID.String()),
+		attr.AssistantThreadID(threadID.String()),
+	))
 }
 
 func (s *ServiceCore) failEvent(ctx context.Context, projectID, eventID uuid.UUID, runErr error) error {

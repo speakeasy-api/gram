@@ -1134,13 +1134,13 @@ func TestServiceCoreProcessThreadEventsCapsRuntimeTeardowns(t *testing.T) {
 
 	result, err := core.ProcessThreadEvents(t.Context(), projectID, threadID)
 	require.NoError(t, err)
-	require.False(t, result.RetryAdmission, "exhausted teardown budget must stop re-admitting the event")
+	require.True(t, result.RetryAdmission, "thread is re-admitted so any other pending events run on a fresh runtime")
 	require.False(t, result.RuntimeActive)
 	require.Equal(t, int64(1), stopCalls.Load(), "the runtime is still torn down on the final attempt")
 
 	event, err := assistantsrepo.New(conn).GetLatestAssistantThreadEventByThreadID(t.Context(), assistantsrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
 	require.NoError(t, err)
-	require.Equal(t, eventStatusFailed, event.Status, "event is failed terminally, not left for the reaper to re-admit")
+	require.Equal(t, eventStatusFailed, event.Status, "the poisoned event itself is failed terminally, not re-admitted")
 	require.True(t, event.LastError.Valid)
 	require.Contains(t, event.LastError.String, "exceeded 10 runtime teardowns")
 }
