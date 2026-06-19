@@ -33,7 +33,6 @@ import {
   LABELS,
   type Measures,
   nextAvailableDimension,
-  nextDimension,
   parseDrillPath,
   PIVOTS,
 } from "./taxonomy";
@@ -379,9 +378,11 @@ export function CostsExplorer(): JSX.Element {
       dim === Dimension.Email
         ? "Top spenders"
         : `Spend by ${(LABELS[dim] ?? "").toLowerCase()}`;
-    // A mix card's rows are drillable when its dimension has a level below it
-    // (e.g. Department → Team); leaf dims like Agent are shown but not clickable.
-    const drillableDim = (dim: Dimension) => nextDimension(dim) !== null;
+    // A mix card's rows are drillable when its dimension has a *populated* level
+    // below it (e.g. Department → Team); leaf dims (Agent) or levels with no data
+    // beneath them are shown but not clickable.
+    const drillableDim = (dim: Dimension) =>
+      nextAvailableDimension(dim, availableDims) !== null;
     // Team view groups by user, so its table already ranks people — surface the
     // top spenders as a compact card too (reuses the main rows, no extra query).
     if (groupBy === Dimension.Email) {
@@ -469,6 +470,7 @@ export function CostsExplorer(): JSX.Element {
     mixLoadingA,
     mixLoadingB,
     groupBy,
+    availableDims,
     stats,
     data,
     isFetching,
@@ -479,9 +481,11 @@ export function CostsExplorer(): JSX.Element {
   // cross-cut axis, e.g. drilling a department straight from the Division view).
   const drillIntoDim = (dim: Dimension, value: string) => {
     // Land on the next chain axis that actually has data, skipping empty links
-    // (e.g. divisions → users when the org has no departments).
-    const next =
-      nextAvailableDimension(dim, availableDims) ?? nextDimension(dim);
+    // (e.g. divisions → users when the org has no departments). Null means
+    // nothing populated below — don't drill into an empty level. (While
+    // availability is still loading this returns the static next dimension, so
+    // drilling stays enabled and never blocks prematurely.)
+    const next = nextAvailableDimension(dim, availableDims);
     if (next === null) return;
     if (value === "" || value === "Other") return;
     goToNode([...path, { dim, value }], next);
@@ -489,6 +493,11 @@ export function CostsExplorer(): JSX.Element {
 
   // Drill into a main-table row: use the current breakdown axis.
   const drillInto = (row: QueryRow) => drillIntoDim(groupBy, row.groupValue);
+
+  // Rows are drillable only when there's a *populated* level below the current
+  // axis — so you can't drill into an empty breakdown. (Availability-unknown
+  // during load falls back to the static chain, keeping rows drillable.)
+  const canDrill = nextAvailableDimension(groupBy, availableDims) !== null;
 
   // Go up one ancestor: drop the deepest filter and regroup by the axis that
   // produced it (the removed crumb's dimension) — i.e. show the parent's profile.
@@ -600,6 +609,7 @@ export function CostsExplorer(): JSX.Element {
         parentValue={parentValue}
         stats={stats}
         groupBy={groupBy}
+        canDrill={canDrill}
         pivotOptions={pivotOptions}
         onGroupByChange={changeGroupBy}
         rows={rows}

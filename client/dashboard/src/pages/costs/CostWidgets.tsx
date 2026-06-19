@@ -191,7 +191,7 @@ function TrendCard({
   );
 }
 
-export type MixRow = { label: string; cost: number };
+type MixRow = { label: string; cost: number };
 
 // One ranked row: label + cost + a graded bar. Becomes a button (with a muted
 // hover) when `onSelect` is supplied, so the user can drill straight into it.
@@ -379,7 +379,7 @@ function StatCard({
   );
 }
 
-export type MixCardSpec = {
+type MixCardSpec = {
   kind: "mix";
   title: string;
   // The dimension these rows rank, and whether it has a level to drill into.
@@ -388,7 +388,7 @@ export type MixCardSpec = {
   rows: MixRow[];
   loading: boolean;
 };
-export type StatCardSpec = {
+type StatCardSpec = {
   kind: "stat";
   title: string;
   value: string;

@@ -28,13 +28,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { CostTable } from "./CostTable";
-import {
-  type Crumb,
-  type DimMeta,
-  LABELS,
-  type Measures,
-  nextDimension,
-} from "./taxonomy";
+import { type Crumb, type DimMeta, LABELS, type Measures } from "./taxonomy";
 
 // ── Formatting helpers ──────────────────────────────────────────────────────
 
@@ -226,6 +220,8 @@ export type EntityProfileProps = {
   stats: Measures;
   // The axis the child table is grouped by, and the re-pivot options.
   groupBy: Dimension;
+  // Whether rows can be drilled — false when no populated level exists below.
+  canDrill: boolean;
   pivotOptions: DimMeta[];
   onGroupByChange: (dim: Dimension) => void;
   // The child rows + drill handler.
@@ -256,6 +252,7 @@ export function EntityProfile({
   parentValue,
   stats,
   groupBy,
+  canDrill,
   pivotOptions,
   onGroupByChange,
   rows,
@@ -267,7 +264,6 @@ export function EntityProfile({
   isLoading,
   isError,
 }: EntityProfileProps): JSX.Element {
-  const canDrill = nextDimension(groupBy) !== null;
   const groupLabel = LABELS[groupBy] ?? "Group";
 
   const title = entity ? prettyName(entity.value, entity.dim) : "All costs";

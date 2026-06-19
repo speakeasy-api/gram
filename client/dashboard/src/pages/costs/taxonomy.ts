@@ -18,7 +18,7 @@ export type Measures = {
 
 // The suggested top-down chain an admin walks. "Team" maps to WorkOS groups[]
 // (no dedicated team dimension yet); "User" is email; "Agent" is hook_source.
-export const CHAIN: DimMeta[] = [
+const CHAIN: DimMeta[] = [
   { dim: Dimension.DivisionName, label: "Division" },
   { dim: Dimension.DepartmentName, label: "Department" },
   { dim: Dimension.Group, label: "Team" },
@@ -42,7 +42,7 @@ export const LABELS: Record<string, string> = Object.fromEntries(
 
 // The next axis to drill into after `dim`, following the suggested chain and
 // falling back to User → Agent for off-chain pivots. null = leaf.
-export function nextDimension(dim: Dimension): Dimension | null {
+function nextDimension(dim: Dimension): Dimension | null {
   const i = CHAIN.findIndex((c) => c.dim === dim);
   if (i >= 0 && i < CHAIN.length - 1) return CHAIN[i + 1]!.dim;
   if (dim === Dimension.HookSource) return null;
@@ -100,7 +100,7 @@ export function parseDrillPath(tail: string): Crumb[] {
 // (only `app.*` custom attrs get the `@` rename), so each taxonomy dimension
 // maps to a fixed key. A dimension whose key is absent has no data for the org —
 // we hide it from the breakdown dropdown and skip it when picking a default.
-export const DIM_ATTRIBUTE_KEY: Partial<Record<Dimension, string>> = {
+const DIM_ATTRIBUTE_KEY: Partial<Record<Dimension, string>> = {
   [Dimension.DivisionName]: "user.attributes.division_name",
   [Dimension.DepartmentName]: "user.attributes.department_name",
   [Dimension.JobTitle]: "user.attributes.job_title",

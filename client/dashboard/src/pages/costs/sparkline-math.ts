@@ -2,9 +2,9 @@
 // component module (Sparkline.tsx) so that file can satisfy the react-refresh
 // "only export components" rule; shared by Sparkline, CostTable, and CostWidgets.
 
-export const UP_COLOR = "#f43f5e"; // rising cost → rose-500
-export const DOWN_COLOR = "#10b981"; // falling cost → emerald-500
-export const FLAT_COLOR = "#94a3b8"; // no clear trend → grey
+const UP_COLOR = "#f43f5e"; // rising cost → rose-500
+const DOWN_COLOR = "#10b981"; // falling cost → emerald-500
+const FLAT_COLOR = "#94a3b8"; // no clear trend → grey
 
 // Moving-average window applied before drawing / trend detection.
 export const SMOOTH_WINDOW = 11;
