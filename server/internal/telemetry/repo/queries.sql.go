@@ -2858,12 +2858,13 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		"max(mcp_match) AS g_mcp_match",
 		"max(mcp_server_url) AS g_mcp_server_url",
 		"anyIfMerge(http_status_code) AS g_http_status_code",
-		"max(has_result) AS g_has_result",
-		"max(has_error) AS g_has_error",
-		"max(has_block) AS g_has_block",
+		// Reconstruct the hook status deterministically from the highest-severity
+		// rank across the trace's summary rows (mirrors the raw-log path), rather
+		// than max()-ing each boolean independently.
+		"max(hook_status_rank) AS g_hook_status_rank",
 		"max(block_reason) AS g_block_reason",
 	).
-		From("trace_summaries").
+		From("(SELECT *, multiIf(has_block = 1, 3, has_error = 1, 2, has_result = 1, 1, 0) AS hook_status_rank FROM trace_summaries)").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		GroupBy("trace_id").
 		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
@@ -2955,7 +2956,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		"g_user_id != ''", "'"+toolUsageUserKindUserID+"'",
 		"'"+toolUsageUserKindUnknown+"'",
 	)
-	hookStatus := "if(g_event_source = 'hook', CAST(multiIf(g_has_block = 1, 'blocked', g_has_error = 1, 'failure', g_has_result = 1, 'success', 'pending') AS Nullable(String)), CAST(NULL AS Nullable(String)))"
+	hookStatus := "if(g_event_source = 'hook', multiIf(g_hook_status_rank = 3, CAST('blocked' AS Nullable(String)), g_hook_status_rank = 2, CAST('failure' AS Nullable(String)), g_hook_status_rank = 1, CAST('success' AS Nullable(String)), CAST('pending' AS Nullable(String))), CAST(NULL AS Nullable(String)))"
 
 	tracesSQL := fmt.Sprintf(`
 SELECT

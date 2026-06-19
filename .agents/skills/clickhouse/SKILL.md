@@ -22,7 +22,7 @@ The pre-aggregated **materialized views are the default read path** for anything
 
 **Reading `trace_summaries`** (one row per `trace_id`, `AggregatingMergeTree`): `GROUP BY trace_id`, use `*Merge` combinators for `AggregateFunction` columns (`anyIfMerge(http_status_code)`) and plain `any()`/`min()`/`sum()`/`max()` for `SimpleAggregateFunction` columns. Tool calls carry a real `trace_id` (recorded by the gateway in `ToolProxy.Do`), so hosted MCP, shadow MCP, skill, and local tool events are all present in the view.
 
-> **Gotcha — `ILLEGAL_AGGREGATION` (code 184):** when a grouped read is wrapped in a CTE/subquery that a *caller* then aggregates over (e.g. `uniqExact(tool_name)` over a `WITH normalized_events AS (... GROUP BY trace_id ...)`), ClickHouse merges the subquery back into the outer aggregate **if an aggregate alias shadows a base column** (`any(gram_urn) AS gram_urn`). Alias grouped aggregates to non-colliding names — prefix them, e.g. `any(gram_urn) AS g_gram_urn` — so the boundary holds.
+> **Gotcha — `ILLEGAL_AGGREGATION` (code 184):** when a grouped read is wrapped in a CTE/subquery that a _caller_ then aggregates over (e.g. `uniqExact(tool_name)` over a `WITH normalized_events AS (... GROUP BY trace_id ...)`), ClickHouse merges the subquery back into the outer aggregate **if an aggregate alias shadows a base column** (`any(gram_urn) AS gram_urn`). Alias grouped aggregates to non-colliding names — prefix them, e.g. `any(gram_urn) AS g_gram_urn` — so the boundary holds.
 
 ### File Structure
 
