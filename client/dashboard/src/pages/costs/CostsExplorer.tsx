@@ -417,16 +417,48 @@ export function CostsExplorer(): JSX.Element {
         loading: mixLoadingB,
       });
     }
-    // Viewing a user (grouped by their agents): show how efficient sessions are.
-    if (groupBy === Dimension.HookSource) {
-      const cps = stats.sessions > 0 ? stats.cost / stats.sessions : null;
-      out.push({
+    // Always show three widgets across the top (trend + two). When a level
+    // yields fewer than two breakdown cards (e.g. only one mix axis survives
+    // pruning), pad with per-session efficiency stats until there are two.
+    const sessions = stats.sessions;
+    const perSession = (n: number) => (sessions > 0 ? n / sessions : null);
+    const caption = `across ${sessions.toLocaleString()} sessions`;
+    const loading = isFetching && !data;
+    const fillers: CardSpec[] = [
+      {
         kind: "stat",
         title: "Cost per session",
-        value: cps !== null ? `$${cps.toFixed(2)}` : "—",
-        caption: `across ${stats.sessions.toLocaleString()} sessions`,
-        loading: isFetching && !data,
-      });
+        value:
+          perSession(stats.cost) !== null
+            ? `$${perSession(stats.cost)!.toFixed(2)}`
+            : "—",
+        caption,
+        loading,
+      },
+      {
+        kind: "stat",
+        title: "Tokens per session",
+        value:
+          perSession(stats.tokens) !== null
+            ? Math.round(perSession(stats.tokens)!).toLocaleString()
+            : "—",
+        caption,
+        loading,
+      },
+      {
+        kind: "stat",
+        title: "Tool calls per session",
+        value:
+          perSession(stats.tools) !== null
+            ? perSession(stats.tools)!.toFixed(1)
+            : "—",
+        caption,
+        loading,
+      },
+    ];
+    for (const filler of fillers) {
+      if (out.length >= 2) break;
+      if (!out.some((c) => c.title === filler.title)) out.push(filler);
     }
     return out;
   }, [

@@ -60,7 +60,10 @@ function LegendTooltip({
 }): JSX.Element {
   return (
     <Tooltip>
-      <TooltipTrigger className="text-muted-foreground inline-flex cursor-help">
+      <TooltipTrigger
+        aria-label="Trend colour legend"
+        className="text-muted-foreground inline-flex cursor-help"
+      >
         <Info className="size-3.5" />
       </TooltipTrigger>
       <TooltipContent>
@@ -84,7 +87,10 @@ function LegendTooltip({
 function InfoTooltip({ text }: { text: string }): JSX.Element {
   return (
     <Tooltip>
-      <TooltipTrigger className="text-muted-foreground inline-flex cursor-help">
+      <TooltipTrigger
+        aria-label={text}
+        className="text-muted-foreground inline-flex cursor-help"
+      >
         <Info className="size-3.5" />
       </TooltipTrigger>
       <TooltipContent className="max-w-56">{text}</TooltipContent>
@@ -393,7 +399,7 @@ export function CostTable({
 
       {sorted.length === 0 ? (
         <div
-          className="px-6 py-10 text-center"
+          className="px-5 py-10 text-center"
           style={{ gridColumn: "1 / -1" }}
         >
           <Type className="text-muted-foreground">
@@ -482,7 +488,7 @@ export function CostTable({
 
       {totalPages > 1 && (
         <div
-          className="flex items-center justify-between px-6 py-3"
+          className="flex items-center justify-between px-5 py-3"
           style={{ gridColumn: "1 / -1" }}
         >
           <p className="text-muted-foreground text-sm">
@@ -493,6 +499,7 @@ export function CostTable({
           <div className="flex items-center gap-1">
             <button
               type="button"
+              aria-label="Previous page"
               onClick={() => setPage((p) => p - 1)}
               disabled={safePage === 0}
               className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-40"
@@ -501,6 +508,7 @@ export function CostTable({
             </button>
             <button
               type="button"
+              aria-label="Next page"
               onClick={() => setPage((p) => p + 1)}
               disabled={safePage >= totalPages - 1}
               className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-40"

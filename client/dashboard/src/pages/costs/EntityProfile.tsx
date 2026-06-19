@@ -51,9 +51,16 @@ function displayValue(groupValue: string): string {
 
 // ── CSV export ──────────────────────────────────────────────────────────────
 
-// Quote a field only when it contains a comma, quote, or newline (RFC 4180).
+// Serialize one CSV field. Two concerns:
+//   1. Formula injection (CWE-1236): a cell starting with = + - @ (or a control
+//      char) is treated as a formula by Excel/Sheets. Directory-sync values
+//      (names, emails) are attacker-influenced, so neutralize with a leading
+//      apostrophe before quoting.
+//   2. RFC 4180 quoting: wrap in quotes (doubling internal quotes) when the
+//      value contains a comma, quote, or newline.
 function csvField(value: string | number): string {
-  const s = String(value);
+  let s = String(value);
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -137,14 +144,8 @@ function entitySubtitle(
 }
 
 // A unique, deterministic colour identity for an entity, derived from its name
-// (FNV-1a → related hues). The avatar is a soft pastel "macOS app icon" squircle
-// (light tinted gradient + a deeper icon tone); the mesh is the same hues as a
-// faint blurred wash behind the hero.
-function entityPalette(name: string): {
-  iconBg: string;
-  iconColor: string;
-  mesh: string;
-} {
+// (FNV-1a → related hues), rendered as a faint blurred mesh wash behind the hero.
+function entityPalette(name: string): { mesh: string } {
   let hash = 2166136261;
   for (let i = 0; i < name.length; i++) {
     hash ^= name.charCodeAt(i);
@@ -160,8 +161,6 @@ function entityPalette(name: string): {
   const h2 = h1 + 16;
   const h3 = h1 - 12;
   return {
-    iconBg: `hsl(${h1} 30% 95%)`,
-    iconColor: `hsl(${h1} 45% 45%)`,
     // Faint, low-saturation wash spread across the full width; masked + blurred
     // in the markup so it fades downward.
     mesh: [

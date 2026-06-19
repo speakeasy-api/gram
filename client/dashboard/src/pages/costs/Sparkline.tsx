@@ -30,8 +30,10 @@ export function Sparkline({
   }
 
   // Smooth out daily noise, then collapse to a few averaged control points so
-  // the curve through them is gentle and never spiky.
-  const series = resample(movingAverage(values, SMOOTH_WINDOW), DRAW_POINTS);
+  // the curve through them is gentle and never spiky. Compute on the finite-
+  // filtered `usable` series — a single NaN/Infinity in the raw input would
+  // otherwise propagate into NaN path coordinates and blank the whole sparkline.
+  const series = resample(movingAverage(usable, SMOOTH_WINDOW), DRAW_POINTS);
 
   const pad = 2;
   const min = Math.min(...series);
@@ -45,7 +47,7 @@ export function Sparkline({
     y: pad + innerH - ((v - min) / span) * innerH,
   }));
 
-  const color = fixedColor ?? TREND_COLOR[trendDirection(values)];
+  const color = fixedColor ?? TREND_COLOR[trendDirection(usable)];
 
   return (
     <svg
