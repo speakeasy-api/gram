@@ -51,7 +51,12 @@ func (s *Service) claimHookIdempotency(ctx context.Context, token string) bool {
 	if token == "" {
 		return true
 	}
-	claimed, err := s.cache.Add(ctx, hookIdempotencyCacheKey(token), hookIdempotencyTTL)
+	// The claim must outlive the request: a transient reset cancels the request
+	// context, and the retry that re-sends the same token would otherwise also
+	// find an unwritten marker (the canceled SETNX returns an error → fail open
+	// → true) and persist a second time. WithoutCancel keeps the marker write
+	// running so the retry actually loses the guard.
+	claimed, err := s.cache.Add(context.WithoutCancel(ctx), hookIdempotencyCacheKey(token), hookIdempotencyTTL)
 	if err != nil {
 		s.logger.WarnContext(ctx, "hook idempotency guard failed; persisting anyway",
 			attr.SlogEvent("hook_idempotency_guard_failed"),

@@ -28,7 +28,8 @@ func requireFileBytes(t *testing.T, path string) []byte {
 func TestSharedHTTPScriptMatchesCheckedIn(t *testing.T) {
 	t.Parallel()
 	checkedIn := requireFileBytes(t, filepath.Join("..", "..", "..", "hooks", "plugin-claude", "hooks", "http.sh"))
-	require.Equal(t, string(checkedIn), string(renderSharedHTTPScript()),
+	// renderSharedHTTPScript() is canonical → pass it as testify's "expected".
+	require.Equal(t, string(renderSharedHTTPScript()), string(checkedIn),
 		"hooks/plugin-claude/hooks/http.sh has drifted from renderSharedHTTPScript() — keep them identical")
 }
 
