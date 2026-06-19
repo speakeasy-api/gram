@@ -25,10 +25,6 @@ type Client struct {
 	// listRiskPolicies endpoint.
 	ListRiskPoliciesDoer goahttp.Doer
 
-	// GetRiskCapabilities Doer is the HTTP client used to make requests to the
-	// getRiskCapabilities endpoint.
-	GetRiskCapabilitiesDoer goahttp.Doer
-
 	// GetRiskPolicy Doer is the HTTP client used to make requests to the
 	// getRiskPolicy endpoint.
 	GetRiskPolicyDoer goahttp.Doer
@@ -73,21 +69,73 @@ type Client struct {
 	// getRiskPolicyStatus endpoint.
 	GetRiskPolicyStatusDoer goahttp.Doer
 
-	// ListShadowMCPApprovals Doer is the HTTP client used to make requests to the
-	// listShadowMCPApprovals endpoint.
-	ListShadowMCPApprovalsDoer goahttp.Doer
+	// CreateRiskPolicyBypassRequest Doer is the HTTP client used to make requests
+	// to the createRiskPolicyBypassRequest endpoint.
+	CreateRiskPolicyBypassRequestDoer goahttp.Doer
 
-	// ApproveShadowMCP Doer is the HTTP client used to make requests to the
-	// approveShadowMCP endpoint.
-	ApproveShadowMCPDoer goahttp.Doer
+	// ListRiskPolicyBypassRequests Doer is the HTTP client used to make requests
+	// to the listRiskPolicyBypassRequests endpoint.
+	ListRiskPolicyBypassRequestsDoer goahttp.Doer
 
-	// RevokeShadowMCPApproval Doer is the HTTP client used to make requests to the
-	// revokeShadowMCPApproval endpoint.
-	RevokeShadowMCPApprovalDoer goahttp.Doer
+	// ApproveRiskPolicyBypassRequest Doer is the HTTP client used to make requests
+	// to the approveRiskPolicyBypassRequest endpoint.
+	ApproveRiskPolicyBypassRequestDoer goahttp.Doer
+
+	// DenyRiskPolicyBypassRequest Doer is the HTTP client used to make requests to
+	// the denyRiskPolicyBypassRequest endpoint.
+	DenyRiskPolicyBypassRequestDoer goahttp.Doer
+
+	// RevokeRiskPolicyBypassRequest Doer is the HTTP client used to make requests
+	// to the revokeRiskPolicyBypassRequest endpoint.
+	RevokeRiskPolicyBypassRequestDoer goahttp.Doer
 
 	// TriggerRiskAnalysis Doer is the HTTP client used to make requests to the
 	// triggerRiskAnalysis endpoint.
 	TriggerRiskAnalysisDoer goahttp.Doer
+
+	// CreateCustomDetectionRule Doer is the HTTP client used to make requests to
+	// the createCustomDetectionRule endpoint.
+	CreateCustomDetectionRuleDoer goahttp.Doer
+
+	// ListCustomDetectionRules Doer is the HTTP client used to make requests to
+	// the listCustomDetectionRules endpoint.
+	ListCustomDetectionRulesDoer goahttp.Doer
+
+	// GetCustomDetectionRule Doer is the HTTP client used to make requests to the
+	// getCustomDetectionRule endpoint.
+	GetCustomDetectionRuleDoer goahttp.Doer
+
+	// UpdateCustomDetectionRule Doer is the HTTP client used to make requests to
+	// the updateCustomDetectionRule endpoint.
+	UpdateCustomDetectionRuleDoer goahttp.Doer
+
+	// DeleteCustomDetectionRule Doer is the HTTP client used to make requests to
+	// the deleteCustomDetectionRule endpoint.
+	DeleteCustomDetectionRuleDoer goahttp.Doer
+
+	// ListRiskExclusions Doer is the HTTP client used to make requests to the
+	// listRiskExclusions endpoint.
+	ListRiskExclusionsDoer goahttp.Doer
+
+	// CreateRiskExclusion Doer is the HTTP client used to make requests to the
+	// createRiskExclusion endpoint.
+	CreateRiskExclusionDoer goahttp.Doer
+
+	// UpdateRiskExclusion Doer is the HTTP client used to make requests to the
+	// updateRiskExclusion endpoint.
+	UpdateRiskExclusionDoer goahttp.Doer
+
+	// DeleteRiskExclusion Doer is the HTTP client used to make requests to the
+	// deleteRiskExclusion endpoint.
+	DeleteRiskExclusionDoer goahttp.Doer
+
+	// SuggestCustomDetectionRule Doer is the HTTP client used to make requests to
+	// the suggestCustomDetectionRule endpoint.
+	SuggestCustomDetectionRuleDoer goahttp.Doer
+
+	// TestDetectionRule Doer is the HTTP client used to make requests to the
+	// testDetectionRule endpoint.
+	TestDetectionRuleDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -109,29 +157,41 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateRiskPolicyDoer:        doer,
-		ListRiskPoliciesDoer:        doer,
-		GetRiskCapabilitiesDoer:     doer,
-		GetRiskPolicyDoer:           doer,
-		UpdateRiskPolicyDoer:        doer,
-		DeleteRiskPolicyDoer:        doer,
-		ListRiskResultsDoer:         doer,
-		ListRiskResultsForAgentDoer: doer,
-		ListRiskResultsByChatDoer:   doer,
-		GetRiskOverviewDoer:         doer,
-		ListRiskCategoriesDoer:      doer,
-		GetRiskUserBreakdownDoer:    doer,
-		GetRiskRuleBreakdownDoer:    doer,
-		GetRiskPolicyStatusDoer:     doer,
-		ListShadowMCPApprovalsDoer:  doer,
-		ApproveShadowMCPDoer:        doer,
-		RevokeShadowMCPApprovalDoer: doer,
-		TriggerRiskAnalysisDoer:     doer,
-		RestoreResponseBody:         restoreBody,
-		scheme:                      scheme,
-		host:                        host,
-		decoder:                     dec,
-		encoder:                     enc,
+		CreateRiskPolicyDoer:               doer,
+		ListRiskPoliciesDoer:               doer,
+		GetRiskPolicyDoer:                  doer,
+		UpdateRiskPolicyDoer:               doer,
+		DeleteRiskPolicyDoer:               doer,
+		ListRiskResultsDoer:                doer,
+		ListRiskResultsForAgentDoer:        doer,
+		ListRiskResultsByChatDoer:          doer,
+		GetRiskOverviewDoer:                doer,
+		ListRiskCategoriesDoer:             doer,
+		GetRiskUserBreakdownDoer:           doer,
+		GetRiskRuleBreakdownDoer:           doer,
+		GetRiskPolicyStatusDoer:            doer,
+		CreateRiskPolicyBypassRequestDoer:  doer,
+		ListRiskPolicyBypassRequestsDoer:   doer,
+		ApproveRiskPolicyBypassRequestDoer: doer,
+		DenyRiskPolicyBypassRequestDoer:    doer,
+		RevokeRiskPolicyBypassRequestDoer:  doer,
+		TriggerRiskAnalysisDoer:            doer,
+		CreateCustomDetectionRuleDoer:      doer,
+		ListCustomDetectionRulesDoer:       doer,
+		GetCustomDetectionRuleDoer:         doer,
+		UpdateCustomDetectionRuleDoer:      doer,
+		DeleteCustomDetectionRuleDoer:      doer,
+		ListRiskExclusionsDoer:             doer,
+		CreateRiskExclusionDoer:            doer,
+		UpdateRiskExclusionDoer:            doer,
+		DeleteRiskExclusionDoer:            doer,
+		SuggestCustomDetectionRuleDoer:     doer,
+		TestDetectionRuleDoer:              doer,
+		RestoreResponseBody:                restoreBody,
+		scheme:                             scheme,
+		host:                               host,
+		decoder:                            dec,
+		encoder:                            enc,
 	}
 }
 
@@ -178,30 +238,6 @@ func (c *Client) ListRiskPolicies() goa.Endpoint {
 		resp, err := c.ListRiskPoliciesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "listRiskPolicies", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// GetRiskCapabilities returns an endpoint that makes HTTP requests to the risk
-// service getRiskCapabilities server.
-func (c *Client) GetRiskCapabilities() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeGetRiskCapabilitiesRequest(c.encoder)
-		decodeResponse = DecodeGetRiskCapabilitiesResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetRiskCapabilitiesRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.GetRiskCapabilitiesDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("risk", "getRiskCapabilities", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -471,15 +507,15 @@ func (c *Client) GetRiskPolicyStatus() goa.Endpoint {
 	}
 }
 
-// ListShadowMCPApprovals returns an endpoint that makes HTTP requests to the
-// risk service listShadowMCPApprovals server.
-func (c *Client) ListShadowMCPApprovals() goa.Endpoint {
+// CreateRiskPolicyBypassRequest returns an endpoint that makes HTTP requests
+// to the risk service createRiskPolicyBypassRequest server.
+func (c *Client) CreateRiskPolicyBypassRequest() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeListShadowMCPApprovalsRequest(c.encoder)
-		decodeResponse = DecodeListShadowMCPApprovalsResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeCreateRiskPolicyBypassRequestRequest(c.encoder)
+		decodeResponse = DecodeCreateRiskPolicyBypassRequestResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListShadowMCPApprovalsRequest(ctx, v)
+		req, err := c.BuildCreateRiskPolicyBypassRequestRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -487,23 +523,23 @@ func (c *Client) ListShadowMCPApprovals() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.ListShadowMCPApprovalsDoer.Do(req)
+		resp, err := c.CreateRiskPolicyBypassRequestDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("risk", "listShadowMCPApprovals", err)
+			return nil, goahttp.ErrRequestError("risk", "createRiskPolicyBypassRequest", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// ApproveShadowMCP returns an endpoint that makes HTTP requests to the risk
-// service approveShadowMCP server.
-func (c *Client) ApproveShadowMCP() goa.Endpoint {
+// ListRiskPolicyBypassRequests returns an endpoint that makes HTTP requests to
+// the risk service listRiskPolicyBypassRequests server.
+func (c *Client) ListRiskPolicyBypassRequests() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeApproveShadowMCPRequest(c.encoder)
-		decodeResponse = DecodeApproveShadowMCPResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeListRiskPolicyBypassRequestsRequest(c.encoder)
+		decodeResponse = DecodeListRiskPolicyBypassRequestsResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildApproveShadowMCPRequest(ctx, v)
+		req, err := c.BuildListRiskPolicyBypassRequestsRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -511,23 +547,23 @@ func (c *Client) ApproveShadowMCP() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.ApproveShadowMCPDoer.Do(req)
+		resp, err := c.ListRiskPolicyBypassRequestsDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("risk", "approveShadowMCP", err)
+			return nil, goahttp.ErrRequestError("risk", "listRiskPolicyBypassRequests", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// RevokeShadowMCPApproval returns an endpoint that makes HTTP requests to the
-// risk service revokeShadowMCPApproval server.
-func (c *Client) RevokeShadowMCPApproval() goa.Endpoint {
+// ApproveRiskPolicyBypassRequest returns an endpoint that makes HTTP requests
+// to the risk service approveRiskPolicyBypassRequest server.
+func (c *Client) ApproveRiskPolicyBypassRequest() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeRevokeShadowMCPApprovalRequest(c.encoder)
-		decodeResponse = DecodeRevokeShadowMCPApprovalResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeApproveRiskPolicyBypassRequestRequest(c.encoder)
+		decodeResponse = DecodeApproveRiskPolicyBypassRequestResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildRevokeShadowMCPApprovalRequest(ctx, v)
+		req, err := c.BuildApproveRiskPolicyBypassRequestRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -535,9 +571,57 @@ func (c *Client) RevokeShadowMCPApproval() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.RevokeShadowMCPApprovalDoer.Do(req)
+		resp, err := c.ApproveRiskPolicyBypassRequestDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("risk", "revokeShadowMCPApproval", err)
+			return nil, goahttp.ErrRequestError("risk", "approveRiskPolicyBypassRequest", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DenyRiskPolicyBypassRequest returns an endpoint that makes HTTP requests to
+// the risk service denyRiskPolicyBypassRequest server.
+func (c *Client) DenyRiskPolicyBypassRequest() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDenyRiskPolicyBypassRequestRequest(c.encoder)
+		decodeResponse = DecodeDenyRiskPolicyBypassRequestResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDenyRiskPolicyBypassRequestRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DenyRiskPolicyBypassRequestDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "denyRiskPolicyBypassRequest", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RevokeRiskPolicyBypassRequest returns an endpoint that makes HTTP requests
+// to the risk service revokeRiskPolicyBypassRequest server.
+func (c *Client) RevokeRiskPolicyBypassRequest() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRevokeRiskPolicyBypassRequestRequest(c.encoder)
+		decodeResponse = DecodeRevokeRiskPolicyBypassRequestResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRevokeRiskPolicyBypassRequestRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RevokeRiskPolicyBypassRequestDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "revokeRiskPolicyBypassRequest", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -562,6 +646,270 @@ func (c *Client) TriggerRiskAnalysis() goa.Endpoint {
 		resp, err := c.TriggerRiskAnalysisDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "triggerRiskAnalysis", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateCustomDetectionRule returns an endpoint that makes HTTP requests to
+// the risk service createCustomDetectionRule server.
+func (c *Client) CreateCustomDetectionRule() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateCustomDetectionRuleRequest(c.encoder)
+		decodeResponse = DecodeCreateCustomDetectionRuleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateCustomDetectionRuleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateCustomDetectionRuleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "createCustomDetectionRule", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListCustomDetectionRules returns an endpoint that makes HTTP requests to the
+// risk service listCustomDetectionRules server.
+func (c *Client) ListCustomDetectionRules() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListCustomDetectionRulesRequest(c.encoder)
+		decodeResponse = DecodeListCustomDetectionRulesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListCustomDetectionRulesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListCustomDetectionRulesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listCustomDetectionRules", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetCustomDetectionRule returns an endpoint that makes HTTP requests to the
+// risk service getCustomDetectionRule server.
+func (c *Client) GetCustomDetectionRule() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetCustomDetectionRuleRequest(c.encoder)
+		decodeResponse = DecodeGetCustomDetectionRuleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetCustomDetectionRuleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetCustomDetectionRuleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "getCustomDetectionRule", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateCustomDetectionRule returns an endpoint that makes HTTP requests to
+// the risk service updateCustomDetectionRule server.
+func (c *Client) UpdateCustomDetectionRule() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateCustomDetectionRuleRequest(c.encoder)
+		decodeResponse = DecodeUpdateCustomDetectionRuleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateCustomDetectionRuleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateCustomDetectionRuleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "updateCustomDetectionRule", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteCustomDetectionRule returns an endpoint that makes HTTP requests to
+// the risk service deleteCustomDetectionRule server.
+func (c *Client) DeleteCustomDetectionRule() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteCustomDetectionRuleRequest(c.encoder)
+		decodeResponse = DecodeDeleteCustomDetectionRuleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteCustomDetectionRuleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteCustomDetectionRuleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "deleteCustomDetectionRule", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRiskExclusions returns an endpoint that makes HTTP requests to the risk
+// service listRiskExclusions server.
+func (c *Client) ListRiskExclusions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRiskExclusionsRequest(c.encoder)
+		decodeResponse = DecodeListRiskExclusionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRiskExclusionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRiskExclusionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listRiskExclusions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateRiskExclusion returns an endpoint that makes HTTP requests to the risk
+// service createRiskExclusion server.
+func (c *Client) CreateRiskExclusion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateRiskExclusionRequest(c.encoder)
+		decodeResponse = DecodeCreateRiskExclusionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateRiskExclusionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateRiskExclusionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "createRiskExclusion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateRiskExclusion returns an endpoint that makes HTTP requests to the risk
+// service updateRiskExclusion server.
+func (c *Client) UpdateRiskExclusion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateRiskExclusionRequest(c.encoder)
+		decodeResponse = DecodeUpdateRiskExclusionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateRiskExclusionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateRiskExclusionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "updateRiskExclusion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteRiskExclusion returns an endpoint that makes HTTP requests to the risk
+// service deleteRiskExclusion server.
+func (c *Client) DeleteRiskExclusion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteRiskExclusionRequest(c.encoder)
+		decodeResponse = DecodeDeleteRiskExclusionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteRiskExclusionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteRiskExclusionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "deleteRiskExclusion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SuggestCustomDetectionRule returns an endpoint that makes HTTP requests to
+// the risk service suggestCustomDetectionRule server.
+func (c *Client) SuggestCustomDetectionRule() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSuggestCustomDetectionRuleRequest(c.encoder)
+		decodeResponse = DecodeSuggestCustomDetectionRuleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSuggestCustomDetectionRuleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SuggestCustomDetectionRuleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "suggestCustomDetectionRule", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// TestDetectionRule returns an endpoint that makes HTTP requests to the risk
+// service testDetectionRule server.
+func (c *Client) TestDetectionRule() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeTestDetectionRuleRequest(c.encoder)
+		decodeResponse = DecodeTestDetectionRuleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildTestDetectionRuleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.TestDetectionRuleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "testDetectionRule", err)
 		}
 		return decodeResponse(resp)
 	}

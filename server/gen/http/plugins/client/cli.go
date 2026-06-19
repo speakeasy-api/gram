@@ -182,10 +182,15 @@ func BuildAddPluginServerPayload(pluginsAddPluginServerBody string, pluginsAddPl
 	{
 		err = json.Unmarshal([]byte(pluginsAddPluginServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"display_name\": \"abc123\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"policy\": \"optional\",\n      \"sort_order\": 1,\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"display_name\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"policy\": \"optional\",\n      \"sort_order\": 1,\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.plugin_id", body.PluginID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", body.ToolsetID, goa.FormatUUID))
+		if body.ToolsetID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+		}
+		if body.McpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+		}
 		if !(body.Policy == "required" || body.Policy == "optional") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy", body.Policy, []any{"required", "optional"}))
 		}
@@ -208,6 +213,7 @@ func BuildAddPluginServerPayload(pluginsAddPluginServerBody string, pluginsAddPl
 	v := &plugins.AddPluginServerPayload{
 		PluginID:    body.PluginID,
 		ToolsetID:   body.ToolsetID,
+		McpServerID: body.McpServerID,
 		DisplayName: body.DisplayName,
 		Policy:      body.Policy,
 		SortOrder:   body.SortOrder,
@@ -524,6 +530,60 @@ func BuildPublishPluginsPayload(pluginsPublishPluginsBody string, pluginsPublish
 		for i, val := range body.GithubUsernames {
 			v.GithubUsernames[i] = val
 		}
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetMarketplaceSettingsPayload builds the payload for the plugins
+// getMarketplaceSettings endpoint from CLI flags.
+func BuildGetMarketplaceSettingsPayload(pluginsGetMarketplaceSettingsSessionToken string, pluginsGetMarketplaceSettingsProjectSlugInput string) (*plugins.GetMarketplaceSettingsPayload, error) {
+	var sessionToken *string
+	{
+		if pluginsGetMarketplaceSettingsSessionToken != "" {
+			sessionToken = &pluginsGetMarketplaceSettingsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsGetMarketplaceSettingsProjectSlugInput != "" {
+			projectSlugInput = &pluginsGetMarketplaceSettingsProjectSlugInput
+		}
+	}
+	v := &plugins.GetMarketplaceSettingsPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpdateMarketplaceSettingsPayload builds the payload for the plugins
+// updateMarketplaceSettings endpoint from CLI flags.
+func BuildUpdateMarketplaceSettingsPayload(pluginsUpdateMarketplaceSettingsBody string, pluginsUpdateMarketplaceSettingsSessionToken string, pluginsUpdateMarketplaceSettingsProjectSlugInput string) (*plugins.UpdateMarketplaceSettingsPayload, error) {
+	var err error
+	var body UpdateMarketplaceSettingsRequestBody
+	{
+		err = json.Unmarshal([]byte(pluginsUpdateMarketplaceSettingsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"marketplace_name\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if pluginsUpdateMarketplaceSettingsSessionToken != "" {
+			sessionToken = &pluginsUpdateMarketplaceSettingsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsUpdateMarketplaceSettingsProjectSlugInput != "" {
+			projectSlugInput = &pluginsUpdateMarketplaceSettingsProjectSlugInput
+		}
+	}
+	v := &plugins.UpdateMarketplaceSettingsPayload{
+		MarketplaceName: body.MarketplaceName,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -17,6 +17,18 @@ FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = ANY(@principal_urns::text[]);
 
+-- name: ListPrincipalGrantsByResource :many
+-- Returns grant rows for a single resource selector.
+SELECT principal_urn, scope, effect, selectors
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND scope = @scope
+  AND selectors @> jsonb_build_object(
+    'resource_kind', sqlc.arg(resource_kind)::text,
+    'resource_id', sqlc.arg(resource_id)::text
+  )
+ORDER BY principal_urn;
+
 -- name: UpsertPrincipalGrant :one
 -- Creates or updates a single grant row. On conflict (same org/principal/scope/effect/selectors),
 -- the updated_at is refreshed. Uses COALESCE to match the functional unique index.
@@ -26,11 +38,46 @@ ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), s
 DO UPDATE SET updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, effect, selectors, created_at, updated_at;
 
+-- name: InsertPrincipalGrantIfAbsent :execrows
+-- Creates a single grant row and leaves existing identical rows untouched.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES (@organization_id, @principal_urn, @scope, @effect, @selectors)
+ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
+DO NOTHING;
+
 -- name: DeletePrincipalGrant :execrows
 -- Removes a specific grant row by ID, scoped to the organization for safety.
 DELETE FROM principal_grants
 WHERE id = @id
   AND organization_id = @organization_id;
+
+-- name: DeletePrincipalGrantByIdentity :execrows
+-- Removes a specific grant row by principal, scope, effect, and selector.
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND COALESCE(effect, 'allow') = COALESCE(sqlc.arg(effect)::text, 'allow')
+  AND selectors = @selectors;
+
+-- name: DeletePrincipalGrantsByTarget :execrows
+-- Removes every principal row for one exact grant target. Used by audience
+-- replacement writes where the caller supplies the full desired principal set.
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND scope = @scope
+  AND COALESCE(effect, 'allow') = COALESCE(sqlc.arg(effect)::text, 'allow')
+  AND selectors = @selectors;
+
+-- name: DeletePrincipalGrantsByResource :execrows
+-- Removes grant rows for a single resource selector.
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND scope = @scope
+  AND selectors @> jsonb_build_object(
+    'resource_kind', sqlc.arg(resource_kind)::text,
+    'resource_id', sqlc.arg(resource_id)::text
+  );
 
 -- name: DeletePrincipalGrantsByPrincipal :execrows
 -- Removes all grants for a specific principal within an org.
@@ -120,6 +167,44 @@ FROM organization_roles
 WHERE organization_id = @organization_id
   AND deleted_at IS NULL
 ORDER BY workos_slug;
+
+-- name: CreateOrganizationRole :one
+-- Creates an org-scoped role, reactivating a soft-deleted row for the same slug.
+INSERT INTO organization_roles (
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    @organization_id,
+    @workos_slug,
+    @workos_name,
+    @workos_description,
+    @workos_created_at,
+    @workos_updated_at,
+    @workos_last_event_id
+)
+ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
+    workos_name = EXCLUDED.workos_name,
+    workos_description = EXCLUDED.workos_description,
+    workos_created_at = EXCLUDED.workos_created_at,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    deleted_at = NULL,
+    workos_deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_roles.deleted_at IS NOT NULL
+RETURNING
+    id,
+    ('role:organization:' || id::text)::text AS role_urn,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    0::bigint AS member_count;
 
 -- name: UpsertOrganizationRole :one
 -- Upsert an org-scoped role. WorkOS sync callers pass an event ID; local role
@@ -431,6 +516,26 @@ LEFT JOIN global_roles
   AND global_roles.workos_deleted IS FALSE
 WHERE ora.organization_id = @organization_id
   AND ora.workos_user_id = @workos_user_id
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+  AND ora.deleted_at IS NULL
+ORDER BY role_slug;
+
+-- name: ListMemberRolePrincipalsByUser :many
+SELECT
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+  ora.role_urn::text AS principal_urn
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = @organization_id
+  AND ora.user_id = sqlc.arg(user_id)::text
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
   AND ora.deleted_at IS NULL
 ORDER BY role_slug;

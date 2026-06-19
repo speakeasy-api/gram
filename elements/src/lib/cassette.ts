@@ -10,8 +10,14 @@
  * 3. Pass it to `<Replay cassette={...}>` to play it back
  */
 
-import { createUIMessageStream, type ChatTransport, type UIMessage } from "ai";
+import {
+  createUIMessageStream,
+  type ChatTransport,
+  type UIMessage,
+  type UIMessageStreamWriter,
+} from "ai";
 import type { ThreadMessage } from "@assistant-ui/react";
+import { sleep } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Cassette types
@@ -94,6 +100,12 @@ export function recordCassette(messages: readonly ThreadMessage[]): Cassette {
           });
           break;
         // Skip image, file, audio, source, data parts for now
+        case "image":
+        case "file":
+        case "audio":
+        case "source":
+        case "data":
+          break;
       }
     }
 
@@ -111,25 +123,6 @@ export function recordCassette(messages: readonly ThreadMessage[]): Cassette {
 // ---------------------------------------------------------------------------
 // Playback: Cassette → ChatTransport
 // ---------------------------------------------------------------------------
-
-/** Sleep that respects AbortSignal for clean cancellation. */
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new DOMException("Aborted", "AbortError"));
-      return;
-    }
-    const timeout = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timeout);
-        reject(new DOMException("Aborted", "AbortError"));
-      },
-      { once: true },
-    );
-  });
-}
 
 /**
  * Creates a ChatTransport that replays pre-recorded assistant messages
@@ -153,7 +146,7 @@ export function createReplayTransport(
       // Advance cursor past it (it should be pointing at a user message).
       if (
         cursor < cassette.messages.length &&
-        cassette.messages[cursor].role === "user"
+        cassette.messages[cursor]?.role === "user"
       ) {
         cursor++;
       }
@@ -163,9 +156,10 @@ export function createReplayTransport(
       const assistantMessages: CassetteMessage[] = [];
       while (
         cursor < cassette.messages.length &&
-        cassette.messages[cursor].role === "assistant"
+        cassette.messages[cursor]?.role === "assistant"
       ) {
-        assistantMessages.push(cassette.messages[cursor]);
+        const m = cassette.messages[cursor];
+        if (m) assistantMessages.push(m);
         cursor++;
       }
 
@@ -204,10 +198,10 @@ export function createReplayTransport(
 // Stream writing helpers
 // ---------------------------------------------------------------------------
 
-interface StreamWriter {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  write(part: any): void;
-}
+// Match the `write` shape of `UIMessageStreamWriter<UIMessage>` so callers can
+// pass the writer they receive from `createUIMessageStream` directly. We only
+// rely on `write` here, so this stays narrow on purpose.
+type StreamWriter = Pick<UIMessageStreamWriter<UIMessage>, "write">;
 
 async function writeReplayPart(
   writer: StreamWriter,

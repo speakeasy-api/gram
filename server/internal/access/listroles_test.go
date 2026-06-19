@@ -33,6 +33,7 @@ func TestService_ListRoles(t *testing.T) {
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-2")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeMCPConnect, authz.WildcardResource)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeRiskPolicyEvaluate, "policy-1")
 
 	result, err := ti.service.ListRoles(ctx, &gen.ListRolesPayload{})
 	require.NoError(t, err)
@@ -45,6 +46,7 @@ func TestService_ListRoles(t *testing.T) {
 
 	adminRole := rolesByID[adminID]
 	require.NotNil(t, adminRole)
+	require.Equal(t, "role:organization:"+adminID, adminRole.PrincipalUrn)
 	require.Equal(t, "Admin", adminRole.Name)
 	require.True(t, adminRole.IsSystem)
 	require.Equal(t, 1, adminRole.MemberCount)
@@ -52,15 +54,17 @@ func TestService_ListRoles(t *testing.T) {
 	require.Equal(t, mockRoleTimestamp, adminRole.UpdatedAt)
 	require.Len(t, adminRole.Grants, 1)
 	require.Equal(t, string(authz.ScopeOrgAdmin), adminRole.Grants[0].Scope)
-	require.Nil(t, adminRole.Grants[0].Selectors)
+	require.Len(t, adminRole.Grants[0].Selectors, 1)
+	require.Equal(t, authz.WildcardResource, adminRole.Grants[0].Selectors[0].ResourceID)
 
 	customRole := rolesByID[customID]
 	require.NotNil(t, customRole)
+	require.Equal(t, "role:organization:"+customID, customRole.PrincipalUrn)
 	require.Equal(t, "Custom Builder", customRole.Name)
 	require.False(t, customRole.IsSystem)
 	require.Equal(t, 2, customRole.MemberCount)
 	require.Equal(t, "Can build selected resources", customRole.Description)
-	require.Len(t, customRole.Grants, 2)
+	require.Len(t, customRole.Grants, 3)
 
 	grantsByScope := make(map[string]*gen.RoleGrant, len(customRole.Grants))
 	for _, grant := range customRole.Grants {
@@ -72,7 +76,10 @@ func TestService_ListRoles(t *testing.T) {
 		ids[i] = s.ResourceID
 	}
 	require.ElementsMatch(t, []string{"project-1", "project-2"}, ids)
-	require.Nil(t, grantsByScope[string(authz.ScopeMCPConnect)].Selectors)
+	mcpSelectors := grantsByScope[string(authz.ScopeMCPConnect)].Selectors
+	require.Len(t, mcpSelectors, 1)
+	require.Equal(t, authz.WildcardResource, mcpSelectors[0].ResourceID)
+	require.Equal(t, "policy-1", grantsByScope[string(authz.ScopeRiskPolicyEvaluate)].Selectors[0].ResourceID)
 }
 
 func TestService_ListRoles_ExcludesDisconnectedUsersFromMemberCounts(t *testing.T) {

@@ -16,11 +16,14 @@ import (
 
 // Endpoints wraps the "assistants" service endpoints.
 type Endpoints struct {
-	ListAssistants  goa.Endpoint
-	GetAssistant    goa.Endpoint
-	CreateAssistant goa.Endpoint
-	UpdateAssistant goa.Endpoint
-	DeleteAssistant goa.Endpoint
+	ListAssistants         goa.Endpoint
+	GetAssistant           goa.Endpoint
+	CreateAssistant        goa.Endpoint
+	UpdateAssistant        goa.Endpoint
+	DeleteAssistant        goa.Endpoint
+	SendMessage            goa.Endpoint
+	GetManagedAssistant    goa.Endpoint
+	EnsureManagedAssistant goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "assistants" service with endpoints.
@@ -28,11 +31,14 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListAssistants:  NewListAssistantsEndpoint(s, a.APIKeyAuth),
-		GetAssistant:    NewGetAssistantEndpoint(s, a.APIKeyAuth),
-		CreateAssistant: NewCreateAssistantEndpoint(s, a.APIKeyAuth),
-		UpdateAssistant: NewUpdateAssistantEndpoint(s, a.APIKeyAuth),
-		DeleteAssistant: NewDeleteAssistantEndpoint(s, a.APIKeyAuth),
+		ListAssistants:         NewListAssistantsEndpoint(s, a.APIKeyAuth),
+		GetAssistant:           NewGetAssistantEndpoint(s, a.APIKeyAuth),
+		CreateAssistant:        NewCreateAssistantEndpoint(s, a.APIKeyAuth),
+		UpdateAssistant:        NewUpdateAssistantEndpoint(s, a.APIKeyAuth),
+		DeleteAssistant:        NewDeleteAssistantEndpoint(s, a.APIKeyAuth),
+		SendMessage:            NewSendMessageEndpoint(s, a.APIKeyAuth),
+		GetManagedAssistant:    NewGetManagedAssistantEndpoint(s, a.APIKeyAuth),
+		EnsureManagedAssistant: NewEnsureManagedAssistantEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -43,6 +49,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateAssistant = m(e.CreateAssistant)
 	e.UpdateAssistant = m(e.UpdateAssistant)
 	e.DeleteAssistant = m(e.DeleteAssistant)
+	e.SendMessage = m(e.SendMessage)
+	e.GetManagedAssistant = m(e.GetManagedAssistant)
+	e.EnsureManagedAssistant = m(e.EnsureManagedAssistant)
 }
 
 // NewListAssistantsEndpoint returns an endpoint function that calls the method
@@ -217,5 +226,110 @@ func NewDeleteAssistantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return nil, s.DeleteAssistant(ctx, p)
+	}
+}
+
+// NewSendMessageEndpoint returns an endpoint function that calls the method
+// "sendMessage" of service "assistants".
+func NewSendMessageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SendMessagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SendMessage(ctx, p)
+	}
+}
+
+// NewGetManagedAssistantEndpoint returns an endpoint function that calls the
+// method "getManagedAssistant" of service "assistants".
+func NewGetManagedAssistantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetManagedAssistantPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetManagedAssistant(ctx, p)
+	}
+}
+
+// NewEnsureManagedAssistantEndpoint returns an endpoint function that calls
+// the method "ensureManagedAssistant" of service "assistants".
+func NewEnsureManagedAssistantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*EnsureManagedAssistantPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.EnsureManagedAssistant(ctx, p)
 	}
 }

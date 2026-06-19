@@ -5,8 +5,9 @@ import {
   type AccessMember,
 } from "@gram/client/models/components";
 import type { FilterChip } from "@/components/observe/ObserveFilterBar";
+import { normalizeUserEmailFilter } from "./observeUserFilters";
 
-export const validPresets: DateRangePreset[] = [
+const validPresets: DateRangePreset[] = [
   "15m",
   "1h",
   "4h",
@@ -54,7 +55,8 @@ export function resolveRoleEmails(
   const roleSet = new Set(roleIds);
   const emails = members
     .filter((m) => m.roleIds.some((id) => roleSet.has(id)))
-    .map((m) => m.email);
+    .map((m) => normalizeUserEmailFilter(m.email))
+    .filter(Boolean);
   return [...new Set(emails)];
 }
 

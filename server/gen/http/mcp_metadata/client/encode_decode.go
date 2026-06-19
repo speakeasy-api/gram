@@ -55,7 +55,12 @@ func EncodeGetMcpMetadataRequest(encoder func(*http.Request) goahttp.Encoder) fu
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		values.Add("toolset_slug", string(p.ToolsetSlug))
+		if p.ToolsetSlug != nil {
+			values.Add("toolset_slug", string(*p.ToolsetSlug))
+		}
+		if p.McpServerID != nil {
+			values.Add("mcp_server_id", *p.McpServerID)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -752,7 +757,8 @@ func unmarshalMcpMetadataResponseBodyToTypesMcpMetadata(v *McpMetadataResponseBo
 	}
 	res := &types.McpMetadata{
 		ID:                        *v.ID,
-		ToolsetID:                 *v.ToolsetID,
+		ToolsetID:                 v.ToolsetID,
+		McpServerID:               v.McpServerID,
 		LogoAssetID:               v.LogoAssetID,
 		ExternalDocumentationURL:  v.ExternalDocumentationURL,
 		ExternalDocumentationText: v.ExternalDocumentationText,

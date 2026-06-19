@@ -131,7 +131,8 @@ export const useAuth = ({
   // useMCPTools). Today the dashboard uses this to forward
   // `Authorization: Bearer <user-session JWT>` so the runtime gateway can
   // resolve the user's upstream credentials for issuer-gated toolsets.
-  const extraHeaders = auth?.headers ?? {};
+  const authHeaders = auth?.headers;
+  const extraHeaders = useMemo(() => authHeaders ?? {}, [authHeaders]);
 
   const ensureValidHeaders = useCallback(async (): Promise<
     Record<string, string>

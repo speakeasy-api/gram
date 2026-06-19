@@ -104,9 +104,6 @@ func TestEnvironmentsService_CloneEnvironment(t *testing.T) {
 
 		// redactedEnvironment is deterministic on plaintext (val[:3]+"*****" or "*****"
 		// for short values), so identical source/clone redactions imply identical plaintext.
-		// Note: ValueHash hashes the redacted display string (not the raw plaintext) — see
-		// computeValueHash in impl.go. We assert hashes match as a structural check only;
-		// the redaction equality above is what proves the values were actually copied.
 		sourceByName := make(map[string]*types.EnvironmentEntry, len(source.Entries))
 		for _, e := range source.Entries {
 			sourceByName[e.Name] = e
@@ -115,7 +112,6 @@ func TestEnvironmentsService_CloneEnvironment(t *testing.T) {
 			s, ok := sourceByName[e.Name]
 			require.True(t, ok, "cloned entry %q should exist in source", e.Name)
 			require.Equal(t, s.Value, e.Value, "cloned entry %q redaction should equal source redaction", e.Name)
-			require.Equal(t, s.ValueHash, e.ValueHash, "cloned entry %q value_hash should equal source value_hash", e.Name)
 		}
 	})
 

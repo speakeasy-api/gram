@@ -11,7 +11,9 @@ import { toolsetsDeleteBySlug } from "../funcs/toolsetsDeleteBySlug.js";
 import { toolsetsGetBySlug } from "../funcs/toolsetsGetBySlug.js";
 import { toolsetsList } from "../funcs/toolsetsList.js";
 import { toolsetsListForOrg } from "../funcs/toolsetsListForOrg.js";
+import { toolsetsListToolFilters } from "../funcs/toolsetsListToolFilters.js";
 import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js";
+import { toolsetsSetToolVariationsGroup } from "../funcs/toolsetsSetToolVariationsGroup.js";
 import { toolsetsSetUserSessionIssuer } from "../funcs/toolsetsSetUserSessionIssuer.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
 import { toolsetsUpdateOAuthProxyServer } from "../funcs/toolsetsUpdateOAuthProxyServer.js";
@@ -193,6 +195,25 @@ export class Toolsets extends ClientSDK {
   }
 
   /**
+   * listToolFilters toolsets
+   *
+   * @remarks
+   * List the tool filter scopes (tags) available on a toolset-backed MCP server and the tools under each, including tools excluded from all filters. Read-only; reflects the explicit tool variations group configured on the toolset, deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
+   */
+  async listToolFilters(
+    request: operations.ListToolsetToolFiltersRequest,
+    security?: operations.ListToolsetToolFiltersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListToolFiltersResult> {
+    return unwrapAsync(toolsetsListToolFilters(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * removeOAuthServer toolsets
    *
    * @remarks
@@ -204,6 +225,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsRemoveOAuthServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setToolVariationsGroup toolsets
+   *
+   * @remarks
+   * Assign a tool variations group to a toolset to enable MCP tool filtering (or pass null to disable). The group must already exist in the caller's project.
+   */
+  async setToolVariationsGroup(
+    request: operations.SetToolsetToolVariationsGroupRequest,
+    security?: operations.SetToolsetToolVariationsGroupSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Toolset> {
+    return unwrapAsync(toolsetsSetToolVariationsGroup(
       this,
       request,
       security,

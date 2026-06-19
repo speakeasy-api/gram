@@ -13,7 +13,7 @@ export const Block = ({
   labelRHS?: string;
   className?: string;
   children: React.ReactNode;
-}) => {
+}): JSX.Element => {
   const blockBackground = "bg-stone-100 dark:bg-stone-900";
 
   return (
@@ -74,7 +74,7 @@ export const BlockInner = ({
 }: {
   className?: string;
   children: React.ReactNode;
-}) => {
+}): JSX.Element => {
   return (
     <div
       className={cn(

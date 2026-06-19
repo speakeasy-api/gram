@@ -79,6 +79,8 @@ export function buildAuditLogsQuery(
       projectSlug: request?.projectSlug,
       actorId: request?.actorId,
       action: request?.action,
+      subjectType: request?.subjectType,
+      subjectId: request?.subjectId,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
@@ -121,6 +123,8 @@ export function buildAuditLogsInfiniteQuery(
       projectSlug: request?.projectSlug,
       actorId: request?.actorId,
       action: request?.action,
+      subjectType: request?.subjectType,
+      subjectId: request?.subjectId,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
@@ -162,6 +166,8 @@ export function queryKeyAuditLogs(
     projectSlug?: string | undefined;
     actorId?: string | undefined;
     action?: string | undefined;
+    subjectType?: string | undefined;
+    subjectId?: string | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },
@@ -175,6 +181,8 @@ export function queryKeyAuditLogsInfinite(
     projectSlug?: string | undefined;
     actorId?: string | undefined;
     action?: string | undefined;
+    subjectType?: string | undefined;
+    subjectId?: string | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },

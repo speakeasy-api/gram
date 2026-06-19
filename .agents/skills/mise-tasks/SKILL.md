@@ -307,3 +307,24 @@ async function run() {
 
 run();
 ```
+
+## Task Configuration for Python Tasks
+
+Python tasks use the same `#MISE`/`#USAGE` directive syntax as bash tasks (the pound-sign comment form), typically run via `uv` with an inline script header.
+
+The catch: our `ruff format` step (run by `hk`) normalizes comments to have a space after the `#`, which would rewrite `#MISE`/`#USAGE` into `# MISE`/`# USAGE`. mise parses those directives literally, so the rewrite silently breaks the task (the description and flags disappear). ruff has no setting to skip comment normalization on its own, so fence the directive block with `# fmt: off` / `# fmt: on`. This keeps the directives intact while ruff still formats the rest of the file.
+
+```python
+#!/usr/bin/env -S uv run --script
+# fmt: off
+# ruff must not add a space after the pound sign: the #MISE/#USAGE directives
+# below are parsed literally by mise and break if rewritten to "# MISE".
+#MISE description="Description of the task goes here"
+#USAGE flag "--out-file <file>" help="Help text for the flag goes here"
+# fmt: on
+# /// script
+# requires-python = ">=3.11"
+# ///
+
+# rest of task implementation goes here
+```

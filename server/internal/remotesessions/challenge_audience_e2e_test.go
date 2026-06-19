@@ -74,7 +74,7 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 			q := repo.New(ti.conn)
 			slugSuffix := strings.ReplaceAll(tc.name, " ", "-")
 			issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
-				ProjectID:                         *authCtx.ProjectID,
+				ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 				Slug:                              "auth-aud-" + slugSuffix,
 				Issuer:                            "https://idp.example.com",
 				AuthorizationEndpoint:             conv.ToPGText("https://idp.example.com/authorize"),
@@ -92,10 +92,10 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 
 			userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-aud-"+slugSuffix)
 
-			_, err = q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
-				ProjectID:               *authCtx.ProjectID,
+			client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+				ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 				RemoteSessionIssuerID:   issuer.ID,
-				UserSessionIssuerID:     userIssuer,
+				UserSessionIssuerID:     conv.ToNullUUID(userIssuer),
 				ClientID:                "aud-cid",
 				ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
 				ClientIDIssuedAt:        pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -103,6 +103,12 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 				TokenEndpointAuthMethod: pgtype.Text{String: "", Valid: false},
 				Scope:                   nil,
 				Audience:                tc.audience,
+			})
+			require.NoError(t, err)
+
+			err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+				RemoteSessionClientID: client.ID,
+				UserSessionIssuerID:   userIssuer,
 			})
 			require.NoError(t, err)
 

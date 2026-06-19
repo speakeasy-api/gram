@@ -2,6 +2,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::compaction::CompactionPolicy;
+
 #[derive(Debug, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
 pub struct McpServer {
     pub id: String,
@@ -23,6 +25,11 @@ pub struct ThreadTurnRequest {
     pub auth_token: Option<String>,
     #[serde(default)]
     pub mcp_servers: Option<Vec<McpServer>>,
+    /// Identity for a runner that booted without `GRAM_ASSISTANT_ID` — i.e. a
+    /// generic warm-pool sandbox that learns which assistant it serves from
+    /// the first turn. Ignored once the boot env has set it (env wins).
+    #[serde(default)]
+    pub assistant_id: Option<String>,
 }
 
 /// 202-style ack returned by `/threads/{thread_id}/turn`. The actual turn
@@ -97,4 +104,6 @@ pub struct ThreadBootstrap {
     pub history: Vec<RunnerMessage>,
     #[serde(default)]
     pub context_window: Option<u64>,
+    #[serde(default)]
+    pub compaction: CompactionPolicy,
 }

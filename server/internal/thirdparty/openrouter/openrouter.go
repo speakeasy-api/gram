@@ -38,33 +38,45 @@ var ErrGenerationNotFound = errors.New("generation not found")
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
-	"anthropic/claude-opus-4.6":     true,
+	"anthropic/claude-opus-4.8":     true,
+	"anthropic/claude-opus-4.7":     true,
 	"anthropic/claude-sonnet-4.6":   true,
 	"anthropic/claude-sonnet-4.5":   true,
+	"anthropic/claude-opus-4.6":     true,
 	"anthropic/claude-opus-4.5":     true,
 	"anthropic/claude-haiku-4.5":    true,
-	"anthropic/claude-opus-4.1":     true,
 	"anthropic/claude-sonnet-4":     true,
+	"openai/gpt-5.5":                true,
+	"openai/gpt-5.5-pro":            true,
 	"openai/gpt-5.4":                true,
 	"openai/gpt-5.4-mini":           true,
+	"openai/gpt-5.4-nano":           true,
+	"openai/gpt-5.3-codex":          true,
 	"openai/gpt-5.1":                true,
-	"openai/gpt-5.1-codex":          true,
 	"openai/gpt-5":                  true,
 	"openai/gpt-4.1":                true,
 	"openai/o4-mini":                true,
 	"openai/o3":                     true,
+	"google/gemini-3.5-flash":       true,
 	"google/gemini-3.1-pro-preview": true,
+	"google/gemini-3.1-flash-lite":  true,
 	"google/gemini-2.5-pro":         true,
 	"google/gemini-2.5-flash":       true,
-	"deepseek/deepseek-r1":          true,
+	"deepseek/deepseek-v4-pro":      true,
+	"deepseek/deepseek-v4-flash":    true,
 	"deepseek/deepseek-v3.2":        true,
+	"deepseek/deepseek-r1":          true,
 	"meta-llama/llama-4-maverick":   true,
-	"x-ai/grok-4":                   true,
+	"x-ai/grok-4.3":                 true,
+	"x-ai/grok-4.20":                true,
+	"qwen/qwen3.7-max":              true,
 	"qwen/qwen3-coder":              true,
+	"moonshotai/kimi-k2.6":          true,
 	"moonshotai/kimi-k2.5":          true,
-	"mistralai/mistral-medium-3.1":  true,
+	"mistralai/mistral-medium-3-5":  true,
 	"mistralai/codestral-2508":      true,
-	"mistralai/devstral-small":      true,
+	"mistralai/devstral-2512":       true,
+	"mistralai/mistral-medium-3.1":  true,
 }
 
 // IsModelAllowed checks if a model is in the allowlist
@@ -187,7 +199,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
 		org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
 		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
+			return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 		}
 
 		creditAmount := o.getLimitForOrg(org)
@@ -204,19 +216,19 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 			MonthlyCredits: int64(creditAmount),
 		})
 		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "failed to store openrouter key data").Log(ctx, o.logger)
+			return "", oops.E(oops.CodeUnexpected, err, "failed to store openrouter key data").LogError(ctx, o.logger)
 		}
 
 		if o.refresher != nil {
 			if err := o.refresher.ScheduleOpenRouterKeyRefresh(ctx, orgID); err != nil {
-				return "", oops.E(oops.CodeUnexpected, err, "error scheduling open router key refresh").Log(ctx, o.logger)
+				return "", oops.E(oops.CodeUnexpected, err, "error scheduling open router key refresh").LogError(ctx, o.logger)
 			}
 		}
 
 		openrouterKey = *keyResponse.Key
 
 	case err != nil:
-		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").Log(ctx, o.logger)
+		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
 
 	default:
 		openrouterKey = key.Key
@@ -241,7 +253,7 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, limit
 
 	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
 	if err != nil {
-		return 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
+		return 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
 
 	var keyLimit int
@@ -263,7 +275,7 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, limit
 		Key:            key.Key,
 	})
 	if err != nil {
-		return 0, oops.E(oops.CodeUnexpected, err, "failed to update openrouter key").Log(ctx, o.logger)
+		return 0, oops.E(oops.CodeUnexpected, err, "failed to update openrouter key").LogError(ctx, o.logger)
 	}
 
 	return keyLimit, nil
@@ -296,7 +308,7 @@ type generationResponse struct {
 func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error) {
 	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
 	if err != nil {
-		return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
+		return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
 	limit := o.getLimitForOrg(org)
 
@@ -518,7 +530,7 @@ func (o *OpenRouter) updateOpenRouterAPIKeyLimit(ctx context.Context, keyHash st
 func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID string, orgID string) (*generationResponse, int, error) {
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
 	if err != nil {
-		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to get openrouter API key").Log(ctx, o.logger)
+		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to get openrouter API key").LogError(ctx, o.logger)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/generation", nil)

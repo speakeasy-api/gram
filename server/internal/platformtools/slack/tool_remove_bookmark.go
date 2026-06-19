@@ -62,7 +62,7 @@ func callRemoveBookmark(ctx context.Context, client *apiClient, env toolconfig.T
 	}
 	setOptionalString(request, "quip_section_id", input.QuipSectionID)
 
-	body, err := client.call(ctx, "bookmarks.remove", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "bookmarks.remove", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

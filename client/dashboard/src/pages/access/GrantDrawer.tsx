@@ -19,7 +19,9 @@ import { ArrowLeft, Check, ChevronRight, Plus, Users } from "lucide-react";
 import { useState } from "react";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { invalidateAllChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
+import { principalDisplayName } from "./challengeHelpers";
 import { toRoleSlug } from "./types";
+import { visiblePermissionCount } from "./roleDialogState";
 
 type Step = "choose" | "select-role" | "confirm";
 
@@ -39,7 +41,7 @@ export function GrantDrawer({
   challengeIds: challengeIdsProp,
   onCreateNew,
   onResolved,
-}: GrantDrawerProps) {
+}: GrantDrawerProps): JSX.Element | null {
   const [step, setStep] = useState<Step>("choose");
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const queryClient = useQueryClient();
@@ -108,7 +110,10 @@ export function GrantDrawer({
 
   if (!challenge) return null;
 
-  const principalDisplay = challenge.userEmail ?? challenge.principalUrn;
+  const principalDisplay = principalDisplayName(
+    challenge.userEmail,
+    challenge.principalUrn,
+  );
 
   const stepTitle = {
     choose: "Grant Access",
@@ -262,8 +267,8 @@ export function GrantDrawer({
                         variant="body"
                         className="text-muted-foreground text-sm"
                       >
-                        {role.grants.length} permissions &middot;{" "}
-                        {role.memberCount} members
+                        {visiblePermissionCount(role.grants)} permissions
+                        &middot; {role.memberCount} members
                       </Type>
                     </div>
                     <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
@@ -335,7 +340,7 @@ export function GrantDrawer({
                           Permissions
                         </Type>
                         <Type variant="body" className="text-sm">
-                          {selectedRole.grants.length}
+                          {visiblePermissionCount(selectedRole.grants)}
                         </Type>
                       </div>
                     </div>

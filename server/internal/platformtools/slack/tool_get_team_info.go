@@ -50,7 +50,7 @@ func callGetTeamInfo(ctx context.Context, client *apiClient, env toolconfig.Tool
 	setOptionalString(request, "team", input.Team)
 	setOptionalString(request, "domain", input.Domain)
 
-	body, err := client.call(ctx, "team.info", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "team.info", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

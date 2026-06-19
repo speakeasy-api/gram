@@ -318,6 +318,18 @@ func (s *StubClient) UpdateOrganizationExternalID(_ context.Context, workosOrgID
 	return nil
 }
 
+func (s *StubClient) GenerateAdminPortalLink(_ context.Context, workosOrgID string, intent PortalIntent, _ GenerateAdminPortalLinkOpts) (string, error) {
+	return fmt.Sprintf("https://stub.workos.com/portal?intent=%s&organization=%s", string(intent), workosOrgID), nil
+}
+
+func (s *StubClient) ListConnections(_ context.Context, _ string) ([]Connection, error) {
+	return nil, nil
+}
+
+func (s *StubClient) ListDirectories(_ context.Context, _ string) ([]Directory, error) {
+	return nil, nil
+}
+
 func (s *StubClient) EnsureOrgExternalID(_ context.Context, workosOrgID, gramOrgID string) error {
 	s.mut.Lock()
 	defer s.mut.Unlock()
@@ -398,12 +410,14 @@ func (s *StubClient) GetOrgMembership(_ context.Context, workOSUserID, workOSOrg
 	return nil, nil
 }
 
-func (s *StubClient) CreateOrganization(_ context.Context, name, gramOrgID string) (string, error) {
+func (s *StubClient) CreateOrganization(_ context.Context, name, _ string) (string, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
-	workosOrgID := fmt.Sprintf("org_%s", gramOrgID)
-	s.orgState(workosOrgID) // initialize
+	workosOrgID := fmt.Sprintf("org_workos_%d", s.next)
+	s.next++
+	state := s.orgState(workosOrgID)
+	state.organization.Name = name
 
 	return workosOrgID, nil
 }

@@ -17,16 +17,16 @@ import (
 
 // BuildClaudePayload builds the payload for the hooks claude endpoint from CLI
 // flags.
-func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, hooksClaudeProjectSlugInput string) (*hooks.ClaudePayload, error) {
+func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, hooksClaudeProjectSlugInput string, hooksClaudeHookHostname string) (*hooks.ClaudePayload, error) {
 	var err error
 	var body ClaudeRequestBody
 	{
 		err = json.Unmarshal([]byte(hooksClaudeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"ConfigChange\",\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }'")
 		}
-		if !(body.HookEventName == "SessionStart" || body.HookEventName == "PreToolUse" || body.HookEventName == "PostToolUse" || body.HookEventName == "PostToolUseFailure" || body.HookEventName == "UserPromptSubmit" || body.HookEventName == "Stop" || body.HookEventName == "SessionEnd" || body.HookEventName == "Notification") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", body.HookEventName, []any{"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop", "SessionEnd", "Notification"}))
+		if !(body.HookEventName == "SessionStart" || body.HookEventName == "ConfigChange" || body.HookEventName == "PreToolUse" || body.HookEventName == "PostToolUse" || body.HookEventName == "PostToolUseFailure" || body.HookEventName == "UserPromptSubmit" || body.HookEventName == "Stop" || body.HookEventName == "SessionEnd" || body.HookEventName == "Notification") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", body.HookEventName, []any{"SessionStart", "ConfigChange", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop", "SessionEnd", "Notification"}))
 		}
 		if err != nil {
 			return nil, err
@@ -44,6 +44,12 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 			projectSlugInput = &hooksClaudeProjectSlugInput
 		}
 	}
+	var hookHostname *string
+	{
+		if hooksClaudeHookHostname != "" {
+			hookHostname = &hooksClaudeHookHostname
+		}
+	}
 	v := &hooks.ClaudePayload{
 		HookEventName:        body.HookEventName,
 		ToolName:             body.ToolName,
@@ -53,6 +59,7 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 		Error:                body.Error,
 		IsInterrupt:          body.IsInterrupt,
 		SessionID:            body.SessionID,
+		UserEmail:            body.UserEmail,
 		Cwd:                  body.Cwd,
 		TranscriptPath:       body.TranscriptPath,
 		Source:               body.Source,
@@ -75,13 +82,14 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+	v.HookHostname = hookHostname
 
 	return v, nil
 }
 
 // BuildCursorPayload builds the payload for the hooks cursor endpoint from CLI
 // flags.
-func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, hooksCursorProjectSlugInput string) (*hooks.CursorPayload, error) {
+func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, hooksCursorProjectSlugInput string, hooksCursorHookHostname string) (*hooks.CursorPayload, error) {
 	var err error
 	var body CursorRequestBody
 	{
@@ -100,6 +108,12 @@ func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, h
 	{
 		if hooksCursorProjectSlugInput != "" {
 			projectSlugInput = &hooksCursorProjectSlugInput
+		}
+	}
+	var hookHostname *string
+	{
+		if hooksCursorHookHostname != "" {
+			hookHostname = &hooksCursorHookHostname
 		}
 	}
 	v := &hooks.CursorPayload{
@@ -142,19 +156,20 @@ func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, h
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+	v.HookHostname = hookHostname
 
 	return v, nil
 }
 
 // BuildCodexPayload builds the payload for the hooks codex endpoint from CLI
 // flags.
-func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hooksCodexProjectSlugInput string) (*hooks.CodexPayload, error) {
+func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hooksCodexProjectSlugInput string, hooksCodexHookHostname string) (*hooks.CodexPayload, error) {
 	var err error
 	var body CodexRequestBody
 	{
 		err = json.Unmarshal([]byte(hooksCodexBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cwd\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"model\": \"abc123\",\n      \"permission_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_output\": \"abc123\",\n      \"transcript_path\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"last_assistant_message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"permission_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_output\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }'")
 		}
 		if !(body.HookEventName == "SessionStart" || body.HookEventName == "PreToolUse" || body.HookEventName == "PermissionRequest" || body.HookEventName == "PostToolUse" || body.HookEventName == "UserPromptSubmit" || body.HookEventName == "Stop") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", body.HookEventName, []any{"SessionStart", "PreToolUse", "PermissionRequest", "PostToolUse", "UserPromptSubmit", "Stop"}))
@@ -175,20 +190,37 @@ func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hook
 			projectSlugInput = &hooksCodexProjectSlugInput
 		}
 	}
+	var hookHostname *string
+	{
+		if hooksCodexHookHostname != "" {
+			hookHostname = &hooksCodexHookHostname
+		}
+	}
 	v := &hooks.CodexPayload{
-		HookEventName:  body.HookEventName,
-		SessionID:      body.SessionID,
-		TranscriptPath: body.TranscriptPath,
-		Cwd:            body.Cwd,
-		Model:          body.Model,
-		ToolName:       body.ToolName,
-		ToolInput:      body.ToolInput,
-		ToolOutput:     body.ToolOutput,
-		PermissionType: body.PermissionType,
-		Prompt:         body.Prompt,
+		HookEventName:        body.HookEventName,
+		SessionID:            body.SessionID,
+		UserEmail:            body.UserEmail,
+		TranscriptPath:       body.TranscriptPath,
+		Cwd:                  body.Cwd,
+		Model:                body.Model,
+		ToolName:             body.ToolName,
+		ToolInput:            body.ToolInput,
+		ToolOutput:           body.ToolOutput,
+		PermissionType:       body.PermissionType,
+		Prompt:               body.Prompt,
+		LastAssistantMessage: body.LastAssistantMessage,
+	}
+	if body.AdditionalData != nil {
+		v.AdditionalData = make(map[string]any, len(body.AdditionalData))
+		for key, val := range body.AdditionalData {
+			tk := key
+			tv := val
+			v.AdditionalData[tk] = tv
+		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+	v.HookHostname = hookHostname
 
 	return v, nil
 }
@@ -201,7 +233,7 @@ func BuildLogsPayload(hooksLogsBody string, hooksLogsApikeyToken string, hooksLo
 	{
 		err = json.Unmarshal([]byte(hooksLogsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"resourceLogs\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"arrayValue\": \"abc123\",\n                        \"boolValue\": false,\n                        \"bytesValue\": \"abc123\",\n                        \"doubleValue\": 1,\n                        \"intValue\": \"abc123\",\n                        \"kvlistValue\": \"abc123\",\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeLogs\": [\n               {\n                  \"logRecords\": [\n                     {\n                        \"attributes\": [\n                           {\n                              \"key\": \"abc123\",\n                              \"value\": {\n                                 \"arrayValue\": \"abc123\",\n                                 \"boolValue\": false,\n                                 \"bytesValue\": \"abc123\",\n                                 \"doubleValue\": 1,\n                                 \"intValue\": \"abc123\",\n                                 \"kvlistValue\": \"abc123\",\n                                 \"stringValue\": \"abc123\"\n                              }\n                           }\n                        ],\n                        \"body\": {\n                           \"stringValue\": \"abc123\"\n                        },\n                        \"droppedAttributesCount\": 1,\n                        \"observedTimeUnixNano\": \"abc123\",\n                        \"timeUnixNano\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"resourceLogs\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"arrayValue\": \"abc123\",\n                        \"boolValue\": false,\n                        \"bytesValue\": \"abc123\",\n                        \"doubleValue\": 1,\n                        \"intValue\": \"abc123\",\n                        \"kvlistValue\": \"abc123\",\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeLogs\": [\n               {\n                  \"logRecords\": [\n                     {\n                        \"attributes\": [\n                           {\n                              \"key\": \"abc123\",\n                              \"value\": {\n                                 \"arrayValue\": \"abc123\",\n                                 \"boolValue\": false,\n                                 \"bytesValue\": \"abc123\",\n                                 \"doubleValue\": 1,\n                                 \"intValue\": \"abc123\",\n                                 \"kvlistValue\": \"abc123\",\n                                 \"stringValue\": \"abc123\"\n                              }\n                           }\n                        ],\n                        \"body\": {\n                           \"stringValue\": \"abc123\"\n                        },\n                        \"droppedAttributesCount\": 1,\n                        \"observedTimeUnixNano\": \"abc123\",\n                        \"spanId\": \"abc123\",\n                        \"timeUnixNano\": \"abc123\",\n                        \"traceId\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }'")
 		}
 	}
 	var apikeyToken *string

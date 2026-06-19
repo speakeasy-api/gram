@@ -33,6 +33,13 @@ type Service interface {
 	// server-side slug. The id and visibility fields are required; exactly one of
 	// remote_mcp_server_id or toolset_id must be provided.
 	UpdateMcpServer(context.Context, *UpdateMcpServerPayload) (res *types.McpServer, err error)
+	// List the tool filter scopes (tags) available on an MCP server and the tools
+	// under each, including tools excluded from all filters. Exactly one of id or
+	// slug must be provided. Read-only; reflects the explicit tool variations
+	// group resolved from the chain (mcp_servers then toolsets), deriving
+	// effective tags with the same logic as the runtime ?tags= filter. Returns
+	// filtering disabled when no explicit group is set.
+	ListToolFilters(context.Context, *ListToolFiltersPayload) (res *types.ListToolFiltersResult, err error)
 	// Delete an MCP server
 	DeleteMcpServer(context.Context, *DeleteMcpServerPayload) (err error)
 }
@@ -57,7 +64,7 @@ const ServiceName = "mcpServers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"createMcpServer", "getMcpServer", "listMcpServers", "updateMcpServer", "deleteMcpServer"}
+var MethodNames = [6]string{"createMcpServer", "getMcpServer", "listMcpServers", "updateMcpServer", "listToolFilters", "deleteMcpServer"}
 
 // CreateMcpServerPayload is the payload type of the mcpServers service
 // createMcpServer method.
@@ -77,6 +84,9 @@ type CreateMcpServerPayload struct {
 	RemoteMcpServerID *string
 	// The ID of the toolset to use as the backend
 	ToolsetID *string
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server. Omit to leave filtering disabled.
+	ToolVariationsGroupID *string
 	// The visibility of the server
 	Visibility types.McpServerVisibility
 }
@@ -121,6 +131,18 @@ type ListMcpServersResult struct {
 	McpServers []*types.McpServer
 }
 
+// ListToolFiltersPayload is the payload type of the mcpServers service
+// listToolFilters method.
+type ListToolFiltersPayload struct {
+	// The ID of the MCP server. Mutually exclusive with slug.
+	ID *string
+	// The slug of the MCP server. Mutually exclusive with id.
+	Slug             *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // UpdateMcpServerPayload is the payload type of the mcpServers service
 // updateMcpServer method.
 type UpdateMcpServerPayload struct {
@@ -141,6 +163,10 @@ type UpdateMcpServerPayload struct {
 	RemoteMcpServerID *string
 	// The ID of the toolset to use as the backend
 	ToolsetID *string
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server. Omit to disable filtering (cleared to null, consistent with the
+	// full-record replace semantics of the other UUID references).
+	ToolVariationsGroupID *string
 	// The visibility of the server
 	Visibility types.McpServerVisibility
 }

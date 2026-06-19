@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -266,12 +267,12 @@ func TestHandleRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 	require.Contains(t, cbW.Header().Get("Location"), parentID)
 
 	sessions, err := remotesessions_repo.New(ti.conn).ListRemoteSessionsByProjectID(ctx, remotesessions_repo.ListRemoteSessionsByProjectIDParams{
-		ProjectID:  result.McpServer.ProjectID,
+		ProjectID:  conv.ToNullUUID(result.McpServer.ProjectID),
 		LimitValue: 10,
 	})
 	require.NoError(t, err)
 	require.Len(t, sessions, 1, "exactly one remote_sessions row should exist after callback")
-	require.Equal(t, anonymousSubject.String(), sessions[0].SubjectUrn.String())
+	require.Equal(t, anonymousSubject.String(), sessions[0].RemoteSession.SubjectUrn.String())
 }
 
 // extractCSRFToken yanks the csrf_token hidden input value out of the

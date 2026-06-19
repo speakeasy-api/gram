@@ -31,7 +31,7 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	beforeView, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
+	beforeView, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -44,14 +44,14 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 	if payload.UserSessionIssuerID != nil {
 		parsed, parseErr := uuid.Parse(*payload.UserSessionIssuerID)
 		if parseErr != nil {
-			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid user_session_issuer_id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid user_session_issuer_id").LogError(ctx, s.logger)
 		}
 		usiID = uuid.NullUUID{UUID: parsed, Valid: true}
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -64,9 +64,9 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 			ProjectID: *authCtx.ProjectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, s.logger)
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "load user session issuer").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "load user session issuer").LogError(ctx, s.logger)
 		}
 	}
 
@@ -76,19 +76,19 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 		ProjectID:           *authCtx.ProjectID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "update toolset user_session_issuer").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "update toolset user_session_issuer").LogError(ctx, s.logger)
 	}
 
-	afterView, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
+	afterView, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
 		return nil, err
 	}
 
 	toolsetUUID, err := uuid.Parse(afterView.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset id").LogError(ctx, s.logger)
 	}
 
 	if err := s.audit.LogToolsetUpdate(ctx, dbtx, audit.LogToolsetUpdateEvent{
@@ -104,11 +104,11 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 		ToolsetSnapshotBefore: beforeView,
 		ToolsetSnapshotAfter:  afterView,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log toolset update").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log toolset update").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
 	return afterView, nil

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -13,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/mock"
@@ -89,12 +91,10 @@ func TestService_SendInvite_WithRoleID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 
-	roleID := "test-role"
-
-	ti.orgs.On("ListRoles", mock.Anything, mock.Anything).Return([]thirdpartyworkos.Role{
-		{ID: "test-role", Slug: "member", Name: "Member"},
-	}, nil).Once()
+	roleID := seedLocalRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "member", "Member")
 
 	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{
 		Email:  "test@example.com",
@@ -111,11 +111,10 @@ func TestService_SendInvite_AuditLog(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 
-	roleID := "role-member"
-	ti.orgs.On("ListRoles", mock.Anything, mock.Anything).Return([]thirdpartyworkos.Role{
-		{ID: "role-member", Slug: "member", Name: "Member"},
-	}, nil).Once()
+	roleID := seedLocalRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "member", "Member")
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationInviteCreate)
 	require.NoError(t, err)
@@ -217,11 +216,8 @@ func TestService_SendInvite_UnknownRoleID(t *testing.T) {
 
 	ctx, ti := newTestOrganizationsService(t)
 
-	roleID := "nonexistent-role"
-
-	ti.orgs.On("ListRoles", mock.Anything, mock.Anything).Return([]thirdpartyworkos.Role{
-		{ID: "some-other-role", Slug: "member", Name: "Member"},
-	}, nil).Once()
+	// A well-formed UUID that does not correspond to any role in this org.
+	roleID := "00000000-0000-0000-0000-000000000000"
 
 	_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{
 		Email:  "test@example.com",
@@ -262,6 +258,34 @@ func TestService_SendInvite_EmailSuccessReturnsInvite(t *testing.T) {
 	require.NotNil(t, invite)
 	require.Equal(t, "emailok@example.com", invite.Email)
 	require.Equal(t, "pending", invite.State)
+}
+
+func TestService_SendInvite_EmailFallsBackToInviterEmailWhenDisplayNameBlank(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceWithEmail(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.Email)
+	authEmail := *authCtx.Email
+
+	_, err := userrepo.New(ti.conn).UpsertUser(ctx, userrepo.UpsertUserParams{
+		ID:          authCtx.UserID,
+		Email:       authEmail,
+		DisplayName: "",
+		PhotoUrl:    pgtype.Text{String: "", Valid: false},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+
+	ti.loops.On("SendTransactional", mock.Anything, mock.MatchedBy(func(input loops.SendTransactionalInput) bool {
+		return input.DataVariables["inviter_name"] == authEmail &&
+			input.DataVariables["inviter_email"] == authEmail
+	})).Return(nil).Once()
+
+	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "blank-name@example.com"})
+	require.NoError(t, err)
+	require.NotNil(t, invite)
 }
 
 func TestService_SendInvite_ExpiredInviteAllowsReinvite(t *testing.T) {

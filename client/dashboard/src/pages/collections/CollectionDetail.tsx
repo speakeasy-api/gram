@@ -23,7 +23,7 @@ import {
 import { Button, Input } from "@speakeasy-api/moonshine";
 import { Textarea } from "@/components/moon/textarea";
 import { useMemo, useState } from "react";
-import { useParams, Outlet } from "react-router";
+import { useParams } from "react-router";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useQueries } from "@tanstack/react-query";
 import { Search } from "lucide-react";
@@ -44,11 +44,43 @@ import { buildCollectionMcpJson, formatMcpJson } from "@/lib/mcp-json";
 import { toast } from "sonner";
 import { CollectionInstallDialog } from "./CollectionInstallDialog";
 
-export function CollectionDetailRoot() {
-  return <Outlet />;
+// A selectable server in the edit-servers picker, sourced from either a
+// toolset (Hosted) or an mcp_server (Remote MCP-backed). Selection and
+// membership are tracked by a composite `${kind}:${id}` key so both backends
+// coexist in one set.
+type ServerOption = {
+  kind: "toolset" | "mcpServer";
+  id: string;
+  name: string;
+  description?: string;
+  projectName: string;
+};
+
+function serverOptionKey(kind: ServerOption["kind"], id: string): string {
+  return `${kind}:${id}`;
 }
 
-export default function CollectionDetail() {
+// The membership key for an attached server, picking whichever backend id the
+// attachment carries (exactly one is set).
+function attachedServerKey(server: {
+  toolsetId?: string | null;
+  mcpServerId?: string | null;
+}): string | null {
+  if (server.toolsetId) return serverOptionKey("toolset", server.toolsetId);
+  if (server.mcpServerId)
+    return serverOptionKey("mcpServer", server.mcpServerId);
+  return null;
+}
+
+// attachServer/detachServer take exactly one backend id. A key encodes which.
+function attachBodyForKey(collectionId: string, key: string) {
+  const [kind, id] = key.split(":");
+  return kind === "mcpServer"
+    ? { collectionId, mcpServerId: id }
+    : { collectionId, toolsetId: id };
+}
+
+export default function CollectionDetail(): JSX.Element {
   return (
     <RequireScope scope={["org:read", "org:admin"]} level="page">
       <CollectionDetailInner />
@@ -81,9 +113,9 @@ function CollectionDetailInner() {
   const [editVisibility, setEditVisibility] = useState<"public" | "private">(
     "private",
   );
-  const [selectedServerToolsetIds, setSelectedServerToolsetIds] = useState<
-    Set<string>
-  >(new Set());
+  const [selectedServerKeys, setSelectedServerKeys] = useState<Set<string>>(
+    new Set(),
+  );
   const [serverSearch, setServerSearch] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -109,66 +141,79 @@ function CollectionDetailInner() {
     })),
   });
 
-  const toolsetsLoading = toolsetQueries.some((q) => q.isLoading);
+  // Remote MCP-backed mcp_servers per project.
+  const mcpServerQueries = useQueries({
+    queries: projects.map((project) => ({
+      queryKey: ["mcpServers", "list", project.slug],
+      queryFn: () => client.mcpServers.list({ gramProject: project.slug }),
+      enabled: !!project.slug,
+    })),
+  });
 
-  // All MCP-enabled toolsets from all projects.
-  const allToolsets = useMemo(() => {
-    const all: Array<{
-      id: string;
-      mcpSlug?: string;
-      name: string;
-      description?: string;
-      projectName: string;
-    }> = [];
+  const serversLoading =
+    toolsetQueries.some((q) => q.isLoading) ||
+    mcpServerQueries.some((q) => q.isLoading);
+
+  // All publishable servers from all projects: MCP-enabled toolsets plus
+  // Remote MCP-backed, non-disabled mcp_servers.
+  const allServers = useMemo(() => {
+    const all: ServerOption[] = [];
     for (let i = 0; i < projects.length; i++) {
       const project = projects[i];
-      const data = toolsetQueries[i]?.data;
-      for (const t of data?.toolsets ?? []) {
-        if (!t.mcpEnabled) continue;
-        if (!t.mcpSlug) continue;
+      for (const t of toolsetQueries[i]?.data?.toolsets ?? []) {
+        if (!t.mcpEnabled || !t.mcpSlug) continue;
         all.push({
+          kind: "toolset",
           id: t.id,
-          mcpSlug: t.mcpSlug,
           name: t.name,
           description: t.description ?? undefined,
-          projectName: project.name,
+          projectName: project!.name!,
+        });
+      }
+      for (const s of mcpServerQueries[i]?.data?.mcpServers ?? []) {
+        if (!s.remoteMcpServerId || s.visibility === "disabled") continue;
+        all.push({
+          kind: "mcpServer",
+          id: s.id,
+          name: s.name ?? s.slug ?? "Untitled server",
+          description: undefined,
+          projectName: project!.name!,
         });
       }
     }
     return all;
-  }, [projects, toolsetQueries]);
+  }, [projects, toolsetQueries, mcpServerQueries]);
 
-  const filteredToolsets = useMemo(() => {
-    if (!serverSearch) return allToolsets;
+  const filteredServers = useMemo(() => {
+    if (!serverSearch) return allServers;
     const q = serverSearch.toLowerCase();
-    return allToolsets.filter(
-      (t) =>
-        t.name.toLowerCase().includes(q) ||
-        (t.description && t.description.toLowerCase().includes(q)) ||
-        t.projectName.toLowerCase().includes(q),
+    return allServers.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        (s.description && s.description.toLowerCase().includes(q)) ||
+        s.projectName.toLowerCase().includes(q),
     );
-  }, [allToolsets, serverSearch]);
+  }, [allServers, serverSearch]);
 
-  // Collection attachments carry the concrete toolset_id they link to, so
-  // membership is a direct identity check — no need to reconcile via origin
-  // specifier or mcp slug (see plan.md decision #4).
-  const attachedToolsetIds = useMemo(
+  // Collection attachments carry the concrete toolset_id or mcp_server_id they
+  // link to, so membership is a direct identity check keyed by backend.
+  const attachedKeys = useMemo(
     () =>
       new Set(
         rawServers
-          .map((server) => server.toolsetId)
-          .filter((id): id is string => !!id),
+          .map((server) => attachedServerKey(server))
+          .filter((key): key is string => !!key),
       ),
     [rawServers],
   );
 
-  const toggleToolset = (toolsetId: string) => {
-    setSelectedServerToolsetIds((prev) => {
+  const toggleServerKey = (key: string) => {
+    setSelectedServerKeys((prev) => {
       const next = new Set(prev);
-      if (next.has(toolsetId)) {
-        next.delete(toolsetId);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        next.add(toolsetId);
+        next.add(key);
       }
       return next;
     });
@@ -467,24 +512,26 @@ function CollectionDetailInner() {
                     <Button
                       size="sm"
                       disabled={isSaving || !editName}
-                      onClick={async () => {
-                        setIsSaving(true);
-                        try {
-                          await updateCollection.mutateAsync({
-                            request: {
-                              updateRequestBody: {
-                                collectionId: collection.id,
-                                name: editName,
-                                description: editDescription,
-                                visibility: editVisibility,
+                      onClick={() => {
+                        void (async () => {
+                          setIsSaving(true);
+                          try {
+                            await updateCollection.mutateAsync({
+                              request: {
+                                updateRequestBody: {
+                                  collectionId: collection.id,
+                                  name: editName,
+                                  description: editDescription,
+                                  visibility: editVisibility,
+                                },
                               },
-                            },
-                          });
+                            });
 
-                          setEditing(false);
-                        } finally {
-                          setIsSaving(false);
-                        }
+                            setEditing(false);
+                          } finally {
+                            setIsSaving(false);
+                          }
+                        })();
                       }}
                     >
                       <Button.Text>
@@ -540,9 +587,7 @@ function CollectionDetailInner() {
                       disabled={isLoading || isSaving}
                       onClick={() => {
                         setServerSearch("");
-                        setSelectedServerToolsetIds(
-                          new Set(attachedToolsetIds),
-                        );
+                        setSelectedServerKeys(new Set(attachedKeys));
                         setEditingServers((current) => !current);
                       }}
                     >
@@ -575,11 +620,11 @@ function CollectionDetailInner() {
                         />
                       </div>
                       <div className="max-h-64 overflow-y-auto">
-                        {toolsetsLoading ? (
+                        {serversLoading ? (
                           <div className="flex items-center justify-center p-4">
                             <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
                           </div>
-                        ) : filteredToolsets.length === 0 ? (
+                        ) : filteredServers.length === 0 ? (
                           <div className="flex flex-col items-center justify-center p-4 text-center">
                             <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
                             <Type small muted>
@@ -589,41 +634,48 @@ function CollectionDetailInner() {
                             </Type>
                           </div>
                         ) : (
-                          filteredToolsets.map((toolset) => (
-                            <label
-                              key={toolset.id}
-                              className="hover:bg-accent/50 flex cursor-pointer items-start gap-3 border-b px-3 py-2.5 last:border-b-0"
-                            >
-                              <Checkbox
-                                checked={selectedServerToolsetIds.has(
-                                  toolset.id,
-                                )}
-                                disabled={isSaving}
-                                onCheckedChange={() =>
-                                  toggleToolset(toolset.id)
-                                }
-                                className="mt-0.5"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="truncate text-sm font-medium">
-                                    {toolset.name}
-                                  </span>
-                                  <Badge
-                                    variant="secondary"
-                                    className="shrink-0 text-xs"
-                                  >
-                                    {toolset.projectName}
-                                  </Badge>
-                                </div>
-                                {toolset.description && (
-                                  <div className="text-muted-foreground mt-0.5 truncate text-xs">
-                                    {toolset.description}
+                          filteredServers.map((server) => {
+                            const key = serverOptionKey(server.kind, server.id);
+                            return (
+                              <label
+                                key={key}
+                                className="hover:bg-accent/50 flex cursor-pointer items-start gap-3 border-b px-3 py-2.5 last:border-b-0"
+                              >
+                                <Checkbox
+                                  checked={selectedServerKeys.has(key)}
+                                  disabled={isSaving}
+                                  onCheckedChange={() => toggleServerKey(key)}
+                                  className="mt-0.5"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="truncate text-sm font-medium">
+                                      {server.name}
+                                    </span>
+                                    {server.kind === "mcpServer" && (
+                                      <Badge
+                                        variant="secondary"
+                                        className="shrink-0 text-xs"
+                                      >
+                                        Remote MCP
+                                      </Badge>
+                                    )}
+                                    <Badge
+                                      variant="secondary"
+                                      className="shrink-0 text-xs"
+                                    >
+                                      {server.projectName}
+                                    </Badge>
                                   </div>
-                                )}
-                              </div>
-                            </label>
-                          ))
+                                  {server.description && (
+                                    <div className="text-muted-foreground mt-0.5 truncate text-xs">
+                                      {server.description}
+                                    </div>
+                                  )}
+                                </div>
+                              </label>
+                            );
+                          })
                         )}
                       </div>
                     </div>
@@ -631,50 +683,52 @@ function CollectionDetailInner() {
                       <Button
                         size="sm"
                         disabled={isSaving}
-                        onClick={async () => {
-                          setIsSaving(true);
-                          try {
-                            const toAttach = [
-                              ...selectedServerToolsetIds,
-                            ].filter((id) => !attachedToolsetIds.has(id));
-                            const toDetach = [...attachedToolsetIds].filter(
-                              (id) => !selectedServerToolsetIds.has(id),
-                            );
+                        onClick={() => {
+                          void (async () => {
+                            setIsSaving(true);
+                            try {
+                              const toAttach = [...selectedServerKeys].filter(
+                                (key) => !attachedKeys.has(key),
+                              );
+                              const toDetach = [...attachedKeys].filter(
+                                (key) => !selectedServerKeys.has(key),
+                              );
 
-                            await Promise.all([
-                              ...toAttach.map((toolsetId) =>
-                                attachServer.mutateAsync({
-                                  request: {
-                                    attachServerRequestBody: {
-                                      collectionId: collection.id,
-                                      toolsetId,
+                              await Promise.all([
+                                ...toAttach.map((key) =>
+                                  attachServer.mutateAsync({
+                                    request: {
+                                      attachServerRequestBody: attachBodyForKey(
+                                        collection.id,
+                                        key,
+                                      ),
                                     },
-                                  },
-                                }),
-                              ),
-                              ...toDetach.map((toolsetId) =>
-                                detachServer.mutateAsync({
-                                  request: {
-                                    attachServerRequestBody: {
-                                      collectionId: collection.id,
-                                      toolsetId,
+                                  }),
+                                ),
+                                ...toDetach.map((key) =>
+                                  detachServer.mutateAsync({
+                                    request: {
+                                      attachServerRequestBody: attachBodyForKey(
+                                        collection.id,
+                                        key,
+                                      ),
                                     },
-                                  },
-                                }),
-                              ),
-                            ]);
-                            setEditingServers(false);
-                            setSelectedServerToolsetIds(new Set());
-                            setServerSearch("");
-                          } finally {
-                            setIsSaving(false);
-                          }
+                                  }),
+                                ),
+                              ]);
+                              setEditingServers(false);
+                              setSelectedServerKeys(new Set());
+                              setServerSearch("");
+                            } finally {
+                              setIsSaving(false);
+                            }
+                          })();
                         }}
                       >
                         <Button.Text>
                           {isSaving
                             ? "Saving..."
-                            : `Save ${selectedServerToolsetIds.size} ${selectedServerToolsetIds.size === 1 ? "Server" : "Servers"}`}
+                            : `Save ${selectedServerKeys.size} ${selectedServerKeys.size === 1 ? "Server" : "Servers"}`}
                         </Button.Text>
                       </Button>
                       <Button
@@ -683,7 +737,7 @@ function CollectionDetailInner() {
                         disabled={isSaving}
                         onClick={() => {
                           setEditingServers(false);
-                          setSelectedServerToolsetIds(new Set());
+                          setSelectedServerKeys(new Set());
                           setServerSearch("");
                         }}
                       >
@@ -814,13 +868,15 @@ function CollectionDetailInner() {
                       variant="destructive-primary"
                       size="sm"
                       disabled={deleteCollection.isPending}
-                      onClick={async () => {
-                        await deleteCollection.mutateAsync({
-                          request: {
-                            collectionId: collection.id,
-                          },
-                        });
-                        orgRoutes.collections.goTo();
+                      onClick={() => {
+                        void (async () => {
+                          await deleteCollection.mutateAsync({
+                            request: {
+                              collectionId: collection.id,
+                            },
+                          });
+                          orgRoutes.collections.goTo();
+                        })();
                       }}
                     >
                       <Button.Text>

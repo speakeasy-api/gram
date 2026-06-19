@@ -29,6 +29,14 @@ type Client struct {
 	// endpoint.
 	ListGlobalDoer goahttp.Doer
 
+	// ListGroups Doer is the HTTP client used to make requests to the listGroups
+	// endpoint.
+	ListGroupsDoer goahttp.Doer
+
+	// CreateGlobal Doer is the HTTP client used to make requests to the
+	// createGlobal endpoint.
+	CreateGlobalDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -52,6 +60,8 @@ func NewClient(
 		UpsertGlobalDoer:    doer,
 		DeleteGlobalDoer:    doer,
 		ListGlobalDoer:      doer,
+		ListGroupsDoer:      doer,
+		CreateGlobalDoer:    doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -127,6 +137,54 @@ func (c *Client) ListGlobal() goa.Endpoint {
 		resp, err := c.ListGlobalDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("variations", "listGlobal", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListGroups returns an endpoint that makes HTTP requests to the variations
+// service listGroups server.
+func (c *Client) ListGroups() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListGroupsRequest(c.encoder)
+		decodeResponse = DecodeListGroupsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListGroupsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListGroupsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("variations", "listGroups", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateGlobal returns an endpoint that makes HTTP requests to the variations
+// service createGlobal server.
+func (c *Client) CreateGlobal() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateGlobalRequest(c.encoder)
+		decodeResponse = DecodeCreateGlobalResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateGlobalRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateGlobalDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("variations", "createGlobal", err)
 		}
 		return decodeResponse(resp)
 	}

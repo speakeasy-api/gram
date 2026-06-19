@@ -17,6 +17,16 @@ type ChatSessionClaims struct {
 	ProjectSlug      string  `json:"project_slug"`
 	ExternalUserID   *string `json:"external_user_id,omitempty"`
 	APIKeyID         string  `json:"api_key_id"`
+	// UserID is the authenticated dashboard user's ID. When present, allows
+	// RBAC enforcement at the MCP gateway. Empty for API-key-only sessions.
+	UserID string `json:"user_id,omitempty"`
+	// SessionID is the dashboard session ID. When present (non-nil), the authz
+	// engine will load and enforce RBAC grants for the user.
+	SessionID *string `json:"session_id,omitempty"`
+	// AccountType is the organization's billing tier (e.g. "enterprise").
+	// Required for RBAC enforcement — the authz engine only loads grants
+	// for enterprise accounts.
+	AccountType string `json:"account_type,omitempty"`
 	jwt.RegisteredClaims
 }
 

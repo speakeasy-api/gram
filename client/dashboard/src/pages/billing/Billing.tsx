@@ -23,8 +23,12 @@ import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
+import {
+  TumAdminSection,
+  TumUsageSection,
+} from "@/components/billing/tum-section";
 
-export default function Billing() {
+export default function Billing(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -39,8 +43,20 @@ export default function Billing() {
   );
 }
 
-export function BillingInner() {
+function BillingInner() {
   const productTier = useProductTier();
+  const isAdmin = useIsAdmin();
+
+  // Enterprise contracts bill on tokens under management, so enterprise orgs
+  // see the TUM view instead of the self-serve usage meters.
+  if (productTier === "enterprise") {
+    return (
+      <>
+        <TumUsageSection />
+        {isAdmin && <TumAdminSection />}
+      </>
+    );
+  }
 
   return (
     <>
@@ -206,7 +222,7 @@ const UsageTiers = () => {
       }
     };
 
-    fetchCheckoutLink();
+    void fetchCheckoutLink();
   }, [client, telemetry, productTier]);
 
   const handleFallbackClick = useCallback(() => {
@@ -256,30 +272,32 @@ const UsageTiers = () => {
   const polarPortalCTA = (
     <Page.Section.CTA>
       <Button
-        onClick={async () => {
-          try {
-            const link = await client.usage.createCustomerSession();
-            if (!link) {
-              console.error(
-                "Failed to create customer session: received empty link",
-              );
+        onClick={() => {
+          void (async () => {
+            try {
+              const link = await client.usage.createCustomerSession();
+              if (!link) {
+                console.error(
+                  "Failed to create customer session: received empty link",
+                );
+                telemetry.capture("customer_session_error", {
+                  error: "Received empty customer session link",
+                  accountType: productTier,
+                });
+                return;
+              }
+              window.open(link, "_blank");
+            } catch (error) {
+              console.error("Error creating customer session:", error);
               telemetry.capture("customer_session_error", {
-                error: "Received empty customer session link",
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : "Failed to create customer session",
                 accountType: productTier,
               });
-              return;
             }
-            window.open(link, "_blank");
-          } catch (error) {
-            console.error("Error creating customer session:", error);
-            telemetry.capture("customer_session_error", {
-              error:
-                error instanceof Error
-                  ? error.message
-                  : "Failed to create customer session",
-              accountType: productTier,
-            });
-          }
+          })();
         }}
         disabled={productTier === "enterprise"}
       >
@@ -336,7 +354,7 @@ const UsageTiers = () => {
               </Type>
               <ul className="list-inside space-y-1">
                 {tierLimits.featureBullets.map((bullet) => (
-                  <li>
+                  <li key={bullet}>
                     <span className="text-muted-foreground/60">✓</span> {bullet}
                   </li>
                 ))}
@@ -356,7 +374,7 @@ const UsageTiers = () => {
                   </Type>
                   <ul className="list-inside space-y-1">
                     {tierLimits.includedBullets.map((bullet) => (
-                      <li>
+                      <li key={bullet}>
                         <span className="text-muted-foreground/60">✓</span>{" "}
                         {bullet}
                       </li>
@@ -377,7 +395,7 @@ const UsageTiers = () => {
                 </Type>
                 <ul className="list-inside space-y-1">
                   {tierLimits.addOnBullets.map((bullet) => (
-                    <li>
+                    <li key={bullet}>
                       <span className="text-muted-foreground/60">✓</span>{" "}
                       {bullet}
                     </li>

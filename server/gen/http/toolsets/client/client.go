@@ -41,6 +41,10 @@ type Client struct {
 	// endpoint.
 	GetToolsetDoer goahttp.Doer
 
+	// ListToolFilters Doer is the HTTP client used to make requests to the
+	// listToolFilters endpoint.
+	ListToolFiltersDoer goahttp.Doer
+
 	// CheckMCPSlugAvailability Doer is the HTTP client used to make requests to
 	// the checkMCPSlugAvailability endpoint.
 	CheckMCPSlugAvailabilityDoer goahttp.Doer
@@ -69,6 +73,10 @@ type Client struct {
 	// setUserSessionIssuer endpoint.
 	SetUserSessionIssuerDoer goahttp.Doer
 
+	// SetToolVariationsGroup Doer is the HTTP client used to make requests to the
+	// setToolVariationsGroup endpoint.
+	SetToolVariationsGroupDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -95,6 +103,7 @@ func NewClient(
 		UpdateToolsetDoer:            doer,
 		DeleteToolsetDoer:            doer,
 		GetToolsetDoer:               doer,
+		ListToolFiltersDoer:          doer,
 		CheckMCPSlugAvailabilityDoer: doer,
 		CloneToolsetDoer:             doer,
 		AddExternalOAuthServerDoer:   doer,
@@ -102,6 +111,7 @@ func NewClient(
 		AddOAuthProxyServerDoer:      doer,
 		UpdateOAuthProxyServerDoer:   doer,
 		SetUserSessionIssuerDoer:     doer,
+		SetToolVariationsGroupDoer:   doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -249,6 +259,30 @@ func (c *Client) GetToolset() goa.Endpoint {
 		resp, err := c.GetToolsetDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "getToolset", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListToolFilters returns an endpoint that makes HTTP requests to the toolsets
+// service listToolFilters server.
+func (c *Client) ListToolFilters() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListToolFiltersRequest(c.encoder)
+		decodeResponse = DecodeListToolFiltersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListToolFiltersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListToolFiltersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "listToolFilters", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -417,6 +451,30 @@ func (c *Client) SetUserSessionIssuer() goa.Endpoint {
 		resp, err := c.SetUserSessionIssuerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "setUserSessionIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetToolVariationsGroup returns an endpoint that makes HTTP requests to the
+// toolsets service setToolVariationsGroup server.
+func (c *Client) SetToolVariationsGroup() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetToolVariationsGroupRequest(c.encoder)
+		decodeResponse = DecodeSetToolVariationsGroupResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetToolVariationsGroupRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetToolVariationsGroupDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "setToolVariationsGroup", err)
 		}
 		return decodeResponse(resp)
 	}

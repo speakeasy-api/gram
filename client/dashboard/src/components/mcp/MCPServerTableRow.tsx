@@ -19,11 +19,11 @@ export function MCPServerTableRow({
 }: {
   server: McpServer;
   endpointCount: number;
-}) {
+}): JSX.Element {
   const routes = useRoutes();
 
   const handleClick = () => {
-    routes.mcp.x.goTo(mcpServerRouteParam(server));
+    routes.mcp.x.overview.goTo(mcpServerRouteParam(server));
   };
 
   const mcpEnabled = server.visibility !== "disabled";

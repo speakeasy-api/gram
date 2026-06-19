@@ -1,32 +1,26 @@
 import { useQueryState } from "nuqs";
+import type { MCPServerEntry } from "@gram-ai/elements";
 import { recommended } from "@gram-ai/elements/plugins";
 import { RequireScope } from "@/components/require-scope";
-import {
-  InsightsConfig,
-  InsightsProvider,
-} from "@/components/insights-sidebar";
+import { InsightsConfig, InsightsProvider } from "@/components/insights-dock";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { Switch } from "@/components/ui/switch";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import type { AuditLog } from "@gram/client/models/components";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import {
   useAuditLogsInfinite,
   useAuditLogFacets,
   useGramContext,
+  useListToolsets,
 } from "@gram/client/react-query";
 import { Icon, Input } from "@speakeasy-api/moonshine";
 import React, {
@@ -40,52 +34,28 @@ import React, {
 } from "react";
 import { Link } from "react-router";
 import {
-  getActionCategory,
-  getActionColorConfig,
-} from "@/lib/audit-log-colors";
+  formatAuditAction,
+  getActorLabel,
+  renderVerb,
+} from "@/lib/audit-log-format";
 import { StructuredDiff } from "@/components/auditlogs/structured-diff";
+import {
+  ActionBadge,
+  ActionDot,
+  AuditFeedFooter,
+  DateGroupHeader,
+  FacetSelect,
+} from "@/components/auditlogs/feed";
+import {
+  formatDateHeader,
+  formatTimeOnly,
+  groupLogsByDate,
+  type FacetOption,
+} from "@/lib/audit-log-feed";
 import { cn, getServerURL } from "@/lib/utils";
-
-type FacetOption = {
-  count?: number;
-  displayName: string;
-  value: string;
-};
-
-function formatTimeOnly(date: Date, mode: "utc" | "local") {
-  return new Intl.DateTimeFormat(undefined, {
-    ...(mode === "utc" ? { timeZone: "UTC" } : {}),
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(date);
-}
-
-function formatDateHeader(date: Date, mode: "utc" | "local") {
-  return new Intl.DateTimeFormat(undefined, {
-    ...(mode === "utc" ? { timeZone: "UTC" } : {}),
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  }).format(date);
-}
-
-function getDateKey(date: Date, mode: "utc" | "local") {
-  if (mode === "utc") {
-    return date.toISOString().slice(0, 10);
-  }
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 function StrongName({ children }: { children: ReactNode }) {
   return <strong className="text-foreground font-semibold">{children}</strong>;
-}
-
-function getActorLabel(log: AuditLog) {
-  return log.actorDisplayName || log.actorSlug || "Someone";
 }
 
 function getSubjectLabel(log: AuditLog) {
@@ -153,49 +123,6 @@ function truncateMiddle(value: string, start = 18, end = 16) {
     return value;
   }
   return `${value.slice(0, start)}...${value.slice(-end)}`;
-}
-
-function getResourceLabel(resource: string) {
-  switch (resource) {
-    case "api_key":
-      return "API key";
-    case "asset":
-      return "asset";
-    case "custom_domains":
-      return "custom domain";
-    case "deployments":
-      return "deployment";
-    case "environment":
-      return "environment";
-    case "mcp_metadata":
-      return "MCP metadata";
-    case "otel_forwarding":
-    case "otel_forwarding_config":
-      return "OpenTelemetry forwarding";
-    case "organization_invitation":
-      return "organization invitation";
-    case "plugin":
-      return "plugin";
-    case "project":
-      return "project";
-    case "template":
-      return "template";
-    case "toolset":
-      return "MCP server";
-    case "variation":
-      return "global variation";
-    default:
-      return resource.replace(/_/g, " ");
-  }
-}
-
-function formatAuditAction(action: string) {
-  const [resource, verb] = action.split(":");
-  if (!resource || !verb) {
-    return action;
-  }
-  const resourceLabel = resource === "toolset" ? "mcp" : resource;
-  return `${resourceLabel}:${verb}`;
 }
 
 function renderSubject(log: AuditLog, orgSlug: string) {
@@ -293,225 +220,11 @@ function renderSubject(log: AuditLog, orgSlug: string) {
   return <span className={monoClass}>{getSubjectLabel(log)}</span>;
 }
 
-function endpointHost(raw: unknown): string {
-  if (typeof raw !== "string" || raw === "") return "";
-  try {
-    return new URL(raw).host || raw;
-  } catch {
-    return raw;
-  }
-}
-
-function describeOtelForwardingUpsert(log: AuditLog): string {
-  const before = log.beforeSnapshot as Record<string, unknown> | undefined;
-  const after = log.afterSnapshot as Record<string, unknown> | undefined;
-  if (!after) return "updated OpenTelemetry forwarding configuration";
-
-  const afterHost = endpointHost(after["endpoint_url"]);
-  const afterEnabled = Boolean(after["enabled"]);
-  const afterHeaders = Array.isArray(after["header_names"])
-    ? (after["header_names"] as string[])
-    : [];
-
-  if (!before) {
-    return afterEnabled
-      ? `enabled OpenTelemetry forwarding${afterHost ? ` to ${afterHost}` : ""}`
-      : `configured OpenTelemetry forwarding${afterHost ? ` to ${afterHost}` : ""} (disabled)`;
-  }
-
-  const beforeHost = endpointHost(before["endpoint_url"]);
-  const beforeEnabled = Boolean(before["enabled"]);
-  const beforeHeaders = Array.isArray(before["header_names"])
-    ? (before["header_names"] as string[])
-    : [];
-
-  const enabledChanged = beforeEnabled !== afterEnabled;
-  const endpointChanged = beforeHost !== afterHost;
-  const headersChanged =
-    JSON.stringify([...beforeHeaders].sort()) !==
-    JSON.stringify([...afterHeaders].sort());
-
-  const changedCount = [enabledChanged, endpointChanged, headersChanged].filter(
-    Boolean,
-  ).length;
-
-  if (changedCount === 1) {
-    if (enabledChanged) {
-      return afterEnabled
-        ? "enabled OpenTelemetry forwarding"
-        : "disabled OpenTelemetry forwarding";
-    }
-    if (endpointChanged) {
-      return `changed OpenTelemetry forwarding endpoint to ${afterHost || "(unset)"}`;
-    }
-    if (headersChanged) {
-      return "updated OpenTelemetry forwarding headers";
-    }
-  }
-
-  return "updated OpenTelemetry forwarding configuration";
-}
-
-function describeToolsetUpdate(log: AuditLog): string {
-  const before = log.beforeSnapshot as Record<string, unknown> | undefined;
-  const after = log.afterSnapshot as Record<string, unknown> | undefined;
-  if (!before || !after) return "updated MCP server";
-
-  const changed = new Set<string>();
-  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
-    if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) {
-      changed.add(key);
-    }
-  }
-
-  if (changed.has("McpIsPublic") && changed.size <= 2) {
-    const isPublic = after["McpIsPublic"];
-    return `changed MCP server visibility to ${isPublic ? "public" : "private"}`;
-  }
-  if (changed.has("McpEnabled") && changed.size <= 2) {
-    const enabled = after["McpEnabled"];
-    return `${enabled ? "enabled" : "disabled"} MCP for server`;
-  }
-  if (changed.has("Name") && changed.size <= 2) {
-    return `renamed MCP server to ${after["Name"]}`;
-  }
-  if (changed.has("ToolSelectionMode") && changed.size <= 2) {
-    return `changed tool selection mode to ${after["ToolSelectionMode"]}`;
-  }
-  if (changed.has("Description") && changed.size <= 2) {
-    return "updated MCP server description";
-  }
-
-  return "updated MCP server";
-}
-
-function renderVerb(log: AuditLog): string {
-  switch (log.action) {
-    case "project:create":
-      return "created project";
-    case "project:update":
-      return "updated project";
-    case "project:delete":
-      return "deleted project";
-    case "environment:create":
-      return "created environment";
-    case "environment:update":
-      return "updated environment";
-    case "environment:delete":
-      return "deleted environment";
-    case "template:create":
-      return "created template";
-    case "template:update":
-      return "updated template";
-    case "template:delete":
-      return "deleted template";
-    case "toolset:create":
-      return "created MCP server";
-    case "toolset:update":
-      return describeToolsetUpdate(log);
-    case "toolset:delete":
-      return "deleted MCP server";
-    case "toolset:attach_external_oauth":
-      return "attached an external OAuth server to MCP server";
-    case "toolset:detach_external_oauth":
-      return "detached an external OAuth server from MCP server";
-    case "toolset:attach_oauth_proxy":
-      return "attached an OAuth proxy to MCP server";
-    case "toolset:detach_oauth_proxy":
-      return "detached an OAuth proxy from MCP server";
-    case "api_key:create":
-      return "created API key";
-    case "api_key:revoke":
-      return "revoked API key";
-    case "variation:update_global":
-      return "updated a global variation for";
-    case "variation:delete_global":
-      return "deleted a global variation for";
-    case "deployments:create":
-      return "created deployment";
-    case "deployments:evolve":
-      return "created deployment";
-    case "deployments:redeploy":
-      return "redeployed deployment";
-    case "custom_domains:create":
-      return "added custom domain";
-    case "custom_domains:delete":
-      return "deleted custom domain";
-    case "mcp_metadata:update":
-      return "updated MCP metadata for";
-    case "otel_forwarding:upsert":
-      return describeOtelForwardingUpsert(log);
-    case "otel_forwarding:delete":
-      return "removed OpenTelemetry forwarding configuration";
-    case "asset:create":
-      return "uploaded asset";
-    case "plugin:create":
-      return "created plugin";
-    case "plugin:update":
-      return "updated plugin";
-    case "plugin:delete":
-      return "deleted plugin";
-    case "plugin:server_add":
-      return "added server to plugin";
-    case "plugin:server_update":
-      return "updated server on plugin";
-    case "plugin:server_remove":
-      return "removed server from plugin";
-    case "plugin:assignments_set":
-      return "updated plugin access assignments";
-    case "plugin:publish":
-      return "published plugins";
-    case "organization:webhooks_enabled":
-      return "enabled webhooks delivery";
-    case "organization:webhooks_disabled":
-      return "disabled webhooks delivery";
-    case "organization_invitation:create":
-      return "invited";
-    case "organization_invitation:revoke":
-      return "revoked invite for";
-    case "organization_invitation:update_role":
-      return "changed invite role for";
-    default: {
-      const [resource = "activity", verb = "updated"] = log.action.split(":");
-      return `${verb.replace(/_/g, " ")} ${getResourceLabel(resource)}`;
-    }
-  }
-}
-
 function hasDiff(log: AuditLog): boolean {
   if (log.action.startsWith("deployments:")) {
     return false;
   }
   return log.beforeSnapshot != null || log.afterSnapshot != null;
-}
-
-function ActionBadge({ action }: { action: string }) {
-  const category = getActionCategory(action);
-  const colors = getActionColorConfig(category);
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[11px] font-medium",
-        colors.bg,
-        colors.text,
-      )}
-    >
-      {formatAuditAction(action)}
-    </span>
-  );
-}
-
-function ActionDot({ action }: { action: string }) {
-  const category = getActionCategory(action);
-  const colors = getActionColorConfig(category);
-  return (
-    <span
-      className={cn(
-        "mt-[3px] inline-block size-2 shrink-0 rounded-full",
-        colors.dot,
-      )}
-    />
-  );
 }
 
 function AuditLogRow({
@@ -602,96 +315,6 @@ function AuditLogRow({
   );
 }
 
-function DateGroupHeader({
-  date,
-  mode,
-}: {
-  date: Date;
-  mode: "utc" | "local";
-}) {
-  return (
-    <div className="flex items-center gap-3 px-4 py-2">
-      <span className="text-muted-foreground shrink-0 text-[11px] font-semibold tracking-wide uppercase">
-        {formatDateHeader(date, mode)}
-      </span>
-      <div className="bg-border h-px flex-1" />
-    </div>
-  );
-}
-
-type DateGroup = {
-  key: string;
-  date: Date;
-  logs: AuditLog[];
-};
-
-function groupLogsByDate(logs: AuditLog[], mode: "utc" | "local"): DateGroup[] {
-  const groups: DateGroup[] = [];
-  const keyMap = new Map<string, DateGroup>();
-
-  for (const log of logs) {
-    const key = getDateKey(log.createdAt, mode);
-    let group = keyMap.get(key);
-    if (!group) {
-      group = { key, date: log.createdAt, logs: [] };
-      groups.push(group);
-      keyMap.set(key, group);
-    }
-    group.logs.push(log);
-  }
-
-  return groups;
-}
-
-function FacetSelect({
-  label,
-  value,
-  onValueChange,
-  placeholder,
-  allLabel,
-  options,
-}: {
-  label: string;
-  value: string;
-  onValueChange: (value: string) => void;
-  placeholder: string;
-  allLabel: string;
-  options: Array<
-    Pick<FacetOption, "displayName" | "value"> & {
-      count?: number;
-    }
-  >;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Type small muted>
-        {label}
-      </Type>
-      <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger size="sm" className="bg-background min-w-[220px]">
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">{allLabel}</SelectItem>
-          {options.map((option) => (
-            <SelectItem
-              key={option.value}
-              value={option.value}
-              description={
-                option.count == null
-                  ? undefined
-                  : `${option.count.toLocaleString()} audit log${option.count === 1 ? "" : "s"}`
-              }
-            >
-              {option.displayName}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}
-
 /**
  * Wraps the audit logs page in an InsightsProvider so the AI Insights
  * trigger appears in the breadcrumb bar. Uses the org's first project
@@ -703,6 +326,11 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
   const client = useGramContext();
 
   const projectSlug = organization.projects[0]?.slug ?? "";
+  const { data: toolsetsData, isLoading: isLoadingToolsets } = useListToolsets(
+    { gramProject: projectSlug },
+    undefined,
+    { enabled: Boolean(projectSlug) },
+  );
 
   const getSession = useCallback(async () => {
     const res = await chatSessionsCreate(
@@ -724,12 +352,18 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
 
   const serverURL = getServerURL();
 
-  // Derive observability MCP URL the same way useObservabilityMcpConfig does.
-  const mcpUrl = serverURL.includes("app.getgram.ai")
-    ? "https://app.getgram.ai/mcp/speakeasy-team-gram"
-    : serverURL.includes("dev.getgram.ai")
-      ? "https://dev.getgram.ai/mcp/speakeasy-team-gram"
-      : import.meta.env.VITE_GRAM_OBSERVABILITY_MCP_URL || undefined;
+  // Build MCP server entries for all project toolsets
+  const mcps = useMemo<MCPServerEntry[] | undefined>(() => {
+    if (isLoadingToolsets || !toolsetsData?.toolsets?.length) {
+      return undefined;
+    }
+
+    return toolsetsData.toolsets.map((toolset) => ({
+      url: internalMcpUrl({ slug: projectSlug }, toolset),
+      name: toolset.slug,
+      environment: toolset.defaultEnvironmentSlug,
+    }));
+  }, [toolsetsData?.toolsets, projectSlug, isLoadingToolsets]);
 
   const auditToolsFilter = useCallback(
     ({ toolName }: { toolName: string }) =>
@@ -759,9 +393,9 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
         GRAM_APIKEY_HEADER_GRAM_KEY: "",
         GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT: projectSlug,
       },
-      ...(mcpUrl && { mcp: mcpUrl }),
+      ...(mcps && mcps.length > 0 && { mcps }),
     }),
-    [projectSlug, auditToolsFilter, serverURL, getSession, session, mcpUrl],
+    [projectSlug, auditToolsFilter, serverURL, getSession, session, mcps],
   );
 
   return (
@@ -769,33 +403,14 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
       mcpConfig={mcpConfig}
       title="Audit Log Insights"
       subtitle="Ask about organization activity, changes, and audit events."
-      suggestions={[
-        {
-          title: "Recent changes",
-          label: "What changed recently?",
-          prompt:
-            "Summarize the most significant recent changes across the organization based on the audit logs.",
-        },
-        {
-          title: "Security review",
-          label: "Security-relevant events",
-          prompt:
-            "What security-relevant events have occurred recently? Look for API key changes, permission modifications, or unusual patterns.",
-        },
-        {
-          title: "Active users",
-          label: "Most active team members",
-          prompt:
-            "Who have been the most active users recently and what kinds of changes have they been making?",
-        },
-      ]}
+      suggestions={INSIGHTS_SUGGESTIONS["org/audit-logs"]}
     >
       {children}
     </InsightsProvider>
   );
 }
 
-export default function OrgAuditLogs() {
+export default function OrgAuditLogs(): React.JSX.Element {
   const { hasAnyScope } = useRBAC();
   const organization = useOrganization();
   // Only wrap with InsightsProvider when user has org:read or org:admin
@@ -821,7 +436,7 @@ export default function OrgAuditLogs() {
   return <AuditLogsInsightsWrapper>{page}</AuditLogsInsightsWrapper>;
 }
 
-export function OrgAuditLogsInner() {
+function OrgAuditLogsInner() {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
   const [selectedProjectSlug, setSelectedProjectSlug] = useQueryState(
@@ -876,8 +491,7 @@ export function OrgAuditLogsInner() {
       selectedProjectSlug === "all" ? undefined : selectedProjectSlug,
     action: selectedAction === "all" ? undefined : selectedAction,
     actorId: selectedActor === "all" ? undefined : selectedActor,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any);
+  });
 
   const logs = useMemo(
     () => data?.pages.flatMap((page) => page.result.logs) ?? [],
@@ -906,8 +520,8 @@ export function OrgAuditLogsInner() {
     }
     parts.push(`Currently showing ${logs.length} audit log entries.`);
     if (dateGroups.length > 0) {
-      const firstDate = dateGroups[0].date;
-      const lastDate = dateGroups[dateGroups.length - 1].date;
+      const firstDate = dateGroups[0]!.date!;
+      const lastDate = dateGroups[dateGroups.length - 1]!.date!;
       parts.push(
         `Date range: ${formatDateHeader(lastDate, tsMode)} to ${formatDateHeader(firstDate, tsMode)}`,
       );
@@ -1191,7 +805,9 @@ export function OrgAuditLogsInner() {
         <FacetSelect
           label="Project"
           value={selectedProjectSlug}
-          onValueChange={setSelectedProjectSlug}
+          onValueChange={(value) => {
+            void setSelectedProjectSlug(value);
+          }}
           placeholder="All projects"
           allLabel="All projects"
           options={projects.map((project) => ({
@@ -1202,7 +818,9 @@ export function OrgAuditLogsInner() {
         <FacetSelect
           label="Action"
           value={selectedAction}
-          onValueChange={setSelectedAction}
+          onValueChange={(value) => {
+            void setSelectedAction(value);
+          }}
           placeholder="All actions"
           allLabel="All actions"
           options={actionOptions}
@@ -1210,7 +828,9 @@ export function OrgAuditLogsInner() {
         <FacetSelect
           label="Actor"
           value={selectedActor}
-          onValueChange={setSelectedActor}
+          onValueChange={(value) => {
+            void setSelectedActor(value);
+          }}
           placeholder="All actors"
           allLabel="All actors"
           options={actorOptions}
@@ -1224,7 +844,7 @@ export function OrgAuditLogsInner() {
             size="sm"
             disabled={!hasActiveFilters}
             onClick={() => {
-              Promise.allSettled([
+              void Promise.allSettled([
                 setSelectedProjectSlug("all"),
                 setSelectedAction("all"),
                 setSelectedActor("all"),
@@ -1414,7 +1034,7 @@ export function OrgAuditLogsInner() {
                       <AuditLogRow
                         key={log.id}
                         log={log}
-                        orgSlug={orgSlug}
+                        orgSlug={orgSlug ?? ""}
                         timestampMode={tsMode}
                         isOdd={rowIndex % 2 === 1}
                         isHighlighted={idx === currentLogIndex}
@@ -1434,39 +1054,15 @@ export function OrgAuditLogsInner() {
           )}
         </div>
 
-        {(logs.length > 0 || isFetchingNextPage) && (
-          <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
-            <Type muted small>
-              {logs.length.toLocaleString()} audit log
-              {logs.length === 1 ? "" : "s"}
-            </Type>
-
-            {hasNextPage ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
-              >
-                {isFetchingNextPage ? (
-                  <>
-                    <Icon
-                      name="loader-circle"
-                      className="size-4 animate-spin"
-                    />
-                    Loading...
-                  </>
-                ) : (
-                  "Load more"
-                )}
-              </Button>
-            ) : (
-              <Type muted small>
-                {isFetching ? "Refreshing..." : "End of audit log history"}
-              </Type>
-            )}
-          </div>
-        )}
+        <AuditFeedFooter
+          count={logs.length}
+          hasNextPage={hasNextPage ?? false}
+          isFetching={isFetching}
+          isFetchingNextPage={isFetchingNextPage}
+          onLoadMore={() => {
+            void fetchNextPage();
+          }}
+        />
       </div>
     </div>
   );

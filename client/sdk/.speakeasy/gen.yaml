@@ -22,6 +22,7 @@ generation:
     oAuth2ClientCredentialsEnabled: true
     oAuth2PasswordEnabled: true
     hoistGlobalSecurity: true
+  inferSSEOverload: true
   sdkHooksConfigAccess: true
   schemas:
     allOfMergeStrategy: shallowMerge

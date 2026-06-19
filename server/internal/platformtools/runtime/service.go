@@ -18,8 +18,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	platformchats "github.com/speakeasy-api/gram/server/internal/platformtools/chats"
+	platformdeployments "github.com/speakeasy-api/gram/server/internal/platformtools/deployments"
+	platformlogs "github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
+	platformrisk "github.com/speakeasy-api/gram/server/internal/platformtools/risk"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
+	platformusers "github.com/speakeasy-api/gram/server/internal/platformtools/users"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
@@ -121,23 +126,76 @@ func TriggerExternalTools(db *pgxpool.Pool, app *bgtriggers.App, auditLogger *au
 	}
 }
 
+// ManagedAssistantLogsTools returns telemetry-backed observability tools for
+// the project's managed assistant. Universal assistants don't get them because
+// they have no dashboard surface to display the results.
+func ManagedAssistantLogsTools(telemetrySvc platformtools.TelemetryService) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformlogs.NewSearchLogsTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewSearchToolCallsTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewSearchChatsTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewSearchUsersTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewGetProjectMetricsSummaryTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewGetUserMetricsSummaryTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewGetObservabilityOverviewTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewListAttributeKeysTool(telemetrySvc), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantChatsTools returns chat-history tools for the project's
+// managed assistant.
+func ManagedAssistantChatsTools(chatSvc platformchats.ChatService) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformchats.NewListChatsTool(chatSvc), RequiredFeature: ""},
+		{Executor: platformchats.NewLoadChatTool(chatSvc), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantUsersTools returns user-directory tools for the project's
+// managed assistant.
+func ManagedAssistantUsersTools(orgSvc platformusers.OrganizationsService) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformusers.NewListOrganizationUsersTool(orgSvc), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantRiskTools returns risk/policy tools for the project's
+// managed assistant. listRiskResultsForAgent redacts matches so raw secret
+// content never reaches the model context.
+func ManagedAssistantRiskTools(riskSvc platformrisk.RiskService) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformrisk.NewListRiskPoliciesTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewListRiskResultsForAgentTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewListRiskResultsByChatTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewGetRiskPolicyStatusTool(riskSvc), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantDeploymentsTools returns deployment-introspection tools for
+// the project's managed assistant.
+func ManagedAssistantDeploymentsTools(deploymentsSvc platformdeployments.DeploymentsService) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformdeployments.NewGetDeploymentLogsTool(deploymentsSvc), RequiredFeature: ""},
+	}
+}
+
 func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, env toolconfig.ToolCallEnv, requestBody io.Reader) (*gateway.PlatformResult, error) {
 	if plan == nil || plan.Kind != gateway.ToolKindPlatform || plan.Descriptor == nil || plan.Platform == nil {
 		return nil, fmt.Errorf("invalid platform tool plan")
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "platform tool requires project auth context").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, nil, "platform tool requires project auth context").LogError(ctx, s.logger)
 	}
 	if authCtx.ProjectID.String() != plan.Descriptor.ProjectID {
-		return nil, oops.E(oops.CodeForbidden, nil, "platform tool auth context does not match project").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeForbidden, nil, "platform tool auth context does not match project").LogError(ctx, s.logger)
 	}
 
 	urnStr := plan.Descriptor.URN.String()
 
 	if feature, gated := s.featureGates[urnStr]; gated && s.featureChecker != nil {
 		if !s.featureChecker(ctx, authCtx.ActiveOrganizationID, feature) {
-			return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogError(ctx, s.logger)
 		}
 	}
 
@@ -158,7 +216,7 @@ func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, e
 
 	executor, ok := s.executors[urnStr]
 	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogError(ctx, s.logger)
 	}
 
 	var out bytes.Buffer

@@ -9,10 +9,10 @@ import { Badge } from "../ui/badge";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
 
 // MCPServerCard renders an mcp_servers row inside the /mcp listing grid.
-// Today only Remote-MCP-backed servers reach this component (gated upstream
-// by the gram-remote-mcp flag and the remoteMcpServerId filter); after the
-// AGE-1902/AGE-1880 cutover, toolset-backed mcp_servers will render through
-// the same card alongside Hosted MCPCard.
+// Today only Remote-MCP-backed servers reach this component (filtered upstream
+// by the remoteMcpServerId filter); after the AGE-1902/AGE-1880 cutover,
+// toolset-backed mcp_servers will render through the same card alongside Hosted
+// MCPCard.
 //
 // TODO(AGE-1902): collapse with MCPCard once Hosted (toolset-backed) cards
 // also source from mcp_servers and the per-card data shape no longer branches
@@ -23,7 +23,7 @@ export function MCPServerCard({
 }: {
   server: McpServer;
   endpointCount: number;
-}) {
+}): JSX.Element {
   const routes = useRoutes();
 
   const mcpEnabled = server.visibility !== "disabled";
@@ -31,7 +31,7 @@ export function MCPServerCard({
 
   return (
     <Link
-      to={routes.mcp.x.href(mcpServerRouteParam(server))}
+      to={routes.mcp.x.overview.href(mcpServerRouteParam(server))}
       className="focus-visible:ring-ring block rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       <DotCard icon={<Network className="text-muted-foreground h-8 w-8" />}>
@@ -63,23 +63,5 @@ export function MCPServerCard({
         </div>
       </DotCard>
     </Link>
-  );
-}
-
-export function MCPServerCardSkeleton() {
-  return (
-    <DotCard>
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <div className="bg-muted h-5 w-2/3 animate-pulse rounded" />
-        <div className="bg-muted h-5 w-20 animate-pulse rounded-full" />
-      </div>
-      <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-        <div className="flex items-center gap-2">
-          <div className="bg-muted h-2.5 w-2.5 animate-pulse rounded-full" />
-          <div className="bg-muted h-3.5 w-12 animate-pulse rounded" />
-        </div>
-        <div className="bg-muted h-3.5 w-10 animate-pulse rounded" />
-      </div>
-    </DotCard>
   );
 }

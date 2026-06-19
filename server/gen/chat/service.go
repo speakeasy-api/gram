@@ -26,8 +26,6 @@ type Service interface {
 	GenerateTitle(context.Context, *GenerateTitlePayload) (res *GenerateTitleResult, err error)
 	// Get the total number of chat credits and usage for the current billing period
 	CreditUsage(context.Context, *CreditUsagePayload) (res *CreditUsageResult, err error)
-	// List all chats for a project with their resolutions
-	ListChatsWithResolutions(context.Context, *ListChatsWithResolutionsPayload) (res *ListChatsWithResolutionsResult, err error)
 	// Soft-delete a chat by its ID
 	DeleteChat(context.Context, *DeleteChatPayload) (err error)
 	// Submit user feedback for a chat (success/failure)
@@ -56,7 +54,14 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"listChats", "loadChat", "generateTitle", "creditUsage", "listChatsWithResolutions", "deleteChat", "submitFeedback"}
+var MethodNames = [6]string{"listChats", "loadChat", "generateTitle", "creditUsage", "deleteChat", "submitFeedback"}
+
+type AgentUsage struct {
+	// The agent usage payload discriminator.
+	Type string
+	// Claude Code usage details.
+	Claude *ClaudeAgentUsage
+}
 
 // Chat is the result type of the chat service loadChat method.
 type Chat struct {
@@ -70,6 +75,8 @@ type Chat struct {
 	// history, walk from `max_generation` down to 0, requesting each generation in
 	// turn.
 	MaxGeneration int
+	// Agent-specific usage enrichment for the chat, when available.
+	AgentUsage *AgentUsage
 	// The ID of the chat
 	ID string
 	// The title of the chat
@@ -120,6 +127,8 @@ type ChatMessage struct {
 	ToolCalls *string
 	// The finish reason of the message
 	FinishReason *string
+	// The agent prompt/turn ID associated with this message, when available.
+	PromptID *string
 	// The ID of the user who created the message
 	UserID *string
 	// The ID of the external user who created the message
@@ -164,59 +173,53 @@ type ChatOverview struct {
 	RiskFindingsCount *int
 }
 
-// Chat overview with embedded resolution data
-type ChatOverviewWithResolutions struct {
-	// List of resolutions for this chat
-	Resolutions []*ChatResolution
-	// The ID of the chat
-	ID string
-	// The title of the chat
-	Title string
-	// The ID of the user who created the chat
-	UserID *string
-	// The ID of the external user who created the chat
-	ExternalUserID *string
-	// The number of messages in the chat
-	NumMessages int
-	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
-	// messages)
-	Source *string
-	// When the chat was created.
-	CreatedAt string
-	// When the chat was last updated.
-	UpdatedAt string
-	// Total input tokens used in this chat
-	TotalInputTokens *int64
-	// Total output tokens used in this chat
-	TotalOutputTokens *int64
-	// Total tokens (input + output) used in this chat
-	TotalTokens *int64
-	// Total cost in USD for this chat
-	TotalCost *float64
-	// When the last message in the chat was created.
-	LastMessageTimestamp string
-	// Number of risk findings recorded against messages in this chat
-	// (project-scoped, found=true). Only populated by endpoints that join risk
-	// data; absent elsewhere.
-	RiskFindingsCount *int
+type ClaudeAgentUsage struct {
+	// Per-prompt Claude usage turns ordered by start time.
+	Turns []*ClaudeTurnUsage
+	// Per-tool Claude usage keyed by tool_use_id.
+	Tools []*ClaudeToolUsage
 }
 
-// Resolution information for a chat
-type ChatResolution struct {
-	// Resolution ID
-	ID string
-	// User's intended goal
-	UserGoal string
-	// Resolution status
-	Resolution string
-	// Notes about the resolution
-	ResolutionNotes string
-	// Score 0-100
-	Score int
-	// When resolution was created
-	CreatedAt string
-	// Message IDs associated with this resolution
-	MessageIds []string
+type ClaudeToolUsage struct {
+	// Claude tool_use_id that correlates the tool call and result.
+	ToolUseID string
+	// Claude prompt.id for the turn that used this tool.
+	PromptID string
+	// Tool name reported by Claude Code.
+	ToolName string
+	// Serialized tool input size in bytes.
+	InputSizeBytes int64
+	// Serialized tool result size in bytes.
+	ResultSizeBytes int64
+}
+
+type ClaudeTurnUsage struct {
+	// Claude prompt.id that correlates events for one user turn.
+	PromptID string
+	// Earliest OTEL log timestamp in this turn, as Unix nanoseconds.
+	StartTimeUnixNano string
+	// Latest OTEL log timestamp in this turn, as Unix nanoseconds.
+	EndTimeUnixNano string
+	// Number of Claude API request events in this turn.
+	RequestCount int64
+	// Input tokens used by this turn.
+	InputTokens int64
+	// Output tokens used by this turn.
+	OutputTokens int64
+	// Cache read tokens used by this turn.
+	CacheReadTokens int64
+	// Cache creation tokens used by this turn.
+	CacheCreationTokens int64
+	// Total tokens used by this turn.
+	TotalTokens int64
+	// Total USD cost for this turn.
+	CostUsd float64
+	// Total cost for this turn in micros of a USD.
+	CostMicros int64
+	// Distinct model names used by this turn.
+	Models []string
+	// Distinct Claude query sources used by this turn.
+	QuerySources []string
 }
 
 // CreditUsagePayload is the payload type of the chat service creditUsage
@@ -263,34 +266,18 @@ type ListChatsPayload struct {
 	SessionToken      *string
 	ProjectSlugInput  *string
 	ChatSessionsToken *string
-}
-
-// ListChatsResult is the result type of the chat service listChats method.
-type ListChatsResult struct {
-	// The list of chats
-	Chats []*ChatOverview
-}
-
-// ListChatsWithResolutionsPayload is the payload type of the chat service
-// listChatsWithResolutions method.
-type ListChatsWithResolutionsPayload struct {
-	SessionToken      *string
-	ProjectSlugInput  *string
-	ChatSessionsToken *string
 	// Search query (searches chat ID, user ID, and title)
 	Search *string
 	// Filter by external user ID
 	ExternalUserID *string
 	// Filter to chats produced by this assistant
 	AssistantID *string
-	// Filter by resolution status
-	ResolutionStatus *string
 	// Filter by whether chat has risk findings: 'true', 'false', or empty for no
 	// filter.
 	HasRisk *string
-	// Filter chats created after this timestamp (ISO 8601)
+	// Filter chats last active after this timestamp (ISO 8601)
 	From *string
-	// Filter chats created before this timestamp (ISO 8601)
+	// Filter chats last active before this timestamp (ISO 8601)
 	To *string
 	// Number of results per page
 	Limit int
@@ -302,11 +289,10 @@ type ListChatsWithResolutionsPayload struct {
 	SortOrder string
 }
 
-// ListChatsWithResolutionsResult is the result type of the chat service
-// listChatsWithResolutions method.
-type ListChatsWithResolutionsResult struct {
-	// List of chats with resolutions
-	Chats []*ChatOverviewWithResolutions
+// ListChatsResult is the result type of the chat service listChats method.
+type ListChatsResult struct {
+	// The list of chats
+	Chats []*ChatOverview
 	// Total number of chats (before pagination)
 	Total int
 }

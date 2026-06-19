@@ -51,7 +51,11 @@ import { WireUserSessionIssuerModal } from "./wire-user-session-issuer/WireUserS
 // Empty array constant to avoid creating new references
 const EMPTY_ENVIRONMENTS: never[] = [];
 
-export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
+export function MCPAuthenticationTab({
+  toolset,
+}: {
+  toolset: Toolset;
+}): JSX.Element {
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const session = useSession();
@@ -103,14 +107,15 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
       return;
     }
 
-    // Create a hash that includes key, state, and valueGroups
+    // Create a hash that includes key, state, and per-environment values
     const createHash = (vars: EnvironmentVariable[]) =>
       vars
         .map((v) => {
-          const valueGroupsHash = v.valueGroups
-            .map((vg) => `${[...vg.environments].sort().join(",")}`)
+          const valuesHash = v.environmentValues
+            .map((ev) => `${ev.environmentSlug}=${ev.value}`)
+            .sort()
             .join("|");
-          return `${v.key}:${v.state}:${valueGroupsHash}`;
+          return `${v.key}:${v.state}:${valuesHash}`;
         })
         .join(",");
 
@@ -174,7 +179,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   // Update environment mutation
   const updateEnvironmentMutation = useUpdateEnvironmentMutation({
     onSuccess: () => {
-      invalidateAllListEnvironments(queryClient);
+      void invalidateAllListEnvironments(queryClient);
       telemetry.capture("environment_event", {
         action: "environment_variable_updated",
         toolset_slug: toolset.slug,
@@ -185,7 +190,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
   // Create environment mutation
   const createEnvironmentMutation = useCreateEnvironmentMutation({
     onSuccess: (data) => {
-      invalidateAllListEnvironments(queryClient);
+      void invalidateAllListEnvironments(queryClient);
       setSelectedEnvironmentView(data.slug);
       setIsCreateEnvDialogOpen(false);
       setNewEnvironmentName("");
@@ -207,8 +212,8 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     onSuccess: () => {
       // Note: handleSaveAll uses mutateAsync and handles invalidation itself
       // This onSuccess is for other callers like handleSetDefaultEnvironment
-      invalidateAllToolset(queryClient);
-      invalidateAllGetMcpMetadata(queryClient);
+      void invalidateAllToolset(queryClient);
+      void invalidateAllGetMcpMetadata(queryClient);
       telemetry.capture("mcp_event", {
         action: "mcp_metadata_updated",
         toolset_slug: toolset.slug,
@@ -407,7 +412,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
     setEditingState(newEditingState);
   };
 
-  // Get editing value for a variable (either from editing state or from valueGroups)
+  // Get editing value for a variable (either from editing state or from environmentValues)
   const getEditingValue = (envVar: EnvironmentVariable): string => {
     if (editingState.has(envVar.id)) {
       return editingState.get(envVar.id)!.value;
@@ -760,7 +765,7 @@ export function MCPAuthenticationTab({ toolset }: { toolset: Toolset }) {
                 hasAnyUserEdits={hasAnyUnsavedChanges}
                 hasExistingConfigs={environmentConfigs.length > 0}
                 onEnvironmentSelect={setSelectedEnvironmentView}
-                onSaveAll={handleSaveAll}
+                onSaveAll={() => void handleSaveAll()}
                 onCancelAll={handleCancelAll}
                 onSetDefaultEnvironment={handleSetDefaultEnvironment}
                 onDetachEnvironment={handleDetachEnvironment}
@@ -1064,7 +1069,7 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
 
 const PARADIGM_LABELS: Record<OAuthParadigm, string> = {
   external: "External OAuth",
-  gram: "Gram OAuth",
+  gram: "Platform OAuth",
   proxy: "OAuth Proxy",
 };
 
@@ -1119,7 +1124,7 @@ function OAuthStatusDisplay({
           {oauthParadigm === "external" ? (
             "Users will authenticate with your external OAuth server before accessing this MCP server."
           ) : oauthParadigm === "gram" ? (
-            "Users will authenticate with Gram OAuth before accessing this MCP server."
+            "Users will authenticate with Platform OAuth before accessing this MCP server."
           ) : (
             <>
               The CLIENT_ID and CLIENT_SECRET values in the{" "}

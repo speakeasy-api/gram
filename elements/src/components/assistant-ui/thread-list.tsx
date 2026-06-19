@@ -4,13 +4,31 @@ import {
   ThreadListPrimitive,
   useAssistantState,
 } from "@assistant-ui/react";
-import { PlusIcon } from "lucide-react";
+import { MessageSquareTextIcon, PlusIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRadius } from "@/hooks/useRadius";
 import { cn } from "@/lib/utils";
 import { useDensity } from "@/hooks/useDensity";
+import { useThreadMeta } from "@/contexts/ThreadMetaContext";
+
+/**
+ * Formats a chat's creation date for the list row: "Jun 14" within the current
+ * year, "Jun 14, 2025" otherwise. Returns null for missing/invalid dates so
+ * the row simply omits the date rather than rendering "Invalid Date".
+ */
+function formatThreadCreatedAt(iso: string | undefined): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+}
 
 interface ThreadListProps {
   className?: string;
@@ -107,12 +125,21 @@ const ThreadListItem: FC = () => {
     >
       <ThreadListItemPrimitive.Trigger
         className={cn(
-          "aui-thread-list-item-trigger flex min-w-0 grow cursor-pointer items-center text-start",
-          d("px-lg"),
+          // px-sm (not px-lg) so the row icon's left edge lines up with the
+          // "New Thread" + icon above: that button's padding resolves to the
+          // p-sm value, which equals px-sm at every density tier.
+          "aui-thread-list-item-trigger flex min-w-0 grow cursor-pointer items-center gap-2.5 text-start",
+          d("px-sm"),
           d("py-sm"),
         )}
       >
-        <ThreadListItemTitle />
+        <span className="aui-thread-list-item-icon flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground">
+          <MessageSquareTextIcon className="size-3.5" />
+        </span>
+        <span className="flex min-w-0 flex-col">
+          <ThreadListItemTitle />
+          <ThreadListItemDate />
+        </span>
       </ThreadListItemPrimitive.Trigger>
       {/* Archive button hidden until feature is implemented */}
       {/* <ThreadListItemArchive /> */}
@@ -122,8 +149,26 @@ const ThreadListItem: FC = () => {
 
 const ThreadListItemTitle: FC = () => {
   return (
-    <span className="aui-thread-list-item-title text-sm break-words text-foreground">
+    <span className="aui-thread-list-item-title block truncate text-sm text-foreground">
       <ThreadListItemPrimitive.Title fallback="New Chat" />
+    </span>
+  );
+};
+
+const ThreadListItemDate: FC = () => {
+  // Both remoteId and externalId equal the chat id in the Gram adapter; the
+  // side-channel map is keyed by that id. New local threads have neither yet,
+  // so they simply render no date.
+  const id = useAssistantState(
+    ({ threadListItem }) =>
+      threadListItem.remoteId ?? threadListItem.externalId,
+  );
+  const meta = useThreadMeta(id ?? undefined);
+  const label = formatThreadCreatedAt(meta?.createdAt);
+  if (!label) return null;
+  return (
+    <span className="aui-thread-list-item-date text-xs text-muted-foreground">
+      {label}
     </span>
   );
 };

@@ -10,6 +10,7 @@ import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import {
   invalidateAllPlugin,
@@ -20,6 +21,7 @@ import { useUpdatePluginMutation } from "@gram/client/react-query/updatePlugin";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
+import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import {
   Button,
   DropdownMenu,
@@ -34,13 +36,28 @@ import { Network, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router";
 import type {
+  McpServer,
   PluginServer,
   ToolsetEntry,
 } from "@gram/client/models/components";
 import { useSdkClient } from "@/contexts/Sdk";
 import { toast } from "sonner";
 
-export default function PluginDetail() {
+// A selectable server for a plugin, sourced from either a toolset (Hosted) or
+// a Remote MCP-backed mcp_server. The kind determines whether it is submitted
+// as a toolset_id or an mcp_server_id, mirroring the collections picker.
+type ServerOptionKind = "toolset" | "mcpServer";
+type ServerOption = {
+  kind: ServerOptionKind;
+  id: string;
+  name: string;
+};
+
+function serverOptionKey(kind: ServerOptionKind, id: string): string {
+  return `${kind}:${id}`;
+}
+
+export default function PluginDetail(): JSX.Element | null {
   const { pluginId } = useParams<{ pluginId: string }>();
   const queryClient = useQueryClient();
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -50,12 +67,27 @@ export default function PluginDetail() {
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
 
   const client = useSdkClient();
+
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
     useListToolsets();
   const toolsets = useMemo(
     () => toolsetsData?.toolsets ?? [],
     [toolsetsData?.toolsets],
   );
+
+  // Remote MCP-backed mcp_servers for this project. Only remote-backed,
+  // non-disabled servers are publishable today.
+  const { data: mcpServersData, isLoading: isLoadingMcpServers } =
+    useMcpServers({});
+  const mcpServers = useMemo(
+    () =>
+      (mcpServersData?.mcpServers ?? []).filter(
+        (s) => !!s.remoteMcpServerId && s.visibility !== "disabled",
+      ),
+    [mcpServersData],
+  );
+
+  const isLoadingServers = isLoadingToolsets || isLoadingMcpServers;
 
   const invalidateAll = async () => {
     await invalidateAllPlugin(queryClient);
@@ -65,14 +97,14 @@ export default function PluginDetail() {
   const updateMutation = useUpdatePluginMutation({
     onSuccess: () => {
       setIsEditOpen(false);
-      invalidateAll();
+      void invalidateAll();
     },
   });
 
   const addServerMutation = useAddPluginServerMutation({
     onSuccess: () => {
       setIsAddServerOpen(false);
-      invalidateAll();
+      void invalidateAll();
     },
   });
 
@@ -106,15 +138,23 @@ export default function PluginDetail() {
   const handleAddServer: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const toolsetId = fd.get("toolsetId") as string;
-    const toolset = toolsets.find((t) => t.id === toolsetId);
+    const key = fd.get("serverKey") as string;
+    if (!key) return;
+    const option = serverOptions.find(
+      (o) => serverOptionKey(o.kind, o.id) === key,
+    );
+    if (!option) return;
     addServerMutation.mutate({
       security: { sessionHeaderGramSession: "" },
       request: {
         addPluginServerForm: {
           pluginId: pluginId!,
-          toolsetId,
-          displayName: toolset?.name ?? toolsetId,
+          // Submit exactly one backend id per the toolset_id XOR mcp_server_id
+          // contract.
+          ...(option.kind === "mcpServer"
+            ? { mcpServerId: option.id }
+            : { toolsetId: option.id }),
+          displayName: option.name,
           policy: "required",
         },
       },
@@ -148,12 +188,45 @@ export default function PluginDetail() {
     return map;
   }, [toolsets]);
 
+  const mcpServerById = useMemo(() => {
+    const map = new Map<string, McpServer>();
+    for (const s of mcpServers) map.set(s.id, s);
+    return map;
+  }, [mcpServers]);
+
+  // Merge toolsets and Remote MCP-backed servers into one selectable list.
+  const serverOptions = useMemo<ServerOption[]>(() => {
+    const opts: ServerOption[] = toolsets.map((t) => ({
+      kind: "toolset",
+      id: t.id,
+      name: t.name,
+    }));
+    for (const s of mcpServers) {
+      opts.push({
+        kind: "mcpServer",
+        id: s.id,
+        name: s.name ?? s.slug ?? "Untitled server",
+      });
+    }
+    return opts;
+  }, [toolsets, mcpServers]);
+
   if (!plugin) return null;
 
   const servers = plugin.servers ?? [];
 
-  const addedToolsetIds = new Set(servers.map((s) => s.toolsetId));
-  const availableToolsets = toolsets.filter((t) => !addedToolsetIds.has(t.id));
+  // Exclude servers already added to the plugin, keyed per backend.
+  const addedToolsetIds = new Set(
+    servers.map((s) => s.toolsetId).filter((id): id is string => !!id),
+  );
+  const addedMcpServerIds = new Set(
+    servers.map((s) => s.mcpServerId).filter((id): id is string => !!id),
+  );
+  const availableServerOptions = serverOptions.filter((o) =>
+    o.kind === "toolset"
+      ? !addedToolsetIds.has(o.id)
+      : !addedMcpServerIds.has(o.id),
+  );
 
   return (
     <Page>
@@ -225,8 +298,17 @@ export default function PluginDetail() {
               <PluginServerCard
                 key={server.id}
                 server={server}
-                toolset={toolsetById.get(server.toolsetId)}
-                isLoadingToolset={isLoadingToolsets}
+                toolset={
+                  server.toolsetId
+                    ? toolsetById.get(server.toolsetId)
+                    : undefined
+                }
+                mcpServer={
+                  server.mcpServerId
+                    ? mcpServerById.get(server.mcpServerId)
+                    : undefined
+                }
+                isLoading={isLoadingServers}
                 onRemove={() => handleRemoveServer(server)}
               />
             ))}
@@ -254,13 +336,25 @@ export default function PluginDetail() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => handleDownload("claude")}>
+              <DropdownMenuItem
+                onClick={() => {
+                  void handleDownload("claude");
+                }}
+              >
                 Claude
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDownload("cursor")}>
+              <DropdownMenuItem
+                onClick={() => {
+                  void handleDownload("cursor");
+                }}
+              >
                 Cursor
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDownload("codex")}>
+              <DropdownMenuItem
+                onClick={() => {
+                  void handleDownload("codex");
+                }}
+              >
                 Codex
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -319,22 +413,26 @@ export default function PluginDetail() {
             <form onSubmit={handleAddServer} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">MCP Server</label>
-                {isLoadingToolsets ? (
+                {isLoadingServers ? (
                   <Skeleton className="h-9 w-full" />
-                ) : availableToolsets.length > 0 ? (
+                ) : availableServerOptions.length > 0 ? (
                   <select
-                    name="toolsetId"
+                    name="serverKey"
                     className="bg-background rounded-md border px-3 py-2 text-sm"
                     required
                   >
                     <option value="">Select an MCP server</option>
-                    {availableToolsets.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
+                    {availableServerOptions.map((o) => (
+                      <option
+                        key={serverOptionKey(o.kind, o.id)}
+                        value={serverOptionKey(o.kind, o.id)}
+                      >
+                        {o.name}
+                        {o.kind === "mcpServer" ? " (Remote MCP)" : ""}
                       </option>
                     ))}
                   </select>
-                ) : toolsets.length > 0 ? (
+                ) : serverOptions.length > 0 ? (
                   <Type muted small>
                     All available MCP servers have already been added to this
                     plugin.
@@ -358,8 +456,8 @@ export default function PluginDetail() {
                   type="submit"
                   disabled={
                     addServerMutation.isPending ||
-                    isLoadingToolsets ||
-                    availableToolsets.length === 0
+                    isLoadingServers ||
+                    availableServerOptions.length === 0
                   }
                 >
                   Add
@@ -376,24 +474,38 @@ export default function PluginDetail() {
 function PluginServerCard({
   server,
   toolset,
-  isLoadingToolset,
+  mcpServer,
+  isLoading,
   onRemove,
 }: {
   server: PluginServer;
   toolset: ToolsetEntry | undefined;
-  isLoadingToolset: boolean;
+  mcpServer: McpServer | undefined;
+  isLoading: boolean;
   onRemove: () => void;
 }) {
   const routes = useRoutes();
 
+  // Remote MCP-backed servers reference an mcp_server; toolset-backed servers
+  // reference a toolset. Exactly one backend is set per row.
+  const isRemote = !!server.mcpServerId;
+  // The card is clickable only once its backing resource resolves.
+  const isClickable = isRemote ? !!mcpServer : !!toolset;
+
   const handleClick = () => {
-    if (toolset) routes.mcp.details.goTo(toolset.slug);
+    // Remote MCP servers live on the mcp_servers-backed details page (x/);
+    // toolset-backed servers use the toolset details page.
+    if (isRemote) {
+      if (mcpServer) routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
+    } else if (toolset) {
+      routes.mcp.details.goTo(toolset.slug);
+    }
   };
 
   return (
     <DotCard
-      className={cn(toolset && "cursor-pointer")}
-      onClick={toolset ? handleClick : undefined}
+      className={cn(isClickable && "cursor-pointer")}
+      onClick={isClickable ? handleClick : undefined}
       icon={<Network className="text-muted-foreground h-8 w-8" />}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
@@ -406,9 +518,15 @@ function PluginServerCard({
           {server.displayName}
         </Type>
         <div className="flex items-center gap-1">
-          {toolset ? (
+          {isRemote ? (
+            // Remote MCP servers have no Gram-side tool catalog, so the
+            // tool-collection badge is omitted.
+            <Badge variant="secondary" className="text-xs">
+              Remote MCP
+            </Badge>
+          ) : toolset ? (
             <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
-          ) : isLoadingToolset ? (
+          ) : isLoading ? (
             <Skeleton className="h-5 w-16" />
           ) : (
             <Badge variant="destructive" className="text-xs">
@@ -419,12 +537,14 @@ function PluginServerCard({
       </div>
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-        {toolset ? (
+        {isRemote ? (
+          <span />
+        ) : toolset ? (
           <MCPStatusIndicator
             mcpEnabled={toolset.mcpEnabled}
             mcpIsPublic={toolset.mcpIsPublic}
           />
-        ) : isLoadingToolset ? (
+        ) : isLoading ? (
           <Skeleton className="h-3.5 w-20" />
         ) : (
           <span />

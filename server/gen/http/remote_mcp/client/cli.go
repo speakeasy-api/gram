@@ -210,6 +210,49 @@ func BuildUpdateServerPayload(remoteMcpUpdateServerBody string, remoteMcpUpdateS
 	return v, nil
 }
 
+// BuildDiscoverProtectedResourceMetadataPayload builds the payload for the
+// remoteMcp discoverProtectedResourceMetadata endpoint from CLI flags.
+func BuildDiscoverProtectedResourceMetadataPayload(remoteMcpDiscoverProtectedResourceMetadataBody string, remoteMcpDiscoverProtectedResourceMetadataSessionToken string, remoteMcpDiscoverProtectedResourceMetadataApikeyToken string, remoteMcpDiscoverProtectedResourceMetadataProjectSlugInput string) (*remotemcp.DiscoverProtectedResourceMetadataPayload, error) {
+	var err error
+	var body DiscoverProtectedResourceMetadataRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteMcpDiscoverProtectedResourceMetadataBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", body.RemoteMcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteMcpDiscoverProtectedResourceMetadataSessionToken != "" {
+			sessionToken = &remoteMcpDiscoverProtectedResourceMetadataSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteMcpDiscoverProtectedResourceMetadataApikeyToken != "" {
+			apikeyToken = &remoteMcpDiscoverProtectedResourceMetadataApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteMcpDiscoverProtectedResourceMetadataProjectSlugInput != "" {
+			projectSlugInput = &remoteMcpDiscoverProtectedResourceMetadataProjectSlugInput
+		}
+	}
+	v := &remotemcp.DiscoverProtectedResourceMetadataPayload{
+		RemoteMcpServerID: body.RemoteMcpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildVerifyURLPayload builds the payload for the remoteMcp verifyURL
 // endpoint from CLI flags.
 func BuildVerifyURLPayload(remoteMcpVerifyURLBody string, remoteMcpVerifyURLSessionToken string, remoteMcpVerifyURLApikeyToken string, remoteMcpVerifyURLProjectSlugInput string) (*remotemcp.VerifyURLPayload, error) {

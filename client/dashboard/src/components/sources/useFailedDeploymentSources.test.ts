@@ -190,9 +190,9 @@ describe("computeFailedSources", () => {
     });
 
     expect(result.failedSources).toHaveLength(1);
-    expect(result.failedSources[0].slug).toBe("pet-store");
-    expect(result.failedSources[0].type).toBe("openapi");
-    expect(result.failedSources[0].errors).toHaveLength(2);
+    expect(result.failedSources[0]!.slug).toBe("pet-store");
+    expect(result.failedSources[0]!.type).toBe("openapi");
+    expect(result.failedSources[0]!.errors).toHaveLength(2);
   });
 
   it("puts unmatched attachment errors into generalErrors", () => {
@@ -235,7 +235,7 @@ describe("computeFailedSources", () => {
       ],
     });
     expect(result.generalErrors).toHaveLength(1);
-    expect(result.generalErrors[0].message).toBe("general failure");
+    expect(result.generalErrors[0]!.message).toBe("general failure");
   });
 
   it("counts tool URNs only from compareDeployment sources", () => {
@@ -275,7 +275,7 @@ describe("computeFailedSources", () => {
       ],
     });
 
-    expect(result.failedSources[0].toolCount).toBe(2);
+    expect(result.failedSources[0]!.toolCount).toBe(2);
   });
 
   it("excludes tool URNs from sources not in compareDeployment", () => {
@@ -315,7 +315,7 @@ describe("computeFailedSources", () => {
     });
 
     // pet-store URNs are filtered out because pet-store isn't in compareDeployment
-    expect(result.failedSources[0].toolCount).toBe(0);
+    expect(result.failedSources[0]!.toolCount).toBe(0);
   });
 
   it("handles multiple failed sources across different types", () => {
@@ -418,8 +418,8 @@ describe("computeFailedSources", () => {
     });
 
     expect(result.failedSources).toHaveLength(1);
-    expect(result.failedSources[0].errors).toHaveLength(1);
-    expect(result.failedSources[0].errors[0].message).toBe("failed");
+    expect(result.failedSources[0]!.errors).toHaveLength(1);
+    expect(result.failedSources[0]!.errors[0]!.message).toBe("failed");
   });
 
   it("counts URNs across multiple toolsets", () => {
@@ -449,7 +449,7 @@ describe("computeFailedSources", () => {
       ],
     });
 
-    expect(result.failedSources[0].toolCount).toBe(2);
+    expect(result.failedSources[0]!.toolCount).toBe(2);
   });
 });
 
@@ -510,9 +510,9 @@ describe("useFailedDeploymentSources", () => {
     const result = renderHook(() => useFailedDeploymentSources());
     expect(result.hasFailures).toBe(true);
     expect(result.failedSources).toHaveLength(1);
-    expect(result.failedSources[0].slug).toBe("pet-store");
-    expect(result.failedSources[0].type).toBe("openapi");
-    expect(result.failedSources[0].errors).toHaveLength(2);
+    expect(result.failedSources[0]!.slug).toBe("pet-store");
+    expect(result.failedSources[0]!.type).toBe("openapi");
+    expect(result.failedSources[0]!.errors).toHaveLength(2);
   });
 
   it("puts unmatched attachment errors into generalErrors", () => {
@@ -567,7 +567,7 @@ describe("useFailedDeploymentSources", () => {
     ]);
 
     const result = renderHook(() => useFailedDeploymentSources());
-    expect(result.failedSources[0].toolCount).toBe(2);
+    expect(result.failedSources[0]!.toolCount).toBe(2);
   });
 
   it("handles externalMcps source type", () => {
@@ -589,7 +589,7 @@ describe("useFailedDeploymentSources", () => {
     setToolsets([]);
 
     const result = renderHook(() => useFailedDeploymentSources());
-    expect(result.failedSources[0].type).toBe("externalmcp");
+    expect(result.failedSources[0]!.type).toBe("externalmcp");
   });
 
   it("handles functionsAssets source type", () => {
@@ -611,8 +611,8 @@ describe("useFailedDeploymentSources", () => {
     setToolsets([{ toolUrns: ["tools:function:my-func:run"] }]);
 
     const result = renderHook(() => useFailedDeploymentSources());
-    expect(result.failedSources[0].type).toBe("function");
-    expect(result.failedSources[0].toolCount).toBe(1);
+    expect(result.failedSources[0]!.type).toBe("function");
+    expect(result.failedSources[0]!.toolCount).toBe(1);
   });
 
   it("errors without attachmentId go to generalErrors", () => {
@@ -634,7 +634,7 @@ describe("useFailedDeploymentSources", () => {
 
     const result = renderHook(() => useFailedDeploymentSources());
     expect(result.generalErrors).toHaveLength(1);
-    expect(result.generalErrors[0].message).toBe("general failure");
+    expect(result.generalErrors[0]!.message).toBe("general failure");
   });
 
   it("uses specific deployment when deploymentId is provided", () => {

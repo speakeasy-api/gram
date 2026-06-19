@@ -1,27 +1,15 @@
-import {
-  useIsAdmin,
-  useOrganization,
-  useProject,
-  useSession,
-} from "@/contexts/Auth.tsx";
+import { useOrganization, useProject } from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { cn } from "@/lib/utils.ts";
 import { ProjectEntry } from "@gram/client/models/components";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
-import { ChevronsUpDown, PlusIcon } from "lucide-react";
+import { PlusIcon } from "lucide-react";
 import React from "react";
 import { InputDialog } from "./input-dialog.tsx";
-import { NavButton } from "./nav-menu.tsx";
-import { Button } from "./ui/button.tsx";
 import { Combobox } from "./ui/combobox.tsx";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover.tsx";
-import { Separator } from "./ui/separator.tsx";
 import { Skeleton } from "./ui/skeleton.tsx";
-import { ThemeToggle } from "./ui/theme-toggle.tsx";
-import { SimpleTooltip } from "./ui/tooltip.tsx";
 import { Type } from "./ui/type.tsx";
 
-import { getProjectColors } from "@/components/project-colors";
+import { getGradientColors } from "@/components/gradient-colors";
 
 export function ProjectAvatar({
   project,
@@ -29,8 +17,8 @@ export function ProjectAvatar({
 }: {
   project: Pick<ProjectEntry, "id">;
   className?: string;
-}) {
-  const colors = getProjectColors(project.id);
+}): React.JSX.Element {
+  const colors = getGradientColors(project.id);
   return (
     <div
       className={cn("h-6 w-6 rounded-full bg-gradient-to-br", className)}
@@ -41,125 +29,7 @@ export function ProjectAvatar({
   );
 }
 
-export function ProjectMenu() {
-  const session = useSession();
-  const organization = useOrganization();
-  const project = useProject();
-  const client = useSdkClient();
-
-  const isAdmin = useIsAdmin();
-
-  const [open, setOpen] = React.useState(false);
-
-  const membershipURL =
-    organization?.userWorkspaceSlugs &&
-    organization.userWorkspaceSlugs.length > 0
-      ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
-      : "https://app.speakeasy.com";
-
-  const adminOverride = isAdmin ? (
-    <>
-      <dl>
-        <dt className="text-muted-foreground">Organization ID</dt>
-        <dd className="font-mono text-xs">{organization?.id}</dd>
-        <dt className="text-muted-foreground">Project ID</dt>
-        <dd className="font-mono text-xs">{project?.id}</dd>
-      </dl>
-      <Separator className="my-2" />
-    </>
-  ) : null;
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          role="combobox"
-          aria-expanded={open}
-          className="h-12 w-full justify-between p-2"
-        >
-          <Stack direction={"horizontal"} gap={3} align="center">
-            <ProjectAvatar project={project} className="h-8 w-8 rounded-md" />
-            <Stack align="start">
-              <Type className="-mb-1 normal-case">
-                {project?.slug ?? "Select Project"}
-              </Type>
-              <Type variant="small" muted className="max-w-[120px] truncate">
-                {organization?.name}
-              </Type>
-            </Stack>
-          </Stack>
-          <ChevronsUpDown className="text-muted-foreground hover:text-foreground" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-0">
-        <div className="flex flex-col gap-2 p-2">
-          {adminOverride}
-          <Stack gap={1}>
-            <Type variant="small" className="px-2">
-              {organization?.name}
-            </Type>
-            <Type muted variant="small" className="truncate px-2">
-              {session.user.email}
-            </Type>
-          </Stack>
-          <ProjectSelector />
-          <Separator className="my-2" />
-          <Stack
-            direction={"horizontal"}
-            gap={2}
-            align="center"
-            justify="space-between"
-            className="pl-2"
-          >
-            <Type variant="small" muted>
-              Theme
-            </Type>
-            <ThemeToggle />
-          </Stack>
-
-          <SimpleTooltip tooltip="User membership is managed through your account">
-            <NavButton
-              title="Manage members"
-              href={membershipURL}
-              Icon={(props) => (
-                <Icon
-                  name="users-round"
-                  {...props}
-                  className={cn(props.className, "mr-1")} // Needed to match the styling of the log out button
-                />
-              )}
-              onClick={() => setOpen(false)}
-            />
-          </SimpleTooltip>
-          <NavButton
-            title="Contact us"
-            href="https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call"
-            Icon={(props) => (
-              <Icon
-                name="message-circle"
-                {...props}
-                className={cn(props.className, "mr-1")} // Needed to match the styling of the log out button
-              />
-            )}
-            onClick={() => setOpen(false)}
-          />
-          <NavButton
-            title="Log out"
-            Icon={(props) => <Icon name="log-out" {...props} />}
-            onClick={async () => {
-              await client.auth.logout();
-              window.location.href = "/login";
-              setOpen(false);
-            }}
-          />
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-export function ProjectSelector() {
+export function ProjectSelector(): React.JSX.Element {
   const organization = useOrganization();
   const project = useProject();
   const client = useSdkClient();
@@ -235,7 +105,7 @@ export function ProjectSelector() {
           title="Create New Project"
           description="Create a new project to get started"
           onSubmit={() => {
-            createProject(newProjectName);
+            void createProject(newProjectName);
           }}
           inputs={[
             {

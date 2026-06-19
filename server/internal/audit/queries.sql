@@ -33,6 +33,9 @@ INSERT INTO audit_logs (
 RETURNING id, organization_id;
 
 -- name: ListAuditLogs :many
+-- When no subject_type filter is given, assistant activity events (one per
+-- assistant tool call) are excluded so they don't drown out the platform
+-- audit feed; callers fetch them explicitly with subject_type = 'assistant'.
 SELECT a.*, p.slug AS project_slug
 FROM audit_logs a
 LEFT JOIN projects p ON p.id = a.project_id
@@ -53,14 +56,25 @@ WHERE a.organization_id = @organization_id
     sqlc.narg(action)::text IS NULL
     OR a.action = sqlc.narg(action)::text
   )
+  AND (
+    (sqlc.narg(subject_type)::text IS NULL AND a.subject_type <> 'assistant')
+    OR a.subject_type = sqlc.narg(subject_type)::text
+  )
+  AND (
+    sqlc.narg(subject_id)::text IS NULL
+    OR a.subject_id = sqlc.narg(subject_id)::text
+  )
 ORDER BY a.seq DESC
 LIMIT 51;
 
 -- name: ListAuditActorFacets :many
+-- Assistant activity events are excluded: facets power the platform audit
+-- feed, which hides them (see ListAuditLogs).
 WITH filtered_logs AS (
   SELECT actor_id, actor_display_name, seq
   FROM audit_logs
   WHERE organization_id = @organization_id
+    AND subject_type <> 'assistant'
     AND (
       sqlc.narg(project_id)::uuid IS NULL
       OR project_id = sqlc.narg(project_id)::uuid
@@ -87,12 +101,15 @@ LEFT JOIN latest_actor_names ON latest_actor_names.actor_id = actor_counts.actor
 ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC;
 
 -- name: ListAuditActionFacets :many
+-- Assistant activity events are excluded: facets power the platform audit
+-- feed, which hides them (see ListAuditLogs).
 SELECT
   action AS value,
   action AS display_name,
   COUNT(*)::bigint AS count
 FROM audit_logs
 WHERE organization_id = @organization_id
+  AND subject_type <> 'assistant'
   AND (
     sqlc.narg(project_id)::uuid IS NULL
     OR project_id = sqlc.narg(project_id)::uuid

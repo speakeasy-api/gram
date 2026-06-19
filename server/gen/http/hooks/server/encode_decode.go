@@ -59,6 +59,7 @@ func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		var (
 			apikeyToken      *string
 			projectSlugInput *string
+			hookHostname     *string
 		)
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -68,7 +69,11 @@ func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewClaudePayload(&body, apikeyToken, projectSlugInput)
+		hookHostnameRaw := r.Header.Get("X-Gram-Hook-Hostname")
+		if hookHostnameRaw != "" {
+			hookHostname = &hookHostnameRaw
+		}
+		payload = NewClaudePayload(&body, apikeyToken, projectSlugInput, hookHostname)
 
 		return payload, nil
 	}
@@ -270,6 +275,7 @@ func DecodeCursorRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		var (
 			apikeyToken      *string
 			projectSlugInput *string
+			hookHostname     *string
 		)
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -279,7 +285,11 @@ func DecodeCursorRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewCursorPayload(&body, apikeyToken, projectSlugInput)
+		hookHostnameRaw := r.Header.Get("X-Gram-Hook-Hostname")
+		if hookHostnameRaw != "" {
+			hookHostname = &hookHostnameRaw
+		}
+		payload = NewCursorPayload(&body, apikeyToken, projectSlugInput, hookHostname)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -495,6 +505,7 @@ func DecodeCodexRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 		var (
 			apikeyToken      *string
 			projectSlugInput *string
+			hookHostname     *string
 		)
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -504,7 +515,11 @@ func DecodeCodexRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewCodexPayload(&body, apikeyToken, projectSlugInput)
+		hookHostnameRaw := r.Header.Get("X-Gram-Hook-Hostname")
+		if hookHostnameRaw != "" {
+			hookHostname = &hookHostnameRaw
+		}
+		payload = NewCodexPayload(&body, apikeyToken, projectSlugInput, hookHostname)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1255,6 +1270,8 @@ func unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord(v *OTELLogRecordReque
 	res := &hooks.OTELLogRecord{
 		TimeUnixNano:           v.TimeUnixNano,
 		ObservedTimeUnixNano:   v.ObservedTimeUnixNano,
+		TraceID:                v.TraceID,
+		SpanID:                 v.SpanID,
 		DroppedAttributesCount: v.DroppedAttributesCount,
 	}
 	if v.Body != nil {

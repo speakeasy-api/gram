@@ -172,6 +172,7 @@ SELECT
   ftd.auth_input,
   ftd.runtime,
   ftd.function_id,
+  ftd.tags,
   ftd.meta,
   ftd.read_only_hint,
   ftd.destructive_hint,
@@ -253,6 +254,7 @@ SELECT
   , tool.input_schema
   , tool.variables
   , tool.auth_input
+  , tool.tags
   , tool.meta
   , access.id AS access_id
 FROM deployment dep

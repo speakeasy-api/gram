@@ -615,6 +615,7 @@ SELECT
   , tool.input_schema
   , tool.variables
   , tool.auth_input
+  , tool.tags
   , tool.meta
   , access.id AS access_id
 FROM deployment dep
@@ -649,6 +650,7 @@ type GetFunctionToolByURNRow struct {
 	InputSchema  []byte
 	Variables    []byte
 	AuthInput    []byte
+	Tags         []string
 	Meta         []byte
 	AccessID     uuid.NullUUID
 }
@@ -668,6 +670,7 @@ func (q *Queries) GetFunctionToolByURN(ctx context.Context, arg GetFunctionToolB
 		&i.InputSchema,
 		&i.Variables,
 		&i.AuthInput,
+		&i.Tags,
 		&i.Meta,
 		&i.AccessID,
 	)
@@ -768,6 +771,7 @@ SELECT
   ftd.auth_input,
   ftd.runtime,
   ftd.function_id,
+  ftd.tags,
   ftd.meta,
   ftd.read_only_hint,
   ftd.destructive_hint,
@@ -806,6 +810,7 @@ type ListFunctionToolsRow struct {
 	AuthInput       []byte
 	Runtime         string
 	FunctionID      uuid.UUID
+	Tags            []string
 	Meta            []byte
 	ReadOnlyHint    pgtype.Bool
 	DestructiveHint pgtype.Bool
@@ -845,6 +850,7 @@ func (q *Queries) ListFunctionTools(ctx context.Context, arg ListFunctionToolsPa
 			&i.AuthInput,
 			&i.Runtime,
 			&i.FunctionID,
+			&i.Tags,
 			&i.Meta,
 			&i.ReadOnlyHint,
 			&i.DestructiveHint,

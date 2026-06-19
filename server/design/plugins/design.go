@@ -387,20 +387,71 @@ var _ = Service("plugins", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "publishPlugins")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PublishPlugins"}`)
 	})
+
+	Method("getMarketplaceSettings", func() {
+		Description("Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(MarketplaceSettingsResult)
+
+		HTTP(func() {
+			GET("/rpc/plugins.getMarketplaceSettings")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMarketplaceSettings")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMarketplaceSettings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MarketplaceSettings"}`)
+	})
+
+	Method("updateMarketplaceSettings", func() {
+		Description("Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.")
+
+		Payload(func() {
+			Attribute("marketplace_name", String, "Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string or omit to clear the override and fall back to the default.")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(UpdateMarketplaceSettingsResult)
+
+		HTTP(func() {
+			POST("/rpc/plugins.updateMarketplaceSettings")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateMarketplaceSettings")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateMarketplaceSettings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateMarketplaceSettings"}`)
+	})
 })
 
 // --- Models ---
 
-// PluginServerModel represents a toolset-backed MCP server included in a plugin.
+// PluginServerModel represents an MCP server included in a plugin. The server
+// is backed by exactly one of a Gram toolset (toolset_id) or a Remote
+// MCP-backed mcp_server (mcp_server_id).
 var PluginServerModel = Type("PluginServer", func() {
-	Required("id", "toolset_id", "display_name", "policy", "sort_order", "created_at")
+	Required("id", "display_name", "policy", "sort_order", "created_at")
 
 	Attribute("id", String, func() {
 		Description("Unique plugin server identifier.")
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID.")
+		Description("Gram toolset ID. Set when this server is toolset-backed (exactly one of toolset_id / mcp_server_id is set).")
+		Format(FormatUUID)
+	})
+	Attribute("mcp_server_id", String, func() {
+		Description("Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one of toolset_id / mcp_server_id is set).")
 		Format(FormatUUID)
 	})
 	Attribute("display_name", String, "Display name shown in generated plugin config.")
@@ -473,16 +524,20 @@ var UpdatePluginForm = Type("UpdatePluginForm", func() {
 })
 
 var AddPluginServerForm = Type("AddPluginServerForm", func() {
-	Required("plugin_id", "toolset_id", "display_name")
+	Required("plugin_id")
 
 	Attribute("plugin_id", String, func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID for the MCP server.")
+		Description("Gram toolset ID for a toolset-backed MCP server. Provide exactly one of toolset_id or mcp_server_id.")
 		Format(FormatUUID)
 	})
-	Attribute("display_name", String, "Display name for the server.")
+	Attribute("mcp_server_id", String, func() {
+		Description("Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of toolset_id or mcp_server_id.")
+		Format(FormatUUID)
+	})
+	Attribute("display_name", String, "Display name for the server. Defaults to the backing toolset or mcp_server name when omitted.")
 	Attribute("policy", String, func() {
 		Enum("required", "optional")
 		Default("required")
@@ -541,4 +596,19 @@ var PublishStatusResult = Type("PublishStatusResult", func() {
 var PublishPluginsResult = Type("PublishPluginsResult", func() {
 	Required("repo_url")
 	Attribute("repo_url", String, "The URL of the published GitHub repository.")
+})
+
+var MarketplaceSettingsResult = Type("MarketplaceSettingsResult", func() {
+	Required("default_name", "effective_name")
+
+	Attribute("marketplace_name", String, "User-provided override for the marketplace name. Absent when no override is configured.")
+	Attribute("default_name", String, "The default marketplace name used when no override is configured.")
+	Attribute("effective_name", String, "The marketplace name that will be used at publish time (override if set, otherwise default).")
+})
+
+var UpdateMarketplaceSettingsResult = Type("UpdateMarketplaceSettingsResult", func() {
+	Required("settings", "republished")
+
+	Attribute("settings", MarketplaceSettingsResult, "The updated marketplace settings.")
+	Attribute("republished", Boolean, "Whether the marketplace was automatically republished to GitHub as part of this update.")
 })

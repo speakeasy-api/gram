@@ -9,16 +9,18 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
  */
-export const TokenEndpointAuthMethod = {
+export const CloneClientFromOAuthProxyProviderFormTokenEndpointAuthMethod = {
   ClientSecretBasic: "client_secret_basic",
   ClientSecretPost: "client_secret_post",
+  None: "none",
 } as const;
 /**
  * How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
  */
-export type TokenEndpointAuthMethod = ClosedEnum<
-  typeof TokenEndpointAuthMethod
->;
+export type CloneClientFromOAuthProxyProviderFormTokenEndpointAuthMethod =
+  ClosedEnum<
+    typeof CloneClientFromOAuthProxyProviderFormTokenEndpointAuthMethod
+  >;
 
 /**
  * Form for cloning an oauth_proxy_provider's client credentials into a new remote_session_client. The caller supplies the existing oauth_proxy_provider, plus the remote_session_issuer and user_session_issuer to pair the new client with.
@@ -43,7 +45,9 @@ export type CloneClientFromOAuthProxyProviderForm = {
   /**
    * How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
    */
-  tokenEndpointAuthMethod?: TokenEndpointAuthMethod | undefined;
+  tokenEndpointAuthMethod?:
+    | CloneClientFromOAuthProxyProviderFormTokenEndpointAuthMethod
+    | undefined;
   /**
    * The user_session_issuer the new client is paired with.
    */
@@ -51,9 +55,10 @@ export type CloneClientFromOAuthProxyProviderForm = {
 };
 
 /** @internal */
-export const TokenEndpointAuthMethod$outboundSchema: z.ZodMiniEnum<
-  typeof TokenEndpointAuthMethod
-> = z.enum(TokenEndpointAuthMethod);
+export const CloneClientFromOAuthProxyProviderFormTokenEndpointAuthMethod$outboundSchema:
+  z.ZodMiniEnum<
+    typeof CloneClientFromOAuthProxyProviderFormTokenEndpointAuthMethod
+  > = z.enum(CloneClientFromOAuthProxyProviderFormTokenEndpointAuthMethod);
 
 /** @internal */
 export type CloneClientFromOAuthProxyProviderForm$Outbound = {
@@ -77,7 +82,7 @@ export const CloneClientFromOAuthProxyProviderForm$outboundSchema:
       remoteSessionIssuerId: z.string(),
       scope: z.optional(z.array(z.string())),
       tokenEndpointAuthMethod: z.optional(
-        TokenEndpointAuthMethod$outboundSchema,
+        CloneClientFromOAuthProxyProviderFormTokenEndpointAuthMethod$outboundSchema,
       ),
       userSessionIssuerId: z.string(),
     }),

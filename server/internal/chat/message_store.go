@@ -61,6 +61,43 @@ func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, para
 	return n, nil
 }
 
+// WriteExternal inserts imported provider messages idempotently and notifies
+// observers when at least one new row is stored.
+func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UUID, params []repo.CreateExternalChatMessageParams) (int64, error) {
+	q := repo.New(w.db)
+	var total int64
+	for _, param := range params {
+		n, err := q.CreateExternalChatMessage(ctx, param)
+		if err != nil {
+			return total, fmt.Errorf("create external chat message: %w", err)
+		}
+		total += n
+	}
+	if total > 0 {
+		w.notifyMessagesStored(ctx, projectID)
+	}
+	return total, nil
+}
+
+// WriteInTx inserts messages via a caller-provided transaction. Observers are
+// NOT fired here — the caller must invoke NotifyStored after commit so observers
+// never see a write that ended up rolled back. Use when the write must be
+// atomic with surrounding DB operations (e.g. a row-level lock for generation
+// serialisation).
+func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, params []repo.CreateChatMessageParams) (int64, error) {
+	n, err := repo.New(tx).CreateChatMessage(ctx, params)
+	if err != nil {
+		return 0, fmt.Errorf("create chat messages: %w", err)
+	}
+	return n, nil
+}
+
+// NotifyStored fans out a stored-messages signal to registered observers.
+// Pair with WriteInTx: invoke after the surrounding transaction commits.
+func (w *ChatMessageWriter) NotifyStored(ctx context.Context, projectID uuid.UUID) {
+	w.notifyMessagesStored(ctx, projectID)
+}
+
 // WriteTurn persists a complete chat turn atomically: pending user/tool rows
 // (with asset upload) and pre-built assistant rows in a single transaction.
 // Observers are notified after commit if anything was stored. A partial write

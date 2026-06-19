@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
+import SwitchOrg from "@/pages/demo/SwitchOrg";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useIsAdminRef } from "@/contexts/Sdk";
@@ -36,16 +37,32 @@ import {
   useSessionData,
   useUser,
   usePylonInAppChat,
+  useFermatPixel,
 } from "./Auth";
 import type { ProjectEntry } from "@gram/client/models/components";
 
 const PREFERRED_PROJECT_KEY = "preferredProject";
 
-const UNAUTHENTICATED_PATHS = ["/login", "/register", "/book-demo"];
+const UNAUTHENTICATED_PATHS = [
+  "/login",
+  "/register",
+  "/invite",
+  "/book-demo",
+  "/shadow-mcp/request",
+  "/risk-policy-bypass/request",
+];
 
-const SLUG_EXEMPT_PATHS = ["/slack/register"];
+const SLUG_EXEMPT_PATHS = [
+  "/switch-org",
+  "/shadow-mcp/request",
+  "/risk-policy-bypass/request",
+];
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+export const AuthProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}): JSX.Element => {
   return (
     <ErrorBoundary FallbackComponent={FullPageError}>
       <AuthHandler>{children}</AuthHandler>
@@ -64,6 +81,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   useIdentifyUserForTelemetry(session?.user);
   usePylonInAppChat(session?.user);
+  useFermatPixel(session?.user, session?.activeOrganizationId ?? "");
 
   // Sync isAdmin into the SDK fetcher so it can attach X-Gram-Scope-Override in production.
   isAdminRef.current = session?.user.isAdmin ?? false;
@@ -77,7 +95,8 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     // skeleton flash for logged-out users before the redirect to /login fires.
     if (
       location.pathname === "/" ||
-      UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p))
+      UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p)) ||
+      location.pathname.endsWith("/setup")
     ) {
       return null;
     }
@@ -95,6 +114,9 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // Show book demo page if organization is not whitelisted
   // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
   if (session.activeOrganizationId && !session.whitelisted) {
+    if (session.organizations.length > 1) {
+      return <SwitchOrg gate />;
+    }
     return <BookDemo />;
   }
 
@@ -121,7 +143,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const isProjectSlug = session.organization?.projects.some(
     (p) => p.slug === pathParts[1],
   );
-  const isOrgRoutePath = ORG_ROUTE_PATHS.includes(pathParts[1]);
+  const isOrgRoutePath = ORG_ROUTE_PATHS.includes(pathParts[1] ?? "");
   // Redirect if: (1) it's a project slug and not an org route, OR
   // (2) it's both a project slug and an org route but has sub-paths (org routes don't have sub-paths)
   // Never redirect if pathParts[1] is "projects" to avoid infinite redirect loops
@@ -186,7 +208,7 @@ export const ProjectProvider = ({
   children,
 }: {
   children: React.ReactNode;
-}) => {
+}): JSX.Element => {
   const organization = useOrganization();
   const user = useUser();
   const navigate = useNavigate();
@@ -243,7 +265,7 @@ export const ProjectProvider = ({
 
   const switchProject = async (slug: string) => {
     client.clear();
-    navigate(`/${organization.slug}/projects/${slug}`);
+    void navigate(`/${organization.slug}/projects/${slug}`);
   };
 
   const value = Object.assign(currentProject, {

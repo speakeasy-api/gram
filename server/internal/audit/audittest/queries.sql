@@ -1,6 +1,7 @@
 -- name: GetLatestAuditLogByAction :one
 SELECT
   action,
+  project_id,
   subject_type,
   subject_display_name,
   subject_slug,

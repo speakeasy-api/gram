@@ -252,7 +252,7 @@ describe("frontend tool Skip flow (sendAutomaticallyWhen fix)", () => {
       0,
     );
     const toolResult = (
-      next?.content as Array<{ type: string; output?: { type?: string } }>
+      next!.content as Array<{ type: string; output?: { type?: string } }>
     )[0];
     expect(toolResult?.type).toBe("tool-result");
   });

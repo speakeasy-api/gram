@@ -9,6 +9,21 @@ metadata:
 
 ## React & Frontend Coding Guidelines
 
+### Verification Commands
+
+Use `pnpm` package scripts for frontend checks. From the repo root, prefer `pnpm -F <package> <script>` so commands run against the right frontend package without `cd`. Do not run `npm exec`, `npx`, bare `vitest`, bare `eslint`, bare `oxfmt`, or bare `tsc` unless you are debugging the package script itself.
+
+| Need                | Dashboard                       | Elements                                | Whole workspace                             |
+| ------------------- | ------------------------------- | --------------------------------------- | ------------------------------------------- |
+| Package lint gate   | `pnpm -F dashboard lint`        | `pnpm -F @gram-ai/elements lint`        | `pnpm lint`                                 |
+| Type-check only     | `pnpm -F dashboard type-check`  | `pnpm -F @gram-ai/elements type-check`  | `pnpm type-check`                           |
+| Tests once          | `pnpm -F dashboard test`        | `pnpm -F @gram-ai/elements test`        | Run the touched package's `pnpm test`       |
+| Tests in watch mode | `pnpm -F dashboard test:watch`  | `pnpm -F @gram-ai/elements test:watch`  | Run the touched package's `pnpm test:watch` |
+| ESLint only         | `pnpm -F dashboard lint:eslint` | `pnpm -F @gram-ai/elements lint:eslint` | Run the touched package's script            |
+| Format check only   | `pnpm -F dashboard lint:format` | `pnpm -F @gram-ai/elements lint:format` | Run the touched package's script            |
+
+For small edits, run the narrowest package script that proves the change. For shared or cross-package frontend changes, run the root `pnpm lint` and `pnpm type-check` scripts.
+
 ### General Guidelines
 
 - Use the `pnpm` package manager
@@ -45,6 +60,42 @@ If you find yourself copy-pasting a JSX structure — even with minor variations
 
 Never use immediately-invoked function expressions inside JSX (`{(() => { ... })()} `). Extract to a named sub-component or a variable above the return statement.
 
+#### No multi-line or nested ternaries
+
+A ternary that wraps onto multiple lines, or chains a second `?:` inside a branch, is unreadable. Reach for one of these instead:
+
+- A `switch` statement when mapping a discriminator (e.g. a `kind` / `type` string) to one of several values.
+- A small **named helper function**, hoisted to module scope when the mapping is pure (e.g. converting a frontend enum to a backend constant). The helper labels the intent at the call site and the JSX stays flat.
+- An object lookup when the keys are statically known and the values are simple constants.
+
+```tsx
+// ❌ wrong — nested multi-line ternary
+attachmentType={
+  sourceKind === "function"
+    ? "functions"
+    : sourceKind === "externalmcp" || sourceKind === "remotemcp"
+      ? "external_mcp"
+      : "openapi"
+}
+
+// ✅ right — hoisted helper with a switch
+function attachmentTypeForSourceKind(sourceKind: string | undefined): string {
+  switch (sourceKind) {
+    case "function":
+      return "functions";
+    case "externalmcp":
+    case "remotemcp":
+      return "external_mcp";
+    default:
+      return "openapi";
+  }
+}
+
+attachmentType={attachmentTypeForSourceKind(sourceKind)}
+```
+
+Single-line, single-branch ternaries (`isOpen ? "x" : "y"`) are fine.
+
 #### Keep components focused
 
 A component that has grown past ~150 lines of JSX is doing too much. Break it up. If a page has multiple tabs, each tab's content is its own component.
@@ -72,7 +123,7 @@ Backwards-compatible callers stay `<HooksEmptyState />`; only the variant caller
 
 ### Tables
 
-Use Moonshine's `Table` from `@speakeasy-api/moonshine` for dashboard tables. Do **not** add new imports from `@/components/ui/table`, do not create new shadcn table wrappers, and do not hand-roll table styling with raw `<table>` markup when Moonshine can express the UI. Existing shadcn table usages should be migrated to Moonshine when touched.
+Use Moonshine's `Table` from `@speakeasy-api/moonshine` for dashboard tables. The legacy `@/components/ui/table` wrapper has been removed; do **not** recreate it, add new shadcn table wrappers, or hand-roll table styling with raw `<table>` markup when Moonshine can express the UI. If you find a lingering legacy table pattern, migrate it to Moonshine when touched.
 
 ```tsx
 import { Column, Table } from "@speakeasy-api/moonshine";

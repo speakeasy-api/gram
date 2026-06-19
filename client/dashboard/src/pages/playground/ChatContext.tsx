@@ -7,7 +7,11 @@ import { ChatContext } from "./useChatContext";
 
 type AppendFn = (message: { content: string }) => void;
 
-export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
+export const ChatProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}): JSX.Element => {
   const telemetry = useTelemetry();
   const [searchParams] = useSearchParams();
   const [id, setId] = useState<string>(searchParams.get("chatId") ?? uuidv7());

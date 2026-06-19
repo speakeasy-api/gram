@@ -946,6 +946,244 @@ func EncodeUpdateServerError(encoder func(context.Context, http.ResponseWriter) 
 	}
 }
 
+// EncodeDiscoverProtectedResourceMetadataResponse returns an encoder for
+// responses returned by the remoteMcp discoverProtectedResourceMetadata
+// endpoint.
+func EncodeDiscoverProtectedResourceMetadataResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*remotemcp.ProtectedResourceMetadataDiscovery)
+		enc := encoder(ctx, w)
+		body := NewDiscoverProtectedResourceMetadataResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeDiscoverProtectedResourceMetadataRequest returns a decoder for
+// requests sent to the remoteMcp discoverProtectedResourceMetadata endpoint.
+func DecodeDiscoverProtectedResourceMetadataRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*remotemcp.DiscoverProtectedResourceMetadataPayload, error) {
+	return func(r *http.Request) (*remotemcp.DiscoverProtectedResourceMetadataPayload, error) {
+		var payload *remotemcp.DiscoverProtectedResourceMetadataPayload
+		var (
+			body DiscoverProtectedResourceMetadataRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateDiscoverProtectedResourceMetadataRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken     *string
+			apikeyToken      *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewDiscoverProtectedResourceMetadataPayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeDiscoverProtectedResourceMetadataError returns an encoder for errors
+// returned by the discoverProtectedResourceMetadata remoteMcp endpoint.
+func EncodeDiscoverProtectedResourceMetadataError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDiscoverProtectedResourceMetadataUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDiscoverProtectedResourceMetadataForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDiscoverProtectedResourceMetadataBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDiscoverProtectedResourceMetadataNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDiscoverProtectedResourceMetadataConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDiscoverProtectedResourceMetadataUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDiscoverProtectedResourceMetadataInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDiscoverProtectedResourceMetadataInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDiscoverProtectedResourceMetadataUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDiscoverProtectedResourceMetadataGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeVerifyURLResponse returns an encoder for responses returned by the
 // remoteMcp verifyURL endpoint.
 func EncodeVerifyURLResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -1465,6 +1703,54 @@ func marshalTypesRemoteMcpServerToRemoteMcpServerResponseBody(v *types.RemoteMcp
 		}
 	} else {
 		res.Headers = []*RemoteMcpServerHeaderResponseBody{}
+	}
+
+	return res
+}
+
+// marshalRemotemcpProtectedResourceMetadataToProtectedResourceMetadataResponseBody
+// builds a value of type *ProtectedResourceMetadataResponseBody from a value
+// of type *remotemcp.ProtectedResourceMetadata.
+func marshalRemotemcpProtectedResourceMetadataToProtectedResourceMetadataResponseBody(v *remotemcp.ProtectedResourceMetadata) *ProtectedResourceMetadataResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ProtectedResourceMetadataResponseBody{
+		Resource:              v.Resource,
+		ResourceDocumentation: v.ResourceDocumentation,
+	}
+	if v.AuthorizationServers != nil {
+		res.AuthorizationServers = make([]string, len(v.AuthorizationServers))
+		for i, val := range v.AuthorizationServers {
+			res.AuthorizationServers[i] = val
+		}
+	}
+	if v.ScopesSupported != nil {
+		res.ScopesSupported = make([]string, len(v.ScopesSupported))
+		for i, val := range v.ScopesSupported {
+			res.ScopesSupported[i] = val
+		}
+	}
+	if v.BearerMethodsSupported != nil {
+		res.BearerMethodsSupported = make([]string, len(v.BearerMethodsSupported))
+		for i, val := range v.BearerMethodsSupported {
+			res.BearerMethodsSupported[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalRemotemcpProtectedResourceMetadataUnavailableToProtectedResourceMetadataUnavailableResponseBody
+// builds a value of type *ProtectedResourceMetadataUnavailableResponseBody
+// from a value of type *remotemcp.ProtectedResourceMetadataUnavailable.
+func marshalRemotemcpProtectedResourceMetadataUnavailableToProtectedResourceMetadataUnavailableResponseBody(v *remotemcp.ProtectedResourceMetadataUnavailable) *ProtectedResourceMetadataUnavailableResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ProtectedResourceMetadataUnavailableResponseBody{
+		Code:    v.Code,
+		Message: v.Message,
 	}
 
 	return res

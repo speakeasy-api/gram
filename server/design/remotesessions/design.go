@@ -87,6 +87,8 @@ var RemoteSession = Type("RemoteSession", func() {
 		Format(FormatUUID)
 	})
 	Attribute("subject_urn", String, "The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).")
+	Attribute("subject_display_name", String, "Resolved display name when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.")
+	Attribute("subject_email", String, "Resolved email when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.")
 	Attribute("user_session_issuer_id", String, "The user_session_issuer this session is bound to.", func() {
 		Format(FormatUUID)
 	})
@@ -99,6 +101,7 @@ var RemoteSession = Type("RemoteSession", func() {
 	Attribute("refresh_expires_at", String, "Upstream refresh-token expiry. Null when the session has no refresh token.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("has_refresh_token", Boolean, "Whether the session holds an upstream refresh token. Gates the 'Refresh now' action; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token. The token itself is never returned.")
 	Attribute("scopes", ArrayOf(String), "Scopes held by this session.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
@@ -107,7 +110,7 @@ var RemoteSession = Type("RemoteSession", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "subject_urn", "user_session_issuer_id", "remote_session_client_id", "access_expires_at", "scopes", "created_at", "updated_at")
+	Required("id", "subject_urn", "user_session_issuer_id", "remote_session_client_id", "access_expires_at", "has_refresh_token", "scopes", "created_at", "updated_at")
 })
 
 var ListRemoteSessionsResult = Type("ListRemoteSessionsResult", func() {

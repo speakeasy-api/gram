@@ -9,16 +9,6 @@ on:
       - main
   merge_group:
   workflow_dispatch:
-    inputs:
-      risk_accuracy_l1:
-        description: "Run prompt-injection risk accuracy with the L1 classifier sidecar"
-        required: false
-        default: false
-        type: boolean
-      pr_number:
-        description: "PR number to update with the risk accuracy comment when manually dispatched"
-        required: false
-        type: string
 
 permissions:
   id-token: write
@@ -27,7 +17,7 @@ permissions:
 env:
   REGISTRY: gcr.io/linen-analyst-344721 #gcr for speakeasy-common gcr registry
   DOCKER_REPOSITORY_OWNER: ${{github.repository_owner}}
-  NODE_OPTIONS: "--max-old-space-size=5120"
+  NODE_OPTIONS: "--max-old-space-size=8192"
 
 jobs:
   changes:
@@ -45,11 +35,12 @@ jobs:
       elements: ${{ steps.gates.outputs.elements }}
       migrations: ${{ steps.gates.outputs.migrations }}
       plog: ${{ steps.gates.outputs.plog }}
+      infra: ${{ steps.gates.outputs.infra }}
+      pystreams: ${{ steps.gates.outputs.pystreams }}
       sdk: ${{ steps.gates.outputs.sdk }}
       sdk-gen: ${{ steps.gates.outputs.sdk-gen }}
-      risk_accuracy: ${{ steps.gates.outputs.risk_accuracy }}
-      pi_classifier: ${{ steps.gates.outputs.pi_classifier }}
       webhooks-catalog: ${{ steps.gates.outputs.webhooks-catalog }}
+      otel-collector: ${{ steps.gates.outputs.otel-collector }}
       elements-examples: ${{ steps.list-elements-examples.outputs.examples }}
     steps:
       - name: Checkout source code
@@ -64,7 +55,6 @@ jobs:
         env:
           HAS_PREVIEW_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
           HAS_FULL_CI_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
-          HAS_MANUAL_RISK_L1: ${{ github.event_name == 'workflow_dispatch' && inputs.risk_accuracy_l1 }}
         run: |
           if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "server=true" >> $GITHUB_OUTPUT
@@ -122,6 +112,20 @@ jobs:
             echo "Plog jobs will be skipped."
           fi
 
+          if [[ "${{ steps.filter.outputs.infra }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+            echo "infra=true" >> $GITHUB_OUTPUT
+            echo "Infra jobs will run."
+          else
+            echo "Infra jobs will be skipped."
+          fi
+
+          if [[ "${{ steps.filter.outputs.pystreams }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+            echo "pystreams=true" >> $GITHUB_OUTPUT
+            echo "Pystreams jobs will run."
+          else
+            echo "Pystreams jobs will be skipped."
+          fi
+
           if [[ "${{ steps.filter.outputs.sdk }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "sdk=true" >> $GITHUB_OUTPUT
             echo "SDK jobs will run."
@@ -136,31 +140,80 @@ jobs:
             echo "SDK generation check will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.risk_accuracy }}" == "true" || "$HAS_MANUAL_RISK_L1" == "true" ]]; then
-            echo "risk_accuracy=true" >> $GITHUB_OUTPUT
-            echo "Risk accuracy comment job will run."
-          else
-            echo "Risk accuracy comment job will be skipped."
-          fi
-
-          if [[ "${{ steps.filter.outputs.pi_classifier }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
-            echo "pi_classifier=true" >> $GITHUB_OUTPUT
-            echo "Prompt-injection classifier image build will run."
-          else
-            echo "Prompt-injection classifier image build will be skipped."
-          fi
-
           if [[ "${{ steps.filter.outputs.webhooks-catalog }}" == "true" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "webhooks-catalog=true" >> $GITHUB_OUTPUT
             echo "Webhooks catalog breaking-change check will run."
           else
             echo "Webhooks catalog breaking-change check will be skipped."
           fi
+
+          if [[ "${{ steps.filter.outputs.otel-collector }}" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+            echo "otel-collector=true" >> $GITHUB_OUTPUT
+            echo "OTel collector jobs will run."
+          else
+            echo "OTel collector jobs will be skipped."
+          fi
       - id: list-elements-examples
         name: List elements examples
         run: |
           examples=$(ls -d elements/examples/*/package.json 2>/dev/null | xargs -I{} dirname {} | xargs -I{} basename {} | jq -R -s -c 'split("\n") | map(select(length > 0))')
           echo "examples=$examples" >> $GITHUB_OUTPUT
+
+  format-check:
+    name: Check formatting with hk
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        with:
+          # Full history so hk can diff against the PR merge base.
+          fetch-depth: 0
+
+      - name: Setup Mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache PNPM
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      # hk's oxfmt step shells out to `pnpm oxfmt`, so node_modules must exist.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            from_ref=$(git merge-base "$BASE_SHA" HEAD)
+            echo "Checking files changed since merge base $from_ref"
+            args=(--from-ref "$from_ref" --to-ref HEAD)
+          else
+            echo "Checking all files"
+            args=(--all)
+          fi
+          if ! hk check "${args[@]}"; then
+            echo "::error::Formatting check failed. Run 'hk fix --all' locally and commit the result."
+            exit 1
+          fi
+
+      - name: Prune PNPM store
+        if: success()
+        run: pnpm store prune
 
   docker-build-server:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -223,13 +276,13 @@ jobs:
           echo "Running image..."
           docker run --rm ${{ steps.build.outputs.image-tag }} version
 
-  docker-build-pi-classifier:
+  docker-build-pystreams:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes]
-    if: needs.changes.outputs.pi_classifier == 'true'
+    needs: [changes, pystreams-build-lint]
+    if: needs.changes.outputs.pystreams == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - id: "auth"
         name: "Authenticate to Google Cloud"
@@ -263,10 +316,19 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
-          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-pi-classifier
-          context: ./services/pi-classifier
-          file: services/pi-classifier/Dockerfile
+          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-pystreams
+          # The build context must be the uv workspace root: pystreams depends on
+          # the in-repo gram-infra member and the single uv.lock lives there. The
+          # build-scoped pystreams/Dockerfile.pystreams.dockerignore trims it down.
+          context: .
+          file: pystreams/Dockerfile.pystreams
           git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
+      - name: Pull and Run Image
+        run: |
+          echo "Pulling image: ${{ steps.build.outputs.image-tag }}"
+          docker pull ${{ steps.build.outputs.image-tag }}
+          echo "Running image..."
+          docker run --rm ${{ steps.build.outputs.image-tag }} --help
 
   assistant-runtime-image:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -299,6 +361,18 @@ jobs:
             echo "enabled=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Compute runtime image content hash
+        id: assistant-runtime-hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          hash=$(mise run hash:assistant-runtime-image)
+          if [ -z "$hash" ]; then
+            echo "runtime image hash is empty" >&2
+            exit 1
+          fi
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+
       - name: "[DEV] Create fly app"
         id: assistantFlyCreateDev
         shell: bash
@@ -324,7 +398,59 @@ jobs:
             --force
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - id: assistantGcrAuth
+        name: "Authenticate to Google Cloud"
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
+          service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
+
+      - name: Login to GCR
+        env:
+          GCR_TOKEN: ${{ steps.assistantGcrAuth.outputs.access_token }}
+        run: |
+          max_attempts=3
+          for ((i=1; i<=max_attempts; i++)); do
+            echo "Docker login attempt $i/$max_attempts..."
+            if docker login -u oauth2accesstoken --password-stdin gcr.io/linen-analyst-344721 <<< "$GCR_TOKEN"; then
+              echo "Login successful"
+              exit 0
+            fi
+            if [ $i -lt $max_attempts ]; then
+              echo "Login failed, waiting 5s before retry..."
+              sleep 5
+            fi
+          done
+          echo "All login attempts failed"
+          exit 1
+
+      - name: Extract assistant runtime metadata for GCR
+        id: assistantMetaGcr
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.DOCKER_REPOSITORY_OWNER }}/gram-assistant-runtime
+          tags: |
+            type=ref,event=branch,enable=${{ github.event_name != 'merge_group' }}
+            type=ref,event=tag
+            type=ref,event=pr
+            type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
+            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
+            type=schedule,pattern=nightly
+            type=sha
+            type=sha,format=long
+
+      - name: Build and push assistant runtime image to GCR
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: ./agents/runtime-image/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.assistantMetaGcr.outputs.tags }}
+          labels: ${{ steps.assistantMetaGcr.outputs.labels }}
 
       - name: "[DEV] Login to Fly registry"
         env:
@@ -333,7 +459,7 @@ jobs:
 
       - name: "[DEV] Extract assistant runtime metadata"
         id: assistantMetaDev
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
           images: ${{ steps.assistantFlyCreateDev.outputs.flyAppRegistry }}
           tags: |
@@ -341,12 +467,13 @@ jobs:
             type=ref,event=tag
             type=ref,event=pr
             type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
+            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
             type=schedule,pattern=nightly
             type=sha
             type=sha,format=long
 
       - name: "[DEV] Build and push assistant runtime image"
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
           file: ./agents/runtime-image/Dockerfile
@@ -362,7 +489,7 @@ jobs:
 
       - name: "[PROD] Extract assistant runtime metadata"
         id: assistantMetaProd
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
           images: ${{ steps.assistantFlyCreateProd.outputs.flyAppRegistry }}
           tags: |
@@ -370,12 +497,13 @@ jobs:
             type=ref,event=tag
             type=ref,event=pr
             type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
+            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
             type=schedule,pattern=nightly
             type=sha
             type=sha,format=long
 
       - name: "[PROD] Build and push assistant runtime image"
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
           file: ./agents/runtime-image/Dockerfile
@@ -383,6 +511,125 @@ jobs:
           push: true
           tags: ${{ steps.assistantMetaProd.outputs.tags }}
           labels: ${{ steps.assistantMetaProd.outputs.labels }}
+
+  otel-collector:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [changes]
+    if: needs.changes.outputs.otel-collector == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && !github.event.pull_request.head.repo.fork))
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: "[DEV] Create fly app"
+        id: collectorFlyCreateDev
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+          FLY_IMAGE: ${{ vars.FLY_OTEL_COLLECTOR_IMAGE_DEV }}
+        run: |
+          mise run fly:init-runner \
+            --org ${{ secrets.FLY_ORG_DEV }} \
+            --image $FLY_IMAGE \
+            --force
+
+      - name: "[PROD] Create fly app"
+        id: collectorFlyCreateProd
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
+          FLY_IMAGE: ${{ vars.FLY_OTEL_COLLECTOR_IMAGE_PROD }}
+        run: |
+          mise run fly:init-runner \
+            --org ${{ secrets.FLY_ORG_PROD }} \
+            --image $FLY_IMAGE \
+            --force
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: "[DEV] Login to Fly registry"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+        run: fly auth docker
+
+      - name: "[DEV] Extract collector metadata"
+        id: collectorMetaDev
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        with:
+          images: ${{ steps.collectorFlyCreateDev.outputs.flyAppRegistry }}
+          tags: |
+            type=ref,event=branch,enable=${{ github.event_name != 'merge_group' }}
+            type=ref,event=pr
+            type=sha
+            type=sha,format=long
+
+      - name: "[DEV] Build and push collector image"
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: ./otel-collector
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.collectorMetaDev.outputs.tags }}
+          labels: ${{ steps.collectorMetaDev.outputs.labels }}
+
+      - name: "[DEV] Deploy collector"
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+        run: |
+          fly deploy \
+            --app ${{ steps.collectorFlyCreateDev.outputs.flyAppName }} \
+            --image ${{ steps.collectorFlyCreateDev.outputs.flyAppRegistry }}:sha-${{ github.sha }} \
+            --config otel-collector/fly.toml \
+            --yes
+
+      - name: "[PROD] Login to Fly registry"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
+        run: fly auth docker
+
+      - name: "[PROD] Extract collector metadata"
+        id: collectorMetaProd
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        with:
+          images: ${{ steps.collectorFlyCreateProd.outputs.flyAppRegistry }}
+          tags: |
+            type=ref,event=branch,enable=${{ github.event_name != 'merge_group' }}
+            type=ref,event=pr
+            type=sha
+            type=sha,format=long
+
+      - name: "[PROD] Build and push collector image"
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: ./otel-collector
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.collectorMetaProd.outputs.tags }}
+          labels: ${{ steps.collectorMetaProd.outputs.labels }}
+
+      - name: "[PROD] Deploy collector"
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
+        run: |
+          fly deploy \
+            --app ${{ steps.collectorFlyCreateProd.outputs.flyAppName }} \
+            --image ${{ steps.collectorFlyCreateProd.outputs.flyAppRegistry }}:sha-${{ github.sha }} \
+            --config otel-collector/fly.toml \
+            --yes
 
   atlas-lint:
     name: Lint migrations with Atlas
@@ -603,11 +850,25 @@ jobs:
             ${{ env.GOCACHE }}
             ${{ env.GOMODCACHE }}
 
+      - name: Compute runtime image content hash
+        id: assistant-runtime-hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          hash=$(mise run hash:assistant-runtime-image)
+          if [ -z "$hash" ]; then
+            echo "runtime image hash is empty" >&2
+            exit 1
+          fi
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+
       - name: Build
+        env:
+          GRAM_ASSISTANT_RUNTIME_IMAGE_HASH: ${{ steps.assistant-runtime-hash.outputs.hash }}
         run: mise run build:server --readonly
 
       - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
         with:
           install-mode: none
           working-directory: server
@@ -644,6 +905,116 @@ jobs:
         run: |
           mise run db:migrate --dry
           mise run git:porcelain
+
+  infra-build-lint:
+    name: Lint and generate infra
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    env:
+      GOMAXPROCS: 4
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache Go
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          key: ${{ env.GH_CACHE_GO_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_GO_KEY }}
+            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+
+      - name: Cache uv
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          key: ${{ env.GH_CACHE_UV_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_UV_KEY }}
+            ${{ env.GH_CACHE_UV_KEY_PARTIAL }}
+          path: ${{ env.UV_CACHE_DIR }}
+
+      # TODO: re-enable once buf.yaml + infra/proto exist on main. The breaking
+      # check compares against origin/main, which has no protos until this
+      # scaffolding lands, so `buf breaking` fails with "no .proto files" on the
+      # bootstrap PR. Uncomment both steps in a follow-up after the initial merge.
+      # - name: Fetch main branch
+      #   run: git fetch --depth=1 origin main
+      #
+      # - name: Lint proto files
+      #   run: mise run lint:infra --against ".git#ref=origin/main"
+
+      - name: Install uv dependencies
+        run: mise run install:uv --all-packages --locked
+
+      - name: Type-check and test the infra Python package
+        run: mise run test:infra
+
+      - name: Run code generators
+        run: mise run gen:infra
+
+      - name: Check for dirty files
+        run: mise run git:porcelain
+
+      - name: Minimize uv cache
+        run: uv cache prune --ci
+
+  pystreams-build-lint:
+    name: Lint and test the pystreams package
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    needs: changes
+    if: needs.changes.outputs.pystreams == 'true'
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache uv
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          key: ${{ env.GH_CACHE_UV_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_UV_KEY }}
+            ${{ env.GH_CACHE_UV_KEY_PARTIAL }}
+          path: ${{ env.UV_CACHE_DIR }}
+
+      - name: Install uv dependencies
+        run: mise run install:uv --all-packages --locked
+
+      - name: Lint the pystreams package
+        run: mise run lint:pystreams
+
+      - name: Test the pystreams package
+        run: mise run test:pystreams
+
+      - name: Minimize uv cache
+        run: uv cache prune --ci
 
   cli-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -694,7 +1065,7 @@ jobs:
         run: mise run build:cli --readonly
 
       - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
         with:
           install-mode: none
           working-directory: cli
@@ -752,7 +1123,7 @@ jobs:
         run: mise run build:plog --readonly
 
       - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
         with:
           install-mode: none
           working-directory: plog
@@ -772,6 +1143,10 @@ jobs:
     if: needs.changes.outputs.server == 'true'
     env:
       GOMAXPROCS: 8
+      # The runner VM is destroyed after the job, and the reaper is the one
+      # container that would still publish a host port (a recurring source of
+      # "address already in use" container-start flakes).
+      TESTCONTAINERS_RYUK_DISABLED: true
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
@@ -802,180 +1177,6 @@ jobs:
 
       - name: Test
         run: mise run test:server
-
-  risk_accuracy:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    needs: changes
-    if: needs.changes.outputs.risk_accuracy == 'true'
-    env:
-      GOMAXPROCS: 8
-      RUN_L1_RISK_ACCURACY: ${{ github.event_name == 'workflow_dispatch' && inputs.risk_accuracy_l1 }}
-      PI_CLASSIFIER_PORT: 5051
-      PI_CLASSIFIER_URL: http://127.0.0.1:5051
-    steps:
-      - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
-
-      - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
-        with:
-          install: true
-          cache: true
-          env: false
-
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
-
-      - name: Install Go deps
-        run: mise run install:go
-
-      - name: Start prompt-injection classifier
-        if: env.RUN_L1_RISK_ACCURACY == 'true'
-        run: |
-          set -euo pipefail
-          docker compose up -d --build gram-pi-classifier
-          for _ in $(seq 1 120); do
-            if curl -fsS "$PI_CLASSIFIER_URL/health" >/dev/null; then
-              exit 0
-            fi
-            sleep 2
-          done
-          docker compose logs gram-pi-classifier
-          exit 1
-
-      - name: Generate risk accuracy report
-        run: |
-          set -euo pipefail
-          if [[ "$RUN_L1_RISK_ACCURACY" == "true" ]]; then
-            mise run risk:report --classifier-url "$PI_CLASSIFIER_URL"
-          else
-            mise run risk:report --no-classifier
-          fi
-
-      - name: Stop prompt-injection classifier
-        if: always() && env.RUN_L1_RISK_ACCURACY == 'true'
-        run: |
-          docker compose stop gram-pi-classifier || true
-          docker compose rm -f gram-pi-classifier || true
-
-      - name: Upload risk accuracy metrics
-        if: always() && hashFiles('server/risk_accuracy_metrics.json') != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: risk-accuracy-metrics
-          path: server/risk_accuracy_metrics.json
-          retention-days: 365
-
-  risk-accuracy-comment:
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    needs: [changes, risk_accuracy]
-    if: |
-      !cancelled() &&
-      needs.changes.outputs.risk_accuracy == 'true' &&
-      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') &&
-      (needs.risk_accuracy.result == 'success' || needs.risk_accuracy.result == 'failure')
-    permissions:
-      contents: read
-      pull-requests: write
-      actions: read
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
-
-      - name: Download PR metrics artifact
-        id: download-pr
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        continue-on-error: true
-        with:
-          name: risk-accuracy-metrics
-          path: ./pr-metrics
-
-      - name: Skip if PR artifact missing
-        id: gate
-        run: |
-          if [ ! -f ./pr-metrics/risk_accuracy_metrics.json ]; then
-            echo "no PR artifact (server-test likely failed before producing one); skipping comment"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Download main baseline metrics
-        if: steps.gate.outputs.skip != 'true'
-        run: |
-          set -uo pipefail
-          mkdir -p ./main-metrics
-          MAIN_RUN_ID=$(gh run list \
-            --branch main \
-            --workflow pr.yaml \
-            --status success \
-            --limit 1 \
-            --json databaseId \
-            --jq '.[0].databaseId // empty')
-          if [ -z "$MAIN_RUN_ID" ]; then
-            echo "no successful main run found; will report without baseline"
-            exit 0
-          fi
-          if ! gh run download "$MAIN_RUN_ID" -n risk-accuracy-metrics -D ./main-metrics 2>/dev/null; then
-            echo "main run $MAIN_RUN_ID has no risk-accuracy-metrics artifact (likely a run before this feature shipped); will report without baseline"
-            rm -rf ./main-metrics
-            mkdir -p ./main-metrics
-          fi
-
-      - name: Render comment body
-        if: steps.gate.outputs.skip != 'true'
-        run: |
-          set -euo pipefail
-          MAIN_FILE=""
-          if [ -f ./main-metrics/risk_accuracy_metrics.json ]; then
-            MAIN_FILE=./main-metrics/risk_accuracy_metrics.json
-          fi
-          .github/scripts/risk-metrics-comment.sh \
-            ./pr-metrics/risk_accuracy_metrics.json \
-            "$MAIN_FILE" > body.md
-
-      - name: Post or update sticky comment
-        if: steps.gate.outputs.skip != 'true'
-        env:
-          PR_NUMBER_INPUT: ${{ github.event.pull_request.number || inputs.pr_number }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          PR_NUMBER="${PR_NUMBER_INPUT:-}"
-          if [ -z "$PR_NUMBER" ]; then
-            PR_NUMBER=$(gh pr view --json number --jq '.number // empty')
-          fi
-          if [ -z "$PR_NUMBER" ]; then
-            echo "no PR number found for sticky risk accuracy comment; pass workflow_dispatch input pr_number"
-            exit 1
-          fi
-          MARKER='<!-- risk-accuracy-metrics -->'
-          EXISTING=$(gh api -X GET \
-            "repos/$REPO/issues/$PR_NUMBER/comments" \
-            --paginate \
-            --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" \
-            | head -1 || true)
-          if [ -n "${EXISTING:-}" ]; then
-            echo "updating existing comment $EXISTING"
-            jq -Rs '{body: .}' body.md \
-              | gh api -X PATCH "repos/$REPO/issues/comments/$EXISTING" --input -
-          else
-            echo "creating new comment"
-            gh pr comment "$PR_NUMBER" --body-file body.md
-          fi
 
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1108,6 +1309,10 @@ jobs:
         run: pnpm lint
         working-directory: client/dashboard
 
+      - name: Knip (dead code / unused deps)
+        run: pnpm knip
+        working-directory: client/dashboard
+
       - name: Check for dirty files
         run: mise run git:porcelain
 
@@ -1150,7 +1355,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Regenerate SDK
-        run: mise run gen:sdk --skip-upload-spec
+        run: mise run gen:sdk
 
       # Prevent perpetual failure for code samples digest.
       - name: Restore .speakeasy/workflow.lock
@@ -1273,7 +1478,7 @@ jobs:
         run: pnpm type-check
 
       - name: Lint Go server
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
         with:
           install-mode: none
           working-directory: functions
@@ -1402,12 +1607,12 @@ jobs:
 
       - name: Set up Docker Buildx
         if: github.event.pull_request.user.login != 'dependabot[bot]'
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
       - name: Extract Docker metadata
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         id: meta
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
           images: |
             ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
@@ -1646,18 +1851,23 @@ jobs:
     if: always()
     needs:
       - changes
+      - format-check
       - server-build-lint
       - server-test
       - docker-build-server
       - docker-build-client
+      - docker-build-pystreams
       - client-build-lint
       - sdk-gen-check
       - ts-sdk-build-lint
       - cli-build-lint
       - plog-build-lint
+      - infra-build-lint
+      - pystreams-build-lint
       - functions-build-host
       - functions-image
       - assistant-runtime-image
+      - otel-collector
       - ts-framework-test
       - elements-build-lint
       - elements-test
@@ -1735,7 +1945,7 @@ jobs:
     steps:
       - name: Generate GitHub App Token
         id: generate-token
-        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ vars.GRAM_BOT_APP_ID }}
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}

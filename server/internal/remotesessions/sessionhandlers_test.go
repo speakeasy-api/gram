@@ -8,9 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -31,7 +33,7 @@ func TestListRemoteSessions(t *testing.T) {
 	// Soft-delete one row directly so it must be excluded from the listing.
 	_, err := repo.New(ti.conn).RevokeRemoteSession(ctx, repo.RevokeRemoteSessionParams{
 		ID:        soft.ID,
-		ProjectID: liveProjectID(t, ctx),
+		ProjectID: conv.ToNullUUID(liveProjectID(t, ctx)),
 	})
 	require.NoError(t, err)
 
@@ -54,6 +56,50 @@ func TestListRemoteSessions(t *testing.T) {
 	}
 	require.True(t, ids[live.ID.String()], "live session must be returned")
 	require.False(t, ids[soft.ID.String()], "soft-deleted session must be excluded")
+}
+
+func TestListRemoteSessions_ResolvesUserSubjectIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rs-resolve", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-rs-resolve").String()
+	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID, "rs-resolve-client")
+
+	seedUser(t, ctx, ti.conn, "user_resolve", "ada@example.com", "Ada Lovelace")
+
+	userSession := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_resolve"), userIssuerID, clientID)
+	anonSession := insertRemoteSession(t, ctx, ti.conn, urn.NewAnonymousSubject("mcp-session-anon"), userIssuerID, clientID)
+
+	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
+		SubjectUrn:            nil,
+		RemoteSessionClientID: nil,
+		Cursor:                nil,
+		Limit:                 nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+
+	byID := make(map[string]*types.RemoteSession, len(result.Items))
+	for _, item := range result.Items {
+		byID[item.ID] = item
+	}
+
+	resolved := byID[userSession.ID.String()]
+	require.NotNil(t, resolved, "user session must be returned")
+	require.NotNil(t, resolved.SubjectDisplayName)
+	require.Equal(t, "Ada Lovelace", *resolved.SubjectDisplayName)
+	require.NotNil(t, resolved.SubjectEmail)
+	require.Equal(t, "ada@example.com", *resolved.SubjectEmail)
+
+	// Anonymous subjects have no users row, so resolution stays nil.
+	anon := byID[anonSession.ID.String()]
+	require.NotNil(t, anon, "anonymous session must be returned")
+	require.Nil(t, anon.SubjectDisplayName)
+	require.Nil(t, anon.SubjectEmail)
 }
 
 func TestListRemoteSessions_FilteredByPrincipal(t *testing.T) {
@@ -90,12 +136,13 @@ func TestListRemoteSessions_FilteredByClient(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuerID := createRemoteIssuer(t, ctx, ti, "rs-list-client", "")
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-rs-list-client").String()
-	clientA := createRemoteClient(t, ctx, ti, issuerID, userIssuerID, "rs-list-client-a")
-	clientB := createRemoteClient(t, ctx, ti, issuerID, userIssuerID, "rs-list-client-b")
+	userIssuerAID := createUserSessionIssuer(t, ctx, ti.conn, "usi-rs-list-client-a").String()
+	userIssuerBID := createUserSessionIssuer(t, ctx, ti.conn, "usi-rs-list-client-b").String()
+	clientA := createRemoteClient(t, ctx, ti, issuerID, userIssuerAID, "rs-list-client-a")
+	clientB := createRemoteClient(t, ctx, ti, issuerID, userIssuerBID, "rs-list-client-b")
 
-	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_in_a"), userIssuerID, clientA)
-	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_in_b"), userIssuerID, clientB)
+	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_in_a"), userIssuerAID, clientA)
+	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("user_in_b"), userIssuerBID, clientB)
 
 	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{
 		SubjectUrn:            nil,

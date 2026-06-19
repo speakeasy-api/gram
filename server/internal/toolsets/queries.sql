@@ -99,6 +99,15 @@ WHERE slug = @slug
   AND project_id = @project_id AND deleted IS FALSE
 RETURNING id, name, slug;
 
+-- name: SetToolsetCustomDomain :exec
+-- Narrow setter used by test fixtures: UpdateToolset's COALESCE pattern can't
+-- set custom_domain_id without also supplying every non-nullable column.
+UPDATE toolsets
+SET
+    custom_domain_id = @custom_domain_id
+  , updated_at = clock_timestamp()
+WHERE slug = @slug AND project_id = @project_id;
+
 -- name: SetToolsetMCPPublicByID :exec
 UPDATE toolsets
 SET mcp_is_public = @mcp_is_public
@@ -256,6 +265,14 @@ RETURNING *;
 UPDATE toolsets
 SET
     user_session_issuer_id = @user_session_issuer_id
+  , updated_at = clock_timestamp()
+WHERE slug = @slug AND project_id = @project_id
+RETURNING *;
+
+-- name: UpdateToolsetToolVariationsGroup :one
+UPDATE toolsets
+SET
+    tool_variations_group_id = @tool_variations_group_id
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;

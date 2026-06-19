@@ -19,6 +19,7 @@ import (
 //	destructive.tool                 — MCP tool annotated as destructive
 //	destructive.<cat>.<name>         — destructive shell / git / db / cloud command
 //	prompt_injection                 — prompt injection (engine selected per-org)
+//	custom.<rule_slug>               — project-defined custom detection rule
 //
 // The pair (source, rule_id) is the stable composite identity for downstream
 // consumers, but the prefix alone is enough to bucket findings into
@@ -47,8 +48,8 @@ const (
 
 	// RulePromptInjection is the canonical rule id emitted for every
 	// prompt-injection finding. There is exactly one rule: whether the
-	// match came from the L1 deberta classifier or an L0 heuristic regex
-	// is an implementation detail not part of the public contract.
+	// match came from the L1 LLM judge or an L0 heuristic regex is an
+	// implementation detail not part of the public contract.
 	RulePromptInjection = "prompt_injection"
 
 	// DeadLetterRuleID is the rule id emitted for Presidio dead-letter

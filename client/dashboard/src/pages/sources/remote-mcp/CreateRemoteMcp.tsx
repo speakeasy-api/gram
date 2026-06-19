@@ -6,7 +6,7 @@ import { Type } from "@/components/ui/type";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
-import { Loader2, Network } from "lucide-react";
+import { AlertCircle, Loader2, Network } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useCreateRemoteMcpSource } from "./hooks";
@@ -37,7 +37,7 @@ function validateRemoteMcpUrl(value: string): string | null {
   return null;
 }
 
-export default function CreateRemoteMcp() {
+export default function CreateRemoteMcp(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -78,12 +78,19 @@ function CreateRemoteMcpForm() {
     }
     try {
       const trimmedName = name.trim();
-      const { mcpServer } = await createSource.mutateAsync({
+      const { authAutoConfig, mcpServer } = await createSource.mutateAsync({
         name: trimmedName === "" ? undefined : trimmedName,
         url: url.trim(),
       });
-      toast.success("Remote MCP server added");
-      routes.mcp.x.goTo(mcpServerRouteParam(mcpServer));
+      if (authAutoConfig.status === "configured") {
+        toast.success("Remote MCP server added and authentication configured");
+      } else {
+        toast.success("Remote MCP server added");
+        if (authAutoConfig.warn) {
+          toast.warning(authAutoConfig.message);
+        }
+      }
+      routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
     } catch (error) {
       const message =
         error instanceof Error
@@ -108,7 +115,12 @@ function CreateRemoteMcpForm() {
         </Type>
       </Stack>
 
-      <form onSubmit={handleSubmit} noValidate>
+      <form
+        onSubmit={(e) => {
+          void handleSubmit(e);
+        }}
+        noValidate
+      >
         <Stack gap={4}>
           <Stack gap={1}>
             <label
@@ -142,11 +154,20 @@ function CreateRemoteMcpForm() {
                 if (!touched) setTouched(true);
               }}
               onBlur={() => setTouched(true)}
+              aria-invalid={validationError ? true : undefined}
+              aria-describedby={
+                validationError ? "remote-mcp-url-error" : undefined
+              }
             />
             {validationError && (
-              <Alert variant="error" dismissible={false}>
-                {validationError}
-              </Alert>
+              <div
+                id="remote-mcp-url-error"
+                role="alert"
+                className="text-destructive mt-2 flex items-center gap-1.5 text-xs"
+              >
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                <span>{validationError}</span>
+              </div>
             )}
             <VerifyRemoteMcpUrlAlert state={verify} />
           </Stack>

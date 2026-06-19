@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -41,7 +43,7 @@ type GenerateChatTitleArgs struct {
 }
 
 const (
-	defaultChatTitle       = "New Chat"
+	defaultChatTitle       = chat.DefaultChatTitle
 	DefaultClaudeChatTitle = "Claude Code Session"
 	DefaultCoworkChatTitle = "Cowork Session"
 	DefaultClaudeAmbiguous = "Claude Session"
@@ -106,6 +108,31 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 	return nil
 }
 
+// leadingEnvelopeRE matches one or more leading "envelope" blocks that agent
+// harnesses prepend to a turn to steer the assistant toward the right channel —
+// e.g. <message-context>…</message-context> from our assistant runtime (which
+// source/surface the turn came from, MCP auth events) or
+// <notification>…</notification> from Claude Code background tasks. The harness
+// needs the block, but it is noise for title generation — left in, the title
+// model fixates on the structured boilerplate and every thread ends up with the
+// same generic title.
+//
+// The tag is an allowlist of envelopes we know about rather than any
+// <tag>…</tag>: a fully-generic match would also eat legitimate leading user
+// markup (a message that starts with <details> or a pasted code block), which
+// distorts the title. Add new harnesses as another `<tag>…</tag>` alternative.
+// Each alternative pairs an open tag with its own close tag (RE2 has no
+// backreferences), so a mismatched `<message-context>…</notification>` is left
+// alone. Anchored to the start, so a tag a user types mid-message is preserved;
+// the non-greedy body stops at the first close tag.
+var leadingEnvelopeRE = regexp.MustCompile(`(?s)^(?:\s*<message-context>.*?</message-context>\s*|\s*<notification>.*?</notification>\s*)+`)
+
+// stripLeadingEnvelopes removes any leading harness framing so the title model
+// sees only the human-authored turn text.
+func stripLeadingEnvelopes(s string) string {
+	return strings.TrimSpace(leadingEnvelopeRE.ReplaceAllString(s, ""))
+}
+
 // buildTitleContext concatenates the last few user/assistant messages into a
 // single string suitable for LLM title generation.
 func buildTitleContext(messages []repo.ChatMessage) string {
@@ -113,10 +140,11 @@ func buildTitleContext(messages []repo.ChatMessage) string {
 	count := 0
 	for i := len(messages) - 1; i >= 0; i-- { // Start from the last message and work backwards to make sure we capture the most recent messages
 		msg := messages[i]
-		if (msg.Role != "user" && msg.Role != "assistant") || strings.TrimSpace(msg.Content) == "" {
+		content := stripLeadingEnvelopes(msg.Content)
+		if (msg.Role != "user" && msg.Role != "assistant") || content == "" {
 			continue
 		}
-		fmt.Fprintf(&b, "%s: %s\n", msg.Role, strings.TrimSpace(msg.Content))
+		fmt.Fprintf(&b, "%s: %s\n", msg.Role, content)
 		count++
 		if count >= 6 {
 			break
@@ -137,7 +165,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 		"Return ONLY the title text, no quotes or explanation. " +
 		"IMPORTANT: The title must directly relate to the content of the messages. " +
 		"Do NOT expand, interpret, or replace abbreviations or acronyms — use the user's exact terminology. " +
-		"If the conversation is a greeting, vague, or lacks a clear topic, return exactly: New Chat"
+		"If the conversation is a greeting, vague, or lacks a clear topic, return exactly: " + defaultChatTitle
 
 	response, err := g.chatClient.GetCompletion(titleCtx, openrouter.CompletionRequest{
 		OrgID:     orgID,

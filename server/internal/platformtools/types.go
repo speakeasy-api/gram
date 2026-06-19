@@ -36,6 +36,8 @@ const (
 	ToolNameGetReactions           = "platform_slack_get_reactions"
 	ToolNameListReactions          = "platform_slack_list_reactions"
 	ToolNameListEmoji              = "platform_slack_list_emoji"
+	ToolNameListUserSessions       = "platform_list_user_sessions"
+	ToolNameGetUserSession         = "platform_get_user_session"
 )
 
 type Dependencies struct {

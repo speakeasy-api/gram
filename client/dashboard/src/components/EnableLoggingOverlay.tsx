@@ -12,7 +12,9 @@ interface EnableLoggingOverlayProps {
  * Shared overlay component shown when logs are not enabled for the organization.
  * Displays a centered card with enable button and handles the mutation state.
  */
-export function EnableLoggingOverlay({ onEnabled }: EnableLoggingOverlayProps) {
+export function EnableLoggingOverlay({
+  onEnabled,
+}: EnableLoggingOverlayProps): JSX.Element {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const { mutate: setLogsFeature, status: mutationStatus } =
     useFeaturesSetMutation({
@@ -62,10 +64,10 @@ export function EnableLoggingOverlay({ onEnabled }: EnableLoggingOverlayProps) {
               className="text-muted-foreground mt-0.5 size-4 shrink-0"
             />
             <p className="text-muted-foreground text-xs">
-              When enabled, Gram will collect tool call payloads, response data,
-              and agent session logs for analysis. This data is stored securely
-              and used to generate the metrics and insights. You can disable
-              logging at any time from the Logs page.
+              When enabled, the platform will collect tool call payloads,
+              response data, and agent session logs for analysis. This data is
+              stored securely and used to generate the metrics and insights. You
+              can disable logging at any time from the Logs page.
             </p>
           </div>
         </div>

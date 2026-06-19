@@ -40,7 +40,11 @@ type GetServerDetailsResponseBody struct {
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
 	// ID of the attached toolset when this server is listed from a Collection
+	// (toolset-backed attachment)
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// ID of the attached MCP server when this server is listed from a Collection
+	// (mcp_server-backed attachment)
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
 	// ID of the internal collection registry this server came from
@@ -825,7 +829,11 @@ type ExternalMCPServerResponseBody struct {
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
 	// ID of the attached toolset when this server is listed from a Collection
+	// (toolset-backed attachment)
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// ID of the attached MCP server when this server is listed from a Collection
+	// (mcp_server-backed attachment)
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
 	// ID of the internal collection registry this server came from
@@ -946,6 +954,7 @@ func NewGetServerDetailsResponseBody(res *types.ExternalMCPServer) *GetServerDet
 		Version:                             res.Version,
 		Description:                         res.Description,
 		ToolsetID:                           res.ToolsetID,
+		McpServerID:                         res.McpServerID,
 		RegistryID:                          res.RegistryID,
 		OrganizationMcpCollectionRegistryID: res.OrganizationMcpCollectionRegistryID,
 		Title:                               res.Title,

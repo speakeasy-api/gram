@@ -3,23 +3,62 @@ package authz
 import (
 	"cmp"
 	"slices"
+	"strings"
 )
 
 // Scope identifies an authorization capability granted on a resource.
 type Scope string
 
+type ScopeParts struct {
+	Resource string
+	Action   string
+}
+
 const (
-	ScopeRoot             Scope = "root"
-	ScopeOrgRead          Scope = "org:read"
-	ScopeOrgAdmin         Scope = "org:admin"
-	ScopeProjectRead      Scope = "project:read"
-	ScopeProjectWrite     Scope = "project:write"
-	ScopeMCPRead          Scope = "mcp:read"
-	ScopeMCPWrite         Scope = "mcp:write"
-	ScopeMCPConnect       Scope = "mcp:connect"
-	ScopeEnvironmentRead  Scope = "environment:read"
-	ScopeEnvironmentWrite Scope = "environment:write"
+	ScopeRoot               Scope = "root"
+	ScopeOrgRead            Scope = "org:read"
+	ScopeOrgAdmin           Scope = "org:admin"
+	ScopeProjectRead        Scope = "project:read"
+	ScopeProjectWrite       Scope = "project:write"
+	ScopeMCPRead            Scope = "mcp:read"
+	ScopeMCPWrite           Scope = "mcp:write"
+	ScopeMCPConnect         Scope = "mcp:connect"
+	ScopeEnvironmentRead    Scope = "environment:read"
+	ScopeEnvironmentWrite   Scope = "environment:write"
+	ScopeRiskPolicyEvaluate Scope = "risk_policy:evaluate"
+	ScopeRiskPolicyBypass   Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 )
+
+var adminScopes = []Scope{
+	ScopeOrgRead,
+	ScopeOrgAdmin,
+	ScopeProjectRead,
+	ScopeProjectWrite,
+	ScopeMCPRead,
+	ScopeMCPWrite,
+	ScopeMCPConnect,
+	ScopeEnvironmentRead,
+	ScopeEnvironmentWrite,
+}
+
+var allScopes = append([]Scope{ScopeRiskPolicyBypass, ScopeRiskPolicyEvaluate}, adminScopes...)
+
+var memberScopes = []Scope{
+	ScopeOrgRead,
+	ScopeProjectRead,
+	ScopeMCPRead,
+	ScopeMCPConnect,
+	ScopeEnvironmentRead,
+}
+
+func (s Scope) Parts() ScopeParts {
+	resource, action, ok := strings.Cut(string(s), ":")
+	if !ok {
+		return ScopeParts{Resource: string(s), Action: ""}
+	}
+
+	return ScopeParts{Resource: resource, Action: action}
+}
 
 // scopeExpansions maps a required scope to the higher-privilege scopes that also satisfy it.
 // Scopes with no higher-privilege implication (admin tiers) map to nil. Expansion is
@@ -37,16 +76,18 @@ const (
 // (a generic project-viewer must not gain access to environment values, which include
 // secrets).
 var scopeExpansions = map[Scope][]Scope{
-	ScopeRoot:             nil,
-	ScopeOrgRead:          {ScopeOrgAdmin},
-	ScopeOrgAdmin:         nil,
-	ScopeProjectRead:      {ScopeProjectWrite},
-	ScopeProjectWrite:     nil,
-	ScopeMCPRead:          {ScopeMCPWrite},
-	ScopeMCPWrite:         nil,
-	ScopeMCPConnect:       {ScopeMCPRead, ScopeMCPWrite},
-	ScopeEnvironmentRead:  {ScopeEnvironmentWrite},
-	ScopeEnvironmentWrite: nil,
+	ScopeRoot:               nil,
+	ScopeOrgRead:            {ScopeOrgAdmin},
+	ScopeOrgAdmin:           nil,
+	ScopeProjectRead:        {ScopeProjectWrite},
+	ScopeProjectWrite:       nil,
+	ScopeMCPRead:            {ScopeMCPWrite},
+	ScopeMCPWrite:           nil,
+	ScopeMCPConnect:         {ScopeMCPRead, ScopeMCPWrite},
+	ScopeEnvironmentRead:    {ScopeEnvironmentWrite},
+	ScopeEnvironmentWrite:   nil,
+	ScopeRiskPolicyEvaluate: nil,
+	ScopeRiskPolicyBypass:   nil,
 }
 
 // scopeSubScopes is the inverse of scopeExpansions: for each higher-privilege

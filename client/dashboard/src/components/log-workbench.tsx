@@ -1,8 +1,13 @@
 import { cn } from "@/lib/utils";
+import {
+  ReleaseStageBadge,
+  type ReleaseStage,
+} from "@/components/release-stage-badge";
 import type React from "react";
 
 export interface LogWorkbenchProps {
   title: React.ReactNode;
+  stage?: ReleaseStage;
   description?: React.ReactNode;
   actions?: React.ReactNode;
   filters?: React.ReactNode;
@@ -20,6 +25,7 @@ export interface LogWorkbenchProps {
 
 export function LogWorkbench({
   title,
+  stage,
   description,
   actions,
   filters,
@@ -33,14 +39,17 @@ export function LogWorkbench({
   surfaceClassName,
   contentClassName,
   className,
-}: LogWorkbenchProps) {
+}: LogWorkbenchProps): JSX.Element {
   return (
     <>
       <div className={cn("flex min-h-0 w-full flex-1 flex-col", className)}>
         <div className="shrink-0 px-8 py-4">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">{title}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-semibold">{title}</h1>
+                {stage ? <ReleaseStageBadge stage={stage} /> : null}
+              </div>
               {description ? (
                 <p className="text-muted-foreground text-sm">{description}</p>
               ) : null}

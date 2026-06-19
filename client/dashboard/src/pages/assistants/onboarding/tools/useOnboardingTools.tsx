@@ -10,8 +10,16 @@ import { computeBehaviorSection } from "../behaviors";
 import { getIntegrationDoc, listIntegrationDocs } from "../docs";
 import { setSection } from "../sections";
 import {
+  SLACK_CAPABILITY_GROUPS,
+  SLACK_EVENT_GROUPS,
+  expandCapabilities,
+  expandEvents,
+} from "../slackCapabilities";
+import { SLACK_TOOL_URN_PREFIX } from "../slackManifest";
+import {
   ProposeNameComponent,
   ProposePersonalityComponent,
+  ProposeSlackSetupComponent,
   RequestEnvironmentSecretsComponent,
   ShowSlackAppGuideComponent,
   ShowWebhookUrlComponent,
@@ -45,7 +53,7 @@ const errResult = (
   message: string,
   extra?: Record<string, unknown>,
 ): ToolResult =>
-  stripUndefined({ ok: false, error: message, ...(extra ?? {}) }) as ToolResult;
+  stripUndefined({ ok: false, error: message, ...extra }) as ToolResult;
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -218,7 +226,7 @@ async function ensureAssistant(
     createAssistantForm: {
       name: payload.name ?? "Untitled assistant",
       instructions: payload.instructions ?? "You are a helpful assistant.",
-      model: payload.model ?? "anthropic/claude-sonnet-4.6",
+      model: payload.model ?? "anthropic/claude-opus-4.7",
       status: payload.status,
       toolsets: [],
       ...(payload.warm_ttl_seconds !== undefined
@@ -622,14 +630,14 @@ function buildAssistantTools(deps: ToolDeps) {
           .min(0)
           .optional()
           .describe(
-            "Seconds to keep a warm runtime alive after the last request. 0 disables warm runtimes. Default 300.",
+            "Seconds to keep a warm runtime alive after the last request. 0 disables warm runtimes. Default 60.",
           ),
         max_concurrency: z
           .number()
           .int()
           .min(1)
           .optional()
-          .describe("Maximum number of concurrent warm runtimes. Default 1."),
+          .describe("Maximum number of concurrent warm runtimes. Default 5."),
       }),
       execute: async (args) =>
         serialize(async () => {
@@ -712,7 +720,7 @@ function buildAssistantTools(deps: ToolDeps) {
   const set_tasks = defineFrontendTool<SetTasksArgs, ToolResult>(
     {
       description:
-        "Replace the assistant's # Tasks section — what it actually does on each run: how it interprets incoming events, which tools it tends to use, what its output looks like, when to stay silent. This is the role/goal-specific guidance derived from the user's stated goal. Do not include personality (use set_personality) or behavior (managed automatically). Pass the body WITHOUT a leading '# Tasks' heading. Do not use any H1 (`# Foo`) inside the body — use H2 (`##`) or lower for sub-structure.",
+        "Replace the assistant's # Tasks section — what it actually does on each run: how it interprets incoming events, which tools it tends to use, what its output looks like, when to stay silent. This is the role/goal-specific guidance derived from the user's stated goal. Do not include personality (use set_personality) or behavior (managed automatically). If the current Tasks body contains an '## Owner' subsection, include it unchanged in the replacement. Pass the body WITHOUT a leading '# Tasks' heading. Do not use any H1 (`# Foo`) inside the body — use H2 (`##`) or lower for sub-structure.",
       parameters: z.object({
         tasks: z
           .string()
@@ -1644,6 +1652,234 @@ function buildAssistantTools(deps: ToolDeps) {
     "read_docs",
   );
 
+  const capabilitySlugEnum = z.enum(
+    SLACK_CAPABILITY_GROUPS.map((g) => g.slug) as [string, ...string[]],
+  );
+  const eventSlugEnum = z.enum(
+    SLACK_EVENT_GROUPS.map((g) => g.slug) as [string, ...string[]],
+  );
+  type ProposeSlackSetupArgs = {
+    preselected_capabilities?: string[];
+    preselected_events?: string[];
+    toolset_name?: string;
+  };
+
+  const propose_slack_setup = defineFrontendTool<
+    ProposeSlackSetupArgs,
+    ToolResult
+  >(
+    {
+      description:
+        "Show the Slack setup card. The user picks which Slack capabilities the assistant has and which Slack events wake it up. On submit, this tool creates a dedicated per-assistant Slack toolset with only the chosen tools (never reuse a catalog toolset), attaches it to the assistant's shared env, and creates a slack trigger when events are chosen. Returns the webhook_url to pass into show_slack_app_guide. Never call this tool in the same turn as show_slack_app_guide or request_environment_secrets — propose_slack_setup first, wait for it to resolve, then continue with declare-keys → install card → secrets card in subsequent turns. Pass plausible preselected groups derived from the user's stated goal; do not call with both empty. If the result is an error about a toolset-name collision, propose a more distinctive name in chat (or ask the user), then re-call with the chosen name in toolset_name.",
+      parameters: z.object({
+        preselected_capabilities: z
+          .array(capabilitySlugEnum)
+          .optional()
+          .describe(
+            "Capability group slugs to pre-check based on the user's stated goal.",
+          ),
+        preselected_events: z
+          .array(eventSlugEnum)
+          .optional()
+          .describe(
+            "Event group slugs to pre-check based on the user's stated goal.",
+          ),
+        toolset_name: z
+          .string()
+          .min(1)
+          .max(128)
+          .optional()
+          .describe(
+            "Override the default Slack toolset name. Defaults to `<assistant name> Slack`. Set this on retry when an earlier call reported the default name was taken by another toolset in the project.",
+          ),
+      }),
+      execute: async (rawArgs, ctx) => {
+        const args = rawArgs as ProposeSlackSetupArgs;
+        const toolCallId = ctx.toolCallId ?? "";
+        const assistantName = live.name ?? draft.assistant?.name ?? "Assistant";
+        const desiredToolsetName: string =
+          args.toolset_name ?? `${assistantName} Slack`;
+        const preflight = await sdk.toolsets.list().catch(() => null);
+        const attachedSlugsPre = new Set(
+          (live.toolsets ?? draft.assistant?.toolsets ?? []).map(
+            (t) => t.toolsetSlug,
+          ),
+        );
+        const conflict = preflight?.toolsets.find(
+          (t) => t.name === desiredToolsetName && !attachedSlugsPre.has(t.slug),
+        );
+        if (conflict) {
+          return errResult(
+            `Toolset name "${desiredToolsetName}" is already taken by another toolset in this project. Ask the user for a more distinctive name (or propose one, e.g. derived from what this assistant does), then re-call propose_slack_setup with toolset_name=<chosen-name>. Do not render the card until you've picked a name.`,
+            { collided_name: desiredToolsetName },
+          );
+        }
+        type SubmitPayload = {
+          success: boolean;
+          cancelled?: boolean;
+          capabilities?: string[];
+          events?: string[];
+        };
+        const userInput: SubmitPayload = await withTimeout(
+          new Promise<SubmitPayload>((resolve) => {
+            draft.registerPending(toolCallId, (r) =>
+              resolve(r as SubmitPayload),
+            );
+          }),
+          15 * 60 * 1000,
+          "propose_slack_setup",
+        ).catch((): SubmitPayload => ({ success: false, cancelled: true }));
+
+        if (!userInput.success) {
+          return okResult({
+            cancelled: true,
+            note: "User skipped Slack setup. Acknowledge briefly and do not call show_slack_app_guide or request_environment_secrets for Slack credentials in this turn — they have nothing to set up yet.",
+          });
+        }
+
+        const capabilitySlugs = userInput.capabilities ?? [];
+        const eventSlugs = userInput.events ?? [];
+        const toolUrns = expandCapabilities(capabilitySlugs);
+        const eventTypes = expandEvents(eventSlugs);
+
+        return serialize(async () => {
+          try {
+            const a = await ensureAssistant(deps, {}, live.id);
+            trackLive(a);
+            const envResult = await ensureAssistantEnv(deps, a.name);
+            const notes: string[] = [];
+            if (envResult.note) notes.push(envResult.note);
+
+            const [existingToolsets, allAssistants] = await Promise.all([
+              sdk.toolsets.list().catch(() => null),
+              sdk.assistants.list().catch(() => null),
+            ]);
+            const attachedSlugs = new Set(a.toolsets.map((t) => t.toolsetSlug));
+            const sharedSlugs = new Set<string>();
+            for (const other of allAssistants?.assistants ?? []) {
+              if (other.id === a.id) continue;
+              for (const ref of other.toolsets ?? []) {
+                sharedSlugs.add(ref.toolsetSlug);
+              }
+            }
+            const existingSlackToolset = existingToolsets?.toolsets.find(
+              (t) =>
+                attachedSlugs.has(t.slug) &&
+                !sharedSlugs.has(t.slug) &&
+                t.tools.some((tool) =>
+                  tool.toolUrn?.startsWith(SLACK_TOOL_URN_PREFIX),
+                ),
+            );
+
+            let toolsetSlug: string | undefined;
+            if (toolUrns.length > 0) {
+              const upserted = existingSlackToolset
+                ? await sdk.toolsets.updateBySlug({
+                    slug: existingSlackToolset.slug,
+                    updateToolsetRequestBody: { toolUrns },
+                  })
+                : await sdk.toolsets.create({
+                    createToolsetRequestBody: {
+                      name: desiredToolsetName,
+                      description: `Slack capabilities for ${a.name}.`,
+                      toolUrns,
+                      defaultEnvironmentSlug: envResult.env.slug,
+                    },
+                  });
+              toolsetSlug = upserted.slug;
+              const next = a.toolsets
+                .filter((t) => t.toolsetSlug !== upserted.slug)
+                .concat([
+                  {
+                    toolsetSlug: upserted.slug,
+                    environmentSlug: envResult.env.slug,
+                  },
+                ]);
+              const updated = await sdk.assistants.update({
+                updateAssistantForm: { id: a.id, toolsets: next },
+              });
+              draft.setAssistant(updated);
+              trackLive(updated);
+              await recomputeBehaviorSection(deps, updated);
+            } else if (existingSlackToolset) {
+              const next = a.toolsets.filter(
+                (t) => t.toolsetSlug !== existingSlackToolset.slug,
+              );
+              const updated = await sdk.assistants.update({
+                updateAssistantForm: { id: a.id, toolsets: next },
+              });
+              draft.setAssistant(updated);
+              trackLive(updated);
+              await recomputeBehaviorSection(deps, updated);
+            }
+
+            const existingTriggerList = await sdk.triggers
+              .list()
+              .catch(() => null);
+            const existingSlackTrigger = existingTriggerList?.triggers.find(
+              (t) =>
+                t.targetKind === "assistant" &&
+                t.targetRef === a.id &&
+                t.definitionSlug === "slack",
+            );
+
+            let triggerId: string | undefined;
+            let webhookUrl: string | undefined;
+            if (eventTypes.length > 0) {
+              if (existingSlackTrigger) {
+                triggerId = existingSlackTrigger.id;
+                webhookUrl = existingSlackTrigger.webhookUrl;
+                const mergedConfig: Record<string, unknown> = {
+                  ...(existingSlackTrigger.config as Record<
+                    string,
+                    unknown
+                  > | null),
+                  event_types: eventTypes,
+                };
+                await sdk.triggers.update({
+                  updateTriggerInstanceForm: {
+                    id: existingSlackTrigger.id,
+                    config: mergedConfig,
+                  },
+                });
+              } else {
+                const created = await sdk.triggers.create({
+                  createTriggerInstanceForm: {
+                    name: "Slack",
+                    definitionSlug: "slack",
+                    config: { event_types: eventTypes },
+                    environmentId: envResult.env.id,
+                    targetKind: "assistant",
+                    targetRef: a.id,
+                    targetDisplay: a.name,
+                  },
+                });
+                triggerId = created.id;
+                webhookUrl = created.webhookUrl;
+              }
+            } else if (existingSlackTrigger) {
+              await sdk.triggers.delete({ id: existingSlackTrigger.id });
+            }
+
+            return okResult({
+              toolset_slug: toolsetSlug,
+              trigger_id: triggerId,
+              webhook_url: webhookUrl,
+              environment_slug: envResult.env.slug,
+              ...(notes.length > 0 ? { notes } : {}),
+              note: "Per-assistant Slack toolset attached. Next: declare the credentials this combination needs with add_environment_keys (include SLACK_SIGNING_SECRET only when a slack trigger was created here), then show_slack_app_guide (pass the webhook_url from this result), then request_environment_secrets in Slack-UI order. After the self-handshake, offer in plain English to narrow which events fire — translate the user's answer into a trigger filter via update_trigger; never mention CEL.",
+            });
+          } catch (e) {
+            return errResult(
+              e instanceof Error ? e.message : "slack setup failed",
+            );
+          }
+        });
+      },
+    },
+    "propose_slack_setup",
+  );
+
   const finish_onboarding = defineFrontendTool<FinishArgs, ToolResult>(
     {
       description:
@@ -1701,6 +1937,7 @@ function buildAssistantTools(deps: ToolDeps) {
     update_trigger,
     show_webhook_url,
     show_slack_app_guide,
+    propose_slack_setup,
     list_integrations,
     list_docs,
     read_docs,
@@ -1729,6 +1966,7 @@ export function useOnboardingTools(): {
     () => ({
       propose_name: ProposeNameComponent,
       propose_personality: ProposePersonalityComponent,
+      propose_slack_setup: ProposeSlackSetupComponent,
       request_environment_secrets: RequestEnvironmentSecretsComponent,
       show_webhook_url: ShowWebhookUrlComponent,
       show_slack_app_guide: ShowSlackAppGuideComponent,

@@ -8,6 +8,7 @@ SELECT
   , s.last_poll_failed_at
   , s.last_poll_success_at
   , s.consecutive_failures
+  , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
@@ -35,12 +36,14 @@ INSERT INTO ai_integration_configs (
     organization_id
   , provider
   , project_id
+  , external_organization_id
   , api_key_encrypted
   , enabled
 ) VALUES (
     @organization_id
   , @provider
   , @project_id
+  , @external_organization_id
   , @api_key_encrypted
   , @enabled
 )
@@ -49,6 +52,7 @@ RETURNING *;
 -- name: UpdateConfigSettings :one
 UPDATE ai_integration_configs
 SET project_id = @project_id,
+    external_organization_id = @external_organization_id,
     enabled = @enabled,
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
@@ -91,6 +95,7 @@ SELECT
   , s.last_poll_failed_at
   , s.last_poll_success_at
   , s.consecutive_failures
+  , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
@@ -109,6 +114,7 @@ SET poll_watermark_at = @poll_watermark_at,
     last_poll_failed_at = NULL,
     last_poll_success_at = NULL,
     consecutive_failures = 0,
+    last_cursor_id = NULL,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = @ai_integration_config_id;
 
@@ -121,8 +127,7 @@ SELECT
 FROM ai_integration_syncs s
 JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
 JOIN organization_metadata om ON om.id = c.organization_id
-WHERE c.provider = @provider
-  AND c.enabled IS TRUE
+WHERE c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND c.api_key_encrypted IS NOT NULL
   AND s.next_poll_after <= @poll_due_before
@@ -139,6 +144,7 @@ SELECT
   , s.last_poll_failed_at
   , s.last_poll_success_at
   , s.consecutive_failures
+  , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
@@ -156,6 +162,7 @@ SET poll_watermark_at = @poll_watermark_at,
     last_poll_failed_at = NULL,
     last_poll_success_at = clock_timestamp(),
     consecutive_failures = 0,
+    last_cursor_id = @last_cursor_id,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = @ai_integration_config_id;
 

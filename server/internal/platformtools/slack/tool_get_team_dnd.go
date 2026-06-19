@@ -54,7 +54,7 @@ func callGetTeamDnd(ctx context.Context, client *apiClient, env toolconfig.ToolC
 		"users": input.UserIDs,
 	}
 
-	body, err := client.call(ctx, "dnd.teamInfo", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "dnd.teamInfo", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

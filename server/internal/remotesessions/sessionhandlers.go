@@ -36,34 +36,34 @@ func (s *Service) ListRemoteSessions(ctx context.Context, payload *gen.ListRemot
 	subjectFilter := conv.PtrToPGText(payload.SubjectUrn)
 	clientFilter, err := conv.PtrToNullUUID(payload.RemoteSessionClientID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client_id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client_id").LogError(ctx, logger)
 	}
 
 	limit := pageLimit(payload.Limit)
 	cursor, err := parseCursor(payload.Cursor)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, logger)
 	}
 
 	rows, err := repo.New(s.db).ListRemoteSessionsByProjectID(ctx, repo.ListRemoteSessionsByProjectIDParams{
-		ProjectID:             *authCtx.ProjectID,
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		SubjectUrn:            subjectFilter,
 		RemoteSessionClientID: clientFilter,
 		Cursor:                cursor,
 		LimitValue:            limit,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list remote sessions").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list remote sessions").LogError(ctx, logger)
 	}
 
 	items := make([]*types.RemoteSession, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, mv.BuildRemoteSessionView(row))
+		items = append(items, mv.BuildRemoteSessionView(row.RemoteSession, conv.FromPGText[string](row.SubjectDisplayName), conv.FromPGText[string](row.SubjectEmail)))
 	}
 
 	var nextCursor *string
 	if len(rows) >= int(limit) {
-		c := rows[len(rows)-1].ID.String()
+		c := rows[len(rows)-1].RemoteSession.ID.String()
 		nextCursor = &c
 	}
 
@@ -87,12 +87,12 @@ func (s *Service) RevokeRemoteSession(ctx context.Context, payload *gen.RevokeRe
 
 	sessionID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid remote_session id").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid remote_session id").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -100,13 +100,13 @@ func (s *Service) RevokeRemoteSession(ctx context.Context, payload *gen.RevokeRe
 
 	revoked, err := txRepo.RevokeRemoteSession(ctx, repo.RevokeRemoteSessionParams{
 		ID:        sessionID,
-		ProjectID: *authCtx.ProjectID,
+		ProjectID: conv.ToNullUUID(*authCtx.ProjectID),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
-		return oops.E(oops.CodeUnexpected, err, "revoke remote session").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "revoke remote session").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionDelete(ctx, dbtx, audit.LogRemoteSessionDeleteEvent{
@@ -118,11 +118,11 @@ func (s *Service) RevokeRemoteSession(ctx context.Context, payload *gen.RevokeRe
 		RemoteSessionURN: urn.NewRemoteSession(revoked.ID),
 		SubjectURN:       revoked.SubjectUrn,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log remote session revoke").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "log remote session revoke").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	return nil

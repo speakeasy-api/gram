@@ -9,8 +9,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
-	"net/netip"
-	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,10 +21,12 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/semaphore"
+	"gopkg.in/yaml.v3"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/risk/presidiofp"
 )
 
 // SourcePresidio is the source label written on every risk_results row
@@ -182,8 +183,14 @@ type presidioResult struct {
 //     identifiers, etc.) and would deny legitimate tool calls / pollute
 //     batch findings. Re-enable once we have a confidence threshold or a
 //     scoped allow-list.
+//   - US_DRIVER_LICENSE: Presidio's pattern is so broad it flags arbitrary
+//     1-letter + N-digit substrings inside base64 hashes, URL paths, UUIDs,
+//     and any text containing "lic" via substring context boosting (e.g.
+//     "public", "duplicate"). See microsoft/presidio#1063 — open since 2023.
+//     Re-enable once the upstream regex is tightened.
 var presidioEntityBlacklist = map[string]struct{}{
-	"PERSON": {},
+	"PERSON":            {},
+	"US_DRIVER_LICENSE": {},
 }
 
 // filterEntities removes blacklisted entity types from the caller's list.
@@ -393,6 +400,16 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 	if onProgress != nil {
 		onProgress()
 	}
+
+	// Reformat JSON payloads as YAML with literal block scalars for
+	// strings containing newlines. Presidio's recognizers (notably
+	// US_DRIVER_LICENSE, IBAN) trip on JSON-escaped multiline content
+	// where `\n`, `\uXXXX`, etc. produce digit-and-letter runs that look
+	// like license numbers or codes. The YAML literal form keeps the
+	// underlying characters but emits real newlines, so the surrounding
+	// markup no longer fabricates matches. Non-JSON payloads pass
+	// through unchanged.
+	text = reformatJSONAsYAML(text)
 
 	if originalSize := len(text); originalSize > presidioMaxMessageBytes {
 		text = truncateAtRuneBoundary(text, presidioMaxMessageBytes)
@@ -615,35 +632,13 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 	return findings
 }
 
-// ipv6ShortFormFP matches IPv6 strings of the form "<hex>::" — a single
-// hex group of up to four chars followed immediately by "::" and nothing
-// else (e.g. "b::", "dead::", "1::"). Production risk_results analysis
-// showed Presidio greedily flagging these as IP_ADDRESS whenever the
-// pattern appeared in code, hex dumps, or text, and none of them
-// represent an address anyone meaningfully uses.
-var ipv6ShortFormFP = regexp.MustCompile(`(?i)^[0-9a-f]{1,4}::$`)
-
-// isPresidioFalsePositive filters Presidio matches the policy author
-// would treat as noise. It currently drops:
-//   - the IPv6/IPv4 unspecified address in any spelling (`::`, `::0`,
-//     `0:0:0:0:0:0:0:0`, `0.0.0.0`), via net/netip;
-//   - loopback addresses (`127.0.0.0/8`, `::1`), via net/netip;
-//   - IPv6 short-form strings of shape "<hex>::" (e.g. "b::", "dead::"),
-//     which dominate Presidio's IP_ADDRESS noise on prod.
+// isPresidioFalsePositive reports whether a Presidio match of the given entity
+// type is noise the policy author would not want surfaced. The catalogs and
+// dispatch live in the leaf package internal/risk/presidiofp so they can be
+// reused outside the scanner (e.g. the offline sweep that re-evaluates stored
+// findings); see presidiofp.Reason for the per-entity coverage.
 func isPresidioFalsePositive(entityType, match string) bool {
-	if entityType != "IP_ADDRESS" {
-		return false
-	}
-	trimmed := strings.TrimSpace(match)
-	if addr, err := netip.ParseAddr(trimmed); err == nil {
-		if addr.IsUnspecified() || addr.IsLoopback() {
-			return true
-		}
-	}
-	if ipv6ShortFormFP.MatchString(trimmed) {
-		return true
-	}
-	return false
+	return presidiofp.Reason(entityType, match) != ""
 }
 
 // computeRetryBackoff returns a full-jittered exponential backoff for the
@@ -662,6 +657,88 @@ func computeRetryBackoff(base time.Duration, attempt int) time.Duration {
 		}
 	}
 	return time.Duration(rand.Int64N(int64(backoff))) // #nosec G404 -- jitter, not security-sensitive
+}
+
+// reformatJSONAsYAML tries to parse text as a JSON value and re-emit it as
+// YAML where any string containing a newline is written as a literal block
+// scalar (`|`). The resulting text carries the same semantic content but
+// drops the JSON `\n` / `\uXXXX` escapes that lead Presidio's regex- and
+// pattern-based recognizers (US_DRIVER_LICENSE in particular) to fabricate
+// matches inside multiline string bodies.
+//
+// Returns text unchanged whenever it does not parse as a JSON value or
+// whenever YAML encoding fails, so non-JSON payloads continue to flow
+// through to Presidio as-is. Any bytes after the first JSON value (mixed
+// prefix-JSON-then-prose inputs) are appended verbatim so Presidio still
+// scans them.
+func reformatJSONAsYAML(text string) string {
+	if text == "" {
+		return text
+	}
+	dec := json.NewDecoder(strings.NewReader(text))
+	dec.UseNumber()
+	var data any
+	if err := dec.Decode(&data); err != nil {
+		return text
+	}
+
+	node := jsonValueToYAMLNode(data)
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(node); err != nil {
+		return text
+	}
+	if err := enc.Close(); err != nil {
+		return text
+	}
+	return buf.String() + text[dec.InputOffset():]
+}
+
+func jsonValueToYAMLNode(v any) *yaml.Node {
+	switch x := v.(type) {
+	case nil:
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}
+	case bool:
+		val := "false"
+		if x {
+			val = "true"
+		}
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: val}
+	case json.Number:
+		return &yaml.Node{Kind: yaml.ScalarNode, Value: x.String()}
+	case string:
+		return jsonStringToYAMLNode(x)
+	case []any:
+		seq := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		for _, item := range x {
+			seq.Content = append(seq.Content, jsonValueToYAMLNode(item))
+		}
+		return seq
+	case map[string]any:
+		m := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			m.Content = append(m.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k},
+				jsonValueToYAMLNode(x[k]),
+			)
+		}
+		return m
+	}
+	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fmt.Sprint(v)}
+}
+
+func jsonStringToYAMLNode(s string) *yaml.Node {
+	n := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: s}
+	if strings.Contains(s, "\n") {
+		n.Style = yaml.LiteralStyle
+	}
+	return n
 }
 
 // truncateAtRuneBoundary returns the longest prefix of s whose byte length is

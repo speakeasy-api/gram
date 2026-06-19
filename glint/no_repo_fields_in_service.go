@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 const (
@@ -21,8 +22,9 @@ type noRepoFieldsInServiceSettings struct {
 
 func newNoRepoFieldsInServiceAnalyzer(rule noRepoFieldsInServiceSettings) *analysis.Analyzer {
 	return &analysis.Analyzer{
-		Name: noRepoFieldsInServiceAnalyzer,
-		Doc:  noRepoFieldsInServiceDoc,
+		Name:     noRepoFieldsInServiceAnalyzer,
+		Doc:      noRepoFieldsInServiceDoc,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 		Run: func(pass *analysis.Pass) (any, error) {
 			annotated := findAnnotatedStructs(pass)
 			if len(annotated) == 0 {

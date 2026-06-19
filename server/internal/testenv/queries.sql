@@ -38,6 +38,12 @@ WHERE deployment_id = @deployment_id;
 -- name: ScrubDeploymentFunctionMachineSpecs :exec
 -- Simulates a legacy deployment by NULLing out memory_mib and scale, as if the row was inserted before these columns existed.
 UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deployment_id = @deployment_id;
+
+-- name: SetDeploymentFunctionInfraOverrides :exec
+UPDATE deployments_functions SET memory_mib_override = @memory_mib_override, scale_override = @scale_override WHERE deployment_id = @deployment_id;
+
+-- name: GetDeploymentFunctionInfraOverrides :many
+SELECT memory_mib_override, scale_override FROM deployments_functions WHERE deployment_id = @deployment_id;
 -- name: CountOutboxEntriesByEventType :one
 SELECT COUNT(*)
 FROM outbox

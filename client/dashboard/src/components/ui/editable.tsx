@@ -13,7 +13,7 @@ export function Editable({
   className?: string;
   children: React.ReactNode;
   disabled?: boolean;
-}) {
+}): JSX.Element {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
@@ -21,7 +21,9 @@ export function Editable({
       className={cn("group relative cursor-pointer", className)}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      onClick={() => !disabled && onClick?.()}
+      onClick={() => {
+        void (!disabled && onClick?.());
+      }}
     >
       <div
         className={`transition-all duration-200 ${isHovered ? "blur-xs" : ""}`}

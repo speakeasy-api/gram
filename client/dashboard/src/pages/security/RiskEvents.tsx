@@ -1,37 +1,24 @@
 import { LogWorkbench } from "@/components/log-workbench";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  defineFilters,
+  useFilterState,
+  type FilterValue,
+} from "@/components/filters";
+import { Page } from "@/components/page-layout";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
-import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
+import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
+import { getPresetRange } from "@gram-ai/elements";
 import type { RiskResult } from "@gram/client/models/components";
 import {
-  invalidateAllRiskListResults,
-  invalidateAllRiskListShadowMCPApprovals,
-  useRiskApproveShadowMCPMutation,
   useRiskListPolicies,
   useRiskOverview,
 } from "@gram/client/react-query/index.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { RefreshCw, ShieldOff } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { RefreshCw, Share2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
@@ -45,15 +32,49 @@ import {
 const RISK_EVENTS_GRID =
   "grid grid-cols-[172px_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
 
-export default function RiskEvents() {
+// Strongly-typed filter schema for Risk Events. `policy_id` and the date range
+// are pinned (always visible in the bar); the rest live behind "More filters".
+// `listRiskResults` already accepts from/to, so the date range needs no backend
+// change. (Source isn't a list param, so it's intentionally omitted here.)
+const RISK_FILTERS = defineFilters([
+  { id: "policy_id", label: "Policy", kind: "select", pinned: true },
+  { id: "date", label: "Date range", kind: "daterange", pinned: true },
+  {
+    id: "rule_id",
+    label: "Rule ID",
+    kind: "text",
+    placeholder: "Rule ID contains...",
+  },
+  {
+    id: "user_id",
+    label: "User",
+    kind: "text",
+    placeholder: "User contains...",
+  },
+  { id: "unique", label: "Unique matches only", kind: "boolean" },
+]);
+
+export default function RiskEvents(): JSX.Element {
   const client = useSdkClient();
-  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
-  const policyFilter = searchParams.get("policy_id") ?? "";
-  const ruleFilter = searchParams.get("rule_id") ?? "";
-  const uniqueOnly = searchParams.get("unique") === "1";
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const { values, setValue, clearValue, clearAll } =
+    useFilterState(RISK_FILTERS);
+  const policyFilter = values.policy_id ?? "";
+  const ruleFilter = values.rule_id;
+  const userFilter = values.user_id;
+  const uniqueOnly = values.unique;
+
+  // The date range maps to the endpoint's from/to. A null preset with no custom
+  // range means "all time" (no from/to sent) — Risk Events' previous behavior.
+  const { from, to } = useMemo(() => {
+    const d = values.date;
+    if (d.customRange) return d.customRange;
+    if (d.preset) return getPresetRange(d.preset);
+    return { from: undefined, to: undefined };
+  }, [values.date]);
 
   const setSelectedChatId = useCallback(
     (chatId: string | null) => {
@@ -66,62 +87,6 @@ export default function RiskEvents() {
             next.delete("chat_id");
           }
           return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
-  );
-
-  const setPolicyFilter = useCallback(
-    (policyId: string) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (policyId) {
-            next.set("policy_id", policyId);
-          } else {
-            next.delete("policy_id");
-          }
-          return next;
-        },
-        { replace: true },
-      );
-      containerRef.current?.scrollTo({ top: 0 });
-    },
-    [setSearchParams],
-  );
-
-  const setRuleFilter = useCallback(
-    (ruleId: string) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (ruleId) {
-            next.set("rule_id", ruleId);
-          } else {
-            next.delete("rule_id");
-          }
-          return next;
-        },
-        { replace: true },
-      );
-      containerRef.current?.scrollTo({ top: 0 });
-    },
-    [setSearchParams],
-  );
-
-  const setUniqueOnly = useCallback(
-    (next: boolean) => {
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev);
-          if (next) {
-            params.set("unique", "1");
-          } else {
-            params.delete("unique");
-          }
-          return params;
         },
         { replace: true },
       );
@@ -155,15 +120,46 @@ export default function RiskEvents() {
     return m;
   }, [policies]);
 
+  // Page-supplied option lists for the schema's select/text dimensions.
+  const filterOptions = useMemo(
+    () => ({
+      policy_id: policies.map((p) => ({ label: p.name, value: p.id })),
+      rule_id: ruleSuggestions.map((r) => ({ label: r, value: r })),
+    }),
+    [policies, ruleSuggestions],
+  );
+
+  const fromIso = from?.toISOString();
+  const toIso = to?.toISOString();
+
+  // Reset the virtualized list to the top whenever a filter changes, so users
+  // don't stay at a stale offset and miss the newly filtered results.
+  useEffect(() => {
+    containerRef.current?.scrollTo({ top: 0 });
+  }, [policyFilter, ruleFilter, userFilter, uniqueOnly, fromIso, toIso]);
+
   const resultsQuery = useInfiniteQuery({
-    queryKey: ["risk", "results", "list", policyFilter, ruleFilter, uniqueOnly],
+    queryKey: [
+      "risk",
+      "results",
+      "list",
+      policyFilter,
+      ruleFilter,
+      userFilter,
+      uniqueOnly,
+      fromIso,
+      toIso,
+    ],
     queryFn: async ({ pageParam }) => {
       return client.risk.results.list({
         cursor: pageParam,
         limit: 50,
         policyId: policyFilter || undefined,
         ruleId: ruleFilter || undefined,
+        userId: userFilter || undefined,
         uniqueMatch: uniqueOnly || undefined,
+        from,
+        to,
       });
     },
     initialPageParam: undefined as string | undefined,
@@ -177,37 +173,6 @@ export default function RiskEvents() {
   const totalCount = resultsQuery.data?.pages[0]?.totalCount ?? results.length;
   const isInitialLoading = policiesLoading || resultsQuery.isLoading;
 
-  const approveMutation = useRiskApproveShadowMCPMutation();
-  const handleExclude = useCallback(
-    (policyId: string, match: string, serverName?: string) => {
-      approveMutation.mutate(
-        {
-          request: {
-            approveShadowMCPRequestBody: {
-              policyId,
-              match,
-              serverName,
-            },
-          },
-        },
-        {
-          onSuccess: () => {
-            toast.success("Excluded from policy");
-            queryClient.invalidateQueries({
-              queryKey: ["risk", "results", "list"],
-            });
-            invalidateAllRiskListResults(queryClient);
-            invalidateAllRiskListShadowMCPApprovals(queryClient);
-          },
-          onError: (err) => {
-            toast.error(`Failed to exclude: ${err.message ?? "unknown error"}`);
-          },
-        },
-      );
-    },
-    [approveMutation, queryClient],
-  );
-
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const container = e.currentTarget;
@@ -218,7 +183,7 @@ export default function RiskEvents() {
       if (!resultsQuery.hasNextPage) return;
 
       if (distanceFromBottom < 200) {
-        resultsQuery.fetchNextPage();
+        void resultsQuery.fetchNextPage();
       }
     },
     [resultsQuery],
@@ -228,6 +193,7 @@ export default function RiskEvents() {
     <RevealAllProvider>
       <LogWorkbench
         title="Risk Events"
+        stage="beta"
         description="Review policy findings across recent analyzed chats."
         actions={
           <div className="flex items-center gap-2">
@@ -235,7 +201,9 @@ export default function RiskEvents() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => resultsQuery.refetch()}
+              onClick={() => {
+                void resultsQuery.refetch();
+              }}
               disabled={resultsQuery.isFetching}
               aria-label="Refresh risk events"
             >
@@ -252,39 +220,16 @@ export default function RiskEvents() {
           </div>
         }
         filters={
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={policyFilter || "all"}
-              onValueChange={(value) =>
-                setPolicyFilter(value === "all" ? "" : value)
-              }
-            >
-              <SelectTrigger className="w-[260px]">
-                <SelectValue placeholder="Filter by policy" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All policies</SelectItem>
-                {policies.map((policy) => (
-                  <SelectItem key={policy.id} value={policy.id}>
-                    {policy.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <RuleIdFilter
-              value={ruleFilter}
-              onChange={setRuleFilter}
-              suggestions={ruleSuggestions}
+          <Page.Toolbar>
+            <Page.Toolbar.Filters
+              schema={RISK_FILTERS}
+              values={values}
+              optionsById={filterOptions}
+              onChange={setValue as (id: string, value: FilterValue) => void}
+              onClear={clearValue as (id: string) => void}
+              onClearAll={clearAll}
             />
-            <label className="border-border hover:bg-muted/50 inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm">
-              <Checkbox
-                checked={uniqueOnly}
-                onCheckedChange={(next) => setUniqueOnly(next === true)}
-                aria-label="Unique matches only"
-              />
-              <span>Unique matches only</span>
-            </label>
-          </div>
+          </Page.Toolbar>
         }
         status={
           resultsQuery.isFetching && results.length > 0 ? (
@@ -305,27 +250,20 @@ export default function RiskEvents() {
               totalCount={totalCount}
               hasNextPage={resultsQuery.hasNextPage}
               isFetchingNextPage={resultsQuery.isFetchingNextPage}
-              onLoadMore={() => resultsQuery.fetchNextPage()}
+              onLoadMore={() => {
+                void resultsQuery.fetchNextPage();
+              }}
             />
           ) : null
         }
         detail={
-          <Drawer
-            open={!!selectedChatId}
-            onOpenChange={(open) => !open && setSelectedChatId(null)}
-            direction="right"
-          >
-            <DrawerContent className="data-[vaul-drawer-direction=right]:w-[720px] data-[vaul-drawer-direction=right]:sm:max-w-[720px]">
-              {selectedChatId && (
-                <ChatDetailPanel
-                  chatId={selectedChatId}
-                  onClose={() => setSelectedChatId(null)}
-                  onDelete={() => setSelectedChatId(null)}
-                  collapseNonRisk
-                />
-              )}
-            </DrawerContent>
-          </Drawer>
+          <ChatDetailSheet
+            chatId={selectedChatId}
+            onClose={() => setSelectedChatId(null)}
+            onDelete={() => setSelectedChatId(null)}
+            collapseNonRisk
+            initialRiskOnly
+          />
         }
         scrollRef={containerRef}
         onScroll={handleScroll}
@@ -337,74 +275,11 @@ export default function RiskEvents() {
           isLoading={isInitialLoading}
           results={results}
           policyNameById={policyNameById}
-          isExcluding={approveMutation.isPending}
           scrollRef={containerRef}
           onSelectChat={setSelectedChatId}
-          onExclude={handleExclude}
         />
       </LogWorkbench>
     </RevealAllProvider>
-  );
-}
-
-function RuleIdFilter({
-  value,
-  onChange,
-  suggestions,
-}: {
-  value: string;
-  onChange: (next: string) => void;
-  suggestions?: string[];
-}) {
-  const [local, setLocal] = useState(value);
-  const listId = useId();
-  useEffect(() => {
-    setLocal(value);
-  }, [value]);
-  useEffect(() => {
-    if (local === value) return;
-    const t = setTimeout(() => onChange(local), 350);
-    return () => clearTimeout(t);
-  }, [local, value, onChange]);
-
-  // Dedup and only include non-empty suggestions. Browser-native <datalist>
-  // does the substring matching client-side using these as candidates.
-  const options = useMemo(
-    () => Array.from(new Set((suggestions ?? []).filter(Boolean))),
-    [suggestions],
-  );
-
-  return (
-    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
-      <Icon name="search" className="text-muted-foreground size-4 shrink-0" />
-      <input
-        type="text"
-        value={local}
-        onChange={(e) => setLocal(e.target.value)}
-        placeholder="Rule ID contains..."
-        className="placeholder:text-muted-foreground w-[200px] bg-transparent text-sm outline-none"
-        aria-label="Filter by rule ID"
-        list={options.length > 0 ? listId : undefined}
-        autoComplete="off"
-      />
-      {options.length > 0 && (
-        <datalist id={listId}>
-          {options.map((opt) => (
-            <option key={opt} value={opt} />
-          ))}
-        </datalist>
-      )}
-      {local && (
-        <button
-          type="button"
-          onClick={() => setLocal("")}
-          className="text-muted-foreground hover:text-foreground"
-          aria-label="Clear rule filter"
-        >
-          <Icon name="x" className="size-3.5" />
-        </button>
-      )}
-    </div>
   );
 }
 
@@ -433,19 +308,15 @@ function RiskEventsRows({
   isLoading,
   results,
   policyNameById,
-  isExcluding,
   scrollRef,
   onSelectChat,
-  onExclude,
 }: {
   error: Error | null;
   isLoading: boolean;
   results: RiskResult[];
   policyNameById: Map<string, string>;
-  isExcluding: boolean;
   scrollRef: RefObject<HTMLDivElement | null>;
   onSelectChat: (chatId: string | null) => void;
-  onExclude: (policyId: string, match: string, serverName?: string) => void;
 }) {
   const rowVirtualizer = useVirtualizer({
     count: results.length,
@@ -515,9 +386,7 @@ function RiskEventsRows({
             <RiskEventsRow
               result={result}
               policyName={policyNameById.get(result.policyId)}
-              isExcluding={isExcluding}
               onSelectChat={onSelectChat}
-              onExclude={onExclude}
             />
           </div>
         );
@@ -529,17 +398,29 @@ function RiskEventsRows({
 function RiskEventsRow({
   result,
   policyName,
-  isExcluding,
   onSelectChat,
-  onExclude,
 }: {
   result: RiskResult;
   policyName: string | undefined;
-  isExcluding: boolean;
   onSelectChat: (chatId: string | null) => void;
-  onExclude: (policyId: string, match: string, serverName?: string) => void;
 }) {
   const isShadowMCP = result.source === "shadow_mcp";
+
+  const handleShare = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!result.chatId) return;
+      const url = new URL(window.location.href);
+      url.searchParams.set("chat_id", result.chatId);
+      try {
+        await navigator.clipboard.writeText(url.toString());
+        toast.success("Link copied to clipboard");
+      } catch {
+        toast.error("Failed to copy link");
+      }
+    },
+    [result.chatId],
+  );
 
   return (
     <div
@@ -587,22 +468,19 @@ function RiskEventsRow({
         {policyName ?? "-"}
       </div>
       <div className="flex min-w-0 justify-center">
-        {isShadowMCP && result.match ? (
-          <Button
-            variant="tertiary"
-            size="sm"
-            disabled={isExcluding}
+        {result.chatId ? (
+          <button
+            type="button"
             onClick={(e) => {
-              e.stopPropagation();
-              onExclude(result.policyId, result.match!);
+              void handleShare(e);
             }}
-            title="Exclude this MCP server from the policy"
+            onKeyDown={(e) => e.stopPropagation()}
+            className="text-muted-foreground hover:text-foreground inline-flex items-center transition-colors"
+            aria-label="Copy link to this event"
+            title="Copy link to this event"
           >
-            <Button.LeftIcon>
-              <ShieldOff className="h-3 w-3" />
-            </Button.LeftIcon>
-            <Button.Text>Exclude</Button.Text>
-          </Button>
+            <Share2 className="h-3 w-3" />
+          </button>
         ) : null}
       </div>
     </div>

@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -45,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -141,19 +143,21 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
 	sessionCaptureEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 
-	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled)
+	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cacheAdapter))
 	telemService := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
 
 	temporalEnv, _ := infra.NewTemporalEnv(t)
 
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
+	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
 	auditLogger := audit.NewLogger()
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, conn, enc, guardianPolicy, cacheAdapter, serverURL)
-	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr)
+	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, guardianPolicy, authzEngine, shadowMCPClient, posthogClient, telemLogger, billingClient, billingClient)
+	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr, remoteProxyManager)
 
-	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, enc, authzEngine, shadowMCPClient, guardianPolicy, posthogClient, billingClient, billingClient, telemLogger, mcpService, serverURL)
+	svc := xmcp.NewService(logger, conn, enc, mcpService)
 
 	return ctx, &testInstance{
 		service:         svc,
@@ -329,6 +333,7 @@ func seedCustomDomain(t *testing.T, ctx context.Context, ti *testInstance, organ
 		Domain:         domainName,
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 

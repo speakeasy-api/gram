@@ -26,7 +26,7 @@ type CancelAssistantsSubscriptionArgs struct {
 
 func (a *CancelAssistantsSubscription) Do(ctx context.Context, args CancelAssistantsSubscriptionArgs) error {
 	if err := a.billingRepo.CancelSubscriptionAtPeriodEnd(ctx, args.SubscriptionID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "cancel assistants subscription at period end").Log(ctx, a.logger)
+		return oops.E(oops.CodeUnexpected, err, "cancel assistants subscription at period end").LogError(ctx, a.logger)
 	}
 	return nil
 }

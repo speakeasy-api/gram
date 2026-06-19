@@ -5,10 +5,10 @@ import {
 } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { useSdkClient } from "@/contexts/Sdk";
-import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
-import { TimeRangePicker, type DateRangePreset } from "@gram-ai/elements";
+import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
+import { type DateRangePreset } from "@gram-ai/elements";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import type { RiskResult } from "@gram/client/models/components";
 import {
   useRiskOverview,
@@ -47,7 +47,7 @@ const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
   "30d",
 ];
 
-export default function RiskOverviewCategoryDetail() {
+export default function RiskOverviewCategoryDetail(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
       <Page>
@@ -170,7 +170,7 @@ function RiskOverviewCategoryDetailContent() {
       if (resultsQuery.isFetchingNextPage || resultsQuery.isFetching) return;
       if (!resultsQuery.hasNextPage) return;
       if (distanceFromBottom < 200) {
-        resultsQuery.fetchNextPage();
+        void resultsQuery.fetchNextPage();
       }
     },
     [resultsQuery],
@@ -206,7 +206,7 @@ function RiskOverviewCategoryDetailContent() {
               <MetricCard
                 title="Findings"
                 value={overviewCategory?.findings ?? totalCount}
-                format="number"
+                format="compact"
                 icon="flag"
               />
             </div>
@@ -236,22 +236,12 @@ function RiskOverviewCategoryDetailContent() {
         </Page.Section.Body>
       </Page.Section>
 
-      <Drawer
-        open={!!selectedChatId}
-        onOpenChange={(open) => !open && setSelectedChatId(null)}
-        direction="right"
-      >
-        <DrawerContent className="data-[vaul-drawer-direction=right]:w-[720px] data-[vaul-drawer-direction=right]:sm:max-w-[720px]">
-          {selectedChatId && (
-            <ChatDetailPanel
-              chatId={selectedChatId}
-              onClose={() => setSelectedChatId(null)}
-              onDelete={() => setSelectedChatId(null)}
-              collapseNonRisk
-            />
-          )}
-        </DrawerContent>
-      </Drawer>
+      <ChatDetailSheet
+        chatId={selectedChatId}
+        onClose={() => setSelectedChatId(null)}
+        onDelete={() => setSelectedChatId(null)}
+        collapseNonRisk
+      />
     </RevealAllProvider>
   );
 }

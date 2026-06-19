@@ -1,13 +1,14 @@
+import type { GramChatMessage } from "@/lib/messageConverter";
 import { MODELS } from "@/lib/models";
-import type { FrontendTool } from "@/lib/tools";
 import {
+  AssistantTool,
   ImageMessagePartComponent,
   ReasoningGroupComponent,
   ReasoningMessagePartComponent,
   TextMessagePartComponent,
   ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
-import { LanguageModel } from "ai";
+import { ChatTransport, LanguageModel, UIMessage } from "ai";
 import {
   ComponentType,
   Dispatch,
@@ -50,6 +51,39 @@ export const VARIANTS = ["widget", "sidecar", "standalone"] as const;
 export type Variant = (typeof VARIANTS)[number];
 
 /**
+ * Live chat context handed to a {@link ElementsTransportFactory}.
+ */
+export interface ElementsTransportContext {
+  /**
+   * The active conversation's persisted chat id, or null when the current
+   * thread has no server-side chat yet (a brand-new, not-yet-sent thread).
+   * Sourced from the thread-list runtime, so it stays current as the user
+   * switches conversations.
+   */
+  getChatId: () => string | null;
+
+  /**
+   * Adopt a chat id assigned out-of-band (e.g. a server-minted id a consumer
+   * transport receives on the first send). Call at the START of an async send
+   * to capture the active conversation, then invoke the returned function with
+   * the server's id once it's known. The closure binds to the conversation the
+   * send originated from, so a thread switch or a parallel send on another
+   * thread during the round-trip can't mis-associate the id.
+   */
+  adoptChatId: () => (chatId: string) => void;
+}
+
+/**
+ * A factory for a {@link ChatTransport}. When `ElementsConfig.transport` is a
+ * function, Elements invokes it once inside the provider and passes the live
+ * chat context, letting the transport read the current chat id at send time
+ * without reaching into Elements internals.
+ */
+export type ElementsTransportFactory = (
+  ctx: ElementsTransportContext,
+) => ChatTransport<UIMessage>;
+
+/**
  * The top level configuration object for the Elements library.
  *
  * @example
@@ -64,6 +98,29 @@ export interface ElementsConfig {
    * The system prompt to use for the Elements library.
    */
   systemPrompt?: string;
+
+  /**
+   * Optional chat transport override. When provided, Elements uses this
+   * transport instead of its built-in client-side streaming transport — e.g.
+   * to route the conversation through a persistent server-side assistant that
+   * generates replies and is polled for them. When omitted, the default
+   * client-side transport is used.
+   *
+   * May be a {@link ChatTransport} directly, or an {@link ElementsTransportFactory}
+   * that Elements invokes inside the provider with the live chat context — use
+   * the factory form when the transport needs the active chat id at send time.
+   */
+  transport?: ChatTransport<UIMessage> | ElementsTransportFactory;
+
+  /**
+   * Whether to expose the inline message-edit affordance on user messages.
+   * Edit relies on assistant-ui's local branch rewriting; transports backed by a
+   * persistent server-side assistant typically can't honour that, so the
+   * sidebar uses this to hide the action rather than offer a broken control.
+   *
+   * @default true
+   */
+  allowMessageEdit?: boolean;
 
   /**
    * Any plugins to use for the Elements library.
@@ -546,6 +603,15 @@ export interface ThemeConfig {
    * @default 'soft'
    */
   radius?: Radius;
+
+  /**
+   * Extra CSS injected into the Elements shadow root after the built-in
+   * stylesheet. Elements renders inside a shadow DOM, so host-page styles
+   * cannot reach its internals — this is the supported escape hatch for
+   * embedders that need to restyle specific components (targeting the
+   * stable `aui-*` class hooks).
+   */
+  customCss?: string;
 }
 
 export interface ComponentOverrides {
@@ -606,8 +672,15 @@ export type ToolsFilter =
   | string[]
   | (({ toolName }: { toolName: string }) => boolean);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type FrontendTools = Record<string, FrontendTool<any, any>>;
+// FrontendTools holds heterogeneous, user-defined tools. Each entry was made by
+// `defineFrontendTool<TArgs, TResult>` with its own narrow generics, but
+// assistant-ui's `AssistantToolProps<TArgs, TResult>` is invariant in both
+// parameters (input position in `execute`, output position in `streamCall`), so
+// no single `FrontendTool<...>` parameterisation can stand in for an arbitrary
+// one. The SDK addresses this on its own `AssistantTool` shape with
+// `unstable_tool: AssistantToolProps<any, any>`; we mirror that here for the
+// record's value type.
+export type FrontendTools = Record<string, AssistantTool>;
 
 /**
  * ToolsConfig is used to configure tool support in the Elements library.
@@ -786,6 +859,12 @@ export interface ContextCompactionConfig {
 }
 
 export interface WelcomeConfig {
+  /**
+   * Optional logo image URL shown above the title on the empty-thread welcome
+   * screen.
+   */
+  logo?: string;
+
   /**
    * The welcome message to display when the thread is empty.
    */
@@ -1004,6 +1083,42 @@ export interface HistoryConfig {
   enabled: boolean;
 
   /**
+   * Extra query parameters forwarded to the thread-list request, used to
+   * filter which conversations are shown. Opaque to Elements — the consumer
+   * decides the keys (e.g. a search term, or a backend-specific scope). When
+   * omitted, all of the caller's chats are listed.
+   */
+  threadListFilters?: Record<string, string>;
+
+  /**
+   * Let the backend own chat-id creation. When true, a brand-new thread does not
+   * get a client-generated id; instead the transport assigns the id (e.g. one
+   * the server minted on the first send, reported via the transport context's
+   * `adoptChatId`). Use with a server-backed `transport`.
+   */
+  deferThreadIdMinting?: boolean;
+
+  /**
+   * Optional hook to transform or drop each persisted message before it is
+   * rendered from history. Return a (possibly rewritten) message to render it,
+   * or `null` to omit it entirely. Elements applies this to every message
+   * returned by `chat.load` before conversion.
+   *
+   * Use this to keep product- or backend-specific transcript conventions out of
+   * the library — e.g. stripping a server-injected framing block from a turn's
+   * text, or hiding system events that carry no user-facing content. Elements
+   * itself stays agnostic to any such convention.
+   *
+   * @example
+   * // Strip a server-injected framing block and hide framing-only turns.
+   * transformChatMessage: (msg) => {
+   *   const cleaned = stripFraming(msg);
+   *   return isFramingOnly(cleaned) ? null : cleaned;
+   * }
+   */
+  transformChatMessage?: (message: GramChatMessage) => GramChatMessage | null;
+
+  /**
    * Whether to show the thread list sidebar/panel.
    * Only applicable for widget and sidecar variants.
    * Only applies when history is enabled.
@@ -1044,4 +1159,6 @@ export type ElementsContextType = {
   setIsOpen: (isOpen: boolean) => void;
   plugins: Plugin[];
   mcpTools: Record<string, unknown> | undefined;
+  /** True while the MCP tool list is actively being fetched. */
+  mcpToolsLoading: boolean;
 };

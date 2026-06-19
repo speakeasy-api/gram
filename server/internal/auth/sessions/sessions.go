@@ -121,10 +121,10 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 
 	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgRepo, s.billingRepo, session.ActiveOrganizationID)
 	if err != nil {
-		return ctx, oops.E(oops.CodeUnexpected, err, "error getting organization metadata").Log(ctx, s.logger)
+		return ctx, oops.E(oops.CodeUnexpected, err, "error getting organization metadata").LogError(ctx, s.logger)
 	}
 	if orgMetadata.DisabledAt.Valid {
-		return ctx, oops.E(oops.CodeUnauthorized, nil, "this organization is disabled, please reach out to support@speakeasy.com for more information").Log(ctx, s.logger)
+		return ctx, oops.E(oops.CodeUnauthorized, nil, "this organization is disabled, please reach out to support@speakeasy.com for more information").LogError(ctx, s.logger)
 	}
 
 	authCtx.AccountType = orgMetadata.GramAccountType

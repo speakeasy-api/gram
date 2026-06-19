@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
@@ -285,15 +286,15 @@ func runRemoteLoginRoundTrip(
 	}
 
 	sessions, err := remotesessions_repo.New(ti.conn).ListRemoteSessionsByProjectID(ctx, remotesessions_repo.ListRemoteSessionsByProjectIDParams{
-		ProjectID:  result.Toolset.ProjectID,
+		ProjectID:  conv.ToNullUUID(result.Toolset.ProjectID),
 		LimitValue: 10,
 	})
 	require.NoError(t, err)
 	require.Len(t, sessions, 1, "exactly one remote_sessions row should exist")
-	require.Equal(t, expectedSubject.String(), sessions[0].SubjectUrn.String())
-	require.Equal(t, result.RemoteSessionClient.ID, sessions[0].RemoteSessionClientID)
-	require.True(t, sessions[0].AccessExpiresAt.Valid)
-	require.True(t, sessions[0].AccessExpiresAt.Time.After(time.Now()), "access_expires_at must be in the future")
+	require.Equal(t, expectedSubject.String(), sessions[0].RemoteSession.SubjectUrn.String())
+	require.Equal(t, result.RemoteSessionClient.ID, sessions[0].RemoteSession.RemoteSessionClientID)
+	require.True(t, sessions[0].RemoteSession.AccessExpiresAt.Valid)
+	require.True(t, sessions[0].RemoteSession.AccessExpiresAt.Time.After(time.Now()), "access_expires_at must be in the future")
 }
 
 // insertUserSessionClient creates a user_session_clients row so
@@ -328,6 +329,7 @@ func attachCustomDomainToToolset(
 		Domain:         domainName,
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 

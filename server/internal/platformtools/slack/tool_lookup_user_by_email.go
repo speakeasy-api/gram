@@ -54,7 +54,7 @@ func callLookupUserByEmail(ctx context.Context, client *apiClient, env toolconfi
 		"email": email,
 	}
 
-	body, err := client.call(ctx, "users.lookupByEmail", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "users.lookupByEmail", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

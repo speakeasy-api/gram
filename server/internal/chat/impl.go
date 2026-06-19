@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -55,6 +56,7 @@ var _ gen.Auther = (*Service)(nil)
 
 type Service struct {
 	auth             *auth.Auth
+	authz            *authz.Engine
 	db               *pgxpool.Pool
 	repo             *repo.Queries
 	tracer           trace.Tracer
@@ -91,6 +93,7 @@ func NewService(
 
 	return &Service{
 		auth:             auth.New(logger, db, sessions, authzEngine),
+		authz:            authzEngine,
 		db:               db,
 		sessions:         sessions,
 		chatSessions:     chatSessions,
@@ -199,124 +202,123 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	result := make([]*gen.ChatOverview, 0)
-	var userInfo *sessions.CachedUserInfo
-	var err error
-	if authCtx.SessionID != nil {
-		userInfo, _, err = s.sessions.GetUserInfo(ctx, authCtx.UserID)
+	// An assistant principal is set only on the assistant runtime path and
+	// only the managed-assistant platform toolset surfaces chat tools, so
+	// treat it as admin-equivalent for project-wide visibility.
+	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
+
+	// Whether the caller sees all project sessions or only their own is decided
+	// by the org:admin RBAC scope — this is a visibility choice, never a gate on
+	// the route, so a caller without org:admin (or when the check can't be made)
+	// still gets a successful response scoped to their own sessions.
+	//
+	// When RBAC is not enforced for the org we must NOT fall through to "see
+	// all" — Require short-circuits to allow when enforcement is off, so check
+	// ShouldEnforce explicitly and treat the disabled case as non-admin.
+	isOrgAdmin := false
+	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
+		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
+	} else if enforce {
+		err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil})
+		var shareableErr *oops.ShareableError
+		switch {
+		case err == nil:
+			isOrgAdmin = true
+		case errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden:
+			// Forbidden simply means not an org admin — show own sessions.
+		default:
+			// Any other error is unexpected; log it but still serve own
+			// sessions rather than failing the listing.
+			s.logger.WarnContext(ctx, "org admin visibility check failed for chat listing; showing own sessions", attr.SlogError(err))
+		}
+	}
+
+	var fromTime, toTime pgtype.Timestamptz
+	if payload.From != nil {
+		t, err := time.Parse(time.RFC3339, *payload.From)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid from timestamp").LogError(ctx, s.logger)
 		}
+		fromTime = pgtype.Timestamptz{Time: t, InfinityModifier: pgtype.Finite, Valid: true}
 	}
-
-	// If we have an external user ID, always only list chats for that external user
-	if authCtx.ExternalUserID != "" {
-		chats, err := s.repo.ListChatsForExternalUser(ctx, repo.ListChatsForExternalUserParams{
-			ProjectID:      *authCtx.ProjectID,
-			ExternalUserID: conv.ToPGText(authCtx.ExternalUserID),
-		})
+	if payload.To != nil {
+		t, err := time.Parse(time.RFC3339, *payload.To)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid to timestamp").LogError(ctx, s.logger)
 		}
-
-		for _, chat := range chats {
-			lastMessageTimestamp := chat.CreatedAt.Time.Format(time.RFC3339)
-			if chat.LastMessageTimestamp.Valid {
-				lastMessageTimestamp = chat.LastMessageTimestamp.Time.Format(time.RFC3339)
-			}
-			result = append(result, &gen.ChatOverview{
-				ID:                   chat.ID.String(),
-				UserID:               nil,
-				ExternalUserID:       &chat.ExternalUserID.String,
-				Source:               conv.FromPGText[string](chat.Source),
-				Title:                chat.Title.String,
-				NumMessages:          int(chat.NumMessages),
-				CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
-				LastMessageTimestamp: lastMessageTimestamp,
-				RiskFindingsCount:    nil,
-				TotalInputTokens:     nil,
-				TotalOutputTokens:    nil,
-				TotalTokens:          nil,
-				TotalCost:            nil,
-			})
-		}
-
-		// Enrich with metrics from ClickHouse
-		if err := s.enrichChatsWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
-			s.logger.WarnContext(ctx, "failed to enrich chats with metrics", attr.SlogError(err))
-		}
-
-		return &gen.ListChatsResult{Chats: result}, nil
+		toTime = pgtype.Timestamptz{Time: t, InfinityModifier: pgtype.Finite, Valid: true}
 	}
 
-	// if the user is Admin, we list chat for a whole project
-	if userInfo != nil && userInfo.Admin {
-		chats, err := s.repo.ListAllChats(ctx, *authCtx.ProjectID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
-		}
+	search := conv.PtrValOr(payload.Search, "")
+	assistantID := conv.PtrValOr(payload.AssistantID, "")
+	hasRiskFilter := conv.PtrValOr(payload.HasRisk, "")
 
-		for _, chat := range chats {
-			lastMessageTimestamp := chat.CreatedAt.Time.Format(time.RFC3339)
-			if chat.LastMessageTimestamp.Valid {
-				lastMessageTimestamp = chat.LastMessageTimestamp.Time.Format(time.RFC3339)
-			}
-			result = append(result, &gen.ChatOverview{
-				ID:                   chat.ID.String(),
-				UserID:               &chat.UserID.String,
-				ExternalUserID:       nil,
-				Source:               conv.FromPGText[string](chat.Source),
-				Title:                chat.Title.String,
-				NumMessages:          int(chat.NumMessages),
-				CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
-				LastMessageTimestamp: lastMessageTimestamp,
-				RiskFindingsCount:    nil,
-				TotalInputTokens:     nil,
-				TotalOutputTokens:    nil,
-				TotalTokens:          nil,
-				TotalCost:            nil,
-			})
+	// Payload filters only apply for org admins and the managed-assistant runtime.
+	var externalUserID, userID string
+	switch {
+	case authCtx.ExternalUserID != "":
+		externalUserID = authCtx.ExternalUserID
+	case isOrgAdmin, isAssistantCall:
+		externalUserID = conv.PtrValOr(payload.ExternalUserID, "")
+	default:
+		if authCtx.UserID == "" {
+			return nil, oops.C(oops.CodeUnauthorized)
 		}
-
-		// Enrich with metrics from ClickHouse
-		if err := s.enrichChatsWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
-			s.logger.WarnContext(ctx, "failed to enrich chats with metrics", attr.SlogError(err))
-		}
-
-		return &gen.ListChatsResult{Chats: result}, nil
+		userID = authCtx.UserID
 	}
 
-	// at this point if there's no UserID in authCtx then the request is unauthorized
-	if authCtx.UserID == "" {
-		return nil, oops.C(oops.CodeUnauthorized)
+	baseParams := repo.CountChatsParams{
+		ProjectID:      *authCtx.ProjectID,
+		ExternalUserID: externalUserID,
+		UserID:         userID,
+		FromTime:       fromTime,
+		ToTime:         toTime,
+		Search:         search,
+		AssistantID:    assistantID,
+		HasRiskFilter:  hasRiskFilter,
 	}
 
-	chats, err := s.repo.ListChatsForUser(ctx, repo.ListChatsForUserParams{
-		ProjectID: *authCtx.ProjectID,
-		UserID:    conv.ToPGText(authCtx.UserID),
+	total, err := s.repo.CountChats(ctx, baseParams)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count chats").LogError(ctx, s.logger)
+	}
+
+	rows, err := s.repo.ListChats(ctx, repo.ListChatsParams{
+		ProjectID:      baseParams.ProjectID,
+		ExternalUserID: baseParams.ExternalUserID,
+		UserID:         baseParams.UserID,
+		FromTime:       baseParams.FromTime,
+		ToTime:         baseParams.ToTime,
+		Search:         baseParams.Search,
+		AssistantID:    baseParams.AssistantID,
+		HasRiskFilter:  baseParams.HasRiskFilter,
+		SortBy:         payload.SortBy,
+		SortOrder:      payload.SortOrder,
+		PageLimit:      conv.SafeInt32(payload.Limit),
+		PageOffset:     conv.SafeInt32(payload.Offset),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list chats").LogError(ctx, s.logger)
 	}
 
-	for _, chat := range chats {
-		lastMessageTimestamp := chat.CreatedAt.Time.Format(time.RFC3339)
-		if chat.LastMessageTimestamp.Valid {
-			lastMessageTimestamp = chat.LastMessageTimestamp.Time.Format(time.RFC3339)
+	result := make([]*gen.ChatOverview, 0, len(rows))
+	for _, row := range rows {
+		lastMessageTimestamp := row.CreatedAt.Time.Format(time.RFC3339)
+		if row.LastMessageTimestamp.Valid {
+			lastMessageTimestamp = row.LastMessageTimestamp.Time.Format(time.RFC3339)
 		}
+		riskCount := int(row.RiskFindingsCount)
 		result = append(result, &gen.ChatOverview{
-			ID:                   chat.ID.String(),
-			UserID:               &chat.UserID.String,
-			ExternalUserID:       nil,
-			Source:               conv.FromPGText[string](chat.Source),
-			Title:                chat.Title.String,
-			NumMessages:          int(chat.NumMessages),
-			CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
+			ID:                   row.ID.String(),
+			UserID:               conv.FromPGText[string](row.UserID),
+			ExternalUserID:       conv.FromPGText[string](row.ExternalUserID),
+			Source:               conv.FromPGText[string](row.Source),
+			Title:                row.Title.String,
+			NumMessages:          int(row.NumMessages),
+			CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 			LastMessageTimestamp: lastMessageTimestamp,
-			RiskFindingsCount:    nil,
+			RiskFindingsCount:    &riskCount,
 			TotalInputTokens:     nil,
 			TotalOutputTokens:    nil,
 			TotalTokens:          nil,
@@ -324,178 +326,11 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		})
 	}
 
-	// Enrich with metrics from ClickHouse
 	if err := s.enrichChatsWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
 		s.logger.WarnContext(ctx, "failed to enrich chats with metrics", attr.SlogError(err))
 	}
 
-	return &gen.ListChatsResult{Chats: result}, nil
-}
-
-func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.ListChatsWithResolutionsPayload) (*gen.ListChatsWithResolutionsResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	// Check if logs are enabled for this organization
-	if err := s.telemetryService.CheckLogsEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
-		return nil, fmt.Errorf("checking logs enabled: %w", err)
-	}
-
-	// If an external user ID is set, restrict to only their chats
-	// This prevents chat-session users from viewing other users' chats
-	if authCtx.ExternalUserID != "" {
-		if payload.ExternalUserID == nil || *payload.ExternalUserID != authCtx.ExternalUserID {
-			// Force filter to their own external user ID
-			payload.ExternalUserID = &authCtx.ExternalUserID
-		}
-	}
-
-	// Set up pagination with safe int32 conversion
-	limit := payload.Limit
-	if limit == 0 {
-		limit = 50
-	}
-	if limit > 100 {
-		limit = 100
-	}
-	offset := payload.Offset
-
-	// Convert optional filter parameters (use empty string for SQL NULL check)
-	search := conv.PtrValOr(payload.Search, "")
-	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
-	assistantID := conv.PtrValOr(payload.AssistantID, "")
-	resolutionStatus := conv.PtrValOr(payload.ResolutionStatus, "")
-	hasRiskFilter := conv.PtrValOr(payload.HasRisk, "")
-
-	// Parse time filters
-	var fromTime, toTime pgtype.Timestamptz
-	if payload.From != nil {
-		t, err := time.Parse(time.RFC3339, *payload.From)
-		if err == nil {
-			fromTime = conv.ToPGTimestamptz(t)
-		}
-	}
-	if payload.To != nil {
-		t, err := time.Parse(time.RFC3339, *payload.To)
-		if err == nil {
-			toTime = conv.ToPGTimestamptz(t)
-		}
-	}
-
-	// Get total count (before pagination)
-	totalCount, err := s.repo.CountChatsWithResolutions(ctx, repo.CountChatsWithResolutionsParams{
-		ProjectID:        *authCtx.ProjectID,
-		Search:           search,
-		ExternalUserID:   externalUserID,
-		AssistantID:      assistantID,
-		FromTime:         fromTime,
-		ToTime:           toTime,
-		ResolutionStatus: resolutionStatus,
-		HasRiskFilter:    hasRiskFilter,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to count chats").Log(ctx, s.logger)
-	}
-
-	// Query database - returns denormalized rows (one row per chat+resolution combination)
-	rows, err := s.repo.ListChatsWithResolutions(ctx, repo.ListChatsWithResolutionsParams{
-		ProjectID:        *authCtx.ProjectID,
-		Search:           search,
-		ExternalUserID:   externalUserID,
-		AssistantID:      assistantID,
-		FromTime:         fromTime,
-		ToTime:           toTime,
-		ResolutionStatus: resolutionStatus,
-		HasRiskFilter:    hasRiskFilter,
-		SortBy:           payload.SortBy,
-		SortOrder:        payload.SortOrder,
-		PageLimit:        int32(limit),
-		PageOffset:       int32(offset), //nolint:gosec // offset is controlled by client pagination
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list chats with resolutions").Log(ctx, s.logger)
-	}
-
-	// Group denormalized rows by chat_id
-	chatMap := make(map[string]*gen.ChatOverviewWithResolutions)
-	chatOrder := make([]string, 0) // Preserve order
-
-	for _, row := range rows {
-		chatID := row.ChatID.String()
-
-		// If this is the first row for this chat, create the chat entry
-		if _, exists := chatMap[chatID]; !exists {
-			lastMessageTimestamp := row.CreatedAt.Time.Format(time.RFC3339)
-			if row.LastMessageTimestamp.Valid {
-				lastMessageTimestamp = row.LastMessageTimestamp.Time.Format(time.RFC3339)
-			}
-			riskCount := int(row.RiskFindingsCount)
-			chatMap[chatID] = &gen.ChatOverviewWithResolutions{
-				ID:                   chatID,
-				Title:                row.Title.String,
-				UserID:               conv.FromPGText[string](row.UserID),
-				ExternalUserID:       conv.FromPGText[string](row.ExternalUserID),
-				Source:               conv.FromPGText[string](row.Source),
-				NumMessages:          int(row.NumMessages),
-				CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
-				LastMessageTimestamp: lastMessageTimestamp,
-				RiskFindingsCount:    &riskCount,
-				Resolutions:          make([]*gen.ChatResolution, 0),
-				TotalInputTokens:     nil,
-				TotalOutputTokens:    nil,
-				TotalTokens:          nil,
-				TotalCost:            nil,
-			}
-			chatOrder = append(chatOrder, chatID)
-		}
-
-		// Add resolution to this chat (if one exists - ResolutionID can be NULL from LEFT JOIN)
-		if row.ResolutionID.Valid {
-			// Convert message_ids from interface{} to []string
-			var messageIDs []string
-			if row.MessageIds != nil {
-				// PostgreSQL array comes back as []interface{} containing uuid.UUID values
-				if msgIDsSlice, ok := row.MessageIds.([]any); ok {
-					messageIDs = make([]string, len(msgIDsSlice))
-					for i, msgID := range msgIDsSlice {
-						if uid, ok := msgID.(uuid.UUID); ok {
-							messageIDs[i] = uid.String()
-						}
-					}
-				}
-			}
-
-			resolution := &gen.ChatResolution{
-				ID:              row.ResolutionID.UUID.String(),
-				UserGoal:        row.UserGoal.String,
-				Resolution:      row.Resolution.String,
-				ResolutionNotes: row.ResolutionNotes.String,
-				Score:           int(row.Score.Int32),
-				CreatedAt:       row.ResolutionCreatedAt.Time.Format(time.RFC3339),
-				MessageIds:      messageIDs,
-			}
-			chatMap[chatID].Resolutions = append(chatMap[chatID].Resolutions, resolution)
-		}
-	}
-
-	// Convert map to ordered slice
-	chats := make([]*gen.ChatOverviewWithResolutions, len(chatOrder))
-	for i, chatID := range chatOrder {
-		chats[i] = chatMap[chatID]
-	}
-
-	// Enrich with metrics from ClickHouse
-	if err := s.enrichChatsWithResolutionsWithMetrics(ctx, authCtx.ProjectID.String(), chats); err != nil {
-		s.logger.WarnContext(ctx, "failed to enrich chats with metrics", attr.SlogError(err))
-	}
-
-	return &gen.ListChatsWithResolutionsResult{
-		Chats: chats,
-		Total: int(totalCount),
-	}, nil
+	return &gen.ListChatsResult{Chats: result, Total: int(total)}, nil
 }
 
 func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*gen.Chat, error) {
@@ -514,7 +349,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
 	}
 
 	// older chat_messages may not have project_id in the model, but it will always exist on the chat
@@ -522,16 +357,19 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// If this isn't coming from the dashboard, make sure the external user ID matches
+	// Off-dashboard callers must match the chat owner unless they're the
+	// managed-assistant runtime (see ListChats).
 	if authCtx.SessionID == nil {
-		if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
-			return nil, oops.C(oops.CodeUnauthorized)
+		if _, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx); !isAssistantCall {
+			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
+				return nil, oops.C(oops.CodeUnauthorized)
+			}
 		}
 	}
 
 	maxGeneration, err := s.repo.GetMaxGenerationForChat(ctx, chat.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat generation").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat generation").LogError(ctx, s.logger)
 	}
 
 	generation := maxGeneration
@@ -549,7 +387,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		Generation: generation,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").LogError(ctx, s.logger)
 	}
 
 	resultMessages := make([]*gen.ChatMessage, len(messages))
@@ -565,6 +403,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			ToolCalls:      &toolCalls,
 			ToolCallID:     &msg.ToolCallID.String,
 			FinishReason:   &msg.FinishReason.String,
+			PromptID:       conv.FromPGText[string](msg.MessageID),
 			CreatedAt:      msg.CreatedAt.Time.Format(time.RFC3339),
 			Generation:     int(msg.Generation),
 		}
@@ -581,7 +420,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat message stats").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat message stats").LogError(ctx, s.logger)
 	}
 
 	lastMessageTimestamp := chat.CreatedAt.Time.Format(time.RFC3339)
@@ -619,11 +458,15 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		TotalOutputTokens:    nil,
 		TotalTokens:          nil,
 		TotalCost:            nil,
+		AgentUsage:           nil,
 	}
 
 	if isLatestRequest {
 		if err := s.enrichChatWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
 			s.logger.WarnContext(ctx, "failed to enrich chat with metrics", attr.SlogError(err))
+		}
+		if err := s.enrichChatWithClaudeTurnUsage(ctx, authCtx.ProjectID.String(), result); err != nil {
+			s.logger.WarnContext(ctx, "failed to enrich chat with Claude turn usage", attr.SlogError(err))
 		}
 	}
 
@@ -692,7 +535,7 @@ func (s *Service) checkCreditBalance(ctx context.Context, orgID, accountType str
 	}
 
 	if pu.IncludedCredits > 0 && pu.Credits >= pu.IncludedCredits {
-		return oops.C(oops.CodeInsufficientCredits).Log(
+		return oops.C(oops.CodeInsufficientCredits).LogError(
 			ctx, s.logger,
 			attr.SlogOrganizationID(orgID),
 		)
@@ -720,11 +563,11 @@ func IsHistoryCorrupted(err error) bool {
 func (s *Service) classifyCompletionError(ctx context.Context, label string, err error) error {
 	switch {
 	case openrouter.IsInsufficientCredits(err):
-		return oops.C(oops.CodeInsufficientCredits).Log(ctx, s.logger)
+		return oops.C(oops.CodeInsufficientCredits).LogError(ctx, s.logger)
 	case openrouter.IsHistoryCorruptionCandidate(err):
-		return oops.E(oops.CodeInvalid, err, historyCorruptedMarker).Log(ctx, s.logger)
+		return oops.E(oops.CodeInvalid, err, historyCorruptedMarker).LogError(ctx, s.logger)
 	default:
-		return oops.E(oops.CodeGatewayError, err, "%s", label).Log(ctx, s.logger)
+		return oops.E(oops.CodeGatewayError, err, "%s", label).LogError(ctx, s.logger)
 	}
 }
 
@@ -784,7 +627,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// Read the request body
 	reqBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, s.logger)
 	}
 
 	// Create a new reader with the same content for the proxy
@@ -792,7 +635,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	var chatRequest openrouter.OpenAIChatRequest
 	if err := json.Unmarshal(reqBody, &chatRequest); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to parse request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to parse request body").LogError(ctx, s.logger)
 	}
 
 	// Defense-in-depth: reject any single tool-result message larger than the
@@ -815,7 +658,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				nil,
 				"tool message %d exceeds %d bytes; truncate tool output client-side",
 				i, maxToolMessageBytes,
-			).Log(ctx, s.logger)
+			).LogError(ctx, s.logger)
 		}
 	}
 
@@ -828,7 +671,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	if chatIDHeader != "" {
 		chatID, err = uuid.Parse(chatIDHeader)
 		if err != nil {
-			return oops.E(oops.CodeInvalid, err, "invalid chat ID").Log(ctx, s.logger)
+			return oops.E(oops.CodeInvalid, err, "invalid chat ID").LogError(ctx, s.logger)
 		}
 	}
 
@@ -966,7 +809,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// Write response
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(openAIResp); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "encode response").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "encode response").LogError(ctx, s.logger)
 	}
 
 	eventProperties["success"] = true
@@ -1009,7 +852,7 @@ func (s *Service) streamCompletion(ctx context.Context, w http.ResponseWriter, s
 		}
 
 		if _, err := io.WriteString(w, text); err != nil {
-			return oops.E(oops.CodeGatewayError, err, "stream write failed").Log(ctx, s.logger)
+			return oops.E(oops.CodeGatewayError, err, "stream write failed").LogError(ctx, s.logger)
 		}
 		if canFlush {
 			flusher.Flush()
@@ -1042,7 +885,7 @@ func (s *Service) streamCompletion(ctx context.Context, w http.ResponseWriter, s
 				return nil
 			}
 			s.logger.ErrorContext(ctx, "stream read error", attr.SlogError(err))
-			return oops.E(oops.CodeGatewayError, err, "stream read failed").Log(ctx, s.logger)
+			return oops.E(oops.CodeGatewayError, err, "stream read failed").LogError(ctx, s.logger)
 		}
 	}
 }
@@ -1122,7 +965,7 @@ func (s *Service) CreditUsage(ctx context.Context, payload *gen.CreditUsagePaylo
 
 	creditsUsed, creditLimit, err := s.openRouter.GetCreditsUsed(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get credit usage").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get credit usage").LogError(ctx, s.logger)
 	}
 
 	return &gen.CreditUsageResult{
@@ -1148,7 +991,7 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
 	}
 
 	if chat.ProjectID != *authCtx.ProjectID {
@@ -1157,7 +1000,7 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 
 	// Return current title from DB. Title generation happens asynchronously via
 	// Temporal after first completion; title will be available on next list()/fetch().
-	title := "New Chat"
+	title := DefaultChatTitle
 	if chat.Title.Valid && chat.Title.String != "" {
 		title = chat.Title.String
 	}
@@ -1172,7 +1015,7 @@ func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload
 
 	chatID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid chat id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
 	}
 
 	err = s.repo.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{
@@ -1180,7 +1023,7 @@ func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "soft delete chat").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "soft delete chat").LogError(ctx, s.logger)
 	}
 
 	return nil
@@ -1203,7 +1046,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
 	}
 
 	if chat.ProjectID != *authCtx.ProjectID {
@@ -1220,7 +1063,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list messages").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list messages").LogError(ctx, s.logger)
 	}
 
 	var lastMessageID uuid.NullUUID
@@ -1240,7 +1083,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 		ChatResolutionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to store feedback").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to store feedback").LogError(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "user feedback submitted",
@@ -1513,7 +1356,7 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 	// Batch insert all messages.
 	crepo := repo.New(tx)
 	if _, err := crepo.CreateChatMessage(ctx, dbrows); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to insert chat messages").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to insert chat messages").LogError(ctx, logger)
 	}
 
 	return nil
@@ -1522,43 +1365,6 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 // enrichChatsWithMetrics fetches token and cost metrics from ClickHouse and adds them to chat overviews.
 // This is a best-effort operation - if metrics can't be fetched, chats are returned with zero values.
 func (s *Service) enrichChatsWithMetrics(ctx context.Context, projectID string, chats []*gen.ChatOverview) error {
-	if len(chats) == 0 {
-		return nil
-	}
-
-	// Check if telemetry service is available
-	if s.telemetryService == nil {
-		return nil
-	}
-
-	// Extract chat IDs
-	chatIDs := make([]string, len(chats))
-	for i, chat := range chats {
-		chatIDs[i] = chat.ID
-	}
-
-	// Fetch metrics from ClickHouse
-	metricsMap, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, chatIDs)
-	if err != nil {
-		return fmt.Errorf("get chat metrics from ClickHouse: %w", err)
-	}
-
-	// Enrich each chat with its metrics
-	for _, chat := range chats {
-		if metrics, found := metricsMap[chat.ID]; found {
-			chat.TotalInputTokens = &metrics.TotalInputTokens
-			chat.TotalOutputTokens = &metrics.TotalOutputTokens
-			chat.TotalTokens = &metrics.TotalTokens
-			chat.TotalCost = &metrics.TotalCost
-		}
-	}
-
-	return nil
-}
-
-// enrichChatsWithResolutionsWithMetrics fetches token and cost metrics from ClickHouse and adds them to chat overviews with resolutions.
-// This is a best-effort operation - if metrics can't be fetched, chats are returned with zero values.
-func (s *Service) enrichChatsWithResolutionsWithMetrics(ctx context.Context, projectID string, chats []*gen.ChatOverviewWithResolutions) error {
 	if len(chats) == 0 {
 		return nil
 	}
@@ -1616,4 +1422,76 @@ func (s *Service) enrichChatWithMetrics(ctx context.Context, projectID string, c
 	}
 
 	return nil
+}
+
+// enrichChatWithClaudeTurnUsage fetches per-turn Claude Code usage from ClickHouse
+// and attaches it to chat.load. This is best-effort: missing ClickHouse data
+// simply leaves the optional agent usage payload empty.
+func (s *Service) enrichChatWithClaudeTurnUsage(ctx context.Context, projectID string, chat *gen.Chat) error {
+	if s.telemetryService == nil {
+		return nil
+	}
+
+	usageMap, err := s.telemetryService.GetClaudeTurnUsageByChatIDs(ctx, projectID, []string{chat.ID})
+	if err != nil {
+		return fmt.Errorf("get Claude turn usage from ClickHouse: %w", err)
+	}
+	toolUsageMap, err := s.telemetryService.GetClaudeToolUsageByChatIDs(ctx, projectID, []string{chat.ID})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to enrich chat with Claude tool usage", attr.SlogError(err))
+		toolUsageMap = nil
+	}
+
+	turns := usageMap[chat.ID]
+	toolUsageRows := toolUsageMap[chat.ID]
+	if len(turns) == 0 && len(toolUsageRows) == 0 {
+		return nil
+	}
+
+	apiTurns := make([]*gen.ClaudeTurnUsage, 0, len(turns))
+	for _, turn := range turns {
+		apiTurns = append(apiTurns, &gen.ClaudeTurnUsage{
+			PromptID:            turn.PromptID,
+			StartTimeUnixNano:   strconv.FormatInt(turn.StartTimeUnixNano, 10),
+			EndTimeUnixNano:     strconv.FormatInt(turn.EndTimeUnixNano, 10),
+			RequestCount:        clampUint64ToInt64(turn.RequestCount),
+			InputTokens:         turn.InputTokens,
+			OutputTokens:        turn.OutputTokens,
+			CacheReadTokens:     turn.CacheReadTokens,
+			CacheCreationTokens: turn.CacheCreationTokens,
+			TotalTokens:         turn.TotalTokens,
+			CostUsd:             turn.CostUSD,
+			CostMicros:          turn.CostMicros,
+			Models:              turn.Models,
+			QuerySources:        turn.QuerySources,
+		})
+	}
+	apiTools := make([]*gen.ClaudeToolUsage, 0, len(toolUsageRows))
+	for _, tool := range toolUsageRows {
+		apiTools = append(apiTools, &gen.ClaudeToolUsage{
+			ToolUseID:       tool.ToolUseID,
+			PromptID:        tool.PromptID,
+			ToolName:        tool.ToolName,
+			InputSizeBytes:  tool.InputSizeBytes,
+			ResultSizeBytes: tool.ResultSizeBytes,
+		})
+	}
+
+	chat.AgentUsage = &gen.AgentUsage{
+		Type: "claude",
+		Claude: &gen.ClaudeAgentUsage{
+			Turns: apiTurns,
+			Tools: apiTools,
+		},
+	}
+
+	return nil
+}
+
+func clampUint64ToInt64(value uint64) int64 {
+	const maxInt64 = ^uint64(0) >> 1
+	if value > maxInt64 {
+		return int64(maxInt64)
+	}
+	return int64(value)
 }

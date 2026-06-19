@@ -22,6 +22,8 @@ type Server struct {
 	UpsertGlobal http.Handler
 	DeleteGlobal http.Handler
 	ListGlobal   http.Handler
+	ListGroups   http.Handler
+	CreateGlobal http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -54,10 +56,14 @@ func New(
 			{"UpsertGlobal", "POST", "/rpc/variations.upsertGlobal"},
 			{"DeleteGlobal", "DELETE", "/rpc/variations.deleteGlobal"},
 			{"ListGlobal", "GET", "/rpc/variations.listGlobal"},
+			{"ListGroups", "GET", "/rpc/variations.listGroups"},
+			{"CreateGlobal", "POST", "/rpc/variations.createGlobal"},
 		},
 		UpsertGlobal: NewUpsertGlobalHandler(e.UpsertGlobal, mux, decoder, encoder, errhandler, formatter),
 		DeleteGlobal: NewDeleteGlobalHandler(e.DeleteGlobal, mux, decoder, encoder, errhandler, formatter),
 		ListGlobal:   NewListGlobalHandler(e.ListGlobal, mux, decoder, encoder, errhandler, formatter),
+		ListGroups:   NewListGroupsHandler(e.ListGroups, mux, decoder, encoder, errhandler, formatter),
+		CreateGlobal: NewCreateGlobalHandler(e.CreateGlobal, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -69,6 +75,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpsertGlobal = m(s.UpsertGlobal)
 	s.DeleteGlobal = m(s.DeleteGlobal)
 	s.ListGlobal = m(s.ListGlobal)
+	s.ListGroups = m(s.ListGroups)
+	s.CreateGlobal = m(s.CreateGlobal)
 }
 
 // MethodNames returns the methods served.
@@ -79,6 +87,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpsertGlobalHandler(mux, h.UpsertGlobal)
 	MountDeleteGlobalHandler(mux, h.DeleteGlobal)
 	MountListGlobalHandler(mux, h.ListGlobal)
+	MountListGroupsHandler(mux, h.ListGroups)
+	MountCreateGlobalHandler(mux, h.CreateGlobal)
 }
 
 // Mount configures the mux to serve the variations endpoints.
@@ -222,6 +232,112 @@ func NewListGlobalHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listGlobal")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "variations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListGroupsHandler configures the mux to serve the "variations" service
+// "listGroups" endpoint.
+func MountListGroupsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/variations.listGroups", f)
+}
+
+// NewListGroupsHandler creates a HTTP handler which loads the HTTP request and
+// calls the "variations" service "listGroups" endpoint.
+func NewListGroupsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListGroupsRequest(mux, decoder)
+		encodeResponse = EncodeListGroupsResponse(encoder)
+		encodeError    = EncodeListGroupsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listGroups")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "variations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateGlobalHandler configures the mux to serve the "variations"
+// service "createGlobal" endpoint.
+func MountCreateGlobalHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/variations.createGlobal", f)
+}
+
+// NewCreateGlobalHandler creates a HTTP handler which loads the HTTP request
+// and calls the "variations" service "createGlobal" endpoint.
+func NewCreateGlobalHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateGlobalRequest(mux, decoder)
+		encodeResponse = EncodeCreateGlobalResponse(encoder)
+		encodeError    = EncodeCreateGlobalError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createGlobal")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "variations")
 		payload, err := decodeRequest(r)
 		if err != nil {

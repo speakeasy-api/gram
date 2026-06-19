@@ -18,9 +18,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -402,6 +404,63 @@ func TestHandleConsentPost_ApproveWithCSRFRedirectsWithCode(t *testing.T) {
 	require.NotEmpty(t, loc.Query().Get("code"))
 }
 
+// TestHandleConsentPost_PropagatesFlowIDIntoGrant asserts the flow id is
+// carried from the AuthnChallengeState into the UserSessionGrant minted on
+// consent approval, so the terminal /token leg (which only reads the grant)
+// can still log the same flow_id.
+func TestHandleConsentPost_PropagatesFlowIDIntoGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	subject := urn.NewUserSubject("consent-user-" + uuid.NewString())
+	stateID := uuid.NewString()
+	csrfToken := "csrf-" + uuid.NewString()
+	flowID := "flow-" + uuid.NewString()
+
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  stateID,
+		FlowID:              flowID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		Endpoint: mcp.EndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
+		ClientID:            client.ClientID,
+		RedirectURI:         client.RedirectUris[0],
+		State:               "client-state",
+		CodeChallenge:       "abc",
+		CodeChallengeMethod: "S256",
+		CSRFToken:           csrfToken,
+		Subject:             &subject,
+		CreatedAt:           time.Now(),
+	}))
+
+	form := url.Values{}
+	form.Set("state", stateID)
+	form.Set("csrf_token", csrfToken)
+	form.Set("action", "approve")
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/connect", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleConsent(w, req))
+	require.Equal(t, http.StatusSeeOther, w.Code)
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	code := loc.Query().Get("code")
+	require.NotEmpty(t, code)
+
+	grantCache := cache.NewTypedObjectCache[mcp.UserSessionGrant](ti.logger, ti.cacheAdapter, cache.SuffixNone)
+	grant, err := grantCache.Get(ctx, "userSessionGrant:"+toolset.UserSessionIssuerID.UUID.String()+":"+code)
+	require.NoError(t, err)
+	require.Equal(t, flowID, grant.FlowID, "flow id must propagate into the grant")
+}
+
 func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 	t.Parallel()
 
@@ -464,6 +523,74 @@ func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 	require.Contains(t, loc, "state=", "consent redirect should carry new challenge state")
 	// The state in the redirect should NOT be the original challengeID (it gets rotated)
 	require.NotContains(t, loc, challengeID, "challenge state should be rotated after IDP callback")
+}
+
+// TestHandleIDPCallback_PreservesFlowIDAcrossRotation asserts the stable
+// flow correlation id survives the deliberate cache-key (ID) rotation in
+// HandleIDPCallback. Without preservation, the private-toolset leg of a flow
+// would be uncorrelatable from the rest (AC: one flow_id reconstructs the
+// whole chain).
+func TestHandleIDPCallback_PreservesFlowIDAcrossRotation(t *testing.T) {
+	t.Parallel()
+
+	gramUserID := "user-" + uuid.New().String()[:8]
+	mock := &mockIdentityResolver{
+		exchangeResult: &identity.IDPUserInfo{
+			Sub:   "workos-user-123",
+			Email: "test@example.com",
+			Name:  "Test User",
+		},
+		upsertResult: gramUserID,
+		hasAccessResult: &sessions.Organization{
+			ID:   "org-id-placeholder",
+			Name: "Test Org",
+		},
+		hasAccessEmail: "test@example.com",
+		hasAccessOK:    true,
+	}
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+
+	flowID := "flow-" + uuid.NewString()
+	challengeID := uuid.NewString()
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  challengeID,
+		FlowID:              flowID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		Endpoint: mcp.EndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
+		ClientID:            "test-client",
+		RedirectURI:         "http://localhost:3000/callback",
+		State:               "client-state",
+		CodeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+		CodeChallengeMethod: "S256",
+		CSRFToken:           "csrf-token",
+		CreatedAt:           time.Now(),
+	}))
+
+	mcpSlug := toolset.McpSlug.String
+	q := url.Values{"state": {challengeID}, "code": {"idp-auth-code-123"}}
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+mcpSlug+"/idp_callback?"+q.Encode(), nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleIDPCallback(w, req))
+	require.Equal(t, http.StatusFound, w.Code)
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	rotatedID := loc.Query().Get("state")
+	require.NotEmpty(t, rotatedID)
+	require.NotEqual(t, challengeID, rotatedID, "cache-key id must rotate")
+
+	rotated, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+rotatedID)
+	require.NoError(t, err)
+	require.Equal(t, flowID, rotated.FlowID, "flow id must survive the rotation")
 }
 
 // TestHandleIDPCallback_UsesBaseURLFromCachedState verifies that the
@@ -802,4 +929,115 @@ func TestHandleIDPCallback_ExchangeFailure_ReturnsUnauthorized(t *testing.T) {
 	err = ti.service.HandleIDPCallback(w, req)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to exchange IDP code")
+}
+
+// dcrPublicClientBody is a minimal RFC 7591 registration request for a
+// public (PKCE-only) client — enough to pass RegistrationRequest.Validate
+// so the test reaches the resolution path under test.
+const dcrPublicClientBody = `{"client_name":"age-2640 test","redirect_uris":["http://localhost:3000/callback"],"token_endpoint_auth_method":"none"}`
+
+// newRegisterRequest builds a POST /mcp/{slug}/register request carrying a
+// JSON DCR body and the chi mcpSlug route param. The handler call is left to
+// each test so resolution errors surface in the test function itself.
+func newRegisterRequest(t *testing.T, slug, body string) *http.Request {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/register", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", slug)
+	return req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+}
+
+// TestHandleRegister_RemoteBackedIssuerGated_ResolvesViaEndpoints is the
+// direct AGE-2640 repro: a remote-backed, issuer-gated mcp_server has no
+// toolsets row, so the legacy toolset-only resolver 404'd at DCR. It must
+// now resolve via mcp_endpoints → mcp_servers and complete registration.
+//
+// HandleRegister is the representative OAuth flow handler here: register,
+// authorize, consent, token, and revoke all share the same
+// LoadResolvedMcpEndpointBySlug resolution path.
+func TestHandleRegister_RemoteBackedIssuerGated_ResolvesViaEndpoints(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	slug := "remote-register-" + uuid.NewString()
+	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "public", issuerID)
+
+	w := httptest.NewRecorder()
+	err := ti.service.HandleRegister(w, newRegisterRequest(t, slug, dcrPublicClientBody))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.NotEmpty(t, resp["client_id"])
+}
+
+// TestHandleRegister_RemoteBackedNotIssuerGated_ReturnsNotFound confirms a
+// remote-backed mcp_server that is NOT issuer-gated stays a 404 on the OAuth
+// flow surface: it is authoritative for the slug and never falls back to the
+// toolset lookup (parity with the well-known behaviour from AGE-2624).
+func TestHandleRegister_RemoteBackedNotIssuerGated_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "remote-noissuer-" + uuid.NewString()
+	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, "https://upstream.invalid/mcp", slug, "public", uuid.Nil)
+
+	w := httptest.NewRecorder()
+	err := ti.service.HandleRegister(w, newRegisterRequest(t, slug, dcrPublicClientBody))
+	require.Error(t, err)
+	require.Empty(t, w.Body.String())
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+// TestHandleRegister_LegacyToolsetSlug_ResolvesViaFallback is the regression
+// guard for issuer-gated toolset-backed servers that predate the toolsets →
+// mcp_servers migration: they have no mcp_endpoint row, so the addressing
+// lookup misses and resolution must fall back to toolsets.mcp_slug.
+func TestHandleRegister_LegacyToolsetSlug_ResolvesViaFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+
+	w := httptest.NewRecorder()
+	err := ti.service.HandleRegister(w, newRegisterRequest(t, toolset.McpSlug.String, dcrPublicClientBody))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.NotEmpty(t, resp["client_id"])
+}
+
+// TestHandleRegister_UnknownSlug_ReturnsNotFound confirms a slug matching
+// neither an mcp_endpoint nor a toolset still 404s after the addressing miss
+// falls through the toolset fallback.
+func TestHandleRegister_UnknownSlug_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPService(t)
+	slug := "definitely-missing-" + uuid.NewString()[:8]
+
+	w := httptest.NewRecorder()
+	err := ti.service.HandleRegister(w, newRegisterRequest(t, slug, dcrPublicClientBody))
+	require.Error(t, err)
+	require.Empty(t, w.Body.String())
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }

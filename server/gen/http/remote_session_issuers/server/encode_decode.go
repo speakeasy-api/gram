@@ -1437,8 +1437,11 @@ func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.R
 	res := &RemoteSessionIssuerResponseBody{
 		ID:                    v.ID,
 		ProjectID:             v.ProjectID,
+		OrganizationID:        v.OrganizationID,
 		Slug:                  v.Slug,
 		Issuer:                v.Issuer,
+		Name:                  v.Name,
+		LogoAssetID:           v.LogoAssetID,
 		AuthorizationEndpoint: v.AuthorizationEndpoint,
 		TokenEndpoint:         v.TokenEndpoint,
 		RegistrationEndpoint:  v.RegistrationEndpoint,

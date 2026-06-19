@@ -3,7 +3,11 @@ import { getServerURL } from "@/lib/utils";
 import { McpEndpoint, ToolsetEntry } from "@gram/client/models/components";
 import { useGetDomain } from "@gram/client/react-query";
 
-export function useCustomDomain(enabled = true) {
+export function useCustomDomain(enabled = true): {
+  domain: ReturnType<typeof useGetDomain>["data"];
+  refetch: ReturnType<typeof useGetDomain>["refetch"];
+  isLoading: boolean;
+} {
   const {
     data: domain,
     isLoading,
@@ -49,7 +53,7 @@ export function useCustomDomains(enabled = true): {
 
 // useMcpEndpointUrl resolves the runtime install URL for a single mcp_endpoint
 // row. Platform-domain endpoints (`custom_domain_id` empty) resolve under the
-// Gram-hosted `/x/mcp/<slug>` runtime path; custom-domain endpoints resolve
+// Gram-hosted `/mcp/<slug>` runtime path; custom-domain endpoints resolve
 // under the matching `custom_domains.domain` value with the same suffix.
 // Returns `undefined` when the endpoint has no slug or when its custom domain
 // hasn't resolved yet (loading or denied), so callers can gracefully render an
@@ -78,7 +82,7 @@ export function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
     serverURL = `https://${match.domain}`;
   }
 
-  const mcpUrl = `${serverURL}/x/mcp/${endpoint.slug}`;
+  const mcpUrl = `${serverURL}/mcp/${endpoint.slug}`;
   return { mcpUrl, installPageUrl: `${mcpUrl}/install` };
 }
 

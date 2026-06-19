@@ -12,6 +12,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const attachMcpServerToOrganizationMcpCollection = `-- name: AttachMcpServerToOrganizationMcpCollection :one
+WITH org_collection AS (
+  SELECT omc.id FROM organization_mcp_collections omc
+  WHERE omc.id = $3 AND omc.organization_id = $4 AND omc.deleted IS FALSE
+)
+INSERT INTO organization_mcp_collection_server_attachments (collection_id, mcp_server_id, published_by)
+SELECT id, $1, $2
+FROM org_collection
+ON CONFLICT (collection_id, mcp_server_id) WHERE deleted IS FALSE DO UPDATE
+SET published_by = EXCLUDED.published_by, published_at = clock_timestamp(), deleted_at = NULL, updated_at = clock_timestamp()
+RETURNING published_at, created_at, updated_at, deleted_at, published_by, id, collection_id, toolset_id, mcp_server_id, deleted
+`
+
+type AttachMcpServerToOrganizationMcpCollectionParams struct {
+	McpServerID    uuid.NullUUID
+	PublishedBy    pgtype.Text
+	CollectionID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) AttachMcpServerToOrganizationMcpCollection(ctx context.Context, arg AttachMcpServerToOrganizationMcpCollectionParams) (OrganizationMcpCollectionServerAttachment, error) {
+	row := q.db.QueryRow(ctx, attachMcpServerToOrganizationMcpCollection,
+		arg.McpServerID,
+		arg.PublishedBy,
+		arg.CollectionID,
+		arg.OrganizationID,
+	)
+	var i OrganizationMcpCollectionServerAttachment
+	err := row.Scan(
+		&i.PublishedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.PublishedBy,
+		&i.ID,
+		&i.CollectionID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const attachServerToOrganizationMcpCollection = `-- name: AttachServerToOrganizationMcpCollection :one
 WITH org_collection AS (
   SELECT omc.id FROM organization_mcp_collections omc
@@ -22,11 +65,11 @@ SELECT id, $1, $2
 FROM org_collection
 ON CONFLICT (collection_id, toolset_id) WHERE deleted IS FALSE DO UPDATE
 SET published_by = EXCLUDED.published_by, published_at = clock_timestamp(), deleted_at = NULL, updated_at = clock_timestamp()
-RETURNING published_at, created_at, updated_at, deleted_at, published_by, id, collection_id, toolset_id, deleted
+RETURNING published_at, created_at, updated_at, deleted_at, published_by, id, collection_id, toolset_id, mcp_server_id, deleted
 `
 
 type AttachServerToOrganizationMcpCollectionParams struct {
-	ToolsetID      uuid.UUID
+	ToolsetID      uuid.NullUUID
 	PublishedBy    pgtype.Text
 	CollectionID   uuid.UUID
 	OrganizationID string
@@ -49,6 +92,7 @@ func (q *Queries) AttachServerToOrganizationMcpCollection(ctx context.Context, a
 		&i.ID,
 		&i.CollectionID,
 		&i.ToolsetID,
+		&i.McpServerID,
 		&i.Deleted,
 	)
 	return i, err
@@ -190,6 +234,29 @@ func (q *Queries) DeleteOrganizationMcpCollectionServerAttachmentsByID(ctx conte
 	return err
 }
 
+const detachMcpServerFromOrganizationMcpCollection = `-- name: DetachMcpServerFromOrganizationMcpCollection :exec
+WITH org_collection AS (
+  SELECT omc.id FROM organization_mcp_collections omc
+  WHERE omc.id = $2 AND omc.organization_id = $3 AND omc.deleted IS FALSE
+)
+UPDATE organization_mcp_collection_server_attachments SET deleted_at = clock_timestamp()
+WHERE
+  collection_id = (SELECT id FROM org_collection)
+  AND mcp_server_id = $1
+  AND deleted IS FALSE
+`
+
+type DetachMcpServerFromOrganizationMcpCollectionParams struct {
+	McpServerID    uuid.NullUUID
+	CollectionID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DetachMcpServerFromOrganizationMcpCollection(ctx context.Context, arg DetachMcpServerFromOrganizationMcpCollectionParams) error {
+	_, err := q.db.Exec(ctx, detachMcpServerFromOrganizationMcpCollection, arg.McpServerID, arg.CollectionID, arg.OrganizationID)
+	return err
+}
+
 const detachServerFromOrganizationMcpCollection = `-- name: DetachServerFromOrganizationMcpCollection :exec
 WITH org_collection AS (
   SELECT omc.id FROM organization_mcp_collections omc
@@ -203,7 +270,7 @@ WHERE
 `
 
 type DetachServerFromOrganizationMcpCollectionParams struct {
-	ToolsetID      uuid.UUID
+	ToolsetID      uuid.NullUUID
 	CollectionID   uuid.UUID
 	OrganizationID string
 }
@@ -294,6 +361,44 @@ func (q *Queries) EnsureOrganizationMcpCollectionRegistry(ctx context.Context, a
 		&i.DeletedAt,
 		&i.Deleted,
 	)
+	return i, err
+}
+
+const getMcpServerForOrganizationAttachment = `-- name: GetMcpServerForOrganizationAttachment :one
+SELECT
+  s.id,
+  s.visibility,
+  EXISTS (
+    SELECT 1 FROM mcp_endpoints e
+    WHERE e.mcp_server_id = s.id AND e.deleted IS FALSE
+  ) AS has_endpoint
+FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+WHERE
+  s.id = $1
+  AND p.organization_id = $2
+  AND s.deleted IS FALSE
+`
+
+type GetMcpServerForOrganizationAttachmentParams struct {
+	McpServerID    uuid.UUID
+	OrganizationID string
+}
+
+type GetMcpServerForOrganizationAttachmentRow struct {
+	ID          uuid.UUID
+	Visibility  string
+	HasEndpoint bool
+}
+
+// Resolve an mcp_server for collection-publishing validation, scoped to the
+// organization through its project (mcp_servers.project_id -> projects).
+// has_endpoint reports whether the server has at least one usable endpoint so
+// the caller can reject unpublishable servers.
+func (q *Queries) GetMcpServerForOrganizationAttachment(ctx context.Context, arg GetMcpServerForOrganizationAttachmentParams) (GetMcpServerForOrganizationAttachmentRow, error) {
+	row := q.db.QueryRow(ctx, getMcpServerForOrganizationAttachment, arg.McpServerID, arg.OrganizationID)
+	var i GetMcpServerForOrganizationAttachmentRow
+	err := row.Scan(&i.ID, &i.Visibility, &i.HasEndpoint)
 	return i, err
 }
 
@@ -439,6 +544,32 @@ func (q *Queries) GetOrganizationMcpCollectionRegistryByNamespace(ctx context.Co
 	return i, err
 }
 
+const isMcpServerAttachedToOrganizationMcpCollection = `-- name: IsMcpServerAttachedToOrganizationMcpCollection :one
+SELECT EXISTS (
+  SELECT 1 FROM organization_mcp_collection_server_attachments a
+  JOIN organization_mcp_collections c ON c.id = a.collection_id
+  WHERE
+    a.collection_id = $1
+    AND c.organization_id = $2
+    AND c.deleted IS FALSE
+    AND a.mcp_server_id = $3
+    AND a.deleted IS FALSE
+)
+`
+
+type IsMcpServerAttachedToOrganizationMcpCollectionParams struct {
+	CollectionID   uuid.UUID
+	OrganizationID string
+	McpServerID    uuid.NullUUID
+}
+
+func (q *Queries) IsMcpServerAttachedToOrganizationMcpCollection(ctx context.Context, arg IsMcpServerAttachedToOrganizationMcpCollectionParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isMcpServerAttachedToOrganizationMcpCollection, arg.CollectionID, arg.OrganizationID, arg.McpServerID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const isServerAttachedToOrganizationMcpCollection = `-- name: IsServerAttachedToOrganizationMcpCollection :one
 SELECT EXISTS (
   SELECT 1 FROM organization_mcp_collection_server_attachments a
@@ -455,7 +586,7 @@ SELECT EXISTS (
 type IsServerAttachedToOrganizationMcpCollectionParams struct {
 	CollectionID   uuid.UUID
 	OrganizationID string
-	ToolsetID      uuid.UUID
+	ToolsetID      uuid.NullUUID
 }
 
 func (q *Queries) IsServerAttachedToOrganizationMcpCollection(ctx context.Context, arg IsServerAttachedToOrganizationMcpCollectionParams) (bool, error) {
@@ -465,8 +596,103 @@ func (q *Queries) IsServerAttachedToOrganizationMcpCollection(ctx context.Contex
 	return exists, err
 }
 
+const listOrganizationMcpCollectionMcpServerAttachments = `-- name: ListOrganizationMcpCollectionMcpServerAttachments :many
+SELECT
+  s.id AS mcp_server_id,
+  s.name AS mcp_server_name,
+  s.slug AS mcp_server_slug,
+  s.visibility AS mcp_server_visibility,
+  ep.slug AS endpoint_slug,
+  ep.custom_domain_id AS endpoint_custom_domain_id,
+  ep.custom_domain AS endpoint_custom_domain,
+  rt.published_at AS published_at
+FROM organization_mcp_collection_server_attachments rt
+JOIN organization_mcp_collections c ON c.id = rt.collection_id
+JOIN mcp_servers s ON s.id = rt.mcp_server_id
+JOIN projects p ON p.id = s.project_id
+LEFT JOIN LATERAL (
+  SELECT e.slug, e.custom_domain_id, cd.domain AS custom_domain, e.created_at
+  FROM mcp_endpoints e
+  LEFT JOIN custom_domains cd
+    ON cd.id = e.custom_domain_id
+    AND cd.organization_id = $1
+    AND cd.deleted IS FALSE
+  WHERE e.mcp_server_id = s.id
+    AND e.deleted IS FALSE
+    -- Only endpoints with a resolvable host: platform endpoints (no custom
+    -- domain), or custom-domain endpoints whose domain is still live in this
+    -- org. Resolving the host inside the selection keeps endpoint choice and
+    -- URL-host construction in lockstep, so a dangling custom-domain endpoint
+    -- is never picked and then emitted as a (wrong) platform URL.
+    AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at ASC
+  LIMIT 1
+) ep ON TRUE
+WHERE
+  rt.collection_id = $2
+  AND c.organization_id = $1
+  AND p.organization_id = $1
+  AND c.deleted IS FALSE
+  AND rt.deleted IS FALSE
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND ep.slug IS NOT NULL
+ORDER BY rt.published_at DESC
+`
+
+type ListOrganizationMcpCollectionMcpServerAttachmentsParams struct {
+	OrganizationID string
+	CollectionID   uuid.UUID
+}
+
+type ListOrganizationMcpCollectionMcpServerAttachmentsRow struct {
+	McpServerID            uuid.UUID
+	McpServerName          pgtype.Text
+	McpServerSlug          pgtype.Text
+	McpServerVisibility    string
+	EndpointSlug           string
+	EndpointCustomDomainID uuid.NullUUID
+	EndpointCustomDomain   pgtype.Text
+	PublishedAt            pgtype.Timestamptz
+}
+
+// mcp_server-backed attachments for a collection. Scoped through the
+// collection's organization and the mcp_server's project -> organization so
+// IDs alone are never trusted. Each server resolves to a single published
+// endpoint via a lateral pick: custom-domain endpoints win over platform
+// endpoints, then oldest created_at, limit 1 (AGE-2651; per-plugin endpoint
+// preference is a follow-up). Servers without a usable endpoint are dropped.
+func (q *Queries) ListOrganizationMcpCollectionMcpServerAttachments(ctx context.Context, arg ListOrganizationMcpCollectionMcpServerAttachmentsParams) ([]ListOrganizationMcpCollectionMcpServerAttachmentsRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationMcpCollectionMcpServerAttachments, arg.OrganizationID, arg.CollectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationMcpCollectionMcpServerAttachmentsRow
+	for rows.Next() {
+		var i ListOrganizationMcpCollectionMcpServerAttachmentsRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.McpServerName,
+			&i.McpServerSlug,
+			&i.McpServerVisibility,
+			&i.EndpointSlug,
+			&i.EndpointCustomDomainID,
+			&i.EndpointCustomDomain,
+			&i.PublishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationMcpCollectionServerAttachments = `-- name: ListOrganizationMcpCollectionServerAttachments :many
-SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.user_session_issuer_id, t.created_at, t.updated_at, t.deleted_at, t.deleted FROM toolsets t
+SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.user_session_issuer_id, t.tool_variations_group_id, t.created_at, t.updated_at, t.deleted_at, t.deleted, rt.published_at AS published_at FROM toolsets t
 JOIN organization_mcp_collection_server_attachments rt ON t.id = rt.toolset_id
 JOIN organization_mcp_collections c ON c.id = rt.collection_id
 WHERE
@@ -484,15 +710,39 @@ type ListOrganizationMcpCollectionServerAttachmentsParams struct {
 	OrganizationID string
 }
 
-func (q *Queries) ListOrganizationMcpCollectionServerAttachments(ctx context.Context, arg ListOrganizationMcpCollectionServerAttachmentsParams) ([]Toolset, error) {
+type ListOrganizationMcpCollectionServerAttachmentsRow struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	Name                   string
+	Slug                   string
+	Description            pgtype.Text
+	DefaultEnvironmentSlug pgtype.Text
+	McpSlug                pgtype.Text
+	McpIsPublic            bool
+	McpEnabled             bool
+	ToolSelectionMode      string
+	CustomDomainID         uuid.NullUUID
+	ExternalOauthServerID  uuid.NullUUID
+	OauthProxyServerID     uuid.NullUUID
+	UserSessionIssuerID    uuid.NullUUID
+	ToolVariationsGroupID  uuid.NullUUID
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+	PublishedAt            pgtype.Timestamptz
+}
+
+func (q *Queries) ListOrganizationMcpCollectionServerAttachments(ctx context.Context, arg ListOrganizationMcpCollectionServerAttachmentsParams) ([]ListOrganizationMcpCollectionServerAttachmentsRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationMcpCollectionServerAttachments, arg.CollectionID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Toolset
+	var items []ListOrganizationMcpCollectionServerAttachmentsRow
 	for rows.Next() {
-		var i Toolset
+		var i ListOrganizationMcpCollectionServerAttachmentsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizationID,
@@ -509,10 +759,12 @@ func (q *Queries) ListOrganizationMcpCollectionServerAttachments(ctx context.Con
 			&i.ExternalOauthServerID,
 			&i.OauthProxyServerID,
 			&i.UserSessionIssuerID,
+			&i.ToolVariationsGroupID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+			&i.PublishedAt,
 		); err != nil {
 			return nil, err
 		}

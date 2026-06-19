@@ -8,6 +8,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestPluginsService_CreatePlugin_RecordsAuditEvent(t *testing.T) {
@@ -110,8 +111,8 @@ func TestPluginsService_AddPluginServer_RecordsAuditEvent(t *testing.T) {
 
 	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Server A",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Server A"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -144,8 +145,8 @@ func TestPluginsService_UpdatePluginServer_RecordsAuditEvent(t *testing.T) {
 
 	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Original Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Original Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -188,8 +189,8 @@ func TestPluginsService_RemovePluginServer_RecordsAuditEvent(t *testing.T) {
 
 	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Doomed Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Doomed Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -264,8 +265,8 @@ func TestPluginsService_PublishPlugins_RecordsAuditEvent(t *testing.T) {
 	toolset := createTestToolset(t, ctx, ti.conn, "audit-publish")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Publish Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Publish Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})

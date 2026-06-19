@@ -12,7 +12,7 @@ export type MigrationStepKey =
   | "remoteSessionIssuer"
   | "remoteSessionClient";
 
-export type StepStatus = "pending" | "running" | "done" | "error";
+type StepStatus = "pending" | "running" | "done" | "error";
 
 export type MigrationParadigm = "gram" | "custom";
 
@@ -117,5 +117,10 @@ export type CreateRemoteSessionClientInput = {
 
 export type LinkToolsetUserSessionIssuerInput = {
   toolsetSlug: string;
+  userSessionIssuerId: string;
+};
+
+export type MigrateGramRegistrationsInput = {
+  oauthProxyProviderId: string;
   userSessionIssuerId: string;
 };

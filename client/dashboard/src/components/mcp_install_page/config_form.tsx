@@ -4,25 +4,26 @@ import { Dialog } from "@/components/ui/dialog";
 import { Label as Heading } from "@/components/ui/label";
 import { Link } from "@/components/ui/link";
 import { Type } from "@/components/ui/type";
-import { useMcpUrl } from "@/hooks/useToolsetUrl";
-import { Toolset } from "@/lib/toolTypes";
 import { Button, cn, Icon, Input, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { CompactUpload } from "../upload";
 import type { UseMcpMetadataMetadataFormResult } from "./useMcpMetadataForm";
 
+// InstallPageConfigFormProps takes the pre-resolved install page URL rather
+// than deriving it from a backend object: toolset-backed installs source it
+// via useMcpUrl, mcp_server-backed installs via useMcpEndpointUrl, and the
+// form has no business knowing which lookup applies.
 interface ConfigFormProps {
-  toolset: Toolset;
+  installPageUrl: string | undefined;
   form: UseMcpMetadataMetadataFormResult;
   isLoading: boolean;
 }
 
 export function InstallPageConfigForm({
-  toolset,
+  installPageUrl,
   form,
   isLoading,
-}: ConfigFormProps) {
-  const { installPageUrl } = useMcpUrl(toolset);
+}: ConfigFormProps): JSX.Element | null {
   const [open, setOpen] = useState(false);
 
   if (!installPageUrl) {
@@ -72,7 +73,9 @@ export function InstallPageConfigForm({
             <div className="inline-block">
               <CompactUpload
                 allowedExtensions={["png", "jpg", "jpeg"]}
-                onUpload={form.logoUploadHandlers.onUpload}
+                onUpload={(file) => {
+                  void form.logoUploadHandlers.onUpload(file);
+                }}
                 renderFilePreview={form.logoUploadHandlers.renderFilePreview}
                 className="max-h-[200px] w-full"
               />

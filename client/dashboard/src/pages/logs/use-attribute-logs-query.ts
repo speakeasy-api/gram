@@ -1,14 +1,5 @@
-import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
-import type { LogFilter } from "@gram/client/models/components/logfilter";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord";
 import type { ToolCallSummary } from "@gram/client/models/components/toolcallsummary";
-import { useGramContext } from "@gram/client/react-query";
-import { unwrapAsync } from "@gram/client/types/fp";
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { Operator as Op } from "@gram/client/models/components/logfilter";
-import type { ActiveLogFilter } from "./log-filter-types";
-
-const PER_PAGE = 100; // fetch more logs to improve grouping coverage
 
 function getNestedAttr(attrs: Record<string, unknown>, path: string): unknown {
   if (!attrs || typeof attrs !== "object") return undefined;
@@ -99,10 +90,22 @@ export function logsToTraceSummaries(
         const urn = getNestedAttr(log.attributes, "gram.tool.urn");
         if (typeof urn === "string") gramUrn = urn;
       }
-      if (httpStatusCode === undefined) {
-        const code = getNestedAttr(log.attributes, "http.response.status_code");
-        if (typeof code === "number") httpStatusCode = code;
+      // Prefer the highest HTTP status code seen in the trace so a trace
+      // containing both a 200 (e.g. MCP handshake) and a 500 (failed tool
+      // call) surfaces as failed. Picking the first code latches onto
+      // whichever log iterates first and can mislead the row indicator green.
+      const rawCode = getNestedAttr(
+        log.attributes,
+        "http.response.status_code",
+      );
+
+      const code = typeof rawCode === "string" ? Number(rawCode) : rawCode;
+      if (typeof code === "number" && !Number.isNaN(code)) {
+        if (httpStatusCode === undefined || code > httpStatusCode) {
+          httpStatusCode = code;
+        }
       }
+
       if (!eventSource) {
         if (typeof src === "string") eventSource = src;
       }
@@ -140,80 +143,40 @@ export function logsToTraceSummaries(
   return summaries;
 }
 
-function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {
-  return filters.map((f) => {
-    let values: string[] | undefined;
-    if (f.op === Op.In) {
-      values = f.value
-        ?.split(",")
-        .map((v) => v.trim())
-        .filter(Boolean);
-    } else if (f.value !== undefined) {
-      values = [f.value];
-    }
-    return {
-      path: f.path,
-      operator: f.op,
-      ...(values !== undefined ? { values } : {}),
-    };
-  });
-}
-
 /**
- * Hook that fetches logs via searchLogs with attribute filters and
- * returns data shaped like the searchToolCalls query for transparent swapping.
+ * Merges per-page trace summaries by traceId. Used by the filtered logs view,
+ * which paginates the raw log stream and may receive the same trace split
+ * across pages. Mirrors the within-page rule in logsToTraceSummaries: a
+ * trace's status is the highest code seen across all its logs.
  */
-export function useAttributeLogsQuery({
-  logFilters,
-  extraFilters = [],
-  gramUrn,
-  from,
-  to,
-  enabled,
-}: {
-  logFilters: ActiveLogFilter[];
-  extraFilters?: LogFilter[];
-  gramUrn: string | null;
-  from: Date;
-  to: Date;
-  enabled: boolean;
-}) {
-  const client = useGramContext();
+export function mergeTraceSummariesByTraceId(
+  raw: ToolCallSummary[],
+): ToolCallSummary[] {
+  const merged = new Map<string, ToolCallSummary>();
+  for (const trace of raw) {
+    const existing = merged.get(trace.traceId);
 
-  return useInfiniteQuery({
-    queryKey: [
-      "attribute-logs",
-      logFilters.map((f) => `${f.path}:${f.op}:${f.value ?? ""}`),
-      extraFilters.map(
-        (f) => `${f.path}:${f.operator}:${f.values?.join(",") ?? ""}`,
-      ),
-      gramUrn,
-      from.toISOString(),
-      to.toISOString(),
-    ],
-    queryFn: async ({ pageParam }) => {
-      const result = await unwrapAsync(
-        telemetrySearchLogs(client, {
-          searchLogsPayload: {
-            from,
-            to,
-            filters: [...toSdkFilters(logFilters), ...extraFilters],
-            ...(gramUrn ? { filter: { gramUrn } } : {}),
-            cursor: pageParam,
-            limit: PER_PAGE,
-            sort: "desc",
-          },
-        }),
-      );
+    if (!existing) {
+      merged.set(trace.traceId, { ...trace });
+      continue;
+    }
 
-      return {
-        toolCalls: logsToTraceSummaries(result.logs),
-        nextCursor: result.nextCursor,
-      };
-    },
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    enabled,
-    throwOnError: false,
-  });
+    existing.logCount += trace.logCount;
+    if (BigInt(trace.startTimeUnixNano) < BigInt(existing.startTimeUnixNano)) {
+      existing.startTimeUnixNano = trace.startTimeUnixNano;
+    }
+
+    if (trace.httpStatusCode === undefined) continue;
+
+    if (
+      existing.httpStatusCode === undefined ||
+      trace.httpStatusCode > existing.httpStatusCode
+    ) {
+      existing.httpStatusCode = trace.httpStatusCode;
+    }
+  }
+
+  return Array.from(merged.values()).sort((a, b) =>
+    a.startTimeUnixNano < b.startTimeUnixNano ? 1 : -1,
+  );
 }

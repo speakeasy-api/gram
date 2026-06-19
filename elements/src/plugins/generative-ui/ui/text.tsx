@@ -20,7 +20,7 @@ export function Text({
   className,
   children,
   ...props
-}: TextProps) {
+}: TextProps): React.JSX.Element {
   return (
     <span
       data-slot="text"

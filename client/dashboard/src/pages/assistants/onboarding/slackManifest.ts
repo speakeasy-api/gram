@@ -1,7 +1,8 @@
 export const SLACK_TOOL_URN_PREFIX = "tools:platform:slack:";
 
-export const SLACK_TOOL_SCOPES: Record<string, readonly string[]> = {
+const SLACK_TOOL_SCOPES: Record<string, readonly string[]> = {
   send_message: ["chat:write", "chat:write.public", "im:write"],
+  set_thread_status: ["chat:write"],
   schedule_message: ["chat:write", "chat:write.public"],
   read_channel_messages: [
     "channels:history",
@@ -138,7 +139,7 @@ export const SLACK_TOOL_SCOPES: Record<string, readonly string[]> = {
 // both xoxb- and xoxp- at install; the assistant uses whichever fits each
 // call site. No per-tool gating — same rationale as ALL_BOT_SCOPES: adding a
 // scope post-install forces a re-install.
-export const SLACK_USER_SCOPES: readonly string[] = [
+const SLACK_USER_SCOPES: readonly string[] = [
   "channels:history",
   "channels:read",
   "emoji:read",
@@ -159,12 +160,12 @@ export const SLACK_USER_SCOPES: readonly string[] = [
   "users:read.email",
 ];
 
-export type SlackEventBinding = {
+type SlackEventBinding = {
   bot_events: readonly string[];
   scopes: readonly string[];
 };
 
-export const SLACK_EVENT_BINDINGS: Record<string, SlackEventBinding> = {
+const SLACK_EVENT_BINDINGS: Record<string, SlackEventBinding> = {
   app_home_opened: { bot_events: ["app_home_opened"], scopes: [] },
   app_mention: {
     bot_events: ["app_mention"],
@@ -297,7 +298,7 @@ function uniqueSorted(values: Iterable<string>): string[] {
 export function buildSlackManifest(
   input: SlackManifestInput,
 ): SlackManifestResult {
-  const displayName = (input.appName.trim() || "Gram Assistant").slice(
+  const displayName = (input.appName.trim() || "Platform Assistant").slice(
     0,
     SLACK_DISPLAY_NAME_LIMIT,
   );

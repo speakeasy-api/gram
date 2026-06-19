@@ -6,6 +6,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 
 import { cn } from "@/lib/utils";
+import { trackError } from "@/lib/errorTracking";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 import { Calendar } from "./calendar";
 
@@ -154,7 +155,7 @@ const BADGE_WIDTH = "min-w-10";
 
 export function getPresetRange(preset: DateRangePreset): TimeRange {
   const p = PRESETS.find((p) => p.value === preset);
-  return p ? p.getRange() : PRESETS[5].getRange(); // Default to 3d
+  return p ? p.getRange() : PRESETS[5]!.getRange(); // Default to 3d
 }
 
 function getPresetByValue(value: DateRangePreset): TimeRangePreset | undefined {
@@ -187,11 +188,15 @@ function parseAsLocalDate(isoString: string): Date {
   // Try to extract just the date part and create a local date
   const dateMatch = isoString.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (dateMatch) {
-    const [, year, month, day] = dateMatch;
+    const year = dateMatch[1]!;
+    const month = dateMatch[2]!;
+    const day = dateMatch[3]!;
     // Check if there's a time component
     const timeMatch = isoString.match(/T(\d{2}):(\d{2}):?(\d{2})?/);
     if (timeMatch) {
-      const [, hours, minutes, seconds = "0"] = timeMatch;
+      const hours = timeMatch[1]!;
+      const minutes = timeMatch[2]!;
+      const seconds = timeMatch[3] ?? "0";
       return new Date(
         parseInt(year),
         parseInt(month) - 1,
@@ -208,16 +213,23 @@ function parseAsLocalDate(isoString: string): Date {
   return new Date(isoString);
 }
 
-async function parseWithAI(
+// Exported for unit testing of header/credential construction.
+export async function parseWithAI(
   input: string,
   apiUrl: string,
   projectSlug?: string,
+  authHeaders?: Record<string, string>,
 ): Promise<ParseResult> {
   try {
     const now = new Date();
 
-    // Create OpenRouter provider without X-Gram-Source header (so usage is billed)
-    const headers: Record<string, string> = {};
+    // Create OpenRouter provider without X-Gram-Source header (so usage is billed).
+    // authHeaders carries the caller's session credential (e.g. Gram-Session /
+    // Gram-Chat-Session). The /chat/completions proxy authenticates from these
+    // request headers — relying on cookies alone fails (the Vercel AI SDK does
+    // not forward them reliably), so a missing credential here 401s and the
+    // catch below would silently swallow it.
+    const headers: Record<string, string> = { ...authHeaders };
     if (projectSlug) {
       headers["Gram-Project"] = projectSlug;
     }
@@ -290,7 +302,15 @@ User input: ${input}`,
 
     // Use the semantic label from AI (e.g., "Mon", "Jan", "2024", "1/5-1/10")
     return { type: "custom", range: { from, to }, label: parsed.label };
-  } catch {
+  } catch (error) {
+    // Returning null keeps the UI graceful on an unparseable string, but the
+    // failure must not be invisible — a 401/gateway error here looks identical
+    // to "couldn't parse" to the user. Surface it so it's diagnosable.
+    trackError(error, {
+      source: "custom",
+      location: "TimeRangePicker.parseWithAI",
+      hasAuthHeaders: Boolean(authHeaders),
+    });
     return null;
   }
 }
@@ -328,6 +348,13 @@ export interface TimeRangePickerProps {
   apiUrl?: string;
   /** Project slug for API authentication */
   projectSlug?: string;
+  /**
+   * Auth headers to send with the AI parsing request to /chat/completions
+   * (e.g. `{ "Gram-Session": token }`). The `/chat/completions` proxy
+   * authenticates from request headers, not cookies, so without these the
+   * request is rejected with 401 and natural-language parsing silently fails.
+   */
+  authHeaders?: Record<string, string>;
   /** Additional class name for the trigger */
   className?: string;
 }
@@ -347,8 +374,9 @@ function TimeRangePicker({
   timezone,
   apiUrl,
   projectSlug,
+  authHeaders,
   className,
-}: TimeRangePickerProps) {
+}: TimeRangePickerProps): React.JSX.Element {
   const [isOpen, setIsOpen] = React.useState(false);
   const [showCalendar, setShowCalendar] = React.useState(false);
   const [inputValue, setInputValue] = React.useState("");
@@ -441,6 +469,7 @@ function TimeRangePicker({
           inputValue,
           effectiveApiUrl,
           projectSlug,
+          authHeaders,
         );
         applyParseResult(aiParsed);
       } finally {
@@ -560,7 +589,9 @@ function TimeRangePicker({
             onClick={handleInputClick}
             onFocus={handleInputFocus}
             onBlur={handleInputBlur}
-            onKeyDown={handleInputKeyDown}
+            onKeyDown={(e) => {
+              void handleInputKeyDown(e);
+            }}
             placeholder="e.g., 3 days ago, last week..."
             disabled={disabled}
             className={cn(

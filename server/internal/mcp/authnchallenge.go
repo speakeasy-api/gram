@@ -24,12 +24,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -87,7 +89,15 @@ type EndpointRef struct {
 // round-trip through the IDP and land on /connect, short enough that
 // abandoned flows don't pile up.
 type AuthnChallengeState struct {
-	ID                  string      `json:"id"`
+	ID string `json:"id"`
+	// FlowID is the stable correlation identifier for the whole OAuth flow,
+	// minted once at /authorize. Unlike ID — which idp_callback rotates to
+	// rotate the Redis cache key — FlowID is preserved across the rotation
+	// and copied into the UserSessionGrant so /token can log it too. Logged
+	// as attr.OAuthFlowID on every handler in the flow. Empty for in-flight
+	// states minted before this field landed (rolling deploy); callers treat
+	// empty as "unknown" and never depend on its presence.
+	FlowID              string      `json:"flow_id,omitempty"`
 	UserSessionIssuerID uuid.UUID   `json:"user_session_issuer_id"`
 	Endpoint            EndpointRef `json:"endpoint"`
 	ClientID            string      `json:"client_id"`
@@ -123,7 +133,12 @@ func (a AuthnChallengeState) TTL() time.Duration { return 10 * time.Minute }
 // grant. Stored in Redis under
 // `userSessionGrant:{user_session_issuer_id}:{code}` for ~10 minutes.
 type UserSessionGrant struct {
-	Code                string             `json:"code"`
+	Code string `json:"code"`
+	// FlowID carries the OAuth flow correlation identifier from the
+	// AuthnChallengeState into the grant so /token can stamp it on its logs,
+	// completing end-to-end correlation. Empty for grants minted before this
+	// field landed (rolling deploy).
+	FlowID              string             `json:"flow_id,omitempty"`
 	UserSessionIssuerID uuid.UUID          `json:"user_session_issuer_id"`
 	UserSessionClientID uuid.UUID          `json:"user_session_client_id"`
 	ClientID            string             `json:"client_id"`
@@ -254,19 +269,21 @@ func (s *Service) BaseURLForRequest(r *http.Request) string {
 // the toolset-keyed (/mcp) and mcp_server-keyed (/x/mcp) MCP runtime
 // paths. It validates the bearer token as a user-session JWT, falls back
 // to an assistant-runtime JWT scoped to the endpoint's project, and on
-// success resolves the upstream remote-session access token configured
+// success resolves the upstream remote-session access tokens configured
 // for the issuer.
 //
 // On success: returns the request context stamped with the resolved
-// principal plus the upstream access token. The token is "" when the
-// issuer has no remote_session_clients bound; today the inv.Check in
-// remotesessions.ResolveOneAccessToken caps the upstream to exactly 0 or
-// 1, so the return type is a single string rather than a slice. Callers
-// wrap the non-empty value into an oauthTokenInputs as needed for
-// downstream tool-dispatch chains.
+// principal plus a remote_session_issuer_id -> upstream access token map.
+// The map is nil/empty when the issuer has no remote_session_clients
+// bound; otherwise it holds one token per remote_session_issuer the
+// subject has linked. Callers wrap each entry into an oauthTokenInputs,
+// tagged with its remote_session_issuer_id, for downstream tool-dispatch
+// chains.
 //
 // On failure: writes a 401 + WWW-Authenticate to w and returns the
-// CodeUnauthorized error from WriteAuthenticateChallenge. The
+// CodeUnauthorized error from WriteAuthenticateChallenge. A re-auth
+// challenge is issued when any attached remote session is missing or
+// invalid (ResolveAccessTokens returns ErrNoValidToken). The
 // resource_metadata URL is built from baseURL + endpoint.RouteBase +
 // endpoint.Slug so a /x/mcp request gets pointed at /x/mcp's
 // protected-resource metadata, not /mcp's.
@@ -279,10 +296,10 @@ func (s *Service) ApplyIssuerGate(
 	w http.ResponseWriter,
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
-) (context.Context, string, error) {
+) (context.Context, map[uuid.UUID]string, error) {
 	protectedResourceURL, err := endpoint.ProtectedResourceURL(baseURL)
 	if err != nil {
-		return ctx, "", oops.E(oops.CodeUnexpected, err, "build protected-resource URL").Log(ctx, s.logger)
+		return ctx, nil, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
 	}
 
 	newCtx, subject, ok := s.validateUserSessionToken(ctx, authToken, endpoint)
@@ -297,28 +314,29 @@ func (s *Service) ApplyIssuerGate(
 		}
 	}
 	if !ok {
-		return ctx, "", WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
+		return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
 	}
 
-	// Resolve the upstream remote_session for this subject before
+	// Resolve the upstream remote_sessions for this subject before
 	// running the legacy auth chain. The resolver short-circuits to
 	// no-op when the issuer has no remote_session_clients bound;
-	// otherwise it either supplies the upstream access token (fed
-	// into tokenInputs so it satisfies the endpoint's oauth2 scheme
-	// downstream) or fails with ErrNoValidToken — which the user
-	// resolves by re-linking via {routeBase}/{slug}/connect.
-	var upstreamToken string
+	// otherwise it supplies one upstream access token per linked
+	// remote_session_issuer (fed into tokenInputs so they satisfy the
+	// endpoint's oauth2 schemes downstream) or fails with ErrNoValidToken
+	// when any attached remote session is missing or invalid — which the
+	// user resolves by re-linking via {routeBase}/{slug}/connect.
+	var upstreamTokens map[uuid.UUID]string
 	if subject != nil {
-		upstream, rerr := s.remoteChallengeMgr.ResolveOneAccessToken(newCtx, endpoint.ProjectID, endpoint.UserSessionIssuerID, *subject)
+		tokens, rerr := s.remoteChallengeMgr.ResolveAccessTokens(newCtx, endpoint.ProjectID, endpoint.UserSessionIssuerID, *subject)
 		switch {
 		case errors.Is(rerr, remotesessions.ErrNoValidToken):
-			return ctx, "", WriteAuthenticateChallenge(w, protectedResourceURL, "")
+			return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "")
 		case rerr != nil:
-			return ctx, "", oops.E(oops.CodeUnexpected, rerr, "resolve remote session").Log(newCtx, s.logger)
+			return ctx, nil, oops.E(oops.CodeUnexpected, rerr, "resolve remote session").LogError(newCtx, s.logger)
 		}
-		upstreamToken = upstream
+		upstreamTokens = tokens
 	}
-	return newCtx, upstreamToken, nil
+	return newCtx, upstreamTokens, nil
 }
 
 var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not match toolset")
@@ -340,25 +358,56 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
 		}
-		return oops.E(oops.CodeUnexpected, err, "load user_session_issuer").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "load user_session_issuer").LogError(ctx, s.logger)
 	}
 	return nil
 }
 
-// extractClientCredentials returns the client_id + client_secret + ok from
-// either the Authorization header (client_secret_basic) or the form body
-// (client_secret_post). HTTP Basic wins when both are present, per RFC 6749
-// §2.3.1 ("the client MAY use only one authentication method").
-func extractClientCredentials(r *http.Request) (string, string, bool) {
+// extractClientCredentials returns the client_id + client_secret + presented
+// auth method + ok from either the Authorization header (client_secret_basic)
+// or the form body (client_secret_post / none). HTTP Basic still wins when
+// both are present; callers log the "multiple" presentation to surface client
+// misconfiguration without changing current compatibility behavior.
+func extractClientCredentials(r *http.Request) (string, string, string, bool) {
+	formID := r.PostForm.Get("client_id")
+	formSecret := r.PostForm.Get("client_secret")
+	hasFormCredentials := formID != "" || formSecret != ""
+
 	if id, secret, ok := r.BasicAuth(); ok && id != "" {
-		return id, secret, true
+		presentedMethod := "client_secret_basic"
+		if hasFormCredentials {
+			presentedMethod = "multiple"
+		}
+		return id, secret, presentedMethod, true
 	}
-	id := r.PostForm.Get("client_id")
-	secret := r.PostForm.Get("client_secret")
-	if id == "" {
-		return "", "", false
+	if formID == "" {
+		return "", "", "none", false
 	}
-	return id, secret, true
+	presentedMethod := "none"
+	if formSecret != "" {
+		presentedMethod = "client_secret_post"
+	}
+	return formID, formSecret, presentedMethod, true
+}
+
+func logOAuthClientCredentialEvent(ctx context.Context, logger *slog.Logger, r *http.Request, message, clientID, presentedMethod, grantType, failureReason string) {
+	args := []any{
+		attr.SlogURLOriginal(r.URL.Path),
+		attr.SlogHTTPRequestHeaderUserAgent(r.UserAgent()),
+	}
+	if clientID != "" {
+		args = append(args, attr.SlogOAuthClientID(clientID))
+	}
+	if presentedMethod != "" {
+		args = append(args, attr.SlogOAuthPresentedAuthMethod(presentedMethod))
+	}
+	if grantType != "" {
+		args = append(args, attr.SlogOAuthGrant(grantType))
+	}
+	if failureReason != "" {
+		args = append(args, attr.SlogOAuthFailureReason(failureReason))
+	}
+	logger.InfoContext(ctx, message, args...)
 }
 
 // sha256Hex returns the base64url-encoded SHA-256 of the input. (The name

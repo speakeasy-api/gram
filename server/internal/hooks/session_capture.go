@@ -206,6 +206,12 @@ func (s *Service) insertMessageWithFallbackUpsert(
 		return fmt.Errorf("check session_capture feature flag: %w", err)
 	}
 	if !enabled {
+		s.logger.DebugContext(ctx, "session capture disabled; skipping Claude chat persistence",
+			attr.SlogEvent("claude_hook_session_capture_disabled"),
+			attr.SlogOrganizationID(metadata.GramOrgID),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogGenAIConversationID(metadata.SessionID),
+		)
 		return nil
 	}
 
@@ -257,6 +263,13 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		role = "user"
 		content = conv.PtrValOr(payload.Prompt, "")
 	case "Stop":
+		if err := s.backfillLastUserPromptID(ctx, chatID, projectID, payload); err != nil {
+			s.logger.WarnContext(ctx, "failed to backfill Claude user prompt ID",
+				attr.SlogError(err),
+				attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
+				attr.SlogProjectID(metadata.ProjectID),
+			)
+		}
 		role = "assistant"
 		content = conv.PtrValOr(payload.LastAssistantMessage, "")
 		model = conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, ""))
@@ -265,6 +278,12 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	}
 
 	if content == "" {
+		s.logger.DebugContext(ctx, "skipping empty Claude conversation event",
+			attr.SlogEvent("claude_hook_conversation_empty"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
+			attr.SlogProjectID(metadata.ProjectID),
+		)
 		return nil
 	}
 
@@ -311,6 +330,33 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	}
 
 	return nil
+}
+
+func (s *Service) backfillLastUserPromptID(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID, payload *gen.ClaudePayload) error {
+	lastUserPromptID := claudeLastUserPromptIDFromAdditionalData(payload.AdditionalData)
+	if lastUserPromptID == "" {
+		return nil
+	}
+
+	_, err := s.repo.BackfillLatestClaudeUserMessagePromptID(ctx, repo.BackfillLatestClaudeUserMessagePromptIDParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+		MessageID: conv.ToPGText(lastUserPromptID),
+	})
+	if err != nil {
+		return fmt.Errorf("backfill latest Claude user message prompt ID: %w", err)
+	}
+	return nil
+}
+
+func claudeLastUserPromptIDFromAdditionalData(additionalData map[string]any) string {
+	if additionalData == nil {
+		return ""
+	}
+	if v, ok := additionalData["LastUserPromptID"].(string); ok {
+		return v
+	}
+	return ""
 }
 
 // writeToolCallRequestToPG writes an assistant message with tool_calls to PostgreSQL.

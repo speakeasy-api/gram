@@ -29,6 +29,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/organizations/server"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -43,6 +44,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	telemrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -61,6 +64,9 @@ type OrganizationProvider interface {
 	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
 	GetOrganizationDomainPolicy(ctx context.Context, workosOrgID string) (*workos.OrganizationDomainPolicy, error)
 	ListRoles(ctx context.Context, workosOrgID string) ([]workos.Role, error)
+	GenerateAdminPortalLink(ctx context.Context, workosOrgID string, intent workos.PortalIntent, opts workos.GenerateAdminPortalLinkOpts) (string, error)
+	ListConnections(ctx context.Context, organizationID string) ([]workos.Connection, error)
+	ListDirectories(ctx context.Context, organizationID string) ([]workos.Directory, error)
 }
 
 var _ OrganizationProvider = (*workos.Client)(nil)
@@ -76,6 +82,14 @@ type orgFeatureChecker interface {
 	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
+// HookEventReader is the subset of the telemetry repo used by the onboarding
+// wizard's verifyOnboardingHooksSetup poll. Decoupled from a concrete repo so
+// tests can stub it.
+type HookEventReader interface {
+	ListRecentHookEventsForOnboarding(ctx context.Context, arg telemrepo.ListRecentHookEventsForOnboardingParams) ([]telemrepo.RecentHookEvent, error)
+	CountRecentHookEventsForOnboarding(ctx context.Context, projectIDs []string, sinceUnixNano int64) (uint64, error)
+}
+
 type Service struct {
 	logger    *slog.Logger
 	tracer    trace.Tracer
@@ -86,6 +100,7 @@ type Service struct {
 	orgs      OrganizationProvider
 	invite    InviteIdentityProvider
 	features  orgFeatureChecker
+	hooks     HookEventReader // optional; nil disables verifyOnboardingHooksSetup
 	email     *email.Service
 	serverURL string // API server URL; used to build invite links
 	siteURL   string // frontend URL; used for post-callback browser redirects
@@ -97,7 +112,7 @@ var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, authzEngine *authz.Engine, emailService *email.Service, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService *email.Service, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 
 	return &Service{
@@ -110,6 +125,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		orgs:      orgs,
 		invite:    invite,
 		features:  features,
+		hooks:     hooks,
 		email:     emailService,
 		serverURL: serverURL,
 		siteURL:   siteURL,
@@ -119,6 +135,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 }
 
 const inviteCallbackPath = "/rpc/organizations.inviteCallback"
+const setupCallbackPath = "/v1/setup/callback"
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
@@ -131,6 +148,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 	// Raw HTTP handler for Gram invite-token acceptance.
 	mux.Handle("GET", inviteCallbackPath, service.handleInviteCallback)
+
+	// Raw HTTP handler for onboarding setup portal callback.
+	// WorkOS success_url redirects here; we verify the setup state and redirect
+	// to the appropriate wizard step in the dashboard.
+	mux.Handle("GET", setupCallbackPath, service.handleSetupCallback)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -149,7 +171,7 @@ func (s *Service) Get(ctx context.Context, _ *gen.GetPayload) (res *gen.Organiza
 
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").LogError(ctx, s.logger)
 	}
 
 	return &gen.Organization{
@@ -178,7 +200,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		return nil, err
 	}
 
-	normalizedEmail := strings.ToLower(strings.TrimSpace(payload.Email))
+	normalizedEmail := conv.NormalizeEmail(payload.Email)
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -188,7 +210,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 
 	emailDomain, ok := inviteEmailDomain(normalizedEmail)
 	if !ok {
-		return nil, oops.E(oops.CodeBadRequest, nil, "email must be a valid email address").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "email must be a valid email address").LogError(ctx, logger)
 	}
 
 	_, err = userrepo.New(s.db).GetConnectedUserByEmail(ctx, userrepo.GetConnectedUserByEmailParams{
@@ -197,15 +219,15 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 	})
 	switch {
 	case err == nil:
-		return nil, oops.E(oops.CodeConflict, nil, "user is already a member of this organization").Log(ctx, logger)
+		return nil, oops.E(oops.CodeConflict, nil, "user is already a member of this organization").LogError(ctx, logger)
 	case errors.Is(err, pgx.ErrNoRows):
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "check organization membership").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "check organization membership").LogError(ctx, logger)
 	}
 
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization metadata").LogError(ctx, logger)
 	}
 	if workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID); workosOrgID != "" {
 		if err := s.ensureInviteEmailDomainAllowed(ctx, logger, workosOrgID, emailDomain); err != nil {
@@ -215,7 +237,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 
 	rawToken, tokenHash, err := generateInviteToken()
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "generate invite token").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "generate invite token").LogError(ctx, logger)
 	}
 
 	roleSlug := pgtype.Text{String: "", Valid: false}
@@ -231,7 +253,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 	// a concurrent request cannot slip in between and claim the unique index.
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // rollback is no-op after commit
 
@@ -244,7 +266,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		OrganizationID: ac.ActiveOrganizationID,
 		Email:          normalizedEmail,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "expire stale invitations").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "expire stale invitations").LogError(ctx, logger)
 	}
 
 	row, err := txRepo.CreateInvitation(ctx, orgrepo.CreateInvitationParams{
@@ -258,9 +280,9 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "organization_invitations_org_email_pending_key" {
-			return nil, oops.E(oops.CodeConflict, nil, "an invitation is already pending for this email").Log(ctx, logger)
+			return nil, oops.E(oops.CodeConflict, nil, "an invitation is already pending for this email").LogError(ctx, logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "create invitation").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create invitation").LogError(ctx, logger)
 	}
 	span.SetAttributes(attr.OrganizationInviteID(row.ID.String()))
 	span.AddEvent("invite.created", trace.WithAttributes(
@@ -277,14 +299,14 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		InviteeEmail:     row.Email,
 		RoleSlug:         conv.FromPGText[string](row.RoleSlug),
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log organization invitation creation").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log organization invitation creation").LogError(ctx, logger)
 	}
 
 	inviteLink := ""
 	if s.email != nil {
 		inviteURL, err := url.Parse(s.serverURL + inviteCallbackPath)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "build invite link").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "build invite link").LogError(ctx, logger)
 		}
 		q := inviteURL.Query()
 		q.Set("invite_token", rawToken)
@@ -293,15 +315,21 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit invitation").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit invitation").LogError(ctx, logger)
 	}
 
 	if s.email != nil {
 		// Look up inviter display name + email and org name for the email template.
 		inviterName, inviterEmail := ac.UserID, ""
 		if u, err := userrepo.New(s.db).GetUser(ctx, ac.UserID); err == nil {
-			inviterName = u.DisplayName
-			inviterEmail = u.Email
+			inviterName = strings.TrimSpace(u.DisplayName)
+			inviterEmail = strings.TrimSpace(u.Email)
+			if inviterName == "" {
+				inviterName = inviterEmail
+			}
+			if inviterName == "" {
+				inviterName = ac.UserID
+			}
 		}
 		orgName := ac.ActiveOrganizationID
 		if org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID); err == nil {
@@ -319,7 +347,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 			// Revoke the invite so the user can retry — the invitee never
 			// received the invite link so the invite is useless.
 			_ = orgrepo.New(s.db).RevokeInvitation(ctx, row.ID)
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to send invite email").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to send invite email").LogError(ctx, logger)
 		}
 		span.AddEvent("invite.email_sent")
 	}
@@ -330,7 +358,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 func (s *Service) ensureInviteEmailDomainAllowed(ctx context.Context, logger *slog.Logger, workosOrgID string, emailDomain string) error {
 	policy, err := s.orgs.GetOrganizationDomainPolicy(ctx, workosOrgID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "get organization trusted domains").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "get organization trusted domains").LogError(ctx, logger)
 	}
 	if policy == nil {
 		return nil
@@ -353,34 +381,34 @@ func (s *Service) ensureInviteEmailDomainAllowed(ctx context.Context, logger *sl
 		return nil
 	}
 
-	return oops.E(oops.CodeBadRequest, nil, "invite email must use one of this organization's trusted domains: %s", strings.Join(trustedDomains, ", ")).Log(ctx, logger)
+	return oops.E(oops.CodeBadRequest, nil, "invite email must use one of this organization's trusted domains: %s", strings.Join(trustedDomains, ", ")).LogError(ctx, logger)
 }
 
 func (s *Service) resolveInviteRoleSlug(ctx context.Context, organizationID string, roleID string, logger *slog.Logger) (pgtype.Text, error) {
 	if strings.TrimSpace(roleID) == "" {
-		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "role id is required").Log(ctx, logger)
+		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "role id is required").LogError(ctx, logger)
 	}
 
-	// Resolve the WorkOS role ID sent by the dashboard into a WorkOS role slug
-	// so the invite stores the slug needed at acceptance time.
-	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	// The dashboard sends a Gram local role UUID (as returned by
+	// /rpc/access.listRoles). Resolve it against the local roles table to
+	// recover the WorkOS slug stored on the invite for acceptance time.
+	roleUUID, err := uuid.Parse(roleID)
 	if err != nil {
-		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, logger)
-	}
-	if !org.WorkosID.Valid || org.WorkosID.String == "" {
-		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, logger)
-	}
-	roles, err := s.orgs.ListRoles(ctx, org.WorkosID.String)
-	if err != nil {
-		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeUnexpected, err, "list roles for invite").Log(ctx, logger)
-	}
-	for _, r := range roles {
-		if r.ID == roleID {
-			return conv.ToPGText(r.Slug), nil
-		}
+		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "role not found").LogError(ctx, logger)
 	}
 
-	return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "role not found").Log(ctx, logger)
+	role, err := accessrepo.New(s.db).GetOrganizationRoleByID(ctx, accessrepo.GetOrganizationRoleByIDParams{
+		OrganizationID: organizationID,
+		ID:             roleUUID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "role not found").LogError(ctx, logger)
+	case err != nil:
+		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeUnexpected, err, "get role for invite").LogError(ctx, logger)
+	}
+
+	return conv.ToPGText(role.WorkosSlug), nil
 }
 
 func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePayload) error {
@@ -407,12 +435,12 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 
 	inviteID, err := uuid.Parse(payload.InvitationID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid invitation id").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid invitation id").LogError(ctx, logger)
 	}
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
@@ -420,12 +448,12 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 	invite, err := txRepo.GetInvitationByID(ctx, inviteID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return oops.C(oops.CodeNotFound).Log(ctx, logger)
+		return oops.C(oops.CodeNotFound).LogError(ctx, logger)
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "get invitation").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "get invitation").LogError(ctx, logger)
 	}
 	if invite.OrganizationID != ac.ActiveOrganizationID {
-		return oops.E(oops.CodeForbidden, nil, "invitation does not belong to this organization").Log(ctx, logger)
+		return oops.E(oops.CodeForbidden, nil, "invitation does not belong to this organization").LogError(ctx, logger)
 	}
 
 	span.SetAttributes(
@@ -442,7 +470,7 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "revoke invitation").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "revoke invitation").LogError(ctx, logger)
 	}
 
 	afterSnapshot := dbInvitationToGen(&row, conv.FromPGText[string](row.InviterUserID))
@@ -456,11 +484,11 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 		InvitationSnapshotBefore: beforeSnapshot,
 		InvitationSnapshotAfter:  afterSnapshot,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log organization invitation revocation").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "log organization invitation revocation").LogError(ctx, logger)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit invitation revocation").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "commit invitation revocation").LogError(ctx, logger)
 	}
 
 	span.AddEvent("invite.revoked")
@@ -493,25 +521,25 @@ func (s *Service) UpdateInviteRole(ctx context.Context, payload *gen.UpdateInvit
 
 	inviteID, err := uuid.Parse(payload.InvitationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid invitation id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid invitation id").LogError(ctx, logger)
 	}
 
 	repo := orgrepo.New(s.db)
 	invite, err := repo.GetInvitationByID(ctx, inviteID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.C(oops.CodeNotFound).Log(ctx, logger)
+		return nil, oops.C(oops.CodeNotFound).LogError(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "get invitation").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get invitation").LogError(ctx, logger)
 	}
 	if invite.OrganizationID != ac.ActiveOrganizationID {
-		return nil, oops.E(oops.CodeForbidden, nil, "invitation does not belong to this organization").Log(ctx, logger)
+		return nil, oops.E(oops.CodeForbidden, nil, "invitation does not belong to this organization").LogError(ctx, logger)
 	}
 	if invite.State != "pending" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invitation is not pending").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "invitation is not pending").LogError(ctx, logger)
 	}
 	if invite.ExpiresAt.Valid && !invite.ExpiresAt.Time.After(time.Now()) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invitation is expired").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "invitation is expired").LogError(ctx, logger)
 	}
 
 	roleSlug, err := s.resolveInviteRoleSlug(ctx, ac.ActiveOrganizationID, payload.RoleID, logger)
@@ -521,7 +549,7 @@ func (s *Service) UpdateInviteRole(ctx context.Context, payload *gen.UpdateInvit
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
@@ -534,9 +562,9 @@ func (s *Service) UpdateInviteRole(ctx context.Context, payload *gen.UpdateInvit
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.C(oops.CodeNotFound).Log(ctx, logger)
+		return nil, oops.C(oops.CodeNotFound).LogError(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "update invitation role").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "update invitation role").LogError(ctx, logger)
 	}
 
 	afterSnapshot := dbInvitationToGen(&row, conv.FromPGText[string](row.InviterUserID))
@@ -550,11 +578,11 @@ func (s *Service) UpdateInviteRole(ctx context.Context, payload *gen.UpdateInvit
 		InvitationSnapshotBefore: beforeSnapshot,
 		InvitationSnapshotAfter:  afterSnapshot,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log organization invitation role update").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log organization invitation role update").LogError(ctx, logger)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit invitation role update").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit invitation role update").LogError(ctx, logger)
 	}
 
 	span.AddEvent("invite.role_updated", trace.WithAttributes(attr.OrganizationInviteRoleSlug(roleSlug.String)))
@@ -583,7 +611,7 @@ func (s *Service) ListInvites(ctx context.Context, _ *gen.ListInvitesPayload) (*
 
 	rows, err := orgrepo.New(s.db).ListPendingInvitations(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list invitations").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list invitations").LogError(ctx, logger)
 	}
 
 	out := make([]*gen.OrganizationInvitation, 0, len(rows))
@@ -614,7 +642,7 @@ func (s *Service) ListUsers(ctx context.Context, _ *gen.ListUsersPayload) (*gen.
 
 	rows, err := orgrepo.New(s.db).ListOrganizationUsers(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list organization users").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization users").LogError(ctx, s.logger)
 	}
 
 	out := make([]*gen.OrganizationUser, 0, len(rows))
@@ -639,7 +667,7 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 	}
 
 	if payload.UserID == ac.UserID {
-		return oops.E(oops.CodeBadRequest, nil, "cannot remove yourself from the organization").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "cannot remove yourself from the organization").LogError(ctx, logger)
 	}
 
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -649,7 +677,7 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
@@ -661,21 +689,21 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, nil, "user is not a member of this organization").Log(ctx, logger)
+		return oops.E(oops.CodeNotFound, nil, "user is not a member of this organization").LogError(ctx, logger)
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "get organization user relationship").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "get organization user relationship").LogError(ctx, logger)
 	}
 
 	if err := qtx.DeleteOrganizationUserRelationship(ctx, orgrepo.DeleteOrganizationUserRelationshipParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		UserID:         conv.ToPGText(payload.UserID),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete organization user relationship").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "delete organization user relationship").LogError(ctx, logger)
 	}
 
 	if rel.WorkosMembershipID.Valid && rel.WorkosMembershipID.String != "" {
 		if err := s.orgs.DeleteOrganizationMembership(ctx, rel.WorkosMembershipID.String); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "remove user").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "remove user").LogError(ctx, logger)
 		}
 	} else {
 		s.logger.DebugContext(ctx, "skipping WorkOS membership delete: no workos_membership_id on relationship",
@@ -686,7 +714,7 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	return nil
@@ -695,7 +723,7 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 func (s *Service) EnableWebhooks(ctx context.Context, payload *gen.EnableWebhooksPayload) (err error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
@@ -707,7 +735,7 @@ func (s *Service) EnableWebhooks(ctx context.Context, payload *gen.EnableWebhook
 
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to read organization details").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to read organization details").LogError(ctx, s.logger)
 	}
 
 	appID := conv.FromPGTextOrEmpty[string](org.SvixAppID)
@@ -721,20 +749,20 @@ func (s *Service) EnableWebhooks(ctx context.Context, payload *gen.EnableWebhook
 			ThrottleRate: nil,
 		}, nil)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to create or get webhook connection").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to create or get webhook connection").LogError(ctx, logger)
 		}
 		appID = app.Id
 	}
 
 	if appID == "" {
-		return oops.E(oops.CodeUnexpected, nil, "malformed webhook connection details").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, nil, "malformed webhook connection details").LogError(ctx, logger)
 	}
 
 	logger = logger.With(attr.SlogOrganizationID(orgID), attr.SlogSvixAppID(appID))
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to access organization details").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to access organization details").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -754,10 +782,10 @@ func (s *Service) EnableWebhooks(ctx context.Context, payload *gen.EnableWebhook
 	case errors.Is(err, pgx.ErrNoRows):
 		stored := conv.FromPGTextOrEmpty[string](row.SvixAppID)
 		if stored != appID {
-			return oops.E(oops.CodeUnexpected, nil, "failed to find organization details to update").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, nil, "failed to find organization details to update").LogError(ctx, logger)
 		}
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to store webhook connection details").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to store webhook connection details").LogError(ctx, logger)
 	}
 
 	if updated {
@@ -770,12 +798,12 @@ func (s *Service) EnableWebhooks(ctx context.Context, payload *gen.EnableWebhook
 			OrganizationSlug: org.Slug,
 			WebhooksEnabled:  row.WebhooksEnabled.Bool,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to log webhook toggle event").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to log webhook toggle event").LogError(ctx, logger)
 		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to save webhook connection details").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to save webhook connection details").LogError(ctx, logger)
 	}
 
 	return nil
@@ -784,7 +812,7 @@ func (s *Service) EnableWebhooks(ctx context.Context, payload *gen.EnableWebhook
 func (s *Service) DisableWebhooks(ctx context.Context, payload *gen.DisableWebhooksPayload) (err error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
@@ -796,13 +824,13 @@ func (s *Service) DisableWebhooks(ctx context.Context, payload *gen.DisableWebho
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to access organization details").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to access organization details").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to read organization details").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to read organization details").LogError(ctx, logger)
 	}
 
 	var updated bool
@@ -816,7 +844,7 @@ func (s *Service) DisableWebhooks(ctx context.Context, payload *gen.DisableWebho
 	case errors.Is(err, pgx.ErrNoRows):
 		// Org didn't have svix app id to begin with, effectively a noop
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to store webhook connection details").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to store webhook connection details").LogError(ctx, logger)
 	}
 
 	if updated {
@@ -829,12 +857,12 @@ func (s *Service) DisableWebhooks(ctx context.Context, payload *gen.DisableWebho
 			OrganizationSlug: org.Slug,
 			WebhooksEnabled:  row.WebhooksEnabled.Bool,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to log webhook toggle event").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to log webhook toggle event").LogError(ctx, logger)
 		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to save webhook connection details").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to save webhook connection details").LogError(ctx, logger)
 	}
 
 	return nil
@@ -843,7 +871,7 @@ func (s *Service) DisableWebhooks(ctx context.Context, payload *gen.DisableWebho
 func (s *Service) CreatePortalSession(ctx context.Context, payload *gen.CreatePortalSessionPayload) (res *gen.CreatePortalSessionResult, err error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
 	// See note below on why we use this pointer to a slice. It's also partly
@@ -852,7 +880,7 @@ func (s *Service) CreatePortalSession(ctx context.Context, payload *gen.CreatePo
 	// capabilities in svix.
 	var caps *[]models.AppPortalCapability
 	readCheckErr := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err == nil {
 		caps = new(fullSvixAppPortalCapabilities())
 	} else if readCheckErr == nil {
 		caps = new(minimumSvixAppPortalCapabilities())
@@ -864,7 +892,7 @@ func (s *Service) CreatePortalSession(ctx context.Context, payload *gen.CreatePo
 
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").LogError(ctx, logger)
 	}
 
 	appID := conv.FromPGTextOrEmpty[string](org.SvixAppID)
@@ -886,7 +914,7 @@ func (s *Service) CreatePortalSession(ctx context.Context, payload *gen.CreatePo
 		SessionId:    nil,
 	}, nil)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create webhook portal session").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create webhook portal session").LogError(ctx, logger)
 	}
 
 	return &gen.CreatePortalSessionResult{
@@ -895,10 +923,311 @@ func (s *Service) CreatePortalSession(ctx context.Context, payload *gen.CreatePo
 	}, nil
 }
 
+func (s *Service) GetOnboardingStatus(ctx context.Context, payload *gen.GetOnboardingStatusPayload) (*gen.OnboardingStatusResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").LogError(ctx, s.logger)
+	}
+
+	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
+	if workosOrgID == "" {
+		return &gen.OnboardingStatusResult{SsoConfigured: false, DsyncConfigured: false}, nil
+	}
+
+	connections, err := s.orgs.ListConnections(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to check SSO connections").LogError(ctx, s.logger)
+	}
+
+	directories, err := s.orgs.ListDirectories(ctx, workosOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to check directory sync").LogError(ctx, s.logger)
+	}
+
+	return &gen.OnboardingStatusResult{
+		SsoConfigured:   workos.HasActiveConnection(connections),
+		DsyncConfigured: workos.HasActiveDirectory(directories),
+	}, nil
+}
+
+const verifyOnboardingHooksLimit = 50
+
+func (s *Service) VerifyOnboardingHooksSetup(ctx context.Context, payload *gen.VerifyOnboardingHooksSetupPayload) (*gen.VerifyOnboardingHooksSetupResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	if s.hooks == nil {
+		// Telemetry/ClickHouse is not wired in this binary. Return an empty result
+		// so the wizard can render gracefully on local OSS setups.
+		return &gen.VerifyOnboardingHooksSetupResult{Events: []*gen.OnboardingHookEvent{}, LatestUnixNano: "0", TotalCount: 0}, nil
+	}
+
+	var sinceUnixNano int64
+	if payload.SinceUnixNano != nil && *payload.SinceUnixNano != "" {
+		parsed, parseErr := strconv.ParseInt(*payload.SinceUnixNano, 10, 64)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid since_unix_nano cursor").LogError(ctx, s.logger)
+		}
+		if parsed > 0 {
+			sinceUnixNano = parsed
+		}
+	}
+
+	projects, err := projectsrepo.New(s.db).ListProjectsByOrganization(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list projects for organization").LogError(ctx, s.logger)
+	}
+
+	if len(projects) == 0 {
+		return &gen.VerifyOnboardingHooksSetupResult{Events: []*gen.OnboardingHookEvent{}, LatestUnixNano: strconv.FormatInt(sinceUnixNano, 10), TotalCount: 0}, nil
+	}
+
+	projectIDs := make([]string, 0, len(projects))
+	slugByID := make(map[string]string, len(projects))
+	for _, p := range projects {
+		id := p.ID.String()
+		projectIDs = append(projectIDs, id)
+		slugByID[id] = p.Slug
+	}
+
+	rows, err := s.hooks.ListRecentHookEventsForOnboarding(ctx, telemrepo.ListRecentHookEventsForOnboardingParams{
+		ProjectIDs:    projectIDs,
+		SinceUnixNano: sinceUnixNano,
+		Limit:         verifyOnboardingHooksLimit,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read recent hook events").LogError(ctx, s.logger)
+	}
+
+	total, err := s.hooks.CountRecentHookEventsForOnboarding(ctx, projectIDs, sinceUnixNano)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to count recent hook events").LogError(ctx, s.logger)
+	}
+
+	events := make([]*gen.OnboardingHookEvent, 0, len(rows))
+	latest := sinceUnixNano
+	for _, r := range rows {
+		if r.TimeUnixNano > latest {
+			latest = r.TimeUnixNano
+		}
+		ev := &gen.OnboardingHookEvent{
+			TimeUnixNano: strconv.FormatInt(r.TimeUnixNano, 10),
+			Source:       r.HookSource,
+			ProjectSlug:  slugByID[r.GramProjectID],
+			ToolName:     r.ToolName,
+			EventName:    r.EventName,
+			UserEmail:    r.UserEmail,
+			ChatID:       r.GramChatID,
+			Status:       conv.PtrEmpty(r.Status),
+		}
+		events = append(events, ev)
+	}
+
+	return &gen.VerifyOnboardingHooksSetupResult{
+		Events:         events,
+		LatestUnixNano: strconv.FormatInt(latest, 10),
+		TotalCount:     int(total), //nolint:gosec // count fits int
+	}, nil
+}
+
+// handleSetupCallback is the backend handler that WorkOS's success_url redirects to
+// after portal completion. It authenticates the session, verifies the setup
+// state with WorkOS, and 302-redirects to the appropriate wizard step.
+//
+// Query params:
+//   - intent: "sso" or "dsync"
+func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
+	ctx, span := s.tracer.Start(r.Context(), "organizations.handleSetupCallback")
+	defer span.End()
+
+	intent := r.URL.Query().Get("intent")
+	if intent == "" {
+		span.SetStatus(codes.Error, "missing intent")
+		http.Error(w, "missing intent parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Authenticate the user's session cookie (set by SessionMiddleware).
+	sessionToken, ok := contextvalues.GetSessionTokenFromContext(ctx)
+	if !ok {
+		span.SetStatus(codes.Error, "unauthenticated")
+		http.Redirect(w, r, s.siteURL+"/login", http.StatusTemporaryRedirect)
+		return
+	}
+
+	ctx, err := s.auth.Authorize(ctx, sessionToken, &security.APIKeyScheme{
+		Name:           "session",
+		Scopes:         []string{},
+		RequiredScopes: []string{},
+	})
+	if err != nil {
+		span.SetStatus(codes.Error, "auth failed")
+		http.Redirect(w, r, s.siteURL+"/login", http.StatusTemporaryRedirect)
+		return
+	}
+
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		span.SetStatus(codes.Error, "missing auth context")
+		http.Error(w, "missing auth context", http.StatusUnauthorized)
+		return
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "setup callback: read org", attr.SlogError(err))
+		span.SetStatus(codes.Error, "read org failed")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
+	orgSlug := org.Slug
+
+	// Determine the next step based on what was just completed and what's verified.
+	var nextStepSlug string
+	switch intent {
+	case "sso":
+		if workosOrgID != "" {
+			connections, err := s.orgs.ListConnections(ctx, workosOrgID)
+			if err != nil {
+				s.logger.ErrorContext(ctx, "setup callback: list connections", attr.SlogError(err))
+			}
+			if workos.HasActiveConnection(connections) {
+				nextStepSlug = "directory-sync"
+			}
+		}
+	case "dsync":
+		// Directory sync may take time to become "linked" after portal setup.
+		// Completing the portal is sufficient to advance — DSYNC is also skippable.
+		nextStepSlug = "create-marketplace"
+	}
+
+	redirectURL := fmt.Sprintf("%s/%s/setup", s.siteURL, orgSlug)
+	if nextStepSlug != "" {
+		redirectURL += fmt.Sprintf("?step=%s", nextStepSlug)
+	}
+
+	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
+}
+
+func (s *Service) SendEnterpriseAdminOnboardingEmail(ctx context.Context, payload *gen.SendEnterpriseAdminOnboardingEmailPayload) (*gen.SendEnterpriseAdminOnboardingEmailResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	if s.email == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "email service not configured").LogError(ctx, s.logger)
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").LogError(ctx, s.logger)
+	}
+
+	setupLink := fmt.Sprintf("%s/%s/setup", strings.TrimRight(s.siteURL, "/"), org.Slug)
+
+	tmpl := email.EnterpriseAdminOnboarding{SetupLink: setupLink}
+
+	sent := 0
+	for _, recipient := range payload.Recipients {
+		recipient = strings.TrimSpace(recipient)
+		if recipient == "" {
+			continue
+		}
+		if err := s.email.Send(ctx, recipient, tmpl); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to send onboarding email to %s", recipient).LogError(ctx, s.logger)
+		}
+		sent++
+	}
+
+	return &gen.SendEnterpriseAdminOnboardingEmailResult{
+		SentCount: sent,
+		SetupLink: setupLink,
+	}, nil
+}
+
+func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *gen.GenerateWorkOSAdminPortalLinkPayload) (res *gen.GenerateWorkOSAdminPortalLinkResult, err error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").LogError(ctx, s.logger)
+	}
+
+	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
+	if workosOrgID == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS")
+	}
+
+	var iopts *workos.IntentOptions
+	if payload.IntentOptions != nil {
+		var sso *workos.SSOIntentOptions
+		if payload.IntentOptions.Sso != nil {
+			sso = &workos.SSOIntentOptions{
+				BookmarkSlug: conv.PtrValOr(payload.IntentOptions.Sso.BookmarkSlug, ""),
+				ProviderType: conv.PtrValOr(payload.IntentOptions.Sso.ProviderType, ""),
+			}
+		}
+		var dv *workos.DomainVerificationIntentOptions
+		if payload.IntentOptions.DomainVerification != nil {
+			dv = &workos.DomainVerificationIntentOptions{
+				DomainName: conv.PtrValOr(payload.IntentOptions.DomainVerification.DomainName, ""),
+			}
+		}
+		iopts = &workos.IntentOptions{
+			SSO:                sso,
+			DomainVerification: dv,
+		}
+	}
+	opts := workos.GenerateAdminPortalLinkOpts{
+		ReturnURL:       conv.PtrValOr(payload.ReturnURL, ""),
+		SuccessURL:      conv.PtrValOr(payload.SuccessURL, ""),
+		ITContactEmails: payload.ItContactEmails,
+		IntentOptions:   iopts,
+	}
+
+	link, err := s.orgs.GenerateAdminPortalLink(ctx, workosOrgID, workos.PortalIntent(payload.Intent), opts)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate WorkOS admin portal link").LogError(ctx, s.logger)
+	}
+
+	return &gen.GenerateWorkOSAdminPortalLinkResult{
+		URL: link,
+	}, nil
+}
+
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || ac == nil {
-		return nil, oops.E(oops.CodeUnauthorized, errors.New("missing auth context"), "missing auth context").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, errors.New("missing auth context"), "missing auth context").LogError(ctx, s.logger)
 	}
 
 	return ac, nil
@@ -907,15 +1236,15 @@ func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, 
 func (s *Service) orgContext(ctx context.Context) (*contextvalues.AuthContext, string, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, "", oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+		return nil, "", oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, "", oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, s.logger)
+		return nil, "", oops.E(oops.CodeUnexpected, err, "get organization metadata").LogError(ctx, s.logger)
 	}
 	if !org.WorkosID.Valid || org.WorkosID.String == "" {
-		return nil, "", oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
+		return nil, "", oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").LogError(ctx, s.logger)
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -1077,7 +1406,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	))
 
 	// Verify the authenticated email matches the invite.
-	inviteeEmail := strings.ToLower(strings.TrimSpace(idpUser.Email))
+	inviteeEmail := conv.NormalizeEmail(idpUser.Email)
 	if invite.Email != inviteeEmail {
 		s.logger.WarnContext(ctx, fmt.Sprintf("invite callback: email mismatch (invite=%s, authenticated=%s)", invite.Email, inviteeEmail))
 		span.AddEvent("invite.callback.email_mismatch", trace.WithAttributes(
@@ -1284,7 +1613,14 @@ func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow) *gen.Organizat
 }
 
 func fullSvixAppPortalCapabilities() []models.AppPortalCapability {
-	return []models.AppPortalCapability{}
+	return []models.AppPortalCapability{
+		models.APPPORTALCAPABILITY_VIEW_BASE,
+		models.APPPORTALCAPABILITY_VIEW_ENDPOINT_SECRET,
+		models.APPPORTALCAPABILITY_MANAGE_ENDPOINT_SECRET,
+		models.APPPORTALCAPABILITY_MANAGE_TRANSFORMATIONS,
+		models.APPPORTALCAPABILITY_CREATE_ATTEMPTS,
+		models.APPPORTALCAPABILITY_MANAGE_ENDPOINT,
+	}
 }
 func minimumSvixAppPortalCapabilities() []models.AppPortalCapability {
 	return []models.AppPortalCapability{models.APPPORTALCAPABILITY_VIEW_BASE}

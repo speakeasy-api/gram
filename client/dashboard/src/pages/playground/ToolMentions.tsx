@@ -18,7 +18,7 @@ export function ToolMentionAutocomplete({
   inputValue,
   onInputChange,
   textareaRef,
-}: ToolMentionProps) {
+}: ToolMentionProps): JSX.Element | null {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredTools, setFilteredTools] = useState<Tool[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -231,7 +231,7 @@ export function MentionedToolsBadges({
   toolIds: string[];
   tools: Tool[];
   onRemove?: (toolId: string) => void;
-}) {
+}): JSX.Element | null {
   const mentionedTools = tools.filter((tool) => toolIds.includes(tool.id));
 
   if (mentionedTools.length === 0) return null;

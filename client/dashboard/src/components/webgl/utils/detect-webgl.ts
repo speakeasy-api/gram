@@ -2,7 +2,7 @@
  * Detects if WebGL is available in the current browser environment.
  * Returns true if WebGL can be used, false otherwise.
  */
-export function isWebGLAvailable(): boolean {
+function isWebGLAvailable(): boolean {
   try {
     const canvas = document.createElement("canvas");
     const gl =

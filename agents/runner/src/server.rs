@@ -17,7 +17,7 @@ use crate::wire::{RunnerStateResponse, ThreadStateView, ThreadTurnRequest, Threa
 
 pub struct ServeConfig {
     pub addr: SocketAddr,
-    pub assistant_id: String,
+    pub assistant_id: Option<String>,
     pub server_url: String,
     pub initial_token: String,
 }
@@ -57,7 +57,7 @@ async fn healthz() -> &'static str {
 async fn state_handler(State(host): State<AppState>) -> Json<RunnerStateResponse> {
     let snapshot = snapshot_threads(&host);
     Json(RunnerStateResponse {
-        assistant_id: host.assistant_id.clone(),
+        assistant_id: host.assistant_id.get().cloned().unwrap_or_default(),
         uptime_seconds: host.started_at.elapsed().as_secs(),
         threads: snapshot
             .into_iter()
@@ -112,6 +112,19 @@ async fn thread_turn(
     let thread = ensure_thread(&host, &thread_id, request.auth_token)
         .await
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+
+    // A warm-pool sandbox boots without GRAM_ASSISTANT_ID and learns its
+    // assistant from the first turn that carries one. Bind it only after
+    // bootstrap succeeds (so a failed turn can't poison the pod's identity) and
+    // never from an empty/whitespace id. Set-once: a boot env value wins.
+    if let Some(assistant_id) = request
+        .assistant_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    {
+        let _ = host.assistant_id.set(assistant_id.to_string());
+    }
 
     // Hand reconcile to the actor and proceed to enqueue. The actor runs
     // concurrently with the agent loop, so a server added by this /turn

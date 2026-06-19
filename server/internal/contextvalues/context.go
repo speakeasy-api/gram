@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 )
 
 type contextKey string
@@ -47,6 +48,10 @@ type AdminAuthContext struct {
 	HD          string
 }
 
+type RPCContext struct {
+	ID mcpjsonrpc.ID
+}
+
 const (
 	SessionTokenContextKey      contextKey = "sessionTokenKey"
 	SessionValueContextKey      contextKey = "sessionValueKey"
@@ -56,6 +61,8 @@ const (
 	AssistantPrincipalKey       contextKey = "assistantPrincipalKey"
 	AdminSessionTokenContextKey contextKey = "adminSessionTokenKey"
 	AdminAuthContextKey         contextKey = "adminAuthKey"
+	RPCContextKey               contextKey = "rpcContextKey"
+	pubsubSubscriberContextKey  contextKey = "pubsubSubscriberKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -91,6 +98,15 @@ func SetRequestContext(ctx context.Context, value *RequestContext) context.Conte
 
 func GetRequestContext(ctx context.Context) (*RequestContext, bool) {
 	value, ok := ctx.Value(RequestContextKey).(*RequestContext)
+	return value, ok
+}
+
+func SetRPCContext(ctx context.Context, value *RPCContext) context.Context {
+	return context.WithValue(ctx, RPCContextKey, value)
+}
+
+func GetRPCContext(ctx context.Context) (*RPCContext, bool) {
+	value, ok := ctx.Value(RPCContextKey).(*RPCContext)
 	return value, ok
 }
 
@@ -138,4 +154,18 @@ func SetAdminAuthContext(ctx context.Context, value *AdminAuthContext) context.C
 func GetAdminAuthContext(ctx context.Context) (*AdminAuthContext, bool) {
 	value, ok := ctx.Value(AdminAuthContextKey).(*AdminAuthContext)
 	return value, ok && value != nil
+}
+
+type PubSubSubscriberContext struct {
+	TopicProtoName        string
+	SubscriptionProtoName string
+}
+
+func SetPubSubSubscriberContext(ctx context.Context, value PubSubSubscriberContext) context.Context {
+	return context.WithValue(ctx, pubsubSubscriberContextKey, &value)
+}
+
+func GetPubSubSubscriberContext(ctx context.Context) (*PubSubSubscriberContext, bool) {
+	value, ok := ctx.Value(pubsubSubscriberContextKey).(*PubSubSubscriberContext)
+	return value, ok
 }

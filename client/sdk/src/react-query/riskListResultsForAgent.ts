@@ -118,6 +118,7 @@ export function setRiskListResultsForAgentData(
       chatId?: string | undefined;
       category?: string | undefined;
       ruleId?: string | undefined;
+      userId?: string | undefined;
       uniqueMatch?: boolean | undefined;
       from?: Date | undefined;
       to?: Date | undefined;
@@ -143,6 +144,7 @@ export function invalidateRiskListResultsForAgent(
       chatId?: string | undefined;
       category?: string | undefined;
       ruleId?: string | undefined;
+      userId?: string | undefined;
       uniqueMatch?: boolean | undefined;
       from?: Date | undefined;
       to?: Date | undefined;

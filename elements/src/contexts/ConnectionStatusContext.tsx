@@ -36,7 +36,7 @@ interface ConnectionStatusProviderProps {
 
 export const ConnectionStatusProvider = ({
   children,
-}: ConnectionStatusProviderProps) => {
+}: ConnectionStatusProviderProps): React.JSX.Element => {
   const [state, setState] = useState<ConnectionState>("connected");
   const [retryCount, setRetryCount] = useState(0);
   const [isOnline, setIsOnline] = useState(
@@ -138,7 +138,7 @@ export const ConnectionStatusProvider = ({
   );
 };
 
-export const useConnectionStatus = () => {
+export const useConnectionStatus = (): ConnectionStatusContextValue => {
   const context = useContext(ConnectionStatusContext);
   if (!context) {
     throw new Error(
@@ -153,6 +153,7 @@ export const useConnectionStatus = () => {
  * Returns null if not within a ConnectionStatusProvider (for backwards compatibility).
  */
 
-export const useConnectionStatusOptional = () => {
-  return useContext(ConnectionStatusContext);
-};
+export const useConnectionStatusOptional =
+  (): ConnectionStatusContextValue | null => {
+    return useContext(ConnectionStatusContext);
+  };

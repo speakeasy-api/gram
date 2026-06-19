@@ -1,14 +1,18 @@
 import { Icon, type IconName } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { formatCompact } from "@/lib/format";
 import { getValueColor, ThresholdConfig } from "./chartUtils";
+import { Link } from "react-router";
 
 type AccentColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
 
 export type MetricCardProps = {
   title: string;
   value: number;
+  /** Renders in place of the formatted value (e.g. "-" when not applicable). */
+  displayValue?: string;
   previousValue?: number;
-  format?: "number" | "currency" | "percent" | "ms" | "seconds";
+  format?: "compact" | "number" | "currency" | "percent" | "ms" | "seconds";
   icon?: IconName;
   invertDelta?: boolean;
   thresholds?: ThresholdConfig;
@@ -16,23 +20,30 @@ export type MetricCardProps = {
   accentColor?: AccentColor;
   subtext?: string;
   tooltip?: string;
+  link?: string;
+  linkText?: string;
 };
 
-export function MetricCard(props: MetricCardProps) {
+export function MetricCard(props: MetricCardProps): JSX.Element {
   const {
     title,
     value,
+    displayValue,
     previousValue = 0,
-    format = "number",
+    format = "compact",
     icon,
     invertDelta = false,
     thresholds,
     comparisonLabel,
     subtext,
     tooltip,
+    link,
+    linkText = "View",
   } = props;
   const formatValue = (v: number) => {
     switch (format) {
+      case "compact":
+        return formatCompact(v);
       case "percent":
         return `${v.toFixed(1)}%`;
       case "ms":
@@ -49,6 +60,7 @@ export function MetricCard(props: MetricCardProps) {
         if (v >= 0.01) return `$${v.toFixed(3)}`;
         if (v > 0) return `$${v.toFixed(4)}`;
         return "$0.00";
+      case "number":
       default:
         return v.toLocaleString();
     }
@@ -86,36 +98,55 @@ export function MetricCard(props: MetricCardProps) {
           </div>
         )}
       </div>
-      <div className="flex items-end justify-between">
-        <span className={`text-3xl font-semibold tracking-tight ${valueColor}`}>
-          {formatValue(value)}
-        </span>
-        {previousValue > 0 && delta !== 0 && (
-          <div className="flex flex-col items-end gap-0.5">
-            <div
-              className={`flex items-center gap-1 text-xs font-medium ${
-                isGood ? "text-emerald-600" : "text-red-500"
-              }`}
+      <div className="flex flex-nowrap items-end">
+        <div className="flex-1 flex flex-col gap-1">
+          <div className="flex items-end justify-between">
+            <span
+              className={`text-3xl font-semibold tracking-tight ${valueColor}`}
             >
-              <Icon
-                name={isPositive ? "trending-up" : "trending-down"}
-                className="size-3"
-              />
-              <span>{delta.toFixed(1)}%</span>
-            </div>
-            {comparisonLabel && (
-              <span className="text-muted-foreground text-[10px]">
-                {comparisonLabel}
-              </span>
+              {displayValue ?? formatValue(value)}
+            </span>
+            {previousValue > 0 && delta !== 0 && (
+              <div className="flex flex-col items-end gap-0.5">
+                <div
+                  className={`flex items-center gap-1 text-xs font-medium ${
+                    isGood ? "text-emerald-600" : "text-red-500"
+                  }`}
+                >
+                  <Icon
+                    name={isPositive ? "trending-up" : "trending-down"}
+                    className="size-3"
+                  />
+                  <span>{delta.toFixed(1)}%</span>
+                </div>
+                {comparisonLabel && (
+                  <span className="text-muted-foreground text-[10px]">
+                    {comparisonLabel}
+                  </span>
+                )}
+              </div>
             )}
+          </div>
+          {subtext && (
+            <span className="text-muted-foreground mt-1 block text-xs">
+              {subtext}
+            </span>
+          )}
+        </div>
+
+        {link && (
+          <div className="shrink">
+            <Link
+              to={link}
+              aria-label={`View ${title}`}
+              className="text-primary/70 hover:text-primary flex items-center gap-1 text-xs no-underline"
+            >
+              {linkText}
+              <Icon name="arrow-right" />
+            </Link>
           </div>
         )}
       </div>
-      {subtext && (
-        <span className="text-muted-foreground mt-1 block text-xs">
-          {subtext}
-        </span>
-      )}
     </div>
   );
 }

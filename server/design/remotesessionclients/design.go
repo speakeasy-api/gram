@@ -8,7 +8,7 @@ import (
 )
 
 func tokenEndpointAuthMethodEnum() {
-	Enum("client_secret_basic", "client_secret_post")
+	Enum("client_secret_basic", "client_secret_post", "none")
 }
 
 // scopePattern matches RFC 6749 §3.3 scope-token: printable ASCII

@@ -28,9 +28,9 @@ type RemoteSession struct {
 
 type RemoteSessionClient struct {
 	ID                      uuid.UUID
-	ProjectID               uuid.UUID
+	ProjectID               uuid.NullUUID
 	RemoteSessionIssuerID   uuid.UUID
-	UserSessionIssuerID     uuid.UUID
+	UserSessionIssuerID     uuid.NullUUID
 	ClientID                string
 	ClientSecretEncrypted   pgtype.Text
 	ClientIDIssuedAt        pgtype.Timestamptz
@@ -47,7 +47,8 @@ type RemoteSessionClient struct {
 
 type RemoteSessionIssuer struct {
 	ID                                uuid.UUID
-	ProjectID                         uuid.UUID
+	ProjectID                         uuid.NullUUID
+	OrganizationID                    pgtype.Text
 	Slug                              string
 	Issuer                            string
 	AuthorizationEndpoint             pgtype.Text
@@ -60,6 +61,8 @@ type RemoteSessionIssuer struct {
 	TokenEndpointAuthMethodsSupported []string
 	Oidc                              bool
 	Passthrough                       bool
+	Name                              pgtype.Text
+	LogoAssetID                       uuid.NullUUID
 	CreatedAt                         pgtype.Timestamptz
 	UpdatedAt                         pgtype.Timestamptz
 	DeletedAt                         pgtype.Timestamptz

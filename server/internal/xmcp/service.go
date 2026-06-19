@@ -1,113 +1,60 @@
 // Package xmcp implements the experimental MCP runtime endpoint at
-// /x/mcp/{slug}. It is a temporary path used to prove out the
-// MCP Servers / MCP Endpoints fronting model — slug + optional custom
-// domain → mcp_endpoint → mcp_server → backend dispatch (Remote MCP proxy
-// vs. existing toolset-backed serving). Once the model is exercised here,
-// runtime handling will move under /mcp/... per AGE-1902.
-//
-// This package owns the HTTP lifecycle (routing, slug resolution, auth, DB
-// loads) for the experimental endpoint and delegates the actual serving
-// work to either [github.com/speakeasy-api/gram/server/internal/remotemcp/proxy]
-// (Remote MCP backend) or
-// [github.com/speakeasy-api/gram/server/internal/mcp.Service.ServeToolsetResolved]
-// (toolset backend).
+// /x/mcp/{slug}. It is a temporary path that proves out the MCP Servers
+// / MCP Endpoints fronting model — slug + optional custom domain →
+// mcp_endpoint → mcp_server → backend dispatch (Remote MCP proxy vs.
+// existing toolset-backed serving). The unified runtime dispatch logic
+// lives on mcp.Service; this package now exists primarily to mount the
+// /x/mcp routes and the OAuth/.well-known adapters that resolve slugs
+// to ResolvedMcpEndpoints. Once /mcp absorbs the model fully (AGE-1902),
+// /x/mcp can be removed.
 package xmcp
 
 import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotemcp"
-	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
-	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
 // RuntimePath is the experimental runtime path served by this package.
 const RuntimePath = "/x/mcp/{slug}"
 
 // Service owns dependencies for the experimental MCP runtime endpoint.
+// The runtime dispatch (resolve mcp_endpoint, run issuer gate, dispatch
+// to remote/toolset backend) lives on mcp.Service; this struct holds
+// only the state required for the OAuth route adapters and the
+// per-backend .well-known responders mounted under /x/mcp.
 type Service struct {
-	logger                                *slog.Logger
-	tracer                                trace.Tracer
-	db                                    *pgxpool.Pool
-	enc                                   *encryption.Client
-	authz                                 *authz.Engine
-	shadowmcpClient                       *shadowmcp.Client
-	mcpService                            *mcp.Service
-	serverURL                             *url.URL
-	guardianPolicy                        *guardian.Policy
-	posthog                               *posthog.Posthog
-	telemLogger                           *tm.Logger
-	proxyMetrics                          *proxy.Metrics
-	xmcpMetrics                           *metrics
-	toolsCallUsageLimitsInterceptor       *ToolsCallUsageLimitsInterceptor
-	toolsCallUsageTrackingInterceptor     *ToolsCallUsageTrackingInterceptor
-	resourcesReadUsageLimitsInterceptor   *ResourcesReadUsageLimitsInterceptor
-	resourcesReadUsageTrackingInterceptor *ResourcesReadUsageTrackingInterceptor
-	initializePostHogEventInterceptor     *InitializePostHogEventInterceptor
+	logger     *slog.Logger
+	db         *pgxpool.Pool
+	enc        *encryption.Client
+	mcpService *mcp.Service
 }
 
 // NewService constructs a Service with its full dependency graph wired up.
 func NewService(
 	logger *slog.Logger,
-	tracerProvider trace.TracerProvider,
-	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	enc *encryption.Client,
-	authzEngine *authz.Engine,
-	shadowmcpClient *shadowmcp.Client,
-	guardianPolicy *guardian.Policy,
-	posthogClient *posthog.Posthog,
-	billingRepo billing.Repository,
-	billingTracker billing.Tracker,
-	telemLogger *tm.Logger,
 	mcpService *mcp.Service,
-	serverURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("xmcp"))
-
-	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/xmcp")
-	xmcpMetrics := newMetrics(meter, logger)
-
 	return &Service{
-		logger:                                logger,
-		tracer:                                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/xmcp"),
-		db:                                    db,
-		enc:                                   enc,
-		authz:                                 authzEngine,
-		shadowmcpClient:                       shadowmcpClient,
-		mcpService:                            mcpService,
-		serverURL:                             serverURL,
-		guardianPolicy:                        guardianPolicy,
-		posthog:                               posthogClient,
-		telemLogger:                           telemLogger,
-		proxyMetrics:                          proxy.NewMetrics(meter, logger),
-		xmcpMetrics:                           xmcpMetrics,
-		toolsCallUsageLimitsInterceptor:       NewToolsCallUsageLimitsInterceptor(billingRepo, logger),
-		toolsCallUsageTrackingInterceptor:     NewToolsCallUsageTrackingInterceptor(billingTracker, logger),
-		resourcesReadUsageLimitsInterceptor:   NewResourcesReadUsageLimitsInterceptor(billingRepo, logger),
-		resourcesReadUsageTrackingInterceptor: NewResourcesReadUsageTrackingInterceptor(billingTracker, logger),
-		initializePostHogEventInterceptor:     NewInitializePostHogEventInterceptor(posthogClient, logger),
+		logger:     logger,
+		db:         db,
+		enc:        enc,
+		mcpService: mcpService,
 	}
 }
 
@@ -121,7 +68,7 @@ func NewService(
 // for parity with /mcp; the .well-known routes are owned by xmcp directly
 // so they can dispatch per-backend (see [Service.HandleWellKnownOAuthServerMetadata]).
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
-	handler := oops.ErrHandle(service.logger, service.ServeMCP).ServeHTTP
+	handler := oops.MCPErrHandle(service.logger, service.ServeMCP).ServeHTTP
 	o11y.AttachHandler(mux, http.MethodDelete, RuntimePath, handler)
 	o11y.AttachHandler(mux, http.MethodGet, RuntimePath, handler)
 	o11y.AttachHandler(mux, http.MethodPost, RuntimePath, handler)
@@ -139,9 +86,9 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, http.MethodGet, wellknown.OAuthProtectedResourcePath+"/x/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP)
 
 	// Issuer-gated OAuth handler family. Each route resolves the slug to
-	// an /x/mcp-keyed *mcp.ResolvedMcpEndpoint via [Service.loadResolvedMcpEndpointBySlug]
-	// and delegates to the matching mcp.Service.Serve* post-resolution
-	// handler.
+	// an /x/mcp-keyed *mcp.ResolvedMcpEndpoint via
+	// [mcp.Service.LoadResolvedMcpEndpointBySlug] and delegates to the
+	// matching mcp.Service.Serve* post-resolution handler.
 	//
 	// idp_callback and remote_login_callback are mounted only at the
 	// slug-less global URLs: the authorize and consent handlers build
@@ -158,16 +105,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/token", oops.ErrHandle(service.logger, service.handleOAuthToken).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/revoke", oops.ErrHandle(service.logger, service.handleOAuthRevoke).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/idp_callback", oops.ErrHandle(service.logger, service.mcpService.HandleIDPCallback).ServeHTTP)
-	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.handleRemoteLoginCallback).ServeHTTP)
-}
-
-// handleRemoteLoginCallback adapts /x/mcp/remote_login_callback onto
-// mcp.Service.HandleRemoteLoginCallback. The
-// underlying handler reads the cached RemoteLoginState's RouteBase so the
-// post-callback redirect lands back on /x/mcp/{slug}/connect — populated
-// when the consent renderer built the parent challenge.
-func (s *Service) handleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
-	return s.mcpService.HandleRemoteLoginCallback(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
+	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.mcpService.HandleRemoteLoginCallback).ServeHTTP)
 }
 
 // handleOAuthRegister adapts the chi /x/mcp/{mcpSlug}/register route to
@@ -246,12 +184,9 @@ func (s *Service) resolveOAuthEndpoint(r *http.Request) (*mcp.ResolvedMcpEndpoin
 		return nil, oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(slug))
-	return s.loadResolvedMcpEndpointBySlug(ctx, logger, slug)
-}
-
-// newHeadersRepo returns a per-request headers wrapper bound to the service
-// DB pool. Using the wrapper ensures secret header values are transparently
-// decrypted before reaching the proxy.
-func (s *Service) newHeadersRepo() *remotemcp.Headers {
-	return remotemcp.NewHeaders(s.logger, s.db, s.enc)
+	endpoint, err := s.mcpService.LoadResolvedMcpEndpointBySlug(ctx, logger, slug, "x/mcp")
+	if err != nil {
+		return nil, fmt.Errorf("load resolved mcp endpoint: %w", err)
+	}
+	return endpoint, nil
 }

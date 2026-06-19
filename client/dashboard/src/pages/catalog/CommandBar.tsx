@@ -71,7 +71,7 @@ export function CommandBar({
   onAdd,
   onClear,
   containerElement,
-}: CommandBarProps) {
+}: CommandBarProps): JSX.Element {
   const barRef = useRef<HTMLDivElement>(null);
   const [containerCenter, setContainerCenter] = useState<number | null>(null);
 

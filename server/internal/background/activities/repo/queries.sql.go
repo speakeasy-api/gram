@@ -12,6 +12,33 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const backfillClaudeUserMessagePromptID = `-- name: BackfillClaudeUserMessagePromptID :exec
+UPDATE chat_messages
+SET message_id = $1
+WHERE id = $2
+  AND chat_id = $3
+  AND (project_id IS NULL OR project_id = $4)
+  AND role = 'user'
+  AND (message_id IS NULL OR message_id = '')
+`
+
+type BackfillClaudeUserMessagePromptIDParams struct {
+	PromptID  pgtype.Text
+	MessageID uuid.UUID
+	ChatID    uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) BackfillClaudeUserMessagePromptID(ctx context.Context, arg BackfillClaudeUserMessagePromptIDParams) error {
+	_, err := q.db.Exec(ctx, backfillClaudeUserMessagePromptID,
+		arg.PromptID,
+		arg.MessageID,
+		arg.ChatID,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const fetchOutboxRowsByIDs = `-- name: FetchOutboxRowsByIDs :many
 SELECT
     o.id,
@@ -351,6 +378,48 @@ func (q *Queries) GetUserEmailsByOrgIDs(ctx context.Context, dollar_1 []string) 
 	for rows.Next() {
 		var i GetUserEmailsByOrgIDsRow
 		if err := rows.Scan(&i.OrganizationID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUnlinkedClaudeUserMessagesForCorrelation = `-- name: ListUnlinkedClaudeUserMessagesForCorrelation :many
+SELECT id, content, created_at
+FROM chat_messages
+WHERE chat_id = $1
+  AND (project_id IS NULL OR project_id = $2)
+  AND role = 'user'
+  AND content != ''
+  AND (message_id IS NULL OR message_id = '')
+ORDER BY seq ASC, created_at ASC
+`
+
+type ListUnlinkedClaudeUserMessagesForCorrelationParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+type ListUnlinkedClaudeUserMessagesForCorrelationRow struct {
+	ID        uuid.UUID
+	Content   string
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListUnlinkedClaudeUserMessagesForCorrelation(ctx context.Context, arg ListUnlinkedClaudeUserMessagesForCorrelationParams) ([]ListUnlinkedClaudeUserMessagesForCorrelationRow, error) {
+	rows, err := q.db.Query(ctx, listUnlinkedClaudeUserMessagesForCorrelation, arg.ChatID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUnlinkedClaudeUserMessagesForCorrelationRow
+	for rows.Next() {
+		var i ListUnlinkedClaudeUserMessagesForCorrelationRow
+		if err := rows.Scan(&i.ID, &i.Content, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

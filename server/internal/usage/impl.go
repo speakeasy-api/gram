@@ -13,6 +13,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/usage/server"
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -23,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -37,16 +39,19 @@ type Service struct {
 	auth          *auth.Auth
 	authz         *authz.Engine
 	serverURL     *url.URL
+	db            *pgxpool.Pool
 	repo          *repo.Queries
 	billingRepo   billing.Repository
 	orgRepo       *orgRepo.Queries
+	telemetryRepo *telemetryrepo.Queries
+	auditLogger   *audit.Logger
 	posthogClient *posthog.Posthog
 	openRouter    openrouter.Provisioner
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, authzEngine *authz.Engine) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	return &Service{
@@ -55,9 +60,12 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auth:          auth.New(logger, db, sessions, authzEngine),
 		authz:         authzEngine,
 		serverURL:     serverURL,
+		db:            db,
 		repo:          repo.New(db),
 		billingRepo:   billingRepo,
 		orgRepo:       orgRepo.New(db),
+		telemetryRepo: telemetryRepo,
+		auditLogger:   auditLogger,
 		posthogClient: posthogClient,
 		openRouter:    openRouter,
 	}
@@ -97,7 +105,7 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to read request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to read request body").LogError(ctx, s.logger)
 	}
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return r.Body.Close()
@@ -105,7 +113,7 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 
 	webhookPayload, err := s.billingRepo.ValidateAndParseWebhookEvent(ctx, body, r.Header)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to validate and parse webhook event").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to validate and parse webhook event").LogError(ctx, s.logger)
 	}
 
 	logger := s.logger.With(attr.SlogEvent(webhookPayload.Type))
@@ -130,20 +138,20 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 
 	existingOrgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, webhookPayload.Data.Customer.ExternalID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").LogError(ctx, logger)
 	}
 
 	previousAccountType := existingOrgMetadata.GramAccountType
 
 	// we must invalidate the customer tier cache since customer tier may have changed witha subscription update
 	if err := s.billingRepo.InvalidateBillingCustomerCaches(ctx, webhookPayload.Data.Customer.ExternalID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to invalidate customer tier cache").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to invalidate customer tier cache").LogError(ctx, logger)
 	}
 
 	// we force a refresh of the state of the organization since customer tier may have changed witha subscription update
 	refreshedOrg, err := mv.DescribeOrganization(ctx, s.logger, s.orgRepo, s.billingRepo, webhookPayload.Data.Customer.ExternalID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to update organization metadata").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to update organization metadata").LogError(ctx, logger)
 	}
 	updatedAccountType := refreshedOrg.GramAccountType
 
@@ -155,19 +163,19 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 			ID:              refreshedOrg.ID,
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to set account type").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to set account type").LogError(ctx, logger)
 		}
 	}
 
 	if previousAccountType != updatedAccountType {
 		if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID, nil); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").LogError(ctx, logger)
 		}
 	}
 
 	// we force a refresh of the period usage since usage may have changed with a subscription update
 	if _, err = s.billingRepo.GetPeriodUsage(ctx, webhookPayload.Data.Customer.ExternalID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to get period usage").LogError(ctx, logger)
 	}
 
 	productName, productType := "", ""
@@ -195,10 +203,10 @@ func (s *Service) handleTopUpOrder(ctx context.Context, logger *slog.Logger, web
 	orgID := webhookPayload.Data.Customer.ExternalID
 
 	if err := s.billingRepo.InvalidateBillingCustomerCaches(ctx, orgID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to invalidate customer tier cache").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to invalidate customer tier cache").LogError(ctx, logger)
 	}
 	if _, err := s.billingRepo.GetPeriodUsage(ctx, orgID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to get period usage").LogError(ctx, logger)
 	}
 
 	if err := s.posthogClient.CaptureEvent(ctx, "gram_topup_purchased", orgID, map[string]any{
@@ -232,14 +240,14 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 		s.logger.InfoContext(ctx, "period usage cache miss, fetching from billing provider")
 		periodUsage, err = s.billingRepo.GetPeriodUsage(ctx, authCtx.ActiveOrganizationID)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get period usage").LogError(ctx, s.logger)
 		}
 	}
 
 	// The actual number of enabled servers right this moment, which may not be updated in Polar yet.
 	actualEnabledServerCount, err := s.repo.GetEnabledServerCount(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "could not get public server count").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "could not get public server count").LogError(ctx, s.logger)
 	}
 
 	// We don't populate the maximums using GetUsageTiers because we want to reflect the actual granted credits, not the current product limits which may have changed.
@@ -258,7 +266,7 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 func (s *Service) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 	tiers, err := s.billingRepo.GetUsageTiers(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get usage tiers").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get usage tiers").LogError(ctx, s.logger)
 	}
 
 	return tiers, nil
@@ -277,7 +285,7 @@ func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckou
 
 	checkoutURL, err := s.billingRepo.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String(), successURL)
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "failed to create checkout").Log(ctx, s.logger)
+		return "", oops.E(oops.CodeUnexpected, err, "failed to create checkout").LogError(ctx, s.logger)
 	}
 	return checkoutURL, nil
 }
@@ -295,7 +303,7 @@ func (s *Service) CreateTopUpCheckout(ctx context.Context, payload *gen.CreateTo
 
 	checkoutURL, err := s.billingRepo.CreateTopUpCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String(), successURL)
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "failed to create top-up checkout").Log(ctx, s.logger)
+		return "", oops.E(oops.CodeUnexpected, err, "failed to create top-up checkout").LogError(ctx, s.logger)
 	}
 	return checkoutURL, nil
 }
@@ -311,7 +319,7 @@ func (s *Service) CreateCustomerSession(ctx context.Context, payload *gen.Create
 
 	sessionURL, err := s.billingRepo.CreateCustomerSession(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "failed to create customer session").Log(ctx, s.logger)
+		return "", oops.E(oops.CodeUnexpected, err, "failed to create customer session").LogError(ctx, s.logger)
 	}
 	return sessionURL, nil
 }

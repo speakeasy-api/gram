@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  RiskPolicyModelConfig,
+  RiskPolicyModelConfig$inboundSchema,
+} from "./riskpolicymodelconfig.js";
 
 /**
  * Policy action: flag (log only) or block (deny in real-time).
@@ -21,11 +25,43 @@ export const RiskPolicyAction = {
  */
 export type RiskPolicyAction = ClosedEnum<typeof RiskPolicyAction>;
 
+/**
+ * Policy audience type: everyone or targeted.
+ */
+export const RiskPolicyAudienceType = {
+  Everyone: "everyone",
+  Targeted: "targeted",
+} as const;
+/**
+ * Policy audience type: everyone or targeted.
+ */
+export type RiskPolicyAudienceType = ClosedEnum<typeof RiskPolicyAudienceType>;
+
+/**
+ * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).
+ */
+export const RiskPolicyPolicyType = {
+  Standard: "standard",
+  PromptBased: "prompt_based",
+} as const;
+/**
+ * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).
+ */
+export type RiskPolicyPolicyType = ClosedEnum<typeof RiskPolicyPolicyType>;
+
 export type RiskPolicy = {
   /**
    * Policy action: flag (log only) or block (deny in real-time).
    */
   action: RiskPolicyAction;
+  /**
+   * Principal URNs the policy applies to. Contains user:all when audience_type is everyone.
+   */
+  audiencePrincipalUrns: Array<string>;
+  /**
+   * Policy audience type: everyone or targeted.
+   */
+  audienceType: RiskPolicyAudienceType;
   /**
    * Whether the policy name is auto-generated. When true, the name is regenerated on each update.
    */
@@ -35,6 +71,14 @@ export type RiskPolicy = {
    */
   createdAt: Date;
   /**
+   * Custom detection rule ids enabled for this policy.
+   */
+  customRuleIds?: Array<string> | undefined;
+  /**
+   * Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.
+   */
+  disabledRules?: Array<string> | undefined;
+  /**
    * Whether the policy is active.
    */
   enabled: boolean;
@@ -42,6 +86,11 @@ export type RiskPolicy = {
    * The risk policy ID.
    */
   id: string;
+  /**
+   * Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.
+   */
+  messageTypes?: Array<string> | undefined;
+  modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The policy name.
    */
@@ -51,6 +100,10 @@ export type RiskPolicy = {
    */
   pendingMessages: number;
   /**
+   * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).
+   */
+  policyType: RiskPolicyPolicyType;
+  /**
    * Presidio entity types to scan for. When empty, scans all entities.
    */
   presidioEntities?: Array<string> | undefined;
@@ -59,7 +112,11 @@ export type RiskPolicy = {
    */
   projectId: string;
   /**
-   * Prompt-injection detection rule ids enabled in addition to the heuristic baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+   * For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Null for standard policies.
+   */
+  prompt?: string | undefined;
+  /**
+   * Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.
    */
   promptInjectionRules?: Array<string> | undefined;
   /**
@@ -90,21 +147,42 @@ export const RiskPolicyAction$inboundSchema: z.ZodMiniEnum<
 > = z.enum(RiskPolicyAction);
 
 /** @internal */
+export const RiskPolicyAudienceType$inboundSchema: z.ZodMiniEnum<
+  typeof RiskPolicyAudienceType
+> = z.enum(RiskPolicyAudienceType);
+
+/** @internal */
+export const RiskPolicyPolicyType$inboundSchema: z.ZodMiniEnum<
+  typeof RiskPolicyPolicyType
+> = z.enum(RiskPolicyPolicyType);
+
+/** @internal */
 export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
   .pipe(
     z.object({
       action: z._default(RiskPolicyAction$inboundSchema, "flag"),
+      audience_principal_urns: z.array(z.string()),
+      audience_type: z._default(
+        RiskPolicyAudienceType$inboundSchema,
+        "everyone",
+      ),
       auto_name: z.boolean(),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      custom_rule_ids: z.optional(z.array(z.string())),
+      disabled_rules: z.optional(z.array(z.string())),
       enabled: z.boolean(),
       id: z.string(),
+      message_types: z.optional(z.array(z.string())),
+      model_config: z.optional(RiskPolicyModelConfig$inboundSchema),
       name: z.string(),
       pending_messages: z.int(),
+      policy_type: z._default(RiskPolicyPolicyType$inboundSchema, "standard"),
       presidio_entities: z.optional(z.array(z.string())),
       project_id: z.string(),
+      prompt: z.optional(z.string()),
       prompt_injection_rules: z.optional(z.array(z.string())),
       sources: z.array(z.string()),
       total_messages: z.int(),
@@ -117,9 +195,16 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "audience_principal_urns": "audiencePrincipalUrns",
+        "audience_type": "audienceType",
         "auto_name": "autoName",
         "created_at": "createdAt",
+        "custom_rule_ids": "customRuleIds",
+        "disabled_rules": "disabledRules",
+        "message_types": "messageTypes",
+        "model_config": "modelConfig",
         "pending_messages": "pendingMessages",
+        "policy_type": "policyType",
         "presidio_entities": "presidioEntities",
         "project_id": "projectId",
         "prompt_injection_rules": "promptInjectionRules",

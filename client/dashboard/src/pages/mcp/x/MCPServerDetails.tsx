@@ -36,48 +36,65 @@ import {
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Network } from "lucide-react";
-import { useState } from "react";
-import { Navigate, useParams } from "react-router";
+import {
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router";
 import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
-import { EndpointsTab } from "./tabs/EndpointsTab";
+import {
+  activeTabFromPath,
+  initialTabFromHash,
+  isLegacyAuthenticationTabPath,
+  type TabValue,
+} from "./MCPServerDetailsRouting";
 import { OverviewTab } from "./tabs/OverviewTab";
-import { SettingsTab } from "./tabs/SettingsTab";
+import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
+import { MCP_SERVER_URL_SECTION_ID } from "./tabs/settings/sections/ServerUrlSection";
+import { SettingsTab } from "./tabs/settings/SettingsTab";
 
-const VALID_TABS = [
-  "overview",
-  "endpoints",
-  "team-access",
-  "settings",
-] as const;
-type TabValue = (typeof VALID_TABS)[number];
-
-function isValidTab(value: string): value is TabValue {
-  return (VALID_TABS as readonly string[]).includes(value);
+function mcpServerTabHref(
+  routes: ReturnType<typeof useRoutes>,
+  mcpServerSlug: string,
+  tab: TabValue,
+): string {
+  switch (tab) {
+    case "overview":
+      return routes.mcp.x.overview.href(mcpServerSlug);
+    case "team-access":
+      return routes.mcp.x.teamAccess.href(mcpServerSlug);
+    case "settings":
+      return routes.mcp.x.settings.href(mcpServerSlug);
+  }
 }
 
-export default function MCPServerDetails() {
+export default function MCPServerDetails(): JSX.Element {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
   const routes = useRoutes();
   const telemetry = useTelemetry();
-  const isRemoteMcpEnabled =
-    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
   const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
   const idOrSlug = mcpServerSlug ?? "";
+  const activeTab = activeTabFromPath(location.pathname, idOrSlug);
+  const legacyAuthenticationPath = isLegacyAuthenticationTabPath(
+    location.pathname,
+    idOrSlug,
+  );
 
-  const [activeTab, setActiveTab] = useState<TabValue>(() => {
-    const hash = window.location.hash.replace("#", "");
-    if (!isValidTab(hash)) return "overview";
-    if (hash === "team-access" && !isRbacEnabled) return "overview";
-    return hash;
-  });
+  const handleShowServerUrlSettings = () => {
+    void navigate(
+      `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_SERVER_URL_SECTION_ID}`,
+    );
+  };
 
-  const handleTabChange = (value: string) => {
-    if (!isValidTab(value)) return;
-    setActiveTab(value);
-    const url = new URL(window.location.href);
-    url.hash = value;
-    window.history.replaceState(null, "", url.toString());
+  const handleShowAuthentication = () => {
+    void navigate(
+      `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
+    );
   };
 
   const {
@@ -85,22 +102,49 @@ export default function MCPServerDetails() {
     isLoading,
     isError,
   } = useGetMcpServer(getMcpServerArgs(idOrSlug), undefined, {
-    enabled: isRemoteMcpEnabled && idOrSlug !== "",
+    enabled: idOrSlug !== "",
   });
 
   const mcpServerId = mcpServer?.id ?? "";
 
   const { data: endpointsResult, isLoading: isLoadingEndpoints } =
     useMcpEndpoints({ mcpServerId }, undefined, {
-      enabled: isRemoteMcpEnabled && mcpServerId !== "",
+      enabled: mcpServerId !== "",
     });
   const endpoints = endpointsResult?.mcpEndpoints ?? [];
 
-  if (!isRemoteMcpEnabled) {
+  if (!idOrSlug) {
     return <Navigate to={routes.mcp.href()} replace />;
   }
   if (isError || (!isLoading && !mcpServer)) {
     return <Navigate to={routes.mcp.href()} replace />;
+  }
+  if (legacyAuthenticationPath) {
+    return (
+      <Navigate
+        to={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
+        replace
+      />
+    );
+  }
+  if (!activeTab) {
+    const initialTab = initialTabFromHash(location.hash, isRbacEnabled);
+    const hash =
+      location.hash === `#${MCP_AUTHENTICATION_SECTION_ID}`
+        ? `#${MCP_AUTHENTICATION_SECTION_ID}`
+        : "";
+
+    return (
+      <Navigate
+        to={`${mcpServerTabHref(routes, idOrSlug, initialTab)}${hash}`}
+        replace
+      />
+    );
+  }
+  if (activeTab === "team-access" && !isRbacEnabled) {
+    return (
+      <Navigate to={mcpServerTabHref(routes, idOrSlug, "overview")} replace />
+    );
   }
 
   return (
@@ -114,76 +158,62 @@ export default function MCPServerDetails() {
         />
       </Page.Header>
 
-      <Page.Body
-        fullWidth
-        noPadding
-        fullHeight
-        overflowHidden
-        className="gap-0"
-      >
+      <Page.Body fullWidth noPadding className="gap-0">
         <MCPServerHero server={mcpServer} />
 
-        <Tabs
-          value={activeTab}
-          onValueChange={handleTabChange}
-          className="flex min-h-0 w-full flex-1 flex-col"
-        >
+        <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
           <div className="shrink-0 border-b">
             <div className="mx-auto max-w-[1270px] px-8">
               <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
-                <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
-                <PageTabsTrigger value="endpoints">
-                  Endpoints
-                  {endpoints.length > 0 && ` (${endpoints.length})`}
+                <PageTabsTrigger value="overview" asChild>
+                  <Link to={mcpServerTabHref(routes, idOrSlug, "overview")}>
+                    Overview
+                  </Link>
                 </PageTabsTrigger>
                 {isRbacEnabled && (
-                  <PageTabsTrigger value="team-access">
-                    Team Access
+                  <PageTabsTrigger value="team-access" asChild>
+                    <Link
+                      to={mcpServerTabHref(routes, idOrSlug, "team-access")}
+                    >
+                      Team Access
+                    </Link>
                   </PageTabsTrigger>
                 )}
-                <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
+                <PageTabsTrigger value="settings" asChild>
+                  <Link to={mcpServerTabHref(routes, idOrSlug, "settings")}>
+                    Settings
+                  </Link>
+                </PageTabsTrigger>
               </TabsList>
             </div>
           </div>
 
           <TabsContent
             value="overview"
-            className="mt-0 min-h-0 flex-1 overflow-y-auto"
+            className="mt-0 w-full data-[state=inactive]:hidden"
           >
             <OverviewTab
               mcpServer={mcpServer}
               endpoints={endpoints}
               isLoadingEndpoints={isLoadingEndpoints}
-              onShowEndpoints={() => handleTabChange("endpoints")}
+              onShowEndpoints={handleShowServerUrlSettings}
+              onShowAuthentication={handleShowAuthentication}
             />
-          </TabsContent>
-
-          <TabsContent
-            value="endpoints"
-            className="mt-0 min-h-0 flex-1 overflow-y-auto"
-          >
-            {mcpServer && (
-              <EndpointsTab
-                mcpServer={mcpServer}
-                endpoints={endpoints}
-                isLoadingEndpoints={isLoadingEndpoints}
-              />
-            )}
           </TabsContent>
 
           {isRbacEnabled && mcpServer && (
             <TabsContent
               value="team-access"
-              className="mt-0 min-h-0 flex-1 overflow-y-auto"
+              className="mt-0 w-full data-[state=inactive]:hidden"
             >
               <RequireScope scope="mcp:read" level="page">
                 <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
                   {/* mcp_servers-backed servers grant under the same `mcp:*`
-                      scope kind as toolset-backed ones (see selector.go), so
-                      MCPTeamAccessTab is reused as-is with the mcp_server's
-                      id as the resource id. No `tools` prop because the
-                      Remote MCP backend doesn't expose a Gram-side tool
-                      catalog. */}
+                    scope kind as toolset-backed ones (see selector.go), so
+                    MCPTeamAccessTab is reused as-is with the mcp_server's
+                    id as the resource id. No `tools` prop because the
+                    Remote MCP backend doesn't expose a Gram-side tool
+                    catalog. */}
                   <MCPTeamAccessTab resourceId={mcpServer.id} />
                 </div>
               </RequireScope>
@@ -192,10 +222,14 @@ export default function MCPServerDetails() {
 
           <TabsContent
             value="settings"
-            className="mt-0 min-h-0 flex-1 overflow-y-auto"
+            className="mt-0 w-full data-[state=inactive]:hidden"
           >
             {mcpServer && (
-              <SettingsTab mcpServer={mcpServer} endpoints={endpoints} />
+              <SettingsTab
+                mcpServer={mcpServer}
+                endpoints={endpoints}
+                isLoadingEndpoints={isLoadingEndpoints}
+              />
             )}
           </TabsContent>
         </Tabs>
@@ -204,6 +238,9 @@ export default function MCPServerDetails() {
   );
 }
 
+// The dropdown only offers the two states that gate whether the server
+// serves traffic. Any other stored visibility values render their label via
+// currentLabel below.
 const VISIBILITY_OPTIONS: {
   value: McpServerVisibility;
   label: string;
@@ -221,16 +258,9 @@ const VISIBILITY_OPTIONS: {
   {
     value: "private",
     label: "Private",
-    description: "Requires Gram platform authentication.",
+    description: "The server serves traffic.",
     dotClass: "bg-blue-400",
     hoverDotClass: "group-hover:bg-blue-400",
-  },
-  {
-    value: "public",
-    label: "Public",
-    description: "Relies solely on the server's configured authentication.",
-    dotClass: "bg-green-400",
-    hoverDotClass: "group-hover:bg-green-400",
   },
 ];
 
@@ -272,6 +302,11 @@ function MCPServerStatusDropdown({ server }: { server: McpServer }) {
           remoteMcpServerId: server.remoteMcpServerId ?? undefined,
           toolsetId: server.toolsetId ?? undefined,
           environmentId: server.environmentId ?? undefined,
+          // updateMcpServer is a full-record replace for the optional UUID
+          // references. Forwarding them keeps stored values intact across a
+          // visibility-only update.
+          userSessionIssuerId: server.userSessionIssuerId ?? undefined,
+          toolVariationsGroupId: server.toolVariationsGroupId ?? undefined,
           visibility: next,
         },
       },

@@ -444,6 +444,53 @@ func BuildGetUserMetricsSummaryPayload(telemetryGetUserMetricsSummaryBody string
 	return v, nil
 }
 
+// BuildGetEmployeeDataFlowGraphPayload builds the payload for the telemetry
+// getEmployeeDataFlowGraph endpoint from CLI flags.
+func BuildGetEmployeeDataFlowGraphPayload(telemetryGetEmployeeDataFlowGraphBody string, telemetryGetEmployeeDataFlowGraphApikeyToken string, telemetryGetEmployeeDataFlowGraphSessionToken string, telemetryGetEmployeeDataFlowGraphProjectSlugInput string) (*telemetry.GetEmployeeDataFlowGraphPayload, error) {
+	var err error
+	var body GetEmployeeDataFlowGraphRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetEmployeeDataFlowGraphBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_id\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetEmployeeDataFlowGraphApikeyToken != "" {
+			apikeyToken = &telemetryGetEmployeeDataFlowGraphApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetEmployeeDataFlowGraphSessionToken != "" {
+			sessionToken = &telemetryGetEmployeeDataFlowGraphSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetEmployeeDataFlowGraphProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetEmployeeDataFlowGraphProjectSlugInput
+		}
+	}
+	v := &telemetry.GetEmployeeDataFlowGraphPayload{
+		From:           body.From,
+		To:             body.To,
+		UserID:         body.UserID,
+		ExternalUserID: body.ExternalUserID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetObservabilityOverviewPayload builds the payload for the telemetry
 // getObservabilityOverview endpoint from CLI flags.
 func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody string, telemetryGetObservabilityOverviewApikeyToken string, telemetryGetObservabilityOverviewSessionToken string, telemetryGetObservabilityOverviewProjectSlugInput string) (*telemetry.GetObservabilityOverviewPayload, error) {
@@ -547,6 +594,153 @@ func BuildGetProjectOverviewPayload(telemetryGetProjectOverviewBody string, tele
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildQueryPayload builds the payload for the telemetry query endpoint from
+// CLI flags.
+func BuildQueryPayload(telemetryQueryBody string, telemetryQuerySessionToken string) (*telemetry.QueryPayload, error) {
+	var err error
+	var body QueryRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryQueryBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"filters\": [\n         {\n            \"dimension\": \"job_title\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"granularity_seconds\": 1,\n      \"group_by\": \"department_name\",\n      \"sort_by\": \"total_tokens\",\n      \"to\": \"2025-12-26T10:00:00Z\",\n      \"top_n\": 2\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if body.GroupBy != nil {
+			if !(*body.GroupBy == "department_name" || *body.GroupBy == "job_title" || *body.GroupBy == "employee_type" || *body.GroupBy == "division_name" || *body.GroupBy == "cost_center_name" || *body.GroupBy == "email" || *body.GroupBy == "model" || *body.GroupBy == "hook_source" || *body.GroupBy == "role" || *body.GroupBy == "group" || *body.GroupBy == "project_id") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.group_by", *body.GroupBy, []any{"department_name", "job_title", "employee_type", "division_name", "cost_center_name", "email", "model", "hook_source", "role", "group", "project_id"}))
+			}
+		}
+		for _, e := range body.Filters {
+			if e != nil {
+				if err2 := ValidateQueryFilterRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if body.TopN < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.top_n", body.TopN, 1, true))
+		}
+		if !(body.SortBy == "total_cost" || body.SortBy == "total_tokens" || body.SortBy == "total_input_tokens" || body.SortBy == "total_output_tokens" || body.SortBy == "cache_read_input_tokens" || body.SortBy == "cache_creation_input_tokens" || body.SortBy == "total_tool_calls" || body.SortBy == "total_chats") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", body.SortBy, []any{"total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "total_tool_calls", "total_chats"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryQuerySessionToken != "" {
+			sessionToken = &telemetryQuerySessionToken
+		}
+	}
+	v := &telemetry.QueryPayload{
+		From:               body.From,
+		To:                 body.To,
+		GroupBy:            body.GroupBy,
+		GranularitySeconds: body.GranularitySeconds,
+		TopN:               body.TopN,
+		SortBy:             body.SortBy,
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.QueryFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = marshalQueryFilterRequestBodyToTelemetryQueryFilter(val)
+		}
+	}
+	{
+		var zero int
+		if v.TopN == zero {
+			v.TopN = 10
+		}
+	}
+	{
+		var zero string
+		if v.SortBy == zero {
+			v.SortBy = "total_cost"
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListSessionsPayload builds the payload for the telemetry listSessions
+// endpoint from CLI flags.
+func BuildListSessionsPayload(telemetryListSessionsBody string, telemetryListSessionsSessionToken string) (*telemetry.ListSessionsPayload, error) {
+	var err error
+	var body ListSessionsRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryListSessionsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"dimension\": \"job_title\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"sort_by\": \"total_tokens\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		for _, e := range body.Filters {
+			if e != nil {
+				if err2 := ValidateQueryFilterRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if !(body.SortBy == "total_cost" || body.SortBy == "total_tokens" || body.SortBy == "total_input_tokens" || body.SortBy == "total_output_tokens" || body.SortBy == "tool_call_count" || body.SortBy == "message_count" || body.SortBy == "duration_seconds") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", body.SortBy, []any{"total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "tool_call_count", "message_count", "duration_seconds"}))
+		}
+		if body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1, true))
+		}
+		if body.Limit > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1000, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryListSessionsSessionToken != "" {
+			sessionToken = &telemetryListSessionsSessionToken
+		}
+	}
+	v := &telemetry.ListSessionsPayload{
+		From:   body.From,
+		To:     body.To,
+		SortBy: body.SortBy,
+		Limit:  body.Limit,
+		Cursor: body.Cursor,
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.QueryFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = marshalQueryFilterRequestBodyToTelemetryQueryFilter(val)
+		}
+	}
+	{
+		var zero string
+		if v.SortBy == zero {
+			v.SortBy = "total_cost"
+		}
+	}
+	{
+		var zero int
+		if v.Limit == zero {
+			v.Limit = 50
+		}
+	}
+	v.SessionToken = sessionToken
 
 	return v, nil
 }
@@ -710,6 +904,286 @@ func BuildGetHooksSummaryPayload(telemetryGetHooksSummaryBody string, telemetryG
 		v.TypesToInclude = make([]string, len(body.TypesToInclude))
 		for i, val := range body.TypesToInclude {
 			v.TypesToInclude[i] = val
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetToolUsageSummaryPayload builds the payload for the telemetry
+// getToolUsageSummary endpoint from CLI flags.
+func BuildGetToolUsageSummaryPayload(telemetryGetToolUsageSummaryBody string, telemetryGetToolUsageSummaryApikeyToken string, telemetryGetToolUsageSummarySessionToken string, telemetryGetToolUsageSummaryProjectSlugInput string) (*telemetry.GetToolUsageSummaryPayload, error) {
+	var err error
+	var body GetToolUsageSummaryRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetToolUsageSummaryBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"shadow_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		for _, e := range body.TargetTypes {
+			if !(e == "hosted_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+			}
+		}
+		for _, e := range body.UserFilters {
+			if e != nil {
+				if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetToolUsageSummaryApikeyToken != "" {
+			apikeyToken = &telemetryGetToolUsageSummaryApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetToolUsageSummarySessionToken != "" {
+			sessionToken = &telemetryGetToolUsageSummarySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetToolUsageSummaryProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetToolUsageSummaryProjectSlugInput
+		}
+	}
+	v := &telemetry.GetToolUsageSummaryPayload{
+		From: body.From,
+		To:   body.To,
+	}
+	if body.TargetTypes != nil {
+		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
+		for i, val := range body.TargetTypes {
+			v.TargetTypes[i] = telemetry.ToolUsageTargetType(val)
+		}
+	}
+	if body.HostedToolsetSlugs != nil {
+		v.HostedToolsetSlugs = make([]string, len(body.HostedToolsetSlugs))
+		for i, val := range body.HostedToolsetSlugs {
+			v.HostedToolsetSlugs[i] = val
+		}
+	}
+	if body.ShadowServerNames != nil {
+		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
+		for i, val := range body.ShadowServerNames {
+			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.UserFilters != nil {
+		v.UserFilters = make([]*telemetry.ToolUsageUserFilter, len(body.UserFilters))
+		for i, val := range body.UserFilters {
+			if val == nil {
+				v.UserFilters[i] = nil
+				continue
+			}
+			v.UserFilters[i] = marshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.HookSources != nil {
+		v.HookSources = make([]string, len(body.HookSources))
+		for i, val := range body.HookSources {
+			v.HookSources[i] = val
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListToolUsageTracesPayload builds the payload for the telemetry
+// listToolUsageTraces endpoint from CLI flags.
+func BuildListToolUsageTracesPayload(telemetryListToolUsageTracesBody string, telemetryListToolUsageTracesApikeyToken string, telemetryListToolUsageTracesSessionToken string, telemetryListToolUsageTracesProjectSlugInput string) (*telemetry.ListToolUsageTracesPayload, error) {
+	var err error
+	var body ListToolUsageTracesRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryListToolUsageTracesBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"operator\": \"not_eq\",\n            \"path\": \"@user.region\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"limit\": 2,\n      \"query\": \"abc123\",\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"sort\": \"desc\",\n      \"target_types\": [\n         \"shadow_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		for _, e := range body.TargetTypes {
+			if !(e == "hosted_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+			}
+		}
+		for _, e := range body.UserFilters {
+			if e != nil {
+				if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		for _, e := range body.Filters {
+			if e != nil {
+				if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if !(body.Sort == "asc" || body.Sort == "desc") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort", body.Sort, []any{"asc", "desc"}))
+		}
+		if body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1, true))
+		}
+		if body.Limit > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1000, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryListToolUsageTracesApikeyToken != "" {
+			apikeyToken = &telemetryListToolUsageTracesApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryListToolUsageTracesSessionToken != "" {
+			sessionToken = &telemetryListToolUsageTracesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryListToolUsageTracesProjectSlugInput != "" {
+			projectSlugInput = &telemetryListToolUsageTracesProjectSlugInput
+		}
+	}
+	v := &telemetry.ListToolUsageTracesPayload{
+		From:   body.From,
+		To:     body.To,
+		Query:  body.Query,
+		Cursor: body.Cursor,
+		Sort:   body.Sort,
+		Limit:  body.Limit,
+	}
+	if body.TargetTypes != nil {
+		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
+		for i, val := range body.TargetTypes {
+			v.TargetTypes[i] = telemetry.ToolUsageTargetType(val)
+		}
+	}
+	if body.HostedToolsetSlugs != nil {
+		v.HostedToolsetSlugs = make([]string, len(body.HostedToolsetSlugs))
+		for i, val := range body.HostedToolsetSlugs {
+			v.HostedToolsetSlugs[i] = val
+		}
+	}
+	if body.ShadowServerNames != nil {
+		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
+		for i, val := range body.ShadowServerNames {
+			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.UserFilters != nil {
+		v.UserFilters = make([]*telemetry.ToolUsageUserFilter, len(body.UserFilters))
+		for i, val := range body.UserFilters {
+			if val == nil {
+				v.UserFilters[i] = nil
+				continue
+			}
+			v.UserFilters[i] = marshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.HookSources != nil {
+		v.HookSources = make([]string, len(body.HookSources))
+		for i, val := range body.HookSources {
+			v.HookSources[i] = val
+		}
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = marshalLogFilterRequestBodyToTelemetryLogFilter(val)
+		}
+	}
+	{
+		var zero string
+		if v.Sort == zero {
+			v.Sort = "desc"
+		}
+	}
+	{
+		var zero int
+		if v.Limit == zero {
+			v.Limit = 100
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetToolUsageFilterOptionsPayload builds the payload for the telemetry
+// getToolUsageFilterOptions endpoint from CLI flags.
+func BuildGetToolUsageFilterOptionsPayload(telemetryGetToolUsageFilterOptionsBody string, telemetryGetToolUsageFilterOptionsApikeyToken string, telemetryGetToolUsageFilterOptionsSessionToken string, telemetryGetToolUsageFilterOptionsProjectSlugInput string) (*telemetry.GetToolUsageFilterOptionsPayload, error) {
+	var err error
+	var body GetToolUsageFilterOptionsRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetToolUsageFilterOptionsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"option_types\": [\n         \"shadow_servers\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		for _, e := range body.OptionTypes {
+			if !(e == "hosted_servers" || e == "shadow_servers" || e == "users") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.option_types[*]", e, []any{"hosted_servers", "shadow_servers", "users"}))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetToolUsageFilterOptionsApikeyToken != "" {
+			apikeyToken = &telemetryGetToolUsageFilterOptionsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetToolUsageFilterOptionsSessionToken != "" {
+			sessionToken = &telemetryGetToolUsageFilterOptionsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetToolUsageFilterOptionsProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetToolUsageFilterOptionsProjectSlugInput
+		}
+	}
+	v := &telemetry.GetToolUsageFilterOptionsPayload{
+		From: body.From,
+		To:   body.To,
+	}
+	if body.OptionTypes != nil {
+		v.OptionTypes = make([]telemetry.ToolUsageFilterOptionType, len(body.OptionTypes))
+		for i, val := range body.OptionTypes {
+			v.OptionTypes[i] = telemetry.ToolUsageFilterOptionType(val)
 		}
 	}
 	v.ApikeyToken = apikeyToken

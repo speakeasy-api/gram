@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useMemo } from "react";
+import { forwardRef, useEffect, useMemo } from "react";
 import { useAsciiStore } from "../../hooks/use-ascii-store";
 import { glsl } from "@/lib/webgl/utils";
 import { useTheme } from "next-themes";

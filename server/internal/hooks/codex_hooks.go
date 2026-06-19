@@ -15,7 +15,9 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.CodexHookResult, error) {
@@ -39,6 +41,10 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
+	metadata := s.codexSessionMetadata(ctx, payload, orgID, projectID)
+	if metadata.UserEmail == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "codex hook payload missing user_email")
+	}
 	logger = logger.With(
 		attr.SlogOrganizationID(orgID),
 		attr.SlogProjectID(projectID),
@@ -52,15 +58,30 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 
 	switch payload.HookEventName {
 	case "PreToolUse":
-		if scanResult := s.scanCodexForEnforcement(ctx, payload, orgID, projectID); scanResult != nil {
+		if scanResult := s.scanCodexForEnforcement(ctx, payload, orgID, projectID, metadata.UserID); scanResult != nil {
 			blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
 			break
 		}
-		policy := s.lookupShadowMCPBlockingPolicy(ctx, projectID)
+		policy := s.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, metadata.UserID)
 		if policy != nil {
 			toolName := conv.PtrValOr(payload.ToolName, "")
-			if detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, toolName, orgID); denied {
+			evidence, matched := s.codexShadowMCPEvidence(ctx, payload)
+			detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy.ID, payload.ToolInput, toolName, evidence)
+			if !denied {
+				// Toolset validation proves a valid x-gram-toolset-id was
+				// echoed, but a shadow server's schema can coach the client
+				// into copying one. The inventory snapshot pins where the
+				// call actually routes — deny when it points at a non-Gram
+				// target. Unmatched prefixes and missing snapshots stay
+				// allowed: older plugin installs ship no inventory.
+				if d := s.codexInventoryProvenanceDetail(ctx, matched, orgID); d != "" {
+					if _, allowed := s.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
+						detail, denied = d, true
+					}
+				}
+			}
+			if denied {
 				logger.InfoContext(ctx, "denying codex tool call: failed gram toolset validation",
 					attr.SlogEvent("codex_hook_denied"),
 					attr.SlogHookBlockReason(detail),
@@ -68,16 +89,26 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 					attr.SlogRiskPolicyName(policy.Name),
 				)
 				blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
-				userReason = renderUserBlockReason(policy.UserMessage, blockReason)
+				userReason = s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
+					OrganizationID:  orgID,
+					ProjectID:       projectID,
+					RequesterUserID: metadata.UserID,
+					UserMessage:     policy.UserMessage,
+					AuditReason:     blockReason,
+					Evidence:        evidence,
+					ToolName:        toolName,
+					ToolInput:       payload.ToolInput,
+					RiskPolicyID:    policy.ID,
+				})
 			}
 		}
 	case "PermissionRequest":
-		if scanResult := s.scanCodexForEnforcement(ctx, payload, orgID, projectID); scanResult != nil {
+		if scanResult := s.scanCodexForEnforcement(ctx, payload, orgID, projectID, metadata.UserID); scanResult != nil {
 			blockReason = fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
 		}
 	case "UserPromptSubmit":
-		if scanResult := s.scanCodexForEnforcement(ctx, payload, orgID, projectID); scanResult != nil {
+		if scanResult := s.scanCodexForEnforcement(ctx, payload, orgID, projectID, metadata.UserID); scanResult != nil {
 			blockReason = fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
 		}
@@ -85,7 +116,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 		// Non-blocking events: telemetry only.
 	}
 
-	s.recordCodexHook(ctx, payload, orgID, projectID, blockReason)
+	s.recordCodexHook(ctx, payload, metadata, blockReason)
 
 	if blockReason != "" {
 		// Return the Codex hook JSON shape (decision=deny + reason) so the
@@ -104,19 +135,22 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 	}, nil
 }
 
-func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload, orgID, projectID, blockReason string) {
-	// Codex does not send user_email; events are attributed to org/project only.
-	metadata := &SessionMetadata{
-		SessionID:   conv.PtrValOr(payload.SessionID, ""),
-		ServiceName: "Codex",
-		UserEmail:   "",
-		UserID:      "",
-		ClaudeOrgID: "",
-		GramOrgID:   orgID,
-		ProjectID:   projectID,
+func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata, blockReason string) {
+	if payload.HookEventName == "SessionStart" {
+		s.captureCodexMCPListSnapshot(ctx, payload)
+		if metadata.SessionID != "" && metadata.UserEmail != "" {
+			if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
+				s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
+					attr.SlogError(err),
+					attr.SlogGenAIConversationID(metadata.SessionID),
+				)
+			}
+		}
+	} else {
+		s.refreshMCPListTTL(ctx, metadata.SessionID)
 	}
 
-	s.writeCodexHookToClickHouse(ctx, payload, orgID, projectID, blockReason)
+	s.writeCodexHookToClickHouse(ctx, payload, metadata, blockReason)
 
 	switch payload.HookEventName {
 	case "PreToolUse":
@@ -131,17 +165,75 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 		if err := s.writeCodexUserPromptToPG(ctx, payload, metadata); err != nil {
 			s.logger.ErrorContext(ctx, "failed to persist Codex user prompt", attr.SlogError(err))
 		}
+	case "Stop":
+		if err := s.writeCodexAssistantResponseToPG(ctx, payload, metadata); err != nil {
+			s.logger.ErrorContext(ctx, "failed to persist Codex assistant response", attr.SlogError(err))
+		}
 	}
 }
 
-func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.CodexPayload, orgID, projectID, blockReason string) {
-	attrs := s.buildCodexTelemetryAttributes(ctx, payload, orgID, projectID)
+// captureCodexMCPListSnapshot parses the MCP inventory shipped by the Codex
+// SessionStart hook script (additional_data.mcp_inventory_codex, the parsed
+// output of `codex mcp list --json`) and caches it under
+// sessionMCPListCacheKey, sharing the snapshot shape and cache key with the
+// Claude flows so downstream matching and telemetry enrichment work
+// unchanged.
+func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.CodexPayload) {
+	if payload.SessionID == nil || *payload.SessionID == "" || payload.AdditionalData == nil {
+		return
+	}
+	raw := payload.AdditionalData["mcp_inventory_codex"]
+	if raw == nil {
+		return
+	}
+
+	entries := ParseCodexMCPList(raw)
+	if err := s.cache.Set(ctx, sessionMCPListCacheKey(*payload.SessionID), entries, sessionMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to cache Codex MCP list snapshot",
+			attr.SlogEvent("codex_hook_mcp_list_cache_set_failed"),
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(*payload.SessionID),
+		)
+	}
+}
+
+func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) *SessionMetadata {
+	metadata := &SessionMetadata{
+		SessionID:   conv.PtrValOr(payload.SessionID, ""),
+		ServiceName: "Codex",
+		UserEmail:   strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
+		UserID:      "",
+		ClaudeOrgID: "",
+		GramOrgID:   orgID,
+		ProjectID:   projectID,
+	}
+
+	if metadata.SessionID != "" {
+		cached, err := s.getSessionMetadata(ctx, metadata.SessionID)
+		if err == nil && cached.ServiceName == "Codex" && cached.GramOrgID == orgID && cached.ProjectID == projectID {
+			if metadata.UserEmail == "" {
+				metadata.UserEmail = cached.UserEmail
+			}
+		}
+	}
+
+	if metadata.UserEmail != "" {
+		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, orgID)
+	} else {
+		metadata.UserID = ""
+	}
+
+	return metadata
+}
+
+func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata, blockReason string) {
+	attrs := s.buildCodexTelemetryAttributes(ctx, payload, metadata)
 	if blockReason != "" {
 		attrs[attr.HookBlockReasonKey] = blockReason
 	}
 	toolName, _ := attrs[attr.ToolNameKey].(string)
 
-	parsedProjectID, err := uuid.Parse(projectID)
+	parsedProjectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "invalid project ID for Codex hook", attr.SlogError(err))
 		return
@@ -149,7 +241,7 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 
 	toolInfo := telemetry.ToolInfo{
 		Name:           toolName,
-		OrganizationID: orgID,
+		OrganizationID: metadata.GramOrgID,
 		ProjectID:      parsedProjectID.String(),
 		ID:             "",
 		URN:            "",
@@ -161,6 +253,7 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
+			UserInfo:   telemetry.UserInfoByID(metadata.UserID),
 			Attributes: attrs,
 		})
 
@@ -170,7 +263,7 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 	}
 }
 
-func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) map[attr.Key]any {
+func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) map[attr.Key]any {
 	toolName := conv.PtrValOr(payload.ToolName, "")
 
 	attrs := map[attr.Key]any{
@@ -180,9 +273,8 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        generateTraceID(),
 		attr.LogBodyKey:        fmt.Sprintf("Hook: %s", payload.HookEventName),
-		attr.UserEmailKey:      "",
-		attr.ProjectIDKey:      projectID,
-		attr.OrganizationIDKey: orgID,
+		attr.ProjectIDKey:      metadata.ProjectID,
+		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     "codex",
 	}
 
@@ -216,11 +308,29 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 	}
 
 	// Parse MCP tool names using the mcp__<server>__<tool> convention.
-	if strings.HasPrefix(toolName, "mcp__") {
-		parts := strings.SplitN(toolName, "__", 3)
-		if len(parts) == 3 {
-			attrs[attr.ToolCallSourceKey] = parts[1]
-			attrs[attr.ToolNameKey] = parts[2]
+	if server, fn, ok := toolref.AttributeTool(toolName); ok {
+		attrs[attr.ToolCallSourceKey] = server
+		attrs[attr.ToolNameKey] = fn
+		// Enrich with the cached MCP inventory: recover the true server/tool
+		// split for sanitized prefixes (which can themselves contain "__"),
+		// the resolved match key, and inventory attributes.
+		if metadata.SessionID != "" {
+			if entries, err := s.getCachedMCPList(ctx, metadata.SessionID); err == nil {
+				matched := matchCodexCachedMCPEntry(entries, toolName)
+				if matched != nil && matched.ToolPrefix != "" {
+					// Sanitized prefixes can contain "__", in which case
+					// the naive split misattributes part of the server
+					// name to the tool — recompute from the full prefix.
+					if rest, ok := strings.CutPrefix(toolName, "mcp__"+matched.ToolPrefix+"__"); ok {
+						attrs[attr.ToolCallSourceKey] = matched.ToolPrefix
+						attrs[attr.ToolNameKey] = rest
+					}
+				}
+				if v := resolvedMCPMatch(matched, server); v != "" {
+					attrs[attr.MCPMatchKey] = v
+				}
+				applyMCPInventoryAttrs(attrs, matched)
+			}
 		}
 	}
 
@@ -371,4 +481,65 @@ func (s *Service) writeCodexUserPromptToPG(ctx context.Context, payload *gen.Cod
 	}
 
 	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle)
+}
+
+func (s *Service) writeCodexAssistantResponseToPG(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) error {
+	if metadata.SessionID == "" {
+		return nil
+	}
+
+	content := conv.PtrValOr(payload.LastAssistantMessage, "")
+	if content == "" {
+		return nil
+	}
+
+	projectID, err := uuid.Parse(metadata.ProjectID)
+	if err != nil {
+		return fmt.Errorf("invalid project ID for Codex assistant response: %w", err)
+	}
+
+	chatID := sessionIDToUUID(metadata.SessionID)
+
+	msgParams := chatRepo.CreateChatMessageParams{
+		ChatID:           chatID,
+		ProjectID:        projectID,
+		Role:             "assistant",
+		Content:          content,
+		Model:            conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, "")),
+		UserID:           conv.ToPGTextEmpty(metadata.UserID),
+		Source:           conv.ToPGText("Codex"),
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+		ContentRaw:       nil,
+		ContentAssetUrl:  conv.ToPGTextEmpty(""),
+		StorageError:     conv.ToPGTextEmpty(""),
+		MessageID:        conv.ToPGTextEmpty(""),
+		ToolCallID:       conv.ToPGTextEmpty(""),
+		ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
+		FinishReason:     conv.ToPGTextEmpty(""),
+		ToolCalls:        nil,
+		Origin:           conv.ToPGTextEmpty(""),
+		UserAgent:        conv.ToPGTextEmpty(""),
+		IpAddress:        conv.ToPGTextEmpty(""),
+		ContentHash:      nil,
+		Generation:       0,
+	}
+
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle); err != nil {
+		return err
+	}
+
+	if s.chatTitleGenerator != nil {
+		if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
+			context.WithoutCancel(ctx),
+			chatID.String(),
+			metadata.GramOrgID,
+			projectID.String(),
+		); err != nil {
+			s.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
+		}
+	}
+
+	return nil
 }

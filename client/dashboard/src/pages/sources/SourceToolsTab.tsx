@@ -1,11 +1,23 @@
+import { ToolVariationBadge } from "@/components/tool-variation-badge";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
+import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import type { Tool } from "@/lib/toolTypes";
 import { Badge } from "@speakeasy-api/moonshine";
 import { useState } from "react";
+import { SourceToolActions } from "./SourceToolActions";
 
 type HttpTool = Extract<Tool, { type: "http" }>;
 type FunctionTool = Extract<Tool, { type: "function" }>;
+type OnToolUpdate = (
+  tool: Tool,
+  updates: ToolUpdateFields,
+) => void | Promise<void>;
+
+type ToolActionsProps = {
+  onToolUpdate?: OnToolUpdate;
+  isToolUpdating?: boolean;
+};
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 
@@ -58,7 +70,11 @@ function FilterPill({
   );
 }
 
-function HttpToolRow({ tool }: { tool: HttpTool }) {
+function HttpToolRow({
+  tool,
+  onToolUpdate,
+  isToolUpdating,
+}: { tool: HttpTool } & ToolActionsProps) {
   return (
     <div className="hover:bg-muted/30 grid grid-cols-[80px_40%_1fr] items-center border-b px-4 py-3 transition-colors last:border-b-0">
       <div>
@@ -69,12 +85,28 @@ function HttpToolRow({ tool }: { tool: HttpTool }) {
       <div className="text-muted-foreground truncate pr-3 font-mono text-sm">
         {tool.path}
       </div>
-      <div className="truncate text-sm">{tool.name}</div>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm">{tool.name}</span>
+          <ToolVariationBadge tool={tool} />
+        </div>
+        {onToolUpdate && (
+          <SourceToolActions
+            tool={tool}
+            onUpdate={(updates) => onToolUpdate(tool, updates)}
+            isUpdating={isToolUpdating}
+          />
+        )}
+      </div>
     </div>
   );
 }
 
-function FunctionToolRow({ tool }: { tool: FunctionTool }) {
+function FunctionToolRow({
+  tool,
+  onToolUpdate,
+  isToolUpdating,
+}: { tool: FunctionTool } & ToolActionsProps) {
   return (
     <div className="hover:bg-muted/30 grid grid-cols-[120px_1fr_1.5fr] items-center gap-4 border-b px-4 py-3 transition-colors last:border-b-0">
       <div>
@@ -82,9 +114,21 @@ function FunctionToolRow({ tool }: { tool: FunctionTool }) {
           <Badge.Text>{tool.runtime}</Badge.Text>
         </Badge>
       </div>
-      <div className="truncate font-mono text-sm">{tool.name}</div>
-      <div className="text-muted-foreground truncate text-sm">
-        {tool.description}
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="truncate font-mono text-sm">{tool.name}</span>
+        <ToolVariationBadge tool={tool} />
+      </div>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <div className="text-muted-foreground truncate text-sm">
+          {tool.description}
+        </div>
+        {onToolUpdate && (
+          <SourceToolActions
+            tool={tool}
+            onUpdate={(updates) => onToolUpdate(tool, updates)}
+            isUpdating={isToolUpdating}
+          />
+        )}
       </div>
     </div>
   );
@@ -142,13 +186,15 @@ function FilteredToolsList({
   methodFilter,
   runtimeFilter,
   searchQuery,
+  onToolUpdate,
+  isToolUpdating,
 }: {
   tools: Tool[];
   isOpenAPI: boolean;
   methodFilter: string | null;
   runtimeFilter: string | null;
   searchQuery: string;
-}) {
+} & ToolActionsProps) {
   const filtered = tools.filter((tool) => {
     if (isOpenAPI) {
       if (tool.type !== "http") return false;
@@ -186,9 +232,23 @@ function FilteredToolsList({
     <>
       {filtered.map((tool) => {
         if (tool.type === "http")
-          return <HttpToolRow key={tool.toolUrn} tool={tool} />;
+          return (
+            <HttpToolRow
+              key={tool.toolUrn}
+              tool={tool}
+              onToolUpdate={onToolUpdate}
+              isToolUpdating={isToolUpdating}
+            />
+          );
         if (tool.type === "function")
-          return <FunctionToolRow key={tool.toolUrn} tool={tool} />;
+          return (
+            <FunctionToolRow
+              key={tool.toolUrn}
+              tool={tool}
+              onToolUpdate={onToolUpdate}
+              isToolUpdating={isToolUpdating}
+            />
+          );
         return null;
       })}
     </>
@@ -199,11 +259,13 @@ export function SourceToolsTab({
   relatedTools,
   isOpenAPI,
   uniqueRuntimes,
+  onToolUpdate,
+  isToolUpdating,
 }: {
   relatedTools: Tool[];
   isOpenAPI: boolean;
   uniqueRuntimes: string[];
-}) {
+} & ToolActionsProps): JSX.Element {
   const [methodFilter, setMethodFilter] = useState<string | null>(null);
   const [runtimeFilter, setRuntimeFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -245,7 +307,7 @@ export function SourceToolsTab({
                   label={method}
                   count={count}
                   active={methodFilter === method}
-                  variant={HTTP_METHOD_VARIANT[method]}
+                  variant={HTTP_METHOD_VARIANT[method] ?? "neutral"}
                   onClick={() =>
                     setMethodFilter(methodFilter === method ? null : method)
                   }
@@ -303,6 +365,8 @@ export function SourceToolsTab({
               methodFilter={methodFilter}
               runtimeFilter={runtimeFilter}
               searchQuery={searchQuery}
+              onToolUpdate={onToolUpdate}
+              isToolUpdating={isToolUpdating}
             />
           </div>
         </div>

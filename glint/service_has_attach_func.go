@@ -5,6 +5,7 @@ import (
 	"go/types"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 const (
@@ -18,8 +19,9 @@ type serviceHasAttachFuncSettings struct {
 
 func newServiceHasAttachFuncAnalyzer(rule serviceHasAttachFuncSettings) *analysis.Analyzer {
 	return &analysis.Analyzer{
-		Name: serviceHasAttachFuncAnalyzer,
-		Doc:  serviceHasAttachFuncDoc,
+		Name:     serviceHasAttachFuncAnalyzer,
+		Doc:      serviceHasAttachFuncDoc,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 		Run: func(pass *analysis.Pass) (any, error) {
 			annotated := findAnnotatedStructs(pass)
 			if len(annotated) == 0 {

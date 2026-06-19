@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
+	"net/url"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -38,7 +40,7 @@ type Service struct {
 	logger             *slog.Logger
 	db                 *pgxpool.Pool
 	telemetryLogger    *telemetry.Logger
-	auth               *auth.Auth
+	auth               authorizer
 	authz              *authz.Engine
 	cache              cache.Cache
 	temporalEnv        *tenv.Environment
@@ -46,8 +48,15 @@ type Service struct {
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
 	riskScanner        risk.RiskScanner
+	policyBypass       *risk.PolicyBypassEvaluator
 	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
+	siteURL            *url.URL
+	jwtSecret          string
+}
+
+type authorizer interface {
+	Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error)
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint
@@ -95,8 +104,11 @@ func NewService(
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
 	riskScanner risk.RiskScanner,
+	policyBypass *risk.PolicyBypassEvaluator,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
+	siteURL *url.URL,
+	jwtSecret string,
 ) *Service {
 	return &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
@@ -111,13 +123,20 @@ func NewService(
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
 		riskScanner:        riskScanner,
+		policyBypass:       policyBypass,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
+		siteURL:            siteURL,
+		jwtSecret:          jwtSecret,
 	}
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
+	ctx, err := s.auth.Authorize(ctx, key, schema)
+	if err != nil {
+		return ctx, fmt.Errorf("authorize hooks api key: %w", err)
+	}
+	return ctx, nil
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -176,7 +195,7 @@ func (s *Service) withAuthContext(ctx context.Context, logger *slog.Logger) *slo
 // back to permissive behaviour. Flag-action policies are intentionally ignored
 // here — they surface as findings via the batch scanner instead of denying at
 // the hook layer.
-func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, projectID string) *risk.ShadowMCPPolicy {
+func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, organizationID, projectID, userID string) *risk.ShadowMCPPolicy {
 	if s.riskScanner == nil || projectID == "" {
 		return nil
 	}
@@ -184,7 +203,7 @@ func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, projectID s
 	if err != nil {
 		return nil
 	}
-	policy, err := s.riskScanner.LookupShadowMCPBlockingPolicy(ctx, pid)
+	policy, err := s.riskScanner.LookupShadowMCPBlockingPolicy(ctx, organizationID, pid, userID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to look up shadow_mcp policy; defaulting to off",
 			attr.SlogError(err),

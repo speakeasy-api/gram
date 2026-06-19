@@ -1,14 +1,17 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
-import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useSessionData } from "@/contexts/Auth";
+import { useOrganization, useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Button } from "@speakeasy-api/moonshine";
-import { FolderSync, Lock } from "lucide-react";
-import { useState } from "react";
+import { useOrgRoutes } from "@/routes";
+import {
+  useGenerateWorkOSAdminPortalLinkMutation,
+  useProductFeatures,
+} from "@gram/client/react-query";
+import { Badge, Button } from "@speakeasy-api/moonshine";
+import { FolderSync, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 
 const UPSELL_COPY = "Contact our team to setup SSO and Directory Sync";
@@ -24,10 +27,17 @@ type IdentityCardProps = {
   providerSubtitle: string;
   learnMoreText: string;
   learnMoreHref: string;
+  active?: boolean;
+  configureButton?: React.ReactNode;
   children?: React.ReactNode;
 };
 
-function useIdentityInterestCapture(sectionId: IdentitySectionId) {
+/**
+ * Notifies our team that a non-entitled org wants SSO / Directory Sync. This
+ * capture backs the "our team has been contacted" upsell toast, so it stays even
+ * though the entitled-org configure buttons no longer emit tracking events.
+ */
+function useUpsellInterestCapture(sectionId: IdentitySectionId) {
   const telemetry = useTelemetry();
   const { session } = useSessionData();
 
@@ -44,7 +54,7 @@ function useIdentityInterestCapture(sectionId: IdentitySectionId) {
 }
 
 function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
-  const captureInterest = useIdentityInterestCapture(sectionId);
+  const captureInterest = useUpsellInterestCapture(sectionId);
 
   return (
     <SimpleTooltip tooltip={UPSELL_COPY}>
@@ -64,6 +74,154 @@ function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
   );
 }
 
+/**
+ * Routes an admin into Gram's guided setup wizard at the relevant step instead
+ * of bouncing them straight to the WorkOS admin portal. Used when SSO / Directory
+ * Sync has not been configured yet so first-run setup happens in-product.
+ */
+function SetupStepButton({ step }: { step: "connect-idp" | "directory-sync" }) {
+  const orgRoutes = useOrgRoutes();
+
+  return (
+    <RequireScope scope="org:admin" level="component">
+      <orgRoutes.setup.Link queryParams={{ step }}>
+        <Button variant="secondary" size="sm">
+          Configure
+        </Button>
+      </orgRoutes.setup.Link>
+    </RequireScope>
+  );
+}
+
+/** Launches the WorkOS admin portal to manage an existing SSO connection. */
+function SSOConfigureButton() {
+  const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to start SSO setup",
+      );
+    },
+  });
+
+  const launchPortal = () => {
+    generatePortalLink.mutate(
+      {
+        request: {
+          generateWorkOSAdminPortalLinkRequestBody: {
+            intent: "sso",
+          },
+        },
+      },
+      {
+        onSuccess: (data) => {
+          window.open(data.url, "_blank", "noopener,noreferrer");
+          toast.info("Continue setup in the WorkOS portal");
+        },
+      },
+    );
+  };
+
+  return (
+    <RequireScope scope="org:admin" level="component">
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={launchPortal}
+        disabled={generatePortalLink.isPending}
+      >
+        {generatePortalLink.isPending && (
+          <Button.LeftIcon>
+            <Loader2 className="h-4 w-4 animate-spin" />
+          </Button.LeftIcon>
+        )}
+        Configure
+      </Button>
+    </RequireScope>
+  );
+}
+
+/** Launches the WorkOS admin portal to manage an existing Directory Sync link. */
+function DirectorySyncConfigureButton() {
+  const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to start Directory Sync setup",
+      );
+    },
+  });
+
+  const launchPortal = () => {
+    generatePortalLink.mutate(
+      {
+        request: {
+          generateWorkOSAdminPortalLinkRequestBody: {
+            intent: "dsync",
+          },
+        },
+      },
+      {
+        onSuccess: (data) => {
+          window.open(data.url, "_blank", "noopener,noreferrer");
+          toast.info("Continue setup in the WorkOS portal");
+        },
+      },
+    );
+  };
+
+  return (
+    <RequireScope scope="org:admin" level="component">
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={launchPortal}
+        disabled={generatePortalLink.isPending}
+      >
+        {generatePortalLink.isPending && (
+          <Button.LeftIcon>
+            <Loader2 className="h-4 w-4 animate-spin" />
+          </Button.LeftIcon>
+        )}
+        Configure
+      </Button>
+    </RequireScope>
+  );
+}
+
+/**
+ * Picks the SSO configure control: upsell when the feature is not entitled, the
+ * WorkOS portal launcher once a connection exists, otherwise the in-product
+ * setup wizard for first-run configuration.
+ */
+function SSOConfigureControl({
+  featureEnabled,
+  active,
+}: {
+  featureEnabled: boolean;
+  active: boolean;
+}) {
+  if (!featureEnabled) return <ConfigureButton sectionId="sso" />;
+  if (active) return <SSOConfigureButton />;
+  return <SetupStepButton step="connect-idp" />;
+}
+
+/**
+ * Picks the Directory Sync configure control, mirroring {@link SSOConfigureControl}:
+ * upsell, WorkOS portal launcher, or the in-product setup wizard.
+ */
+function DirectorySyncConfigureControl({
+  featureEnabled,
+  active,
+}: {
+  featureEnabled: boolean;
+  active: boolean;
+}) {
+  if (!featureEnabled) return <ConfigureButton sectionId="directory_sync" />;
+  if (active) return <DirectorySyncConfigureButton />;
+  return <SetupStepButton step="directory-sync" />;
+}
+
 function IdentitySection({
   sectionId,
   heading,
@@ -73,6 +231,8 @@ function IdentitySection({
   providerSubtitle,
   learnMoreText,
   learnMoreHref,
+  active,
+  configureButton,
   children,
 }: IdentityCardProps) {
   return (
@@ -96,8 +256,13 @@ function IdentitySection({
               <Type muted small>
                 {providerSubtitle}
               </Type>
+              {active && (
+                <Badge variant="success" className="mt-1.5">
+                  <Badge.Text>Connected</Badge.Text>
+                </Badge>
+              )}
             </div>
-            <ConfigureButton sectionId={sectionId} />
+            {configureButton ?? <ConfigureButton sectionId={sectionId} />}
           </div>
           {children}
         </div>
@@ -114,24 +279,7 @@ function IdentitySection({
   );
 }
 
-function RequireSsoRow() {
-  const [requireSso, setRequireSso] = useState(false);
-  return (
-    <div className="border-border bg-muted/30 flex items-center justify-between gap-4 border-t p-4">
-      <Type variant="body" className="font-medium">
-        Require workspace members to login with SSO to access this workspace
-      </Type>
-      <Switch
-        checked={requireSso}
-        onCheckedChange={setRequireSso}
-        disabled
-        aria-label="Require workspace members to login with SSO"
-      />
-    </div>
-  );
-}
-
-export default function OrgIdentity() {
+export default function OrgIdentity(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -147,6 +295,14 @@ export default function OrgIdentity() {
 }
 
 function OrgIdentityInner() {
+  const organization = useOrganization();
+  const { data: features } = useProductFeatures();
+
+  const ssoFeatureEnabled = features?.ssoEnabled ?? false;
+  const scimFeatureEnabled = features?.scimEnabled ?? false;
+  const ssoActive = organization.ssoEnabled === true;
+  const scimActive = organization.scimEnabled === true;
+
   return (
     <div className="flex flex-col gap-6">
       <Heading variant="h4">Identity</Heading>
@@ -157,12 +313,21 @@ function OrgIdentityInner() {
           description="Set up Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
           providerIcon={<Lock className="text-muted-foreground h-5 w-5" />}
           providerTitle="SSO"
-          providerSubtitle="Choose an identity provider to get started."
+          providerSubtitle={
+            ssoActive
+              ? "Your identity provider is connected."
+              : "Choose an identity provider to get started."
+          }
           learnMoreText="Learn more about SSO"
           learnMoreHref="https://www.speakeasy.com/docs"
-        >
-          <RequireSsoRow />
-        </IdentitySection>
+          active={ssoActive}
+          configureButton={
+            <SSOConfigureControl
+              featureEnabled={ssoFeatureEnabled}
+              active={ssoActive}
+            />
+          }
+        />
 
         <IdentitySection
           sectionId="directory_sync"
@@ -172,9 +337,20 @@ function OrgIdentityInner() {
             <FolderSync className="text-muted-foreground h-5 w-5" />
           }
           providerTitle="SCIM"
-          providerSubtitle="Choose an identity provider to get started."
+          providerSubtitle={
+            scimActive
+              ? "Your directory provider is connected."
+              : "Choose an identity provider to get started."
+          }
           learnMoreText="Learn more about SCIM Directory Sync"
           learnMoreHref="https://www.speakeasy.com/docs"
+          active={scimActive}
+          configureButton={
+            <DirectorySyncConfigureControl
+              featureEnabled={scimFeatureEnabled}
+              active={scimActive}
+            />
+          }
         />
       </div>
     </div>

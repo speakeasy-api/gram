@@ -39,12 +39,12 @@ WITH inserted AS (
     $1
   )
   ON CONFLICT (ai_integration_config_id) DO NOTHING
-  RETURNING created_at, updated_at, ai_integration_config_id, poll_watermark_at, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
+  RETURNING created_at, updated_at, ai_integration_config_id, poll_watermark_at, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
 )
-SELECT created_at, updated_at, ai_integration_config_id, poll_watermark_at, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
+SELECT created_at, updated_at, ai_integration_config_id, poll_watermark_at, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
 FROM inserted
 UNION ALL
-SELECT created_at, updated_at, ai_integration_config_id, poll_watermark_at, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
+SELECT created_at, updated_at, ai_integration_config_id, poll_watermark_at, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
 FROM ai_integration_syncs
 WHERE ai_integration_config_id = $1
 LIMIT 1
@@ -55,6 +55,7 @@ type EnsureSyncRow struct {
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
 	PollWatermarkAt       pgtype.Timestamptz
+	LastCursorID          pgtype.Text
 	NextPollAfter         pgtype.Timestamptz
 	LastPollError         pgtype.Text
 	LastPollFailedAt      pgtype.Timestamptz
@@ -71,6 +72,7 @@ func (q *Queries) EnsureSync(ctx context.Context, aiIntegrationConfigID uuid.UUI
 		&i.UpdatedAt,
 		&i.AiIntegrationConfigID,
 		&i.PollWatermarkAt,
+		&i.LastCursorID,
 		&i.NextPollAfter,
 		&i.LastPollError,
 		&i.LastPollFailedAt,
@@ -83,7 +85,7 @@ func (q *Queries) EnsureSync(ctx context.Context, aiIntegrationConfigID uuid.UUI
 
 const getConfigByOrgAndProvider = `-- name: GetConfigByOrgAndProvider :one
 SELECT
-    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.api_key_encrypted, c.enabled, c.id, c.deleted
+    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.id, c.deleted
   , s.id AS sync_id
   , s.poll_watermark_at
   , s.next_poll_after
@@ -91,6 +93,7 @@ SELECT
   , s.last_poll_failed_at
   , s.last_poll_success_at
   , s.consecutive_failures
+  , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
@@ -106,25 +109,27 @@ type GetConfigByOrgAndProviderParams struct {
 }
 
 type GetConfigByOrgAndProviderRow struct {
-	CreatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	OrganizationID      string
-	Provider            string
-	ProjectID           uuid.UUID
-	ApiKeyEncrypted     string
-	Enabled             bool
-	ID                  uuid.UUID
-	Deleted             bool
-	SyncID              uuid.UUID
-	PollWatermarkAt     pgtype.Timestamptz
-	NextPollAfter       pgtype.Timestamptz
-	LastPollError       pgtype.Text
-	LastPollFailedAt    pgtype.Timestamptz
-	LastPollSuccessAt   pgtype.Timestamptz
-	ConsecutiveFailures int32
-	SyncCreatedAt       pgtype.Timestamptz
-	SyncUpdatedAt       pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	OrganizationID         string
+	Provider               string
+	ProjectID              uuid.UUID
+	ExternalOrganizationID pgtype.Text
+	ApiKeyEncrypted        string
+	Enabled                bool
+	ID                     uuid.UUID
+	Deleted                bool
+	SyncID                 uuid.UUID
+	PollWatermarkAt        pgtype.Timestamptz
+	NextPollAfter          pgtype.Timestamptz
+	LastPollError          pgtype.Text
+	LastPollFailedAt       pgtype.Timestamptz
+	LastPollSuccessAt      pgtype.Timestamptz
+	ConsecutiveFailures    int32
+	LastCursorID           pgtype.Text
+	SyncCreatedAt          pgtype.Timestamptz
+	SyncUpdatedAt          pgtype.Timestamptz
 }
 
 func (q *Queries) GetConfigByOrgAndProvider(ctx context.Context, arg GetConfigByOrgAndProviderParams) (GetConfigByOrgAndProviderRow, error) {
@@ -137,6 +142,7 @@ func (q *Queries) GetConfigByOrgAndProvider(ctx context.Context, arg GetConfigBy
 		&i.OrganizationID,
 		&i.Provider,
 		&i.ProjectID,
+		&i.ExternalOrganizationID,
 		&i.ApiKeyEncrypted,
 		&i.Enabled,
 		&i.ID,
@@ -148,6 +154,7 @@ func (q *Queries) GetConfigByOrgAndProvider(ctx context.Context, arg GetConfigBy
 		&i.LastPollFailedAt,
 		&i.LastPollSuccessAt,
 		&i.ConsecutiveFailures,
+		&i.LastCursorID,
 		&i.SyncCreatedAt,
 		&i.SyncUpdatedAt,
 	)
@@ -172,7 +179,7 @@ func (q *Queries) GetFirstProjectByOrganization(ctx context.Context, organizatio
 
 const getUsagePollConfigByID = `-- name: GetUsagePollConfigByID :one
 SELECT
-    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.api_key_encrypted, c.enabled, c.id, c.deleted
+    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.id, c.deleted
   , s.id AS sync_id
   , s.poll_watermark_at
   , s.next_poll_after
@@ -180,6 +187,7 @@ SELECT
   , s.last_poll_failed_at
   , s.last_poll_success_at
   , s.consecutive_failures
+  , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
@@ -191,25 +199,27 @@ WHERE c.id = $1
 `
 
 type GetUsagePollConfigByIDRow struct {
-	CreatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	OrganizationID      string
-	Provider            string
-	ProjectID           uuid.UUID
-	ApiKeyEncrypted     string
-	Enabled             bool
-	ID                  uuid.UUID
-	Deleted             bool
-	SyncID              uuid.UUID
-	PollWatermarkAt     pgtype.Timestamptz
-	NextPollAfter       pgtype.Timestamptz
-	LastPollError       pgtype.Text
-	LastPollFailedAt    pgtype.Timestamptz
-	LastPollSuccessAt   pgtype.Timestamptz
-	ConsecutiveFailures int32
-	SyncCreatedAt       pgtype.Timestamptz
-	SyncUpdatedAt       pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	OrganizationID         string
+	Provider               string
+	ProjectID              uuid.UUID
+	ExternalOrganizationID pgtype.Text
+	ApiKeyEncrypted        string
+	Enabled                bool
+	ID                     uuid.UUID
+	Deleted                bool
+	SyncID                 uuid.UUID
+	PollWatermarkAt        pgtype.Timestamptz
+	NextPollAfter          pgtype.Timestamptz
+	LastPollError          pgtype.Text
+	LastPollFailedAt       pgtype.Timestamptz
+	LastPollSuccessAt      pgtype.Timestamptz
+	ConsecutiveFailures    int32
+	LastCursorID           pgtype.Text
+	SyncCreatedAt          pgtype.Timestamptz
+	SyncUpdatedAt          pgtype.Timestamptz
 }
 
 func (q *Queries) GetUsagePollConfigByID(ctx context.Context, aiIntegrationConfigID uuid.UUID) (GetUsagePollConfigByIDRow, error) {
@@ -222,6 +232,7 @@ func (q *Queries) GetUsagePollConfigByID(ctx context.Context, aiIntegrationConfi
 		&i.OrganizationID,
 		&i.Provider,
 		&i.ProjectID,
+		&i.ExternalOrganizationID,
 		&i.ApiKeyEncrypted,
 		&i.Enabled,
 		&i.ID,
@@ -233,6 +244,7 @@ func (q *Queries) GetUsagePollConfigByID(ctx context.Context, aiIntegrationConfi
 		&i.LastPollFailedAt,
 		&i.LastPollSuccessAt,
 		&i.ConsecutiveFailures,
+		&i.LastCursorID,
 		&i.SyncCreatedAt,
 		&i.SyncUpdatedAt,
 	)
@@ -244,6 +256,7 @@ INSERT INTO ai_integration_configs (
     organization_id
   , provider
   , project_id
+  , external_organization_id
   , api_key_encrypted
   , enabled
 ) VALUES (
@@ -252,16 +265,18 @@ INSERT INTO ai_integration_configs (
   , $3
   , $4
   , $5
+  , $6
 )
-RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, api_key_encrypted, enabled, id, deleted
+RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, id, deleted
 `
 
 type InsertConfigParams struct {
-	OrganizationID  string
-	Provider        string
-	ProjectID       uuid.UUID
-	ApiKeyEncrypted string
-	Enabled         bool
+	OrganizationID         string
+	Provider               string
+	ProjectID              uuid.UUID
+	ExternalOrganizationID pgtype.Text
+	ApiKeyEncrypted        string
+	Enabled                bool
 }
 
 func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (AiIntegrationConfig, error) {
@@ -269,6 +284,7 @@ func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (AiI
 		arg.OrganizationID,
 		arg.Provider,
 		arg.ProjectID,
+		arg.ExternalOrganizationID,
 		arg.ApiKeyEncrypted,
 		arg.Enabled,
 	)
@@ -280,6 +296,7 @@ func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (AiI
 		&i.OrganizationID,
 		&i.Provider,
 		&i.ProjectID,
+		&i.ExternalOrganizationID,
 		&i.ApiKeyEncrypted,
 		&i.Enabled,
 		&i.ID,
@@ -290,7 +307,7 @@ func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (AiI
 
 const listEnabledConfigsByProvider = `-- name: ListEnabledConfigsByProvider :many
 SELECT
-    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.api_key_encrypted, c.enabled, c.id, c.deleted
+    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.id, c.deleted
   , s.id AS sync_id
   , s.poll_watermark_at
   , s.next_poll_after
@@ -298,6 +315,7 @@ SELECT
   , s.last_poll_failed_at
   , s.last_poll_success_at
   , s.consecutive_failures
+  , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
@@ -310,25 +328,27 @@ ORDER BY c.organization_id, c.provider
 `
 
 type ListEnabledConfigsByProviderRow struct {
-	CreatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	OrganizationID      string
-	Provider            string
-	ProjectID           uuid.UUID
-	ApiKeyEncrypted     string
-	Enabled             bool
-	ID                  uuid.UUID
-	Deleted             bool
-	SyncID              uuid.UUID
-	PollWatermarkAt     pgtype.Timestamptz
-	NextPollAfter       pgtype.Timestamptz
-	LastPollError       pgtype.Text
-	LastPollFailedAt    pgtype.Timestamptz
-	LastPollSuccessAt   pgtype.Timestamptz
-	ConsecutiveFailures int32
-	SyncCreatedAt       pgtype.Timestamptz
-	SyncUpdatedAt       pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	OrganizationID         string
+	Provider               string
+	ProjectID              uuid.UUID
+	ExternalOrganizationID pgtype.Text
+	ApiKeyEncrypted        string
+	Enabled                bool
+	ID                     uuid.UUID
+	Deleted                bool
+	SyncID                 uuid.UUID
+	PollWatermarkAt        pgtype.Timestamptz
+	NextPollAfter          pgtype.Timestamptz
+	LastPollError          pgtype.Text
+	LastPollFailedAt       pgtype.Timestamptz
+	LastPollSuccessAt      pgtype.Timestamptz
+	ConsecutiveFailures    int32
+	LastCursorID           pgtype.Text
+	SyncCreatedAt          pgtype.Timestamptz
+	SyncUpdatedAt          pgtype.Timestamptz
 }
 
 func (q *Queries) ListEnabledConfigsByProvider(ctx context.Context, provider string) ([]ListEnabledConfigsByProviderRow, error) {
@@ -347,6 +367,7 @@ func (q *Queries) ListEnabledConfigsByProvider(ctx context.Context, provider str
 			&i.OrganizationID,
 			&i.Provider,
 			&i.ProjectID,
+			&i.ExternalOrganizationID,
 			&i.ApiKeyEncrypted,
 			&i.Enabled,
 			&i.ID,
@@ -358,6 +379,7 @@ func (q *Queries) ListEnabledConfigsByProvider(ctx context.Context, provider str
 			&i.LastPollFailedAt,
 			&i.LastPollSuccessAt,
 			&i.ConsecutiveFailures,
+			&i.LastCursorID,
 			&i.SyncCreatedAt,
 			&i.SyncUpdatedAt,
 		); err != nil {
@@ -380,17 +402,15 @@ SELECT
 FROM ai_integration_syncs s
 JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
 JOIN organization_metadata om ON om.id = c.organization_id
-WHERE c.provider = $1
-  AND c.enabled IS TRUE
+WHERE c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND c.api_key_encrypted IS NOT NULL
-  AND s.next_poll_after <= $2
+  AND s.next_poll_after <= $1
 ORDER BY s.next_poll_after ASC, c.organization_id ASC, c.provider ASC
-LIMIT $3
+LIMIT $2
 `
 
 type ListUsagePollCandidatesParams struct {
-	Provider      string
 	PollDueBefore pgtype.Timestamptz
 	LimitCount    int32
 }
@@ -403,7 +423,7 @@ type ListUsagePollCandidatesRow struct {
 }
 
 func (q *Queries) ListUsagePollCandidates(ctx context.Context, arg ListUsagePollCandidatesParams) ([]ListUsagePollCandidatesRow, error) {
-	rows, err := q.db.Query(ctx, listUsagePollCandidates, arg.Provider, arg.PollDueBefore, arg.LimitCount)
+	rows, err := q.db.Query(ctx, listUsagePollCandidates, arg.PollDueBefore, arg.LimitCount)
 	if err != nil {
 		return nil, err
 	}
@@ -456,18 +476,25 @@ SET poll_watermark_at = $1,
     last_poll_failed_at = NULL,
     last_poll_success_at = clock_timestamp(),
     consecutive_failures = 0,
+    last_cursor_id = $3,
     updated_at = clock_timestamp()
-WHERE ai_integration_config_id = $3
+WHERE ai_integration_config_id = $4
 `
 
 type RecordUsagePollSuccessParams struct {
 	PollWatermarkAt       pgtype.Timestamptz
 	NextPollAfter         pgtype.Timestamptz
+	LastCursorID          pgtype.Text
 	AiIntegrationConfigID uuid.UUID
 }
 
 func (q *Queries) RecordUsagePollSuccess(ctx context.Context, arg RecordUsagePollSuccessParams) error {
-	_, err := q.db.Exec(ctx, recordUsagePollSuccess, arg.PollWatermarkAt, arg.NextPollAfter, arg.AiIntegrationConfigID)
+	_, err := q.db.Exec(ctx, recordUsagePollSuccess,
+		arg.PollWatermarkAt,
+		arg.NextPollAfter,
+		arg.LastCursorID,
+		arg.AiIntegrationConfigID,
+	)
 	return err
 }
 
@@ -479,6 +506,7 @@ SET poll_watermark_at = $1,
     last_poll_failed_at = NULL,
     last_poll_success_at = NULL,
     consecutive_failures = 0,
+    last_cursor_id = NULL,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = $3
 `
@@ -515,24 +543,27 @@ func (q *Queries) SoftDeleteConfig(ctx context.Context, arg SoftDeleteConfigPara
 const updateConfigSettings = `-- name: UpdateConfigSettings :one
 UPDATE ai_integration_configs
 SET project_id = $1,
-    enabled = $2,
+    external_organization_id = $2,
+    enabled = $3,
     updated_at = clock_timestamp()
-WHERE organization_id = $3
-  AND provider = $4
+WHERE organization_id = $4
+  AND provider = $5
   AND deleted IS FALSE
-RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, api_key_encrypted, enabled, id, deleted
+RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, id, deleted
 `
 
 type UpdateConfigSettingsParams struct {
-	ProjectID      uuid.UUID
-	Enabled        bool
-	OrganizationID string
-	Provider       string
+	ProjectID              uuid.UUID
+	ExternalOrganizationID pgtype.Text
+	Enabled                bool
+	OrganizationID         string
+	Provider               string
 }
 
 func (q *Queries) UpdateConfigSettings(ctx context.Context, arg UpdateConfigSettingsParams) (AiIntegrationConfig, error) {
 	row := q.db.QueryRow(ctx, updateConfigSettings,
 		arg.ProjectID,
+		arg.ExternalOrganizationID,
 		arg.Enabled,
 		arg.OrganizationID,
 		arg.Provider,
@@ -545,6 +576,7 @@ func (q *Queries) UpdateConfigSettings(ctx context.Context, arg UpdateConfigSett
 		&i.OrganizationID,
 		&i.Provider,
 		&i.ProjectID,
+		&i.ExternalOrganizationID,
 		&i.ApiKeyEncrypted,
 		&i.Enabled,
 		&i.ID,

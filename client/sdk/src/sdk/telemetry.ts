@@ -3,14 +3,20 @@
  */
 
 import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
+import { telemetryGetEmployeeDataFlowGraph } from "../funcs/telemetryGetEmployeeDataFlowGraph.js";
 import { telemetryGetHooksSummary } from "../funcs/telemetryGetHooksSummary.js";
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { telemetryGetProjectOverview } from "../funcs/telemetryGetProjectOverview.js";
+import { telemetryGetToolUsageFilterOptions } from "../funcs/telemetryGetToolUsageFilterOptions.js";
+import { telemetryGetToolUsageSummary } from "../funcs/telemetryGetToolUsageSummary.js";
 import { telemetryGetUserMetricsSummary } from "../funcs/telemetryGetUserMetricsSummary.js";
 import { telemetryListAttributeKeys } from "../funcs/telemetryListAttributeKeys.js";
 import { telemetryListFilterOptions } from "../funcs/telemetryListFilterOptions.js";
 import { telemetryListHooksTraces } from "../funcs/telemetryListHooksTraces.js";
+import { telemetryListSessions } from "../funcs/telemetryListSessions.js";
+import { telemetryListToolUsageTraces } from "../funcs/telemetryListToolUsageTraces.js";
+import { telemetryQuery } from "../funcs/telemetryQuery.js";
 import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
 import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
 import { telemetrySearchToolCalls } from "../funcs/telemetrySearchToolCalls.js";
@@ -33,6 +39,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.CaptureEventResult> {
     return unwrapAsync(telemetryCaptureEvent(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getEmployeeDataFlowGraph telemetry
+   *
+   * @remarks
+   * Get an employee's MCP data flow graph across origins, clients, servers, and tools
+   */
+  async getEmployeeDataFlowGraph(
+    request: operations.GetEmployeeDataFlowGraphRequest,
+    security?: operations.GetEmployeeDataFlowGraphSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetEmployeeDataFlowGraphResult> {
+    return unwrapAsync(telemetryGetEmployeeDataFlowGraph(
       this,
       request,
       security,
@@ -117,6 +142,44 @@ export class Telemetry extends ClientSDK {
   }
 
   /**
+   * getToolUsageFilterOptions telemetry
+   *
+   * @remarks
+   * Get filter options for target-aware MCP and tool usage metrics
+   */
+  async getToolUsageFilterOptions(
+    request: operations.GetToolUsageFilterOptionsRequest,
+    security?: operations.GetToolUsageFilterOptionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetToolUsageFilterOptionsResult> {
+    return unwrapAsync(telemetryGetToolUsageFilterOptions(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getToolUsageSummary telemetry
+   *
+   * @remarks
+   * Get target-aware MCP and tool usage metrics
+   */
+  async getToolUsageSummary(
+    request: operations.GetToolUsageSummaryRequest,
+    security?: operations.GetToolUsageSummarySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetToolUsageSummaryResult> {
+    return unwrapAsync(telemetryGetToolUsageSummary(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getUserMetricsSummary telemetry
    *
    * @remarks
@@ -185,6 +248,63 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListHooksTracesResult> {
     return unwrapAsync(telemetryListHooksTraces(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listSessions telemetry
+   *
+   * @remarks
+   * Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.
+   */
+  async listSessions(
+    request: operations.ListSessionsRequest,
+    security?: operations.ListSessionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListSessionsResult> {
+    return unwrapAsync(telemetryListSessions(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listToolUsageTraces telemetry
+   *
+   * @remarks
+   * List target-aware MCP and tool usage traces
+   */
+  async listToolUsageTraces(
+    request: operations.ListToolUsageTracesRequest,
+    security?: operations.ListToolUsageTracesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListToolUsageTracesResult> {
+    return unwrapAsync(telemetryListToolUsageTraces(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * query telemetry
+   *
+   * @remarks
+   * Generic, org-scoped analytics query over pre-aggregated usage metrics. Returns both a grouped table and a per-group hourly timeseries for the same slice of data, supporting arbitrary allowlisted group-by dimensions and filters (e.g. group by department_name, then drill in by filtering department_name and grouping by role).
+   */
+  async query(
+    request: operations.QueryRequest,
+    security?: operations.QuerySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.QueryResult> {
+    return unwrapAsync(telemetryQuery(
       this,
       request,
       security,

@@ -5,7 +5,8 @@ import {
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { useRoutes } from "@/routes";
-import { TimeRangePicker, type DateRangePreset } from "@gram-ai/elements";
+import { type DateRangePreset } from "@gram-ai/elements";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/index.js";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useMemo } from "react";
@@ -24,7 +25,7 @@ const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
   "30d",
 ];
 
-export default function RiskOverviewCategoriesIndex() {
+export default function RiskOverviewCategoriesIndex(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
       <Page>

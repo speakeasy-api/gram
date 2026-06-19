@@ -31,6 +31,8 @@ type ClaudeRequestBody struct {
 	IsInterrupt *bool `form:"is_interrupt,omitempty" json:"is_interrupt,omitempty" xml:"is_interrupt,omitempty"`
 	// The Claude Code session ID
 	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// Email of the authenticated user from the Speakeasy device agent, if available
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
 	// The working directory when the event fired
 	Cwd *string `form:"cwd,omitempty" json:"cwd,omitempty" xml:"cwd,omitempty"`
 	// Path to the conversation transcript file
@@ -134,6 +136,10 @@ type CodexRequestBody struct {
 	HookEventName *string `form:"hook_event_name,omitempty" json:"hook_event_name,omitempty" xml:"hook_event_name,omitempty"`
 	// The Codex session ID
 	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// Email of the authenticated Codex user, if available
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Additional hook-specific data
+	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
 	// Path to the conversation transcript file
 	TranscriptPath *string `form:"transcript_path,omitempty" json:"transcript_path,omitempty" xml:"transcript_path,omitempty"`
 	// The working directory when the event fired
@@ -150,6 +156,8 @@ type CodexRequestBody struct {
 	PermissionType *string `form:"permission_type,omitempty" json:"permission_type,omitempty" xml:"permission_type,omitempty"`
 	// The user's prompt text (UserPromptSubmit only)
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// The final assistant message text for the turn (Stop only)
+	LastAssistantMessage *string `form:"last_assistant_message,omitempty" json:"last_assistant_message,omitempty" xml:"last_assistant_message,omitempty"`
 }
 
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
@@ -1174,6 +1182,10 @@ type OTELLogRecordRequestBody struct {
 	TimeUnixNano *string `form:"timeUnixNano,omitempty" json:"timeUnixNano,omitempty" xml:"timeUnixNano,omitempty"`
 	// Observed timestamp in nanoseconds
 	ObservedTimeUnixNano *string `form:"observedTimeUnixNano,omitempty" json:"observedTimeUnixNano,omitempty" xml:"observedTimeUnixNano,omitempty"`
+	// Trace ID
+	TraceID *string `form:"traceId,omitempty" json:"traceId,omitempty" xml:"traceId,omitempty"`
+	// Span ID
+	SpanID *string `form:"spanId,omitempty" json:"spanId,omitempty" xml:"spanId,omitempty"`
 	// Log body content
 	Body *OTELLogBodyRequestBody `form:"body,omitempty" json:"body,omitempty" xml:"body,omitempty"`
 	// Log attributes
@@ -1996,7 +2008,7 @@ func NewMetricsGatewayErrorResponseBody(res *goa.ServiceError) *MetricsGatewayEr
 }
 
 // NewClaudePayload builds a hooks service claude endpoint payload.
-func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.ClaudePayload {
+func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string) *hooks.ClaudePayload {
 	v := &hooks.ClaudePayload{
 		HookEventName:        *body.HookEventName,
 		ToolName:             body.ToolName,
@@ -2006,6 +2018,7 @@ func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugI
 		Error:                body.Error,
 		IsInterrupt:          body.IsInterrupt,
 		SessionID:            body.SessionID,
+		UserEmail:            body.UserEmail,
 		Cwd:                  body.Cwd,
 		TranscriptPath:       body.TranscriptPath,
 		Source:               body.Source,
@@ -2028,12 +2041,13 @@ func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugI
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+	v.HookHostname = hookHostname
 
 	return v
 }
 
 // NewCursorPayload builds a hooks service cursor endpoint payload.
-func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.CursorPayload {
+func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string) *hooks.CursorPayload {
 	v := &hooks.CursorPayload{
 		HookEventName:    *body.HookEventName,
 		ConversationID:   body.ConversationID,
@@ -2074,26 +2088,38 @@ func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugI
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+	v.HookHostname = hookHostname
 
 	return v
 }
 
 // NewCodexPayload builds a hooks service codex endpoint payload.
-func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.CodexPayload {
+func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string) *hooks.CodexPayload {
 	v := &hooks.CodexPayload{
-		HookEventName:  *body.HookEventName,
-		SessionID:      body.SessionID,
-		TranscriptPath: body.TranscriptPath,
-		Cwd:            body.Cwd,
-		Model:          body.Model,
-		ToolName:       body.ToolName,
-		ToolInput:      body.ToolInput,
-		ToolOutput:     body.ToolOutput,
-		PermissionType: body.PermissionType,
-		Prompt:         body.Prompt,
+		HookEventName:        *body.HookEventName,
+		SessionID:            body.SessionID,
+		UserEmail:            body.UserEmail,
+		TranscriptPath:       body.TranscriptPath,
+		Cwd:                  body.Cwd,
+		Model:                body.Model,
+		ToolName:             body.ToolName,
+		ToolInput:            body.ToolInput,
+		ToolOutput:           body.ToolOutput,
+		PermissionType:       body.PermissionType,
+		Prompt:               body.Prompt,
+		LastAssistantMessage: body.LastAssistantMessage,
+	}
+	if body.AdditionalData != nil {
+		v.AdditionalData = make(map[string]any, len(body.AdditionalData))
+		for key, val := range body.AdditionalData {
+			tk := key
+			tv := val
+			v.AdditionalData[tk] = tv
+		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+	v.HookHostname = hookHostname
 
 	return v
 }
@@ -2142,8 +2168,8 @@ func ValidateClaudeRequestBody(body *ClaudeRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hook_event_name", "body"))
 	}
 	if body.HookEventName != nil {
-		if !(*body.HookEventName == "SessionStart" || *body.HookEventName == "PreToolUse" || *body.HookEventName == "PostToolUse" || *body.HookEventName == "PostToolUseFailure" || *body.HookEventName == "UserPromptSubmit" || *body.HookEventName == "Stop" || *body.HookEventName == "SessionEnd" || *body.HookEventName == "Notification") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", *body.HookEventName, []any{"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop", "SessionEnd", "Notification"}))
+		if !(*body.HookEventName == "SessionStart" || *body.HookEventName == "ConfigChange" || *body.HookEventName == "PreToolUse" || *body.HookEventName == "PostToolUse" || *body.HookEventName == "PostToolUseFailure" || *body.HookEventName == "UserPromptSubmit" || *body.HookEventName == "Stop" || *body.HookEventName == "SessionEnd" || *body.HookEventName == "Notification") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", *body.HookEventName, []any{"SessionStart", "ConfigChange", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop", "SessionEnd", "Notification"}))
 		}
 	}
 	return

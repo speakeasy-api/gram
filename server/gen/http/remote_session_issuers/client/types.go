@@ -29,6 +29,11 @@ type CreateRemoteSessionIssuerRequestBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Issuer URL; matches the iss claim.
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Optional display name. Stored NULL when empty; clients fall back to the
+	// issuer URL/slug.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -62,6 +67,10 @@ type UpdateRemoteSessionIssuerRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Set or clear the display name. An empty string clears it to NULL.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Set the logo asset id.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -110,12 +119,18 @@ type DiscoverRemoteSessionIssuerResponseBody struct {
 type CreateRemoteSessionIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level issuers.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Project-unique slug.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -142,12 +157,18 @@ type CreateRemoteSessionIssuerResponseBody struct {
 type UpdateRemoteSessionIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level issuers.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Project-unique slug.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -182,12 +203,18 @@ type ListRemoteSessionIssuersResponseBody struct {
 type GetRemoteSessionIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level issuers.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Project-unique slug.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -1353,12 +1380,18 @@ type DeleteRemoteSessionIssuerGatewayErrorResponseBody struct {
 type RemoteSessionIssuerResponseBody struct {
 	// The remote_session_issuer id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id.
+	// The owning project id. Empty for organization-level issuers.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Project-unique slug.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -1396,6 +1429,8 @@ func NewCreateRemoteSessionIssuerRequestBody(p *remotesessionissuers.CreateRemot
 	body := &CreateRemoteSessionIssuerRequestBody{
 		Slug:                  p.Slug,
 		Issuer:                p.Issuer,
+		Name:                  p.Name,
+		LogoAssetID:           p.LogoAssetID,
 		AuthorizationEndpoint: p.AuthorizationEndpoint,
 		TokenEndpoint:         p.TokenEndpoint,
 		RegistrationEndpoint:  p.RegistrationEndpoint,
@@ -1438,6 +1473,8 @@ func NewUpdateRemoteSessionIssuerRequestBody(p *remotesessionissuers.UpdateRemot
 		ID:                    p.ID,
 		Slug:                  p.Slug,
 		Issuer:                p.Issuer,
+		Name:                  p.Name,
+		LogoAssetID:           p.LogoAssetID,
 		AuthorizationEndpoint: p.AuthorizationEndpoint,
 		TokenEndpoint:         p.TokenEndpoint,
 		RegistrationEndpoint:  p.RegistrationEndpoint,
@@ -1675,8 +1712,11 @@ func NewCreateRemoteSessionIssuerRemoteSessionIssuerOK(body *CreateRemoteSession
 	v := &types.RemoteSessionIssuer{
 		ID:                    *body.ID,
 		ProjectID:             *body.ProjectID,
+		OrganizationID:        *body.OrganizationID,
 		Slug:                  *body.Slug,
 		Issuer:                *body.Issuer,
+		Name:                  body.Name,
+		LogoAssetID:           body.LogoAssetID,
 		AuthorizationEndpoint: body.AuthorizationEndpoint,
 		TokenEndpoint:         body.TokenEndpoint,
 		RegistrationEndpoint:  body.RegistrationEndpoint,
@@ -1871,8 +1911,11 @@ func NewUpdateRemoteSessionIssuerRemoteSessionIssuerOK(body *UpdateRemoteSession
 	v := &types.RemoteSessionIssuer{
 		ID:                    *body.ID,
 		ProjectID:             *body.ProjectID,
+		OrganizationID:        *body.OrganizationID,
 		Slug:                  *body.Slug,
 		Issuer:                *body.Issuer,
+		Name:                  body.Name,
+		LogoAssetID:           body.LogoAssetID,
 		AuthorizationEndpoint: body.AuthorizationEndpoint,
 		TokenEndpoint:         body.TokenEndpoint,
 		RegistrationEndpoint:  body.RegistrationEndpoint,
@@ -2235,8 +2278,11 @@ func NewGetRemoteSessionIssuerRemoteSessionIssuerOK(body *GetRemoteSessionIssuer
 	v := &types.RemoteSessionIssuer{
 		ID:                    *body.ID,
 		ProjectID:             *body.ProjectID,
+		OrganizationID:        *body.OrganizationID,
 		Slug:                  *body.Slug,
 		Issuer:                *body.Issuer,
+		Name:                  body.Name,
+		LogoAssetID:           body.LogoAssetID,
 		AuthorizationEndpoint: body.AuthorizationEndpoint,
 		TokenEndpoint:         body.TokenEndpoint,
 		RegistrationEndpoint:  body.RegistrationEndpoint,
@@ -2601,6 +2647,9 @@ func ValidateCreateRemoteSessionIssuerResponseBody(body *CreateRemoteSessionIssu
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
@@ -2622,8 +2671,8 @@ func ValidateCreateRemoteSessionIssuerResponseBody(body *CreateRemoteSessionIssu
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	if body.LogoAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2643,6 +2692,9 @@ func ValidateUpdateRemoteSessionIssuerResponseBody(body *UpdateRemoteSessionIssu
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
@@ -2664,8 +2716,8 @@ func ValidateUpdateRemoteSessionIssuerResponseBody(body *UpdateRemoteSessionIssu
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	if body.LogoAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2701,6 +2753,9 @@ func ValidateGetRemoteSessionIssuerResponseBody(body *GetRemoteSessionIssuerResp
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
@@ -2722,8 +2777,8 @@ func ValidateGetRemoteSessionIssuerResponseBody(body *GetRemoteSessionIssuerResp
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	if body.LogoAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -4195,6 +4250,9 @@ func ValidateRemoteSessionIssuerResponseBody(body *RemoteSessionIssuerResponseBo
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
@@ -4216,8 +4274,8 @@ func ValidateRemoteSessionIssuerResponseBody(body *RemoteSessionIssuerResponseBo
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	if body.LogoAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

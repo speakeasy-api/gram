@@ -46,6 +46,7 @@ import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
+import { useHideInsightsDock } from "@/components/insights-context";
 
 type ColorScheme = "light" | "dark" | "system";
 type Density = "compact" | "normal" | "spacious";
@@ -183,7 +184,10 @@ function SwitchField({
   );
 }
 
-export default function ChatElements() {
+export default function ChatElements(): JSX.Element {
+  // This page hosts its own chat runtime, so hide the floating dock and keep
+  // the shared runtime out of its tree (no nested RemoteThreadListRuntime).
+  useHideInsightsDock();
   return (
     <Page>
       <Page.Header>
@@ -304,7 +308,7 @@ function ChatElementsInner() {
       }
     };
 
-    createSession();
+    void createSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- createSessionMutation is unstable; trigger on previewKey, auth, and user identity changes only
   }, [previewKey, project.slug, session.session, session.user.id]);
 

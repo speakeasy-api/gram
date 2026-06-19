@@ -70,7 +70,7 @@ func NewCreateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -105,7 +105,7 @@ func NewListEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoi
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -140,7 +140,7 @@ func NewUpdateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -175,7 +175,7 @@ func NewDeleteEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -210,7 +210,7 @@ func NewAttachServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -245,7 +245,7 @@ func NewDetachServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -280,7 +280,7 @@ func NewListServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string

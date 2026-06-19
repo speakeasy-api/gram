@@ -1,6 +1,5 @@
-import { promptNames } from "@/lib/toolTypes";
+import { ReactElement } from "react";
 import { cn } from "@/lib/utils";
-import { ToolsetEntry } from "@gram/client/models/components";
 import {
   Badge,
   Icon,
@@ -11,95 +10,25 @@ import {
   TooltipTrigger,
 } from "@speakeasy-api/moonshine";
 
-// Define minimal types for badge components
-type ToolsetForBadge = Pick<ToolsetEntry, "name" | "slug" | "promptTemplates">;
-
-export const ToolsetPromptsBadge = ({
-  toolset,
-  variant = "neutral",
-}: {
-  toolset: ToolsetForBadge | undefined;
-  variant?: "neutral" | "destructive" | "information" | "success" | "warning";
-}) => {
-  const names = toolset ? promptNames(toolset.promptTemplates) : [];
-
-  const tooltipContent = (
-    <div className="max-h-[300px] overflow-y-auto">
-      <Stack gap={1}>
-        {names.map((prompt, i) => (
-          <p key={i}>{prompt}</p>
-        ))}
-      </Stack>
-    </div>
-  );
-
-  return names && names.length > 0 ? (
-    <Tooltip>
-      <TooltipTrigger>
-        <Badge variant={variant} className="bg-card">
-          <Badge.Text>
-            {names.length} Prompt{names.length === 1 ? "" : "s"}
-          </Badge.Text>
-        </Badge>
-      </TooltipTrigger>
-      <TooltipPortal>
-        <TooltipContent side="bottom">{tooltipContent}</TooltipContent>
-      </TooltipPortal>
-    </Tooltip>
-  ) : null;
-};
-
-export const ResourcesBadge = ({
-  resourceUris,
-  variant = "neutral",
-  className,
-}: {
-  resourceUris: string[] | undefined;
-  variant?: React.ComponentProps<typeof Badge>["variant"];
-  className?: string;
-}) => {
-  if (!resourceUris || resourceUris.length === 0) {
-    return null;
-  }
-
-  const tooltipContent = (
-    <div className="max-h-[300px] overflow-y-auto">
-      <Stack gap={1}>
-        {resourceUris.map((uri, i) => (
-          <p key={i}>{uri}</p>
-        ))}
-      </Stack>
-    </div>
-  );
-
-  return (
-    <Tooltip>
-      <TooltipTrigger>
-        <Badge variant={variant} className={cn("bg-card", className)}>
-          <Badge.Text>
-            {resourceUris.length} Resource
-            {resourceUris.length === 1 ? "" : "s"}
-          </Badge.Text>
-        </Badge>
-      </TooltipTrigger>
-      <TooltipPortal>
-        <TooltipContent className="max-w-sm">{tooltipContent}</TooltipContent>
-      </TooltipPortal>
-    </Tooltip>
-  );
-};
-
 export const ToolCollectionBadge = ({
   toolNames,
   variant = "neutral",
   className,
   warnOnTooManyTools = false,
+  emptyLabel,
 }: {
   toolNames: string[] | undefined;
   variant?: React.ComponentProps<typeof Badge>["variant"];
   className?: string;
   warnOnTooManyTools?: boolean;
-}) => {
+  /**
+   * What to render when there are no tools.
+   * - undefined (default): the "No Tools" badge.
+   * - null: render nothing.
+   * - ReactNode: render this instead.
+   */
+  emptyLabel?: React.ReactNode | null;
+}): ReactElement | null => {
   let tooltipContent: React.ReactNode = (
     <div className="max-h-[300px] overflow-y-auto">
       <Stack gap={1}>
@@ -123,6 +52,8 @@ export const ToolCollectionBadge = ({
   }
 
   if (!toolNames || toolNames.length === 0) {
+    if (emptyLabel === null) return null;
+    if (emptyLabel !== undefined) return <>{emptyLabel}</>;
     return (
       <Badge variant={variant} className={className}>
         No Tools
@@ -155,7 +86,7 @@ export const ToolCollectionBadge = ({
   );
 };
 
-export const PoweredBySpeakeasyBadge = () => {
+export const PoweredBySpeakeasyBadge = (): ReactElement => {
   return (
     <Badge variant="neutral" className="bg-card">
       <Badge.Text>Powered by Speakeasy</Badge.Text>

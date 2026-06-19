@@ -17,11 +17,6 @@ func ListRiskPoliciesRiskPath() string {
 	return "/rpc/risk.policies.list"
 }
 
-// GetRiskCapabilitiesRiskPath returns the URL path to the risk service getRiskCapabilities HTTP endpoint.
-func GetRiskCapabilitiesRiskPath() string {
-	return "/rpc/risk.capabilities.get"
-}
-
 // GetRiskPolicyRiskPath returns the URL path to the risk service getRiskPolicy HTTP endpoint.
 func GetRiskPolicyRiskPath() string {
 	return "/rpc/risk.policies.get"
@@ -77,22 +72,87 @@ func GetRiskPolicyStatusRiskPath() string {
 	return "/rpc/risk.policies.status"
 }
 
-// ListShadowMCPApprovalsRiskPath returns the URL path to the risk service listShadowMCPApprovals HTTP endpoint.
-func ListShadowMCPApprovalsRiskPath() string {
-	return "/rpc/risk.approvals.list"
+// CreateRiskPolicyBypassRequestRiskPath returns the URL path to the risk service createRiskPolicyBypassRequest HTTP endpoint.
+func CreateRiskPolicyBypassRequestRiskPath() string {
+	return "/rpc/risk.createPolicyBypassRequest"
 }
 
-// ApproveShadowMCPRiskPath returns the URL path to the risk service approveShadowMCP HTTP endpoint.
-func ApproveShadowMCPRiskPath() string {
-	return "/rpc/risk.approvals.create"
+// ListRiskPolicyBypassRequestsRiskPath returns the URL path to the risk service listRiskPolicyBypassRequests HTTP endpoint.
+func ListRiskPolicyBypassRequestsRiskPath() string {
+	return "/rpc/risk.listPolicyBypassRequests"
 }
 
-// RevokeShadowMCPApprovalRiskPath returns the URL path to the risk service revokeShadowMCPApproval HTTP endpoint.
-func RevokeShadowMCPApprovalRiskPath() string {
-	return "/rpc/risk.approvals.delete"
+// ApproveRiskPolicyBypassRequestRiskPath returns the URL path to the risk service approveRiskPolicyBypassRequest HTTP endpoint.
+func ApproveRiskPolicyBypassRequestRiskPath() string {
+	return "/rpc/risk.approvePolicyBypassRequest"
+}
+
+// DenyRiskPolicyBypassRequestRiskPath returns the URL path to the risk service denyRiskPolicyBypassRequest HTTP endpoint.
+func DenyRiskPolicyBypassRequestRiskPath() string {
+	return "/rpc/risk.denyPolicyBypassRequest"
+}
+
+// RevokeRiskPolicyBypassRequestRiskPath returns the URL path to the risk service revokeRiskPolicyBypassRequest HTTP endpoint.
+func RevokeRiskPolicyBypassRequestRiskPath() string {
+	return "/rpc/risk.revokePolicyBypassRequest"
 }
 
 // TriggerRiskAnalysisRiskPath returns the URL path to the risk service triggerRiskAnalysis HTTP endpoint.
 func TriggerRiskAnalysisRiskPath() string {
 	return "/rpc/risk.policies.trigger"
+}
+
+// CreateCustomDetectionRuleRiskPath returns the URL path to the risk service createCustomDetectionRule HTTP endpoint.
+func CreateCustomDetectionRuleRiskPath() string {
+	return "/rpc/risk.customRules.create"
+}
+
+// ListCustomDetectionRulesRiskPath returns the URL path to the risk service listCustomDetectionRules HTTP endpoint.
+func ListCustomDetectionRulesRiskPath() string {
+	return "/rpc/risk.customRules.list"
+}
+
+// GetCustomDetectionRuleRiskPath returns the URL path to the risk service getCustomDetectionRule HTTP endpoint.
+func GetCustomDetectionRuleRiskPath() string {
+	return "/rpc/risk.customRules.get"
+}
+
+// UpdateCustomDetectionRuleRiskPath returns the URL path to the risk service updateCustomDetectionRule HTTP endpoint.
+func UpdateCustomDetectionRuleRiskPath() string {
+	return "/rpc/risk.customRules.update"
+}
+
+// DeleteCustomDetectionRuleRiskPath returns the URL path to the risk service deleteCustomDetectionRule HTTP endpoint.
+func DeleteCustomDetectionRuleRiskPath() string {
+	return "/rpc/risk.customRules.delete"
+}
+
+// ListRiskExclusionsRiskPath returns the URL path to the risk service listRiskExclusions HTTP endpoint.
+func ListRiskExclusionsRiskPath() string {
+	return "/rpc/risk.listExclusions"
+}
+
+// CreateRiskExclusionRiskPath returns the URL path to the risk service createRiskExclusion HTTP endpoint.
+func CreateRiskExclusionRiskPath() string {
+	return "/rpc/risk.createExclusions"
+}
+
+// UpdateRiskExclusionRiskPath returns the URL path to the risk service updateRiskExclusion HTTP endpoint.
+func UpdateRiskExclusionRiskPath() string {
+	return "/rpc/risk.updateExclusions"
+}
+
+// DeleteRiskExclusionRiskPath returns the URL path to the risk service deleteRiskExclusion HTTP endpoint.
+func DeleteRiskExclusionRiskPath() string {
+	return "/rpc/risk.deleteExclusions"
+}
+
+// SuggestCustomDetectionRuleRiskPath returns the URL path to the risk service suggestCustomDetectionRule HTTP endpoint.
+func SuggestCustomDetectionRuleRiskPath() string {
+	return "/rpc/risk.customRules.suggest"
+}
+
+// TestDetectionRuleRiskPath returns the URL path to the risk service testDetectionRule HTTP endpoint.
+func TestDetectionRuleRiskPath() string {
+	return "/rpc/risk.rules.test"
 }

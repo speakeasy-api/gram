@@ -2,6 +2,7 @@ package gram
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -13,22 +14,48 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/k8s"
 )
 
 var assistantRuntimeFlags = []cli.Flag{
 	&cli.StringFlag{
 		Name:    "assistant-runtime-provider",
-		Usage:   "Assistant runtime provider. Allowed values: flyio.",
+		Usage:   "Assistant runtime provider. Allowed values: flyio, gke.",
 		Value:   assistants.RuntimeProviderFlyIO,
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_PROVIDER"},
 		Action: func(_ *cli.Context, val string) error {
 			switch val {
-			case "", assistants.RuntimeProviderFlyIO:
+			case "", assistants.RuntimeProviderFlyIO, assistants.RuntimeProviderGKE:
 				return nil
 			default:
 				return fmt.Errorf("invalid assistant runtime provider: %s", val)
 			}
 		},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-gke-namespace",
+		Usage:   "Kubernetes namespace for GKE Agent Sandbox assistant runtimes. Defaults to gram-{environment}.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_NAMESPACE"},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-gke-sandbox-template",
+		Usage:   "SandboxTemplate name that GKE assistant runtime claims reference (a SandboxWarmPool on the same template pre-warms pods).",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_SANDBOX_TEMPLATE"},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-gke-cluster-endpoint",
+		Usage:   "API endpoint (host or IP) of the assistant runtime cluster. Setting this enables the GKE backend.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_CLUSTER_ENDPOINT"},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-gke-cluster-ca",
+		Usage:   "Base64-encoded CA certificate of the assistant runtime cluster.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_CLUSTER_CA"},
+	},
+	&cli.StringSliceFlag{
+		Name:    "assistant-runtime-gke-runner-cidr",
+		Usage:   "Pod CIDR(s) the assistant runner pods are reachable on. The server dials runners by pod IP, so these are allowlisted past the guardian egress policy (which blocks RFC1918 by default).",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_RUNNER_CIDR"},
 	},
 	&cli.StringFlag{
 		Name:    "assistant-runtime-server-url",
@@ -61,9 +88,28 @@ var assistantRuntimeFlags = []cli.Flag{
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OCI_IMAGE"},
 	},
 	&cli.StringFlag{
-		Name:    "assistant-runtime-image-version",
-		Usage:   "The assistant runtime image tag/version to run on fly.io.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_IMAGE_VERSION"},
+		Name:    "assistant-runtime-otlp-endpoint",
+		Usage:   "OTLP endpoint assistant runtimes export traces to. Trace export is disabled when unset.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OTLP_ENDPOINT"},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-otlp-protocol",
+		Usage:   "OTLP transport for assistant runtime traces. Allowed values: grpc, http/protobuf, http/json.",
+		Value:   "grpc",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OTLP_PROTOCOL"},
+		Action: func(_ *cli.Context, val string) error {
+			switch val {
+			case "", "grpc", "http/protobuf", "http/json":
+				return nil
+			default:
+				return fmt.Errorf("invalid assistant runtime otlp protocol: %s", val)
+			}
+		},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-otlp-headers",
+		Usage:   "Headers for the assistant runtime OTLP exporter as comma-separated key=value pairs.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OTLP_HEADERS"},
 	},
 }
 
@@ -78,11 +124,25 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 	}
 
 	provider := c.String("assistant-runtime-provider")
-	if provider == "" {
+	switch provider {
+	case "", assistants.RuntimeProviderFlyIO:
 		provider = assistants.RuntimeProviderFlyIO
-	}
-	if provider != assistants.RuntimeProviderFlyIO {
+	case assistants.RuntimeProviderGKE:
+	default:
 		return assistants.RuntimeBackendConfig{}, fmt.Errorf("invalid assistant runtime provider: %s", provider)
+	}
+
+	gkeNamespace := c.String("assistant-runtime-gke-namespace")
+	if gkeNamespace == "" {
+		gkeNamespace = "gram-" + c.String("environment")
+	}
+
+	// tokens.Parse returns a non-nil value even for an empty string, so guard on
+	// the raw flag: a GKE-only deployment leaves the Fly token unset and must not
+	// have the Fly backend (and its validation) forced on.
+	var flyTokens *tokens.Tokens
+	if raw := c.String("assistant-runtime-flyio-api-token"); raw != "" {
+		flyTokens = tokens.Parse(raw)
 	}
 
 	return assistants.RuntimeBackendConfig{
@@ -90,15 +150,32 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 		Fly: assistants.FlyRuntimeConfig{
 			ServiceName:        "gram",
 			ServiceVersion:     GitSHA,
-			FlyTokens:          tokens.Parse(c.String("assistant-runtime-flyio-api-token")),
+			FlyTokens:          flyTokens,
 			FlyAPIURL:          "",
 			FlyMachinesBaseURL: "",
 			DefaultFlyOrg:      c.String("assistant-runtime-flyio-org"),
 			DefaultFlyRegion:   c.String("assistant-runtime-flyio-region"),
 			OCIImage:           c.String("assistant-runtime-oci-image"),
-			ImageVersion:       c.String("assistant-runtime-image-version"),
+			ImageTag:           AssistantRuntimeImageHash,
 			AppNamePrefix:      c.String("assistant-runtime-flyio-app-name-prefix"),
 			ServerURL:          resolvedServerURL,
+			OTLPEndpoint:       c.String("assistant-runtime-otlp-endpoint"),
+			OTLPProtocol:       c.String("assistant-runtime-otlp-protocol"),
+			OTLPHeaders:        c.String("assistant-runtime-otlp-headers"),
+			Environment:        c.String("environment"),
+		},
+		// Dynamic is injected in newAssistantRuntime from a remote client for the
+		// assistant cluster (k8s.NewRemoteDynamicClient); the egress-controlled
+		// HTTP client is built from the guardian policy in NewRuntimeBackend.
+		GKE: assistants.GKERuntimeConfig{
+			Dynamic:          nil,
+			Namespace:        gkeNamespace,
+			SandboxTemplate:  c.String("assistant-runtime-gke-sandbox-template"),
+			GuestPort:        0,
+			OCIImage:         c.String("assistant-runtime-oci-image"),
+			ImageTag:         AssistantRuntimeImageHash,
+			ServerURL:        resolvedServerURL,
+			RunnerCIDRBlocks: c.StringSlice("assistant-runtime-gke-runner-cidr"),
 		},
 	}, nil
 }
@@ -117,11 +194,32 @@ func newAssistantRuntime(
 	if err != nil {
 		return nil, err
 	}
-	if err := cfg.Fly.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid fly assistant runtime config: %w", err)
+
+	// Build the GKE backend whenever an assistant cluster is configured (its
+	// endpoint is set), not only when it is the target: a fly-target process must
+	// still reach the assistant cluster to reap gke-backed runtime rows (and vice
+	// versa). The client authenticates with the process's Google credentials
+	// (workload identity in-cluster, ADC locally) against the separate cluster.
+	if endpoint := c.String("assistant-runtime-gke-cluster-endpoint"); endpoint != "" {
+		caCert, err := base64.StdEncoding.DecodeString(c.String("assistant-runtime-gke-cluster-ca"))
+		if err != nil {
+			return nil, fmt.Errorf("decode --assistant-runtime-gke-cluster-ca: %w", err)
+		}
+		dynamicClient, err := k8s.NewRemoteDynamicClient(ctx, endpoint, caCert)
+		if err != nil {
+			return nil, fmt.Errorf("build assistant cluster client: %w", err)
+		}
+		cfg.GKE.Dynamic = dynamicClient
 	}
+
+	// Fly and GKE call back to the server at the same URL; validate it once.
 	if err := guardianPolicy.ValidateHost(ctx, cfg.Fly.ServerURL.Hostname()); err != nil {
-		return nil, fmt.Errorf("assistant fly runtime requires a public --assistant-runtime-server-url or --server-url; got %q: %w", cfg.Fly.ServerURL.String(), err)
+		return nil, fmt.Errorf("assistant runtime requires a public --assistant-runtime-server-url or --server-url; got %q: %w", cfg.Fly.ServerURL.String(), err)
 	}
-	return assistants.NewRuntimeBackend(logger, tracerProvider, guardianPolicy, cfg), nil
+
+	backend, err := assistants.NewRuntimeBackend(logger, tracerProvider, guardianPolicy, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("build assistant runtime backend: %w", err)
+	}
+	return backend, nil
 }

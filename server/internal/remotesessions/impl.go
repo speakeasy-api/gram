@@ -8,6 +8,7 @@ package remotesessions
 import (
 	"context"
 	"log/slog"
+	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -15,9 +16,11 @@ import (
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
+	orgissuerssrv "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/server"
 	clientssrv "github.com/speakeasy-api/gram/server/gen/http/remote_session_clients/server"
 	issuerssrv "github.com/speakeasy-api/gram/server/gen/http/remote_session_issuers/server"
 	sessionssrv "github.com/speakeasy-api/gram/server/gen/http/remote_sessions/server"
+	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	sessionsgen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
@@ -33,39 +36,45 @@ import (
 )
 
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	auth         *auth.Auth
-	authz        *authz.Engine
-	enc          *encryption.Client
-	environments *environments.EnvironmentEntries
-	policy       *guardian.Policy
-	auditLogger  *audit.Logger
+	tracer              trace.Tracer
+	logger              *slog.Logger
+	db                  *pgxpool.Pool
+	auth                *auth.Auth
+	authz               *authz.Engine
+	enc                 *encryption.Client
+	environments        *environments.EnvironmentEntries
+	policy              *guardian.Policy
+	auditLogger         *audit.Logger
+	serverURL           *url.URL
+	legacyRegistrations LegacyRegistrationStore
 }
 
 var (
-	_ issuersgen.Service  = (*Service)(nil)
-	_ issuersgen.Auther   = (*Service)(nil)
-	_ clientsgen.Service  = (*Service)(nil)
-	_ clientsgen.Auther   = (*Service)(nil)
-	_ sessionsgen.Service = (*Service)(nil)
-	_ sessionsgen.Auther  = (*Service)(nil)
+	_ issuersgen.Service    = (*Service)(nil)
+	_ issuersgen.Auther     = (*Service)(nil)
+	_ orgissuersgen.Service = (*Service)(nil)
+	_ orgissuersgen.Auther  = (*Service)(nil)
+	_ clientsgen.Service    = (*Service)(nil)
+	_ clientsgen.Auther     = (*Service)(nil)
+	_ sessionsgen.Service   = (*Service)(nil)
+	_ sessionsgen.Auther    = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL, legacyRegistrations LegacyRegistrationStore) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
-		logger:       logger,
-		db:           db,
-		auth:         auth.New(logger, db, sessionManager, authzEngine),
-		authz:        authzEngine,
-		enc:          enc,
-		environments: env,
-		policy:       policy,
-		auditLogger:  auditLogger,
+		tracer:              tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
+		logger:              logger,
+		db:                  db,
+		auth:                auth.New(logger, db, sessionManager, authzEngine),
+		authz:               authzEngine,
+		enc:                 enc,
+		environments:        env,
+		policy:              policy,
+		auditLogger:         auditLogger,
+		serverURL:           serverURL,
+		legacyRegistrations: legacyRegistrations,
 	}
 }
 
@@ -80,6 +89,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		issuerEndpoints.Use(m)
 	}
 	issuerssrv.Mount(mux, issuerssrv.New(issuerEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+
+	orgIssuerEndpoints := orgissuersgen.NewEndpoints(service)
+	for _, m := range mw {
+		orgIssuerEndpoints.Use(m)
+	}
+	orgissuerssrv.Mount(mux, orgissuerssrv.New(orgIssuerEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 
 	clientEndpoints := clientsgen.NewEndpoints(service)
 	for _, m := range mw {

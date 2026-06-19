@@ -11,7 +11,7 @@ import { fromPromise } from "xstate";
 
 import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
 
-import { parseScopes } from "./machine-types";
+import { parseScopes, pickAuthMethodFromList } from "./machine-types";
 
 type SignalArg = { signal: AbortSignal };
 
@@ -49,6 +49,12 @@ export type DeleteEnvironmentInput = { envSlug: string };
 
 export type RegisterClientInput = {
   registrationEndpoint: string;
+  // Method derived from the (often empty) discovered metadata. Used as the
+  // fallback when live discovery is skipped or fails.
+  tokenAuthMethod: string;
+  // Origin to run live RFC 8414 discovery against to recover the upstream's
+  // real token_endpoint_auth_methods_supported. Empty disables discovery.
+  issuer: string;
 };
 
 export type RegisterClientOutput = {
@@ -168,9 +174,36 @@ export function createWizardServices(
 
   const registerClient = fromPromise<RegisterClientOutput, RegisterClientInput>(
     async ({ input, signal }) => {
+      // The synthesized remote-MCP metadata omits the supported-methods list,
+      // so run a live RFC 8414 discovery against the issuer origin to recover
+      // it (e.g. Make advertises only client_secret_post, and rejects DCR that
+      // omits it or sends client_secret_basic). Best-effort: any failure leaves
+      // the metadata-derived fallback method in place.
+      let authMethod = input.tokenAuthMethod;
+      if (input.issuer) {
+        try {
+          const draft = await client.remoteSessionIssuers.discover(
+            {
+              discoverRemoteSessionIssuerRequestBody: { issuer: input.issuer },
+            },
+            undefined,
+            { fetchOptions: { signal } },
+          );
+          const supported = draft.tokenEndpointAuthMethodsSupported ?? [];
+          if (supported.length > 0) {
+            authMethod = pickAuthMethodFromList(supported);
+          }
+        } catch {
+          // Keep the fallback method on discovery failure.
+        }
+      }
+
       const result = await proxyRegisterUpstreamClient(
         authedFetch,
-        { registrationEndpoint: input.registrationEndpoint },
+        {
+          registrationEndpoint: input.registrationEndpoint,
+          tokenEndpointAuthMethod: authMethod || undefined,
+        },
         { signal },
       );
       return {

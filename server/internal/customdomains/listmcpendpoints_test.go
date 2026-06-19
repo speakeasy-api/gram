@@ -40,6 +40,7 @@ func TestListMcpEndpoints_DomainWithNoEndpoints_ReturnsEmpty(t *testing.T) {
 		Domain:         "no-endpoints.example.com",
 		IngressName:    pgTextValid("ingress-noep"),
 		CertSecretName: pgTextValid("cert-noep"),
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 
@@ -64,6 +65,7 @@ func TestListMcpEndpoints_ReturnsEndpointsAcrossProjects(t *testing.T) {
 		Domain:         "list-cross.example.com",
 		IngressName:    pgTextValid("ingress-list"),
 		CertSecretName: pgTextValid("cert-list"),
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 

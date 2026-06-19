@@ -18,7 +18,7 @@ interface ViewSourceDialogContentProps {
 export function ViewSourceDialogContent({
   source,
   isOpenAPI,
-}: ViewSourceDialogContentProps) {
+}: ViewSourceDialogContentProps): JSX.Element {
   const project = useProject();
   const { projectSlug } = useSlugs();
 
@@ -56,7 +56,9 @@ export function ViewSourceDialogContent({
               variant="secondary"
               size="sm"
               className="mt-4"
-              onClick={() => refetch()}
+              onClick={() => {
+                void refetch();
+              }}
             >
               Retry
             </Button>

@@ -54,7 +54,7 @@ func callLeaveChannel(ctx context.Context, client *apiClient, env toolconfig.Too
 		"channel": channelID,
 	}
 
-	body, err := client.call(ctx, "conversations.leave", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.leave", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

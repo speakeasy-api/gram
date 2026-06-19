@@ -26,7 +26,7 @@ export const ShadowRoot = ({
   children,
   hostClassName,
   hostStyle,
-}: ShadowRootProps) => {
+}: ShadowRootProps): React.JSX.Element => {
   const hostRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [shadowRoot, setShadowRoot] = useState<ShadowRoot | null>(null);
@@ -66,7 +66,33 @@ export const ShadowRoot = ({
     styleElement.setAttribute("data-gram-elements", "true");
     styleElement.textContent = elementsStyles;
     shadowRoot.prepend(styleElement);
-  }, [shadowRoot, elementsStyles]);
+  }, [shadowRoot]);
+
+  // Embedder CSS overrides (theme.customCss) go in a separate style tag
+  // appended after the built-in stylesheet so they win the cascade at equal
+  // specificity.
+  const customCss = config.theme?.customCss;
+  useEffect(() => {
+    if (!shadowRoot) {
+      return;
+    }
+
+    let customStyle = shadowRoot.querySelector<HTMLStyleElement>(
+      "style[data-gram-elements-custom]",
+    );
+
+    if (!customCss) {
+      customStyle?.remove();
+      return;
+    }
+
+    if (!customStyle) {
+      customStyle = document.createElement("style");
+      customStyle.setAttribute("data-gram-elements-custom", "true");
+      shadowRoot.append(customStyle);
+    }
+    customStyle.textContent = customCss;
+  }, [shadowRoot, customCss]);
 
   return (
     <div

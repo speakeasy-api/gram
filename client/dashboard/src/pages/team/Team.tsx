@@ -50,7 +50,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Ellipsis,
+  FolderSync,
   RefreshCw,
+  Shield,
   UserPlus,
   Users,
   X,
@@ -84,7 +86,7 @@ function getMemberColors(id: string) {
   };
 }
 
-export default function Team() {
+export default function Team(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -99,7 +101,7 @@ export default function Team() {
   );
 }
 
-export function TeamInner() {
+function TeamInner() {
   const organization = useOrganization();
   const user = useUser();
   const { isRbacEnabled } = useRBAC();
@@ -242,13 +244,15 @@ export function TeamInner() {
         },
       },
       {
-        onSuccess: async () => {
-          await invalidateTeamData();
-          toast.success(`Invite sent to ${submittedEmail}`);
-          setInviteEmail("");
-          setInviteEmailTouched(false);
-          setInviteRoleId(undefined);
-          setIsInviteDialogOpen(false);
+        onSuccess: () => {
+          void (async () => {
+            await invalidateTeamData();
+            toast.success(`Invite sent to ${submittedEmail}`);
+            setInviteEmail("");
+            setInviteEmailTouched(false);
+            setInviteRoleId(undefined);
+            setIsInviteDialogOpen(false);
+          })();
         },
       },
     );
@@ -265,10 +269,12 @@ export function TeamInner() {
         },
       },
       {
-        onSuccess: async () => {
-          await invalidateTeamData();
-          toast.success(`${displayName} has been removed`);
-          setMemberToRemove(null);
+        onSuccess: () => {
+          void (async () => {
+            await invalidateTeamData();
+            toast.success(`${displayName} has been removed`);
+            setMemberToRemove(null);
+          })();
         },
       },
     );
@@ -285,10 +291,12 @@ export function TeamInner() {
         },
       },
       {
-        onSuccess: async () => {
-          await invalidateTeamData();
-          toast.success(`Invite to ${email} has been cancelled`);
-          setInviteToCancel(null);
+        onSuccess: () => {
+          void (async () => {
+            await invalidateTeamData();
+            toast.success(`Invite to ${email} has been cancelled`);
+            setInviteToCancel(null);
+          })();
         },
       },
     );
@@ -311,9 +319,11 @@ export function TeamInner() {
         },
       },
       {
-        onSuccess: async () => {
-          await invalidateAllListInvites(queryClient);
-          toast.success(`Invite role changed to ${getRoleName(roleId)}`);
+        onSuccess: () => {
+          void (async () => {
+            await invalidateAllListInvites(queryClient);
+            toast.success(`Invite role changed to ${getRoleName(roleId)}`);
+          })();
         },
       },
     );
@@ -341,15 +351,19 @@ export function TeamInner() {
               },
             },
             {
-              onSuccess: async () => {
-                await invalidateTeamData();
-                toast.success(`Invite resent to ${invite.email}`);
+              onSuccess: () => {
+                void (async () => {
+                  await invalidateTeamData();
+                  toast.success(`Invite resent to ${invite.email}`);
+                })();
               },
-              onError: async () => {
-                await invalidateTeamData();
-                toast.error(
-                  `Failed to resend invite to ${invite.email}. The previous invite was revoked — please send a new invite.`,
-                );
+              onError: () => {
+                void (async () => {
+                  await invalidateTeamData();
+                  toast.error(
+                    `Failed to resend invite to ${invite.email}. The previous invite was revoked — please send a new invite.`,
+                  );
+                })();
               },
             },
           );
@@ -487,6 +501,7 @@ export function TeamInner() {
           (memberRoleIds.length > 0
             ? {
                 id: member.userId,
+                principalUrn: `user:${member.userId}`,
                 name: member.name,
                 email: member.email,
                 photoUrl: member.photoUrl,
@@ -508,12 +523,12 @@ export function TeamInner() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {isRbacEnabled && accessMember && (
+              {isRbacEnabled && accessMember && !organization.scimEnabled && (
                 <RequireScope scope="org:admin" level="component">
                   <DropdownMenuItem
-                    onSelect={() =>
-                      setTimeout(() => setChangingMember(accessMember), 0)
-                    }
+                    onSelect={() => {
+                      void setTimeout(() => setChangingMember(accessMember), 0);
+                    }}
                   >
                     Manage roles
                   </DropdownMenuItem>
@@ -521,15 +536,13 @@ export function TeamInner() {
               )}
               {isRbacEnabled && (
                 <DropdownMenuItem
-                  onSelect={() =>
-                    setTimeout(
-                      () =>
-                        navigate(
-                          `${orgRoutes.access.challenges.href()}?identity=${encodeURIComponent(member.email)}`,
-                        ),
-                      0,
-                    )
-                  }
+                  onSelect={() => {
+                    void setTimeout(() => {
+                      void navigate(
+                        `${orgRoutes.access.challenges.href()}?identity=${encodeURIComponent(member.email)}`,
+                      );
+                    }, 0);
+                  }}
                 >
                   View challenges
                 </DropdownMenuItem>
@@ -540,9 +553,9 @@ export function TeamInner() {
                   <RequireScope scope="org:admin" level="component">
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
-                      onSelect={() =>
-                        setTimeout(() => setMemberToRemove(member), 0)
-                      }
+                      onSelect={() => {
+                        void setTimeout(() => setMemberToRemove(member), 0);
+                      }}
                     >
                       Remove member
                     </DropdownMenuItem>
@@ -759,12 +772,28 @@ export function TeamInner() {
               </Type>
             </Stack>
             <RequireScope scope="org:admin" level="component">
-              <Button onClick={() => setIsInviteDialogOpen(true)}>
-                <Button.LeftIcon>
-                  <UserPlus className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Invite Member</Button.Text>
-              </Button>
+              {organization.scimEnabled ? (
+                <SimpleTooltip tooltip="Managed by your identity provider">
+                  <span className="inline-flex">
+                    <Button
+                      onClick={() => setIsInviteDialogOpen(true)}
+                      disabled
+                    >
+                      <Button.LeftIcon>
+                        <UserPlus className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Invite Member</Button.Text>
+                    </Button>
+                  </span>
+                </SimpleTooltip>
+              ) : (
+                <Button onClick={() => setIsInviteDialogOpen(true)}>
+                  <Button.LeftIcon>
+                    <UserPlus className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Invite Member</Button.Text>
+                </Button>
+              )}
             </RequireScope>
           </Stack>
 
@@ -785,29 +814,27 @@ export function TeamInner() {
             />
           </div>
 
-          <div className="min-h-[580px]">
-            <Table
-              columns={memberColumns}
-              data={visibleMembers}
-              rowKey={(row) => row.userId}
-              className="min-h-fit"
-              noResultsMessage={
-                <Stack
-                  gap={2}
-                  className="bg-background h-full p-8"
-                  align="center"
-                  justify="center"
-                >
-                  <Users className="text-muted-foreground h-12 w-12" />
-                  <Type variant="body" className="text-muted-foreground">
-                    {search
-                      ? "No members matching your search"
-                      : "No team members yet"}
-                  </Type>
-                </Stack>
-              }
-            />
-          </div>
+          <Table
+            columns={memberColumns}
+            data={visibleMembers}
+            rowKey={(row) => row.userId}
+            className="min-h-fit"
+            noResultsMessage={
+              <Stack
+                gap={2}
+                className="bg-background h-full p-8"
+                align="center"
+                justify="center"
+              >
+                <Users className="text-muted-foreground h-12 w-12" />
+                <Type variant="body" className="text-muted-foreground">
+                  {search
+                    ? "No members matching your search"
+                    : "No team members yet"}
+                </Type>
+              </Stack>
+            }
+          />
           {totalPages > 1 && (
             <div className="flex items-center justify-between border-t px-4 py-3">
               <Type variant="body" className="text-muted-foreground text-sm">
@@ -861,6 +888,48 @@ export function TeamInner() {
             />
           </div>
         )}
+        {/* Identity signpost */}
+        <div className="border-border border-t pt-8">
+          {organization.scimEnabled ? (
+            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
+              <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <Type variant="body" className="text-sm font-medium">
+                  Directory Sync is enabled
+                </Type>
+                <Type muted small className="mt-0.5">
+                  Team membership and role assignments are managed by your
+                  identity provider.{" "}
+                  <Link
+                    to={orgRoutes.identity.href()}
+                    className="text-foreground underline underline-offset-4"
+                  >
+                    Manage identity settings
+                  </Link>
+                </Type>
+              </div>
+            </div>
+          ) : (
+            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
+              <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <Type variant="body" className="text-sm font-medium">
+                  SSO & Directory Sync
+                </Type>
+                <Type muted small className="mt-0.5">
+                  Automate member provisioning and enforce identity provider
+                  authentication.{" "}
+                  <Link
+                    to={orgRoutes.identity.href()}
+                    className="text-foreground underline underline-offset-4"
+                  >
+                    Set up SSO & SCIM
+                  </Link>
+                </Type>
+              </div>
+            </div>
+          )}
+        </div>
       </Stack>
 
       {/* Invite Dialog */}
@@ -947,7 +1016,9 @@ export function TeamInner() {
       {/* Remove Member Dialog */}
       <Dialog
         open={!!memberToRemove}
-        onOpenChange={(open) => !open && setMemberToRemove(null)}
+        onOpenChange={(open) => {
+          void (!open && setMemberToRemove(null));
+        }}
       >
         <Dialog.Content>
           <Dialog.Header>
@@ -984,7 +1055,9 @@ export function TeamInner() {
       {/* Cancel Invite Dialog */}
       <Dialog
         open={!!inviteToCancel}
-        onOpenChange={(open) => !open && setInviteToCancel(null)}
+        onOpenChange={(open) => {
+          void (!open && setInviteToCancel(null));
+        }}
       >
         <Dialog.Content>
           <Dialog.Header>
@@ -1016,8 +1089,8 @@ export function TeamInner() {
         </Dialog.Content>
       </Dialog>
 
-      {/* Change Role Dialog */}
-      {isRbacEnabled && (
+      {/* Change Role Dialog — hidden when directory sync manages role assignment */}
+      {isRbacEnabled && !organization.scimEnabled && (
         <ChangeRoleDialog
           member={changingMember}
           onOpenChange={(open) => {

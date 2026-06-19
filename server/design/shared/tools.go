@@ -108,9 +108,10 @@ var FunctionToolDefinition = Type("FunctionToolDefinition", func() {
 	Attribute("function_id", String, "The ID of the function")
 	Attribute("runtime", String, "Runtime environment (e.g., nodejs:24, python:3.12)")
 	Attribute("variables", Any, "Variables configuration for the function")
+	Attribute("tags", ArrayOf(String), "The tags list for this function tool")
 	Attribute("meta", MapOf(String, Any), "Meta tags for the tool")
 
-	Required("deployment_id", "asset_id", "function_id", "runtime")
+	Required("deployment_id", "asset_id", "function_id", "runtime", "tags")
 })
 
 // ExternalMCPToolDefinition represents a proxy tool that unfolds to external MCP server tools at runtime
@@ -255,7 +256,6 @@ var EnvironmentEntry = Type("EnvironmentEntry", func() {
 
 	Attribute("name", String, "The name of the environment variable")
 	Attribute("value", String, "Redacted values of the environment variable")
-	Attribute("value_hash", String, "Hash of the value to identify matching values across environments without exposing the actual value")
 	Attribute("created_at", String, func() {
 		Description("The creation date of the environment entry")
 		Format(FormatDateTime)
@@ -265,5 +265,5 @@ var EnvironmentEntry = Type("EnvironmentEntry", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("name", "value", "value_hash", "created_at", "updated_at")
+	Required("name", "value", "created_at", "updated_at")
 })

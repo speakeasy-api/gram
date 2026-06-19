@@ -1,18 +1,12 @@
 package triggers
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"path"
 	"reflect"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -24,7 +18,6 @@ import (
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 
 	gramjsonschema "github.com/speakeasy-api/gram/server/internal/jsonschema"
-	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
@@ -37,6 +30,7 @@ type Kind string
 const (
 	KindWebhook  Kind = "webhook"
 	KindSchedule Kind = "schedule"
+	KindDirect   Kind = "direct"
 )
 
 type EnvRequirement struct {
@@ -58,6 +52,7 @@ type Definition struct {
 	AuthenticateWebhook  func(body []byte, headers http.Header, env map[string]string, config Config) error
 	HandleWebhook        func(body []byte, headers http.Header, config Config) (*WebhookIngressResult, error)
 	BuildScheduledEvent  func(instance triggerrepo.TriggerInstance, config Config, firedAt time.Time) (*EventEnvelope, error)
+	BuildDirectEvent     func(instance triggerrepo.TriggerInstance, config Config, payload []byte, receivedAt time.Time) (*EventEnvelope, error)
 	ExtractSchedule      func(config Config) (string, error)
 }
 
@@ -93,47 +88,6 @@ type Task struct {
 	CorrelationID     string
 	EventJSON         []byte
 	RawPayload        []byte
-}
-
-type slackTriggerConfig struct {
-	FilterExpr string   `json:"filter,omitempty"`
-	EventTypes []string `json:"event_types,omitempty"`
-
-	// compiledFilter is set during DecodeConfig when FilterExpr is non-empty.
-	compiledFilter cel.Program
-}
-
-func (c slackTriggerConfig) Filter(event any) (bool, error) {
-	slackEvent, ok := event.(slackTriggerEvent)
-	if !ok {
-		return false, fmt.Errorf("expected slackTriggerEvent, got %T", event)
-	}
-
-	// Event-type matching.
-	allowed := c.EventTypes
-	if len(allowed) == 0 {
-		allowed = supportedSlackEventTypes
-	}
-	if slackEvent.EventType == "" {
-		return false, nil
-	}
-	if !slices.Contains(allowed, slackEvent.EventType) {
-		return false, nil
-	}
-
-	// CEL filter evaluation.
-	if c.compiledFilter == nil {
-		return true, nil
-	}
-	out, _, err := c.compiledFilter.Eval(map[string]any{"event": event})
-	if err != nil {
-		return false, fmt.Errorf("evaluate filter: %w", err)
-	}
-	val, ok := out.Value().(bool)
-	if !ok {
-		return false, fmt.Errorf("filter result was %T, want bool", out.Value())
-	}
-	return val, nil
 }
 
 type cronTriggerConfig struct {
@@ -185,393 +139,15 @@ type wakeTriggerConfig struct {
 
 func (c wakeTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
 
-type slackEventRequest struct {
-	Type      string          `json:"type"`
-	Challenge string          `json:"challenge,omitempty"`
-	TeamID    string          `json:"team_id,omitempty"`
-	EventID   string          `json:"event_id,omitempty"`
-	EventTime int64           `json:"event_time,omitempty"`
-	Event     json.RawMessage `json:"event,omitempty"`
-}
+type dashboardTriggerConfig struct{}
 
-// slackEventRequestBody is the normalized intermediate shape produced by
-// decodeSlackEvent. JSON tags also let it deserialize directly from the
-// "string user / string channel" majority of Slack events; per-event-type
-// branches in decodeSlackEvent handle the polymorphic shapes.
-type slackEventRequestBody struct {
-	Type     string `json:"type"`
-	Subtype  string `json:"subtype,omitempty"`
-	Text     string `json:"text,omitempty"`
-	User     string `json:"user,omitempty"`
-	Inviter  string `json:"inviter,omitempty"`
-	BotID    string `json:"bot_id,omitempty"`
-	AppID    string `json:"app_id,omitempty"`
-	Channel  string `json:"channel,omitempty"`
-	ThreadTs string `json:"thread_ts,omitempty"`
-	Ts       string `json:"ts,omitempty"`
+func (dashboardTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
 
-	// Reaction-event fields. Slack puts the channel + ts of the reacted-to
-	// message inside `item`, not on the event body itself, so reaction_added
-	// / reaction_removed arrive with empty top-level Channel/Ts.
-	Reaction string              `json:"reaction,omitempty"`
-	ItemUser string              `json:"item_user,omitempty"`
-	Item     *slackEventItemBody `json:"item,omitempty"`
-}
-
-// slackUserChangeEventBody matches the team_join and user_change payloads,
-// where Slack sends event.user as a User object rather than a user ID.
-// See https://docs.slack.dev/reference/events/team_join and
-// https://docs.slack.dev/reference/events/user_change.
-type slackUserChangeEventBody struct {
-	Type string    `json:"type"`
-	User slackUser `json:"user"`
-}
-
-// slackUser models the subset of Slack's User object
-// (https://docs.slack.dev/reference/objects/user-object) that we surface
-// downstream.
-type slackUser struct {
-	ID string `json:"id"`
-}
-
-// slackChannelObjectEventBody matches channel_created, channel_rename, and
-// group_rename, where Slack sends event.channel as a channel object rather
-// than a channel ID. See https://docs.slack.dev/reference/events/channel_created,
-// https://docs.slack.dev/reference/events/channel_rename, and
-// https://docs.slack.dev/reference/events/group_rename.
-type slackChannelObjectEventBody struct {
-	Type    string             `json:"type"`
-	Channel slackChannelObject `json:"channel"`
-}
-
-type slackChannelObject struct {
-	ID      string `json:"id"`
-	Creator string `json:"creator,omitempty"`
-}
-
-// slackFileSharedEventBody matches file_shared, where the actor is carried in
-// `event.user_id` (not `event.user`) and the channel in `event.channel_id`.
-// See https://docs.slack.dev/reference/events/file_shared.
-type slackFileSharedEventBody struct {
-	Type      string `json:"type"`
-	UserID    string `json:"user_id,omitempty"`
-	ChannelID string `json:"channel_id,omitempty"`
-}
-
-// slackChannelIDChangedEventBody matches channel_id_changed, which carries
-// new_channel_id instead of an `event.channel` field.
-// See https://docs.slack.dev/reference/events/channel_id_changed.
-type slackChannelIDChangedEventBody struct {
-	Type         string `json:"type"`
-	OldChannelID string `json:"old_channel_id,omitempty"`
-	NewChannelID string `json:"new_channel_id,omitempty"`
-}
-
-type slackEventItemBody struct {
-	Type    string `json:"type,omitempty"`
-	Channel string `json:"channel,omitempty"`
-	Ts      string `json:"ts,omitempty"`
-}
-
-// decodeSlackEvent decodes the inner `event` payload of an event_callback,
-// dispatching by event type because Slack's `event.user` and `event.channel`
-// are sometimes objects (e.g. team_join, channel_rename) and sometimes string
-// IDs (e.g. message, app_mention). Each branch normalizes the payload back
-// into slackEventRequestBody for downstream code.
-func decodeSlackEvent(raw json.RawMessage) (slackEventRequestBody, error) {
-	var probe struct {
-		Type string `json:"type"`
-	}
-	if err := json.Unmarshal(raw, &probe); err != nil {
-		return slackEventRequestBody{}, fmt.Errorf("event type: %w", err)
-	}
-	switch probe.Type {
-	case "team_join", "user_change":
-		var ev slackUserChangeEventBody
-		if err := json.Unmarshal(raw, &ev); err != nil {
-			return slackEventRequestBody{}, fmt.Errorf("%s event: %w", probe.Type, err)
-		}
-		return slackEventRequestBody{
-			Type:     ev.Type,
-			Subtype:  "",
-			Text:     "",
-			User:     ev.User.ID,
-			Inviter:  "",
-			BotID:    "",
-			AppID:    "",
-			Channel:  "",
-			ThreadTs: "",
-			Ts:       "",
-			Reaction: "",
-			ItemUser: "",
-			Item:     nil,
-		}, nil
-	case "channel_created":
-		var ev slackChannelObjectEventBody
-		if err := json.Unmarshal(raw, &ev); err != nil {
-			return slackEventRequestBody{}, fmt.Errorf("%s event: %w", probe.Type, err)
-		}
-		// channel_created carries the actor inside channel.creator; surface it
-		// as the normalized actor user so downstream consumers see a unified shape.
-		return slackEventRequestBody{
-			Type:     ev.Type,
-			Subtype:  "",
-			Text:     "",
-			User:     ev.Channel.Creator,
-			Inviter:  "",
-			BotID:    "",
-			AppID:    "",
-			Channel:  ev.Channel.ID,
-			ThreadTs: "",
-			Ts:       "",
-			Reaction: "",
-			ItemUser: "",
-			Item:     nil,
-		}, nil
-	case "channel_rename", "group_rename":
-		var ev slackChannelObjectEventBody
-		if err := json.Unmarshal(raw, &ev); err != nil {
-			return slackEventRequestBody{}, fmt.Errorf("%s event: %w", probe.Type, err)
-		}
-		return slackEventRequestBody{
-			Type:     ev.Type,
-			Subtype:  "",
-			Text:     "",
-			User:     "",
-			Inviter:  "",
-			BotID:    "",
-			AppID:    "",
-			Channel:  ev.Channel.ID,
-			ThreadTs: "",
-			Ts:       "",
-			Reaction: "",
-			ItemUser: "",
-			Item:     nil,
-		}, nil
-	case "channel_id_changed":
-		var ev slackChannelIDChangedEventBody
-		if err := json.Unmarshal(raw, &ev); err != nil {
-			return slackEventRequestBody{}, fmt.Errorf("%s event: %w", probe.Type, err)
-		}
-		return slackEventRequestBody{
-			Type:     ev.Type,
-			Subtype:  "",
-			Text:     "",
-			User:     "",
-			Inviter:  "",
-			BotID:    "",
-			AppID:    "",
-			Channel:  ev.NewChannelID,
-			ThreadTs: "",
-			Ts:       "",
-			Reaction: "",
-			ItemUser: "",
-			Item:     nil,
-		}, nil
-	case "file_shared":
-		var ev slackFileSharedEventBody
-		if err := json.Unmarshal(raw, &ev); err != nil {
-			return slackEventRequestBody{}, fmt.Errorf("%s event: %w", probe.Type, err)
-		}
-		return slackEventRequestBody{
-			Type:     ev.Type,
-			Subtype:  "",
-			Text:     "",
-			User:     ev.UserID,
-			Inviter:  "",
-			BotID:    "",
-			AppID:    "",
-			Channel:  ev.ChannelID,
-			ThreadTs: "",
-			Ts:       "",
-			Reaction: "",
-			ItemUser: "",
-			Item:     nil,
-		}, nil
-	default:
-		var ev slackEventRequestBody
-		if err := json.Unmarshal(raw, &ev); err != nil {
-			return slackEventRequestBody{}, fmt.Errorf("event: %w", err)
-		}
-		return ev, nil
-	}
-}
-
-// slackCorrelationID derives the assistant-thread correlation key from a
-// Slack event. Top-level messages (empty thread_ts) fall back to the event's
-// own ts so each top-level message maps 1:1 to a Gram thread — Slack itself
-// promotes a top-level ts into thread_ts the moment anyone replies, so this
-// mirrors Slack's threading semantic. Channel-less events (e.g. team_join)
-// fall back to the workspace ID.
-func slackCorrelationID(channelID, threadID, fallbackTs, teamID string) string {
-	if threadID == "" {
-		threadID = fallbackTs
-	}
-	if channelID != "" && threadID != "" {
-		return channelID + ":" + threadID
-	}
-	if channelID != "" {
-		return channelID
-	}
-	return teamID
-}
-
-// slackInteractionPayload is the JSON body of a Block Kit interaction
-// envelope (e.g. block_actions). Slack form-encodes this under the "payload"
-// field of the webhook request body. We only model the fields needed to
-// route the click back to the originating thread + surface action metadata.
-// See https://docs.slack.dev/interactivity/handling-user-interaction.
-type slackInteractionPayload struct {
-	Type     string `json:"type"`
-	APIAppID string `json:"api_app_id,omitempty"`
-	Team     struct {
-		ID string `json:"id"`
-	} `json:"team"`
-	User struct {
-		ID string `json:"id"`
-	} `json:"user"`
-	Channel struct {
-		ID string `json:"id"`
-	} `json:"channel"`
-	Message struct {
-		Ts       string `json:"ts"`
-		ThreadTs string `json:"thread_ts,omitempty"`
-	} `json:"message"`
-	Container struct {
-		ChannelID string `json:"channel_id,omitempty"`
-		ThreadTs  string `json:"thread_ts,omitempty"`
-		MessageTs string `json:"message_ts,omitempty"`
-	} `json:"container"`
-	Actions []struct {
-		ActionID string `json:"action_id"`
-		BlockID  string `json:"block_id"`
-		Value    string `json:"value,omitempty"`
-		Type     string `json:"type,omitempty"`
-	} `json:"actions"`
-}
-
-func isSlackInteractionRequest(headers http.Header) bool {
-	// Events API requests are application/json; interactivity requests are
-	// always application/x-www-form-urlencoded with a single `payload` field.
-	// HasPrefix tolerates an optional ;charset= parameter without paying for
-	// mime.ParseMediaType on every webhook.
-	contentType := strings.ToLower(headers.Get("Content-Type"))
-	return strings.HasPrefix(contentType, "application/x-www-form-urlencoded")
-}
-
-func handleSlackInteraction(body []byte) (*WebhookIngressResult, error) {
-	values, err := url.ParseQuery(string(body))
-	if err != nil {
-		return nil, fmt.Errorf("decode slack interaction body: %w", err)
-	}
-	rawPayload := values.Get("payload")
-	if rawPayload == "" {
-		return nil, fmt.Errorf("decode slack interaction body: missing payload")
-	}
-	var payload slackInteractionPayload
-	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
-		return nil, fmt.Errorf("decode slack interaction payload: %w", err)
-	}
-	if payload.Type != "block_actions" {
-		// Other interaction envelopes (view_submission, shortcut, etc.) are
-		// not wired through Gram triggers yet. Ack without dispatching so
-		// Slack stops retrying.
-		return &WebhookIngressResult{Response: nil, Event: nil, Task: nil}, nil
-	}
-	if len(payload.Actions) == 0 {
-		return nil, fmt.Errorf("decode slack interaction payload: no actions")
-	}
-
-	// Block Kit button clicks deliver exactly one entry in actions[].
-	// Multi-select / checkbox payloads fan out across entries; we only
-	// surface the first because button is the only interactive element
-	// the outbound model exposes today.
-	action := payload.Actions[0]
-
-	channelID := payload.Channel.ID
-	if channelID == "" {
-		channelID = payload.Container.ChannelID
-	}
-	threadID := payload.Message.ThreadTs
-	if threadID == "" {
-		threadID = payload.Container.ThreadTs
-	}
-	messageTs := payload.Message.Ts
-	if messageTs == "" {
-		messageTs = payload.Container.MessageTs
-	}
-
-	normalized := slackTriggerEvent{
-		EnvelopeType: "interactive",
-		EventType:    payload.Type,
-		Subtype:      "",
-		TeamID:       payload.Team.ID,
-		ChannelID:    channelID,
-		ThreadID:     threadID,
-		UserID:       payload.User.ID,
-		InviterID:    "",
-		BotID:        "",
-		AppID:        payload.APIAppID,
-		Text:         action.Value,
-		Timestamp:    messageTs,
-		Reaction:     "",
-		ItemUserID:   "",
-		ItemChannel:  "",
-		ItemTs:       "",
-		ItemType:     "",
-		ActionID:     action.ActionID,
-		ActionValue:  action.Value,
-		BlockID:      action.BlockID,
-	}
-
-	return &WebhookIngressResult{
-		Response: nil,
-		Event: &EventEnvelope{
-			EventID:           uuid.NewSHA1(uuid.NameSpaceURL, body).String(),
-			CorrelationID:     slackCorrelationID(channelID, threadID, messageTs, payload.Team.ID),
-			TriggerInstanceID: "",
-			DefinitionSlug:    "slack",
-			Event:             normalized,
-			RawPayload:        body,
-			ReceivedAt:        time.Now().UTC(),
-		},
-		Task: nil,
-	}, nil
-}
-
-type slackTriggerEvent struct {
-	EnvelopeType string `json:"envelope_type" cel:"envelope_type"`
-	EventType    string `json:"event_type" cel:"event_type"`
-	Subtype      string `json:"subtype,omitempty" cel:"subtype"`
-	TeamID       string `json:"team_id,omitempty" cel:"team_id"`
-	ChannelID    string `json:"channel_id,omitempty" cel:"channel_id"`
-	ThreadID     string `json:"thread_id,omitempty" cel:"thread_id"`
-	// UserID is the normalized actor for the event: the user who took the
-	// action that produced it. Source varies by event type (event.user,
-	// event.user.id, event.user_id, event.channel.creator).
-	UserID string `json:"user_id,omitempty" cel:"user_id"`
-	// InviterID is set on member_joined_channel when the join was the result
-	// of an invitation. Empty if the user joined themselves or was added by
-	// default channel rules.
-	InviterID string `json:"inviter_id,omitempty" cel:"inviter_id"`
-	BotID     string `json:"bot_id,omitempty" cel:"bot_id"`
-	AppID     string `json:"app_id,omitempty" cel:"app_id"`
-	Text      string `json:"text,omitempty" cel:"text"`
-	Timestamp string `json:"timestamp,omitempty" cel:"timestamp"`
-
-	// Reaction-event fields exposed to CEL filters and the assistant adapter.
-	// Empty for non-reaction events.
-	Reaction    string `json:"reaction,omitempty" cel:"reaction"`
-	ItemUserID  string `json:"item_user_id,omitempty" cel:"item_user_id"`
-	ItemChannel string `json:"item_channel,omitempty" cel:"item_channel"`
-	ItemTs      string `json:"item_ts,omitempty" cel:"item_ts"`
-	ItemType    string `json:"item_type,omitempty" cel:"item_type"`
-
-	// Block Kit interaction fields, set when EnvelopeType is "interactive"
-	// and EventType is "block_actions". Empty for events-API callbacks.
-	ActionID    string `json:"action_id,omitempty" cel:"action_id"`
-	ActionValue string `json:"action_value,omitempty" cel:"action_value"`
-	BlockID     string `json:"block_id,omitempty" cel:"block_id"`
+type dashboardTriggerEvent struct {
+	Text           string `json:"text" cel:"text"`
+	UserID         string `json:"user_id,omitempty" cel:"user_id"`
+	CorrelationID  string `json:"correlation_id,omitempty" cel:"correlation_id"`
+	IdempotencyKey string `json:"idempotency_key,omitempty" cel:"idempotency_key"`
 }
 
 type cronTriggerEvent struct {
@@ -588,55 +164,23 @@ type wakeTriggerEvent struct {
 	Note              string `json:"note,omitempty" cel:"note"`
 }
 
-var supportedSlackEventTypes = []string{
-	"app_home_opened",
-	"app_mention",
-	"app_uninstalled",
-	// Interactivity envelope, not an Events API event. Delivered to the same
-	// webhook by Slack when a user clicks a Block Kit button. See
-	// https://docs.slack.dev/interactivity/handling-user-interaction.
-	"block_actions",
-	"channel_archive",
-	"channel_created",
-	"channel_deleted",
-	"channel_id_changed",
-	"channel_left",
-	"channel_rename",
-	"channel_unarchive",
-	"emoji_changed",
-	"file_change",
-	"file_created",
-	"file_deleted",
-	"file_public",
-	"file_shared",
-	"file_unshared",
-	"group_archive",
-	"group_deleted",
-	"group_left",
-	"group_rename",
-	"group_unarchive",
-	"link_shared",
-	"member_joined_channel",
-	"member_left_channel",
-	"message",
-	"pin_added",
-	"pin_removed",
-	"reaction_added",
-	"reaction_removed",
-	"team_join",
-	"tokens_revoked",
-	"user_change",
-}
-
 var registry = map[string]Definition{
-	"slack": newSlackDefinition(),
-	"cron":  newCronDefinition(),
-	"wake":  newWakeDefinition(),
+	DefinitionSlugSlack:     newSlackDefinition(),
+	DefinitionSlugLinear:    newLinearDefinition(),
+	DefinitionSlugGithub:    newGitHubDefinition(),
+	DefinitionSlugCron:      newCronDefinition(),
+	DefinitionSlugWake:      newWakeDefinition(),
+	DefinitionSlugDashboard: newDashboardDefinition(),
 }
 
 func List() []Definition {
 	definitions := make([]Definition, 0, len(registry))
 	for _, definition := range registry {
+		// Direct-ingress definitions (e.g. dashboard) are system-managed, not
+		// user-creatable trigger types — keep them out of the public catalog.
+		if definition.Kind == KindDirect {
+			continue
+		}
 		definitions = append(definitions, definition)
 	}
 	slices.SortFunc(definitions, func(a, b Definition) int {
@@ -676,167 +220,11 @@ func compileCELFilter(eventType reflect.Type, expression string) (cel.Program, e
 	return prog, nil
 }
 
-func newSlackDefinition() Definition {
-	schema := buildInputSchema[slackTriggerConfig](
-		withArrayItemsEnum("event_types", toAnySlice(supportedSlackEventTypes)...),
-	)
-	compiled := mustCompileSchema(schema)
-	return Definition{
-		Slug:                 "slack",
-		Title:                "Slack",
-		Description:          "Receive Slack Events API callbacks and map them to Gram trigger events.",
-		Kind:                 KindWebhook,
-		ConfigSchema:         schema,
-		CompiledConfigSchema: compiled,
-		EnvRequirements: []EnvRequirement{
-			{
-				Name:        "SLACK_SIGNING_SECRET",
-				Description: "Slack signing secret used to verify webhook signatures.",
-				Required:    true,
-			},
-		},
-		EventType: reflect.TypeFor[slackTriggerEvent](),
-		DecodeConfig: func(raw map[string]any) (Config, error) {
-			cfg, err := decodeConfig[slackTriggerConfig](raw, compiled)
-			if err != nil {
-				return nil, err
-			}
-			for _, eventType := range cfg.EventTypes {
-				if !slices.Contains(supportedSlackEventTypes, eventType) {
-					return nil, fmt.Errorf("unsupported slack event type %q", eventType)
-				}
-			}
-			prog, err := compileCELFilter(reflect.TypeFor[slackTriggerEvent](), cfg.FilterExpr)
-			if err != nil {
-				return nil, err
-			}
-			cfg.compiledFilter = prog
-			return cfg, nil
-		},
-		AuthenticateWebhook: func(body []byte, headers http.Header, env map[string]string, config Config) error {
-			// Slack's URL verification handshake must echo the challenge before
-			// any signing secret has necessarily been configured. Allow it
-			// through auth; HandleWebhook will respond with the challenge.
-			var probe slackEventRequest
-			if err := json.Unmarshal(body, &probe); err == nil && probe.Type == "url_verification" && probe.Challenge != "" {
-				return nil
-			}
-			ciEnv := toolconfig.CIEnvFrom(env)
-			signingSecret := ciEnv.Get("SLACK_SIGNING_SECRET")
-			if signingSecret == "" {
-				return fmt.Errorf("missing SLACK_SIGNING_SECRET")
-			}
-			if err := validateSlackSignature(body, headers, signingSecret); err != nil {
-				return err
-			}
-			return nil
-		},
-		HandleWebhook: func(body []byte, headers http.Header, config Config) (*WebhookIngressResult, error) {
-			if isSlackInteractionRequest(headers) {
-				return handleSlackInteraction(body)
-			}
-
-			var req slackEventRequest
-			if err := json.Unmarshal(body, &req); err != nil {
-				return nil, fmt.Errorf("decode slack payload: %w", err)
-			}
-			if req.Type == "url_verification" && req.Challenge != "" {
-				return &WebhookIngressResult{
-					Response: &WebhookResponse{
-						Status:      http.StatusOK,
-						ContentType: "text/plain",
-						Body:        []byte(req.Challenge),
-					},
-					Event: nil,
-					Task:  nil,
-				}, nil
-			}
-
-			if len(req.Event) == 0 {
-				return nil, fmt.Errorf("decode slack payload: missing event")
-			}
-			event, err := decodeSlackEvent(req.Event)
-			if err != nil {
-				return nil, fmt.Errorf("decode slack payload: %w", err)
-			}
-
-			threadID := event.ThreadTs
-
-			eventID := req.EventID
-			if eventID == "" {
-				eventID = uuid.NewSHA1(uuid.NameSpaceURL, body).String()
-			}
-
-			// Reaction events carry the channel + ts of the reacted-to message
-			// in `item`. Fall back to those so threading aligns with the
-			// originating message and CEL filters / correlation work.
-			channelID := event.Channel
-			timestamp := event.Ts
-			var (
-				itemType, itemChannel, itemTs string
-			)
-			if event.Item != nil {
-				itemType = event.Item.Type
-				itemChannel = event.Item.Channel
-				itemTs = event.Item.Ts
-				if channelID == "" {
-					channelID = itemChannel
-				}
-				if threadID == "" {
-					threadID = itemTs
-				}
-				if timestamp == "" {
-					timestamp = itemTs
-				}
-			}
-
-			normalizedEvent := slackTriggerEvent{
-				EnvelopeType: req.Type,
-				EventType:    event.Type,
-				Subtype:      event.Subtype,
-				TeamID:       req.TeamID,
-				ChannelID:    channelID,
-				ThreadID:     threadID,
-				UserID:       event.User,
-				InviterID:    event.Inviter,
-				BotID:        event.BotID,
-				AppID:        event.AppID,
-				Text:         event.Text,
-				Timestamp:    timestamp,
-				Reaction:     event.Reaction,
-				ItemUserID:   event.ItemUser,
-				ItemChannel:  itemChannel,
-				ItemTs:       itemTs,
-				ItemType:     itemType,
-				ActionID:     "",
-				ActionValue:  "",
-				BlockID:      "",
-			}
-
-			return &WebhookIngressResult{
-				Response: nil,
-				Event: &EventEnvelope{
-					EventID:           eventID,
-					CorrelationID:     slackCorrelationID(channelID, threadID, timestamp, req.TeamID),
-					TriggerInstanceID: "",
-					DefinitionSlug:    "slack",
-					Event:             normalizedEvent,
-					RawPayload:        body,
-					ReceivedAt:        time.Now().UTC(),
-				},
-				Task: nil,
-			}, nil
-		},
-		BuildScheduledEvent: nil,
-		ExtractSchedule:     nil,
-	}
-}
-
 func newCronDefinition() Definition {
 	schema := buildInputSchema[cronTriggerConfig]()
 	compiled := mustCompileSchema(schema)
 	return Definition{
-		Slug:                 "cron",
+		Slug:                 DefinitionSlugCron,
 		Title:                "Cron",
 		Description:          "Run a trigger on a Temporal-backed cron schedule.",
 		Kind:                 KindSchedule,
@@ -885,6 +273,7 @@ func newCronDefinition() Definition {
 				ReceivedAt:        firedAt.UTC(),
 			}, nil
 		},
+		BuildDirectEvent: nil,
 		ExtractSchedule: func(config Config) (string, error) {
 			cfg, ok := config.(cronTriggerConfig)
 			if !ok {
@@ -899,7 +288,7 @@ func newWakeDefinition() Definition {
 	schema := buildInputSchema[wakeTriggerConfig]()
 	compiled := mustCompileSchema(schema)
 	return Definition{
-		Slug:                 "wake",
+		Slug:                 DefinitionSlugWake,
 		Title:                "Wake",
 		Description:          "One-shot self-wake of an assistant thread at an absolute future time.",
 		Kind:                 KindSchedule,
@@ -951,6 +340,7 @@ func newWakeDefinition() Definition {
 				ReceivedAt:        firedAt.UTC(),
 			}, nil
 		},
+		BuildDirectEvent: nil,
 		ExtractSchedule: func(config Config) (string, error) {
 			cfg, ok := config.(wakeTriggerConfig)
 			if !ok {
@@ -958,6 +348,55 @@ func newWakeDefinition() Definition {
 			}
 			return cfg.FireAt.UTC().Format(time.RFC3339Nano), nil
 		},
+	}
+}
+
+func newDashboardDefinition() Definition {
+	schema := buildInputSchema[dashboardTriggerConfig]()
+	compiled := mustCompileSchema(schema)
+	return Definition{
+		Slug:                 DefinitionSlugDashboard,
+		Title:                "Dashboard",
+		Description:          "Direct messages from the Gram dashboard assistant sidebar.",
+		Kind:                 KindDirect,
+		ConfigSchema:         schema,
+		CompiledConfigSchema: compiled,
+		EnvRequirements:      []EnvRequirement{},
+		EventType:            reflect.TypeFor[dashboardTriggerEvent](),
+		DecodeConfig: func(raw map[string]any) (Config, error) {
+			return decodeConfig[dashboardTriggerConfig](raw, compiled)
+		},
+		AuthenticateWebhook: nil,
+		HandleWebhook:       nil,
+		BuildScheduledEvent: nil,
+		BuildDirectEvent: func(instance triggerrepo.TriggerInstance, _ Config, payload []byte, receivedAt time.Time) (*EventEnvelope, error) {
+			var event dashboardTriggerEvent
+			if err := json.Unmarshal(payload, &event); err != nil {
+				return nil, fmt.Errorf("decode dashboard message: %w", err)
+			}
+			if event.Text == "" {
+				return nil, fmt.Errorf("dashboard message text is required")
+			}
+			if event.UserID == "" {
+				return nil, fmt.Errorf("dashboard message user id is required")
+			}
+			if event.IdempotencyKey == "" {
+				return nil, fmt.Errorf("dashboard message idempotency key is required")
+			}
+			if event.CorrelationID == "" {
+				return nil, fmt.Errorf("dashboard message correlation id is required")
+			}
+			return &EventEnvelope{
+				EventID:           uuid.NewSHA1(uuid.NameSpaceURL, []byte(instance.ID.String()+":"+event.IdempotencyKey)).String(),
+				CorrelationID:     event.CorrelationID,
+				TriggerInstanceID: instance.ID.String(),
+				DefinitionSlug:    instance.DefinitionSlug,
+				Event:             event,
+				RawPayload:        payload,
+				ReceivedAt:        receivedAt.UTC(),
+			}, nil
+		},
+		ExtractSchedule: nil,
 	}
 }
 
@@ -1012,42 +451,6 @@ func withArrayItemsEnum(propertyName string, values ...any) inputSchemaOption {
 			prop.Items.Enum = values
 		})
 	}
-}
-
-func validateSlackSignature(body []byte, headers http.Header, signingSecret string) error {
-	timestamp := headers.Get("X-Slack-Request-Timestamp")
-	signature := headers.Get("X-Slack-Signature")
-	if timestamp == "" || signature == "" {
-		return fmt.Errorf("missing slack signature headers")
-	}
-
-	seconds, err := parseUnixTimestamp(timestamp)
-	if err != nil {
-		return fmt.Errorf("parse slack timestamp: %w", err)
-	}
-	now := time.Now().Unix()
-	if absInt64(now-seconds) > 300 {
-		return fmt.Errorf("slack timestamp too far from current time")
-	}
-
-	base := "v0:" + timestamp + ":" + string(body)
-	mac := hmac.New(sha256.New, []byte(signingSecret))
-	if _, err := io.WriteString(mac, base); err != nil {
-		return fmt.Errorf("hash slack signature: %w", err)
-	}
-	expected := "v0=" + hex.EncodeToString(mac.Sum(nil))
-	if !hmac.Equal([]byte(expected), []byte(signature)) {
-		return fmt.Errorf("slack signature mismatch")
-	}
-	return nil
-}
-
-func parseUnixTimestamp(value string) (int64, error) {
-	parsed, err := strconv.ParseInt(value, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("parse int: %w", err)
-	}
-	return parsed, nil
 }
 
 func absInt64(value int64) int64 {

@@ -2,15 +2,15 @@ import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
-import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
+import type { ChatOverview } from "@gram/client/models/components";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { useCallback, useState } from "react";
 
 interface ChatLogsTableProps {
-  chats: ChatOverviewWithResolutions[];
+  chats: ChatOverview[];
   selectedChatId?: string;
-  onSelectChat: (chat: ChatOverviewWithResolutions) => void;
+  onSelectChat: (chat: ChatOverview) => void;
   onDeleteChat: (chatId: string) => void;
   isLoading: boolean;
   error: Error | null;
@@ -50,7 +50,7 @@ function RiskIndicator({ count, size = 44 }: { count: number; size?: number }) {
   );
 }
 
-function formatDuration(chat: ChatOverviewWithResolutions): string {
+function formatDuration(chat: ChatOverview): string {
   // Use lastMessageTimestamp if available, otherwise fall back to updatedAt
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const seconds = Math.round(
@@ -79,12 +79,11 @@ function CopyButton({
   const handleCopy = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation(); // Don't trigger row selection
-      // Copy with the label prefix
-      navigator.clipboard.writeText(`${label}: ${value}`);
+      void navigator.clipboard.writeText(value);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     },
-    [value, label],
+    [value],
   );
 
   return (
@@ -123,7 +122,7 @@ export function ChatLogsTable({
   onDeleteChat,
   isLoading,
   error,
-}: ChatLogsTableProps) {
+}: ChatLogsTableProps): JSX.Element {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   if (isLoading && chats.length === 0) {
     return (
@@ -185,6 +184,8 @@ export function ChatLogsTable({
           const isSelected = selectedChatId === chat.id;
           const source = chat.source;
           const riskCount = chat.riskFindingsCount ?? 0;
+          const lastActivityTimestamp =
+            chat.lastMessageTimestamp ?? chat.createdAt;
 
           return (
             <button
@@ -194,7 +195,7 @@ export function ChatLogsTable({
                 "group w-full px-5 py-4 text-left transition-all duration-150",
                 "hover:bg-muted/50",
                 "focus-visible:bg-muted/50 focus:outline-none",
-                isSelected && "bg-primary/[0.03] hover:bg-primary/[0.05]",
+                isSelected && "bg-primary/3 hover:bg-primary/5",
               )}
             >
               <div className="flex items-center gap-5">
@@ -213,7 +214,12 @@ export function ChatLogsTable({
                     <CopyButton value={chat.id} label="Chat ID" />
                     <span className="text-muted-foreground/40">·</span>
                     <span className="text-muted-foreground text-sm">
-                      {format(chat.createdAt, "MMM d, HH:mm")}
+                      Created {format(chat.createdAt, "MMM d, HH:mm")}
+                    </span>
+                    <span className="text-muted-foreground/40">·</span>
+                    <span className="text-muted-foreground text-sm">
+                      Last activity{" "}
+                      {format(lastActivityTimestamp, "MMM d, HH:mm")}
                     </span>
                   </div>
 
@@ -297,7 +303,9 @@ export function ChatLogsTable({
 
       <Dialog
         open={deleteConfirmId !== null}
-        onOpenChange={(open) => !open && setDeleteConfirmId(null)}
+        onOpenChange={(open) => {
+          void (!open && setDeleteConfirmId(null));
+        }}
       >
         <Dialog.Content>
           <Dialog.Header>

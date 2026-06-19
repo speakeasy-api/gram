@@ -18,7 +18,7 @@ export function CheckboxWrapper({
   label,
   valuePath,
   defaultChecked,
-}: CheckboxWrapperProps) {
+}: CheckboxWrapperProps): React.JSX.Element {
   const id = React.useId();
 
   return (

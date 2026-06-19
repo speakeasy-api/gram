@@ -5,15 +5,20 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
+	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -28,13 +33,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/background"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -48,9 +53,22 @@ import (
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-// RiskAnalysisSignaler starts or signals the drain workflow for a risk policy.
+// RiskAnalysisSignaler signals the per-project risk analysis coordinator workflow.
 type RiskAnalysisSignaler interface {
-	SignalNewMessages(ctx context.Context, params background.DrainRiskAnalysisParams) error
+	Signal(ctx context.Context, projectID uuid.UUID) error
+}
+
+// RiskExclusionReconciler triggers the retroactive reconcile sweep for an
+// exclusion (flag/unflag matching findings in risk_results). Best-effort: a
+// failed trigger is logged, not fatal — the reconcile itself is idempotent.
+type RiskExclusionReconciler interface {
+	Reconcile(ctx context.Context, projectID, exclusionID uuid.UUID) error
+}
+
+// RiskPolicyResultsCleaner asynchronously deletes risk_results rows for a
+// soft-deleted policy. Best-effort: a failed trigger is logged, not fatal.
+type RiskPolicyResultsCleaner interface {
+	Clean(ctx context.Context, projectID, policyID uuid.UUID) error
 }
 
 type Service struct {
@@ -61,11 +79,21 @@ type Service struct {
 	auth             *auth.Auth
 	authz            *authz.Engine
 	signaler         RiskAnalysisSignaler
+	reconciler       RiskExclusionReconciler
+	resultsCleaner   RiskPolicyResultsCleaner
 	completionClient openrouter.CompletionClient
 	shadowMCPClient  *shadowmcp.Client
 	audit            *audit.Logger
-	cache            cache.Cache
-	piClassifier     bool
+	jwtSecret        string
+	// flags gates the nl/LLM-judge policy MVP (FlagPromptPolicies). Optional:
+	// when nil the feature is treated as disabled.
+	flags feature.Provider
+	// Scanners reused by the rule-playground endpoint (testDetectionRule)
+	// so the dashboard sees the exact same matcher output the worker
+	// produces during chat-message analysis. Optional: when nil the
+	// playground returns an "unsupported" response for that scanner family.
+	piiScanner ra.PIIScanner
+	piScanner  *ra.PromptInjectionScanner
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -89,11 +117,15 @@ func NewObserver(
 		auth:             nil,
 		authz:            nil,
 		signaler:         signaler,
+		reconciler:       nil,
+		resultsCleaner:   nil,
 		completionClient: nil,
 		shadowMCPClient:  nil,
 		audit:            auditLogger,
-		cache:            nil,
-		piClassifier:     false,
+		jwtSecret:        "",
+		piiScanner:       nil,
+		piScanner:        nil,
+		flags:            nil,
 	}
 }
 
@@ -104,11 +136,15 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	signaler RiskAnalysisSignaler,
+	reconciler RiskExclusionReconciler,
+	resultsCleaner RiskPolicyResultsCleaner,
 	completionClient openrouter.CompletionClient,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
-	redisCache cache.Cache,
-	piClassifier bool,
+	jwtSecret string,
+	piiScanner ra.PIIScanner,
+	piScanner *ra.PromptInjectionScanner,
+	flags feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -120,11 +156,15 @@ func NewService(
 		auth:             auth.New(logger, db, sessions, authzEngine),
 		authz:            authzEngine,
 		signaler:         signaler,
+		reconciler:       reconciler,
+		resultsCleaner:   resultsCleaner,
 		completionClient: completionClient,
 		shadowMCPClient:  shadowMCPClient,
 		audit:            auditLogger,
-		cache:            redisCache,
-		piClassifier:     piClassifier,
+		jwtSecret:        jwtSecret,
+		piiScanner:       piiScanner,
+		piScanner:        piScanner,
+		flags:            flags,
 	}
 }
 
@@ -142,57 +182,16 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) GetRiskCapabilities(ctx context.Context, payload *gen.GetRiskCapabilitiesPayload) (*gen.RiskCapabilitiesResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	return &gen.RiskCapabilitiesResult{
-		PiClassifierEnabled: s.piClassifier,
-	}, nil
-}
-
 // OnMessagesStored implements chat.MessageObserver. The caller
 // (notifyObservers) already dispatches this in a goroutine with a
 // detached context, so this method can safely perform I/O.
 func (s *Service) OnMessagesStored(ctx context.Context, projectID uuid.UUID) {
-	policies, err := s.repo.ListEnabledRiskPoliciesByProject(ctx, projectID)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "list enabled risk policies for observer", attr.SlogError(err))
-		return
+	if err := s.signaler.Signal(ctx, projectID); err != nil {
+		s.logger.ErrorContext(ctx, "signal risk coordinator",
+			attr.SlogError(err),
+			attr.SlogProjectID(projectID.String()),
+		)
 	}
-
-	s.logger.DebugContext(ctx, "risk observer signaling policies",
-		attr.SlogProjectID(projectID.String()),
-		attr.SlogRiskPolicyCount(len(policies)),
-	)
-
-	// Each SignalNewMessages call round-trips to Temporal (~20ms),
-	// and this runs on the chat-message hot path. Fan out so total
-	// latency is the slowest signal, not the sum of all signals.
-	var wg sync.WaitGroup
-	wg.Add(len(policies))
-	for _, p := range policies {
-		go func(p repo.RiskPolicy) {
-			defer wg.Done()
-			if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
-				ProjectID:    p.ProjectID,
-				RiskPolicyID: p.ID,
-				MaxMessages:  background.DefaultRecentMessagesBudget,
-			}); err != nil {
-				s.logger.ErrorContext(ctx, "signal risk drain workflow",
-					attr.SlogError(err),
-					attr.SlogRiskPolicyID(p.ID.String()),
-				)
-			}
-		}(p)
-	}
-	wg.Wait()
 }
 
 func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskPolicyPayload) (*types.RiskPolicy, error) {
@@ -229,16 +228,71 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, err
 	}
 
+	policyType := payload.PolicyType
+	if policyType == "" {
+		policyType = "standard"
+	}
+	if err := validatePolicyType(policyType); err != nil {
+		return nil, err
+	}
+
+	// prompt_based (LLM-judge) policies carry a prompt + optional model config
+	// instead of detection sources, and are gated behind FlagPromptPolicies
+	// during the MVP.
+	var prompt pgtype.Text
+	var modelConfig []byte
+	if policyType == "prompt_based" {
+		if !s.promptPoliciesEnabled(ctx, authCtx) {
+			return nil, oops.E(oops.CodeForbidden, nil, "prompt-based policies are not enabled for this organization")
+		}
+		if payloadHasCreatePromptPolicyDetectionConfig(payload) {
+			return nil, oops.E(oops.CodeInvalid, nil, "prompt-based policies do not support detection source configuration")
+		}
+		p, mc, err := validatePromptPolicyFields(payload.Prompt, payload.ModelConfig)
+		if err != nil {
+			return nil, err
+		}
+		prompt = pgtype.Text{String: p, Valid: true}
+		modelConfig = mc
+	}
+
 	sources := payload.Sources
-	if sources == nil {
-		sources = []string{"gitleaks"}
+	if policyType == "prompt_based" {
+		// prompt_based policies evaluate the prompt via the LLM judge, not
+		// detection sources. Persist an empty (non-null) source set.
+		sources = []string{}
+	} else {
+		if sources == nil {
+			sources = []string{"gitleaks"}
+		}
+		if err := validateSources(sources); err != nil {
+			return nil, err
+		}
+		if err := validateSourceAction(sources, action); err != nil {
+			return nil, err
+		}
 	}
-	if err := validateSources(sources); err != nil {
+	if err := validateCustomRuleIDs(payload.CustomRuleIds); err != nil {
 		return nil, err
 	}
-	if err := validateSourceAction(sources, action); err != nil {
+	if err := validateMessageTypes(payload.MessageTypes); err != nil {
 		return nil, err
 	}
+
+	audienceType := payload.AudienceType
+	if audienceType == "" {
+		audienceType = riskPolicyAudienceEveryone
+	}
+	audiencePrincipals, err := riskPolicyAudiencePrincipals(audienceType, payload.AudiencePrincipalUrns)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
+	}
+	for _, principal := range audiencePrincipals {
+		if err := authz.ValidatePrincipal(ctx, s.db, authCtx.ActiveOrganizationID, principal); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
+		}
+	}
+	audiencePrincipalURNs := principalStrings(audiencePrincipals)
 
 	enabled := true
 	if payload.Enabled != nil {
@@ -255,7 +309,11 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		for _, p := range existingPolicies {
 			existingNames = append(existingNames, p.Name)
 		}
-		name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, payload.PresidioEntities, action, existingNames)
+		if policyType == "prompt_based" {
+			name = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
+		} else {
+			name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, payload.PresidioEntities, action, existingNames)
+		}
 	}
 
 	if err := validatePolicyName(name); err != nil {
@@ -264,12 +322,12 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 
 	id, err := uuid.NewV7()
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "generate policy id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "generate policy id").LogError(ctx, s.logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -278,16 +336,27 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		ProjectID:            *authCtx.ProjectID,
 		OrganizationID:       authCtx.ActiveOrganizationID,
 		Name:                 name,
+		PolicyType:           policyType,
 		Sources:              sources,
-		PresidioEntities:     payload.PresidioEntities,
-		PromptInjectionRules: payload.PromptInjectionRules,
+		PresidioEntities:     createPolicyDetectionField(policyType, payload.PresidioEntities),
+		PromptInjectionRules: createPolicyDetectionField(policyType, payload.PromptInjectionRules),
+		DisabledRules:        createPolicyDetectionField(policyType, payload.DisabledRules),
+		CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
+		MessageTypes:         payload.MessageTypes,
 		Enabled:              enabled,
 		Action:               action,
+		AudienceType:         audienceType,
 		AutoName:             autoName,
 		UserMessage:          conv.PtrToPGTextEmpty(payload.UserMessage),
+		Prompt:               prompt,
+		ModelConfig:          modelConfig,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").LogError(ctx, s.logger)
+	}
+
+	if err := syncRiskPolicyAudienceGrants(ctx, dbtx, authCtx.ActiveOrganizationID, row.ID.String(), audienceType, audiencePrincipalURNs); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync risk policy audience").LogError(ctx, s.logger)
 	}
 
 	if err := s.audit.LogRiskPolicyCreate(ctx, dbtx, audit.LogRiskPolicyCreateEvent{
@@ -299,26 +368,19 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		RiskPolicyID:     row.ID,
 		RiskPolicyName:   row.Name,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy create").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy create").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy create").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy create").LogError(ctx, s.logger)
 	}
 
 	if s.shadowMCPClient != nil {
 		s.shadowMCPClient.Invalidate(ctx, row.ProjectID)
 	}
 
-	// Trigger the drain workflow for the new policy. New policies only
-	// scan the most recent slice by default; users can request a full
-	// backfill explicitly via TriggerRiskAnalysis on the Progress tab.
 	if enabled {
-		_ = s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
-			ProjectID:    row.ProjectID,
-			RiskPolicyID: row.ID,
-			MaxMessages:  background.DefaultRecentMessagesBudget,
-		})
+		_ = s.signaler.Signal(ctx, row.ProjectID)
 	}
 
 	return s.policyToType(ctx, row)
@@ -336,7 +398,7 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 
 	rows, err := s.repo.ListRiskPolicies(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk policies").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk policies").LogError(ctx, s.logger)
 	}
 
 	policies := make([]*types.RiskPolicy, 0, len(rows))
@@ -371,7 +433,7 @@ func (s *Service) GetRiskPolicy(ctx context.Context, payload *gen.GetRiskPolicyP
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
 
 	return s.policyToType(ctx, row)
@@ -402,7 +464,18 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
+	}
+
+	// policy_type is immutable; gate edits to prompt_based policies behind the flag.
+	if current.PolicyType == "prompt_based" && !s.promptPoliciesEnabled(ctx, authCtx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "prompt-based policies are not enabled for this organization")
+	}
+	if current.PolicyType == "standard" && (payload.Prompt != nil || payload.ModelConfig != nil) {
+		return nil, oops.E(oops.CodeInvalid, nil, "prompt and model_config are only supported for prompt-based policies")
+	}
+	if current.PolicyType == "prompt_based" && payloadHasPromptPolicyDetectionConfig(payload) {
+		return nil, oops.E(oops.CodeInvalid, nil, "prompt-based policies do not support detection source configuration")
 	}
 
 	sources := current.Sources
@@ -423,6 +496,27 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		promptInjectionRules = payload.PromptInjectionRules
 	}
 
+	disabledRules := current.DisabledRules
+	if payload.DisabledRules != nil {
+		disabledRules = payload.DisabledRules
+	}
+
+	customRuleIds := current.CustomRuleIds
+	if payload.CustomRuleIds != nil {
+		if err := validateCustomRuleIDs(payload.CustomRuleIds); err != nil {
+			return nil, err
+		}
+		customRuleIds = payload.CustomRuleIds
+	}
+
+	messageTypes := current.MessageTypes
+	if payload.MessageTypes != nil {
+		if err := validateMessageTypes(payload.MessageTypes); err != nil {
+			return nil, err
+		}
+		messageTypes = payload.MessageTypes
+	}
+
 	enabled := current.Enabled
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
@@ -439,6 +533,33 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, err
 	}
 
+	audienceType := current.AudienceType
+	if payload.AudienceType != nil {
+		audienceType = *payload.AudienceType
+	}
+	if err := validateRiskPolicyAudienceType(audienceType); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
+	}
+
+	audiencePrincipalURNs := payload.AudiencePrincipalUrns
+	if audienceType == riskPolicyAudienceTargeted && audiencePrincipalURNs == nil {
+		audiencePrincipalURNs, err = riskPolicyAudiencePrincipalURNs(ctx, s.db, authCtx.ActiveOrganizationID, current.ID.String())
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load risk policy audience").LogError(ctx, s.logger)
+		}
+	}
+
+	audiencePrincipals, err := riskPolicyAudiencePrincipals(audienceType, audiencePrincipalURNs)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
+	}
+	for _, principal := range audiencePrincipals {
+		if err := authz.ValidatePrincipal(ctx, s.db, authCtx.ActiveOrganizationID, principal); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
+		}
+	}
+	audiencePrincipalURNs = principalStrings(audiencePrincipals)
+
 	autoName := current.AutoName
 	if payload.AutoName != nil {
 		autoName = *payload.AutoName
@@ -449,6 +570,29 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	userMessage := current.UserMessage
 	if payload.UserMessage != nil {
 		userMessage = conv.PtrToPGTextEmpty(payload.UserMessage)
+	}
+
+	// prompt + model_config apply to prompt_based policies. Omitted fields
+	// preserve the current values; a provided prompt must be non-empty for a
+	// prompt_based policy.
+	prompt := current.Prompt
+	if payload.Prompt != nil {
+		p := strings.TrimSpace(*payload.Prompt)
+		if current.PolicyType == "prompt_based" && p == "" {
+			return nil, oops.E(oops.CodeInvalid, nil, "prompt must not be empty for prompt-based policies")
+		}
+		if len([]rune(p)) > maxPromptPolicyPromptLength {
+			return nil, oops.E(oops.CodeInvalid, nil, "prompt must be at most %d characters", maxPromptPolicyPromptLength)
+		}
+		prompt = pgtype.Text{String: p, Valid: p != ""}
+	}
+	modelConfig := current.ModelConfig
+	if payload.ModelConfig != nil {
+		mc, err := marshalModelConfig(payload.ModelConfig)
+		if err != nil {
+			return nil, err
+		}
+		modelConfig = mc
 	}
 
 	// Regenerate the name only when the caller explicitly opts in on this
@@ -463,18 +607,26 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 				existingNames = append(existingNames, p.Name)
 			}
 		}
-		name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, presidioEntities, action, existingNames)
+		if current.PolicyType == "prompt_based" {
+			name = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
+		} else {
+			name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, presidioEntities, action, existingNames)
+		}
 	}
 
 	if err := validatePolicyName(name); err != nil {
 		return nil, err
 	}
 
-	snapshotBefore := policyRowSnapshot(current)
+	currentAudiencePrincipalURNs, err := riskPolicyAudiencePrincipalURNs(ctx, s.db, authCtx.ActiveOrganizationID, current.ID.String())
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy audience snapshot").LogError(ctx, s.logger)
+	}
+	snapshotBefore := policyRowSnapshotWithAudience(current, currentAudiencePrincipalURNs)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -485,13 +637,23 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		Sources:              sources,
 		PresidioEntities:     presidioEntities,
 		PromptInjectionRules: promptInjectionRules,
+		DisabledRules:        disabledRules,
+		CustomRuleIds:        customRuleIds,
+		MessageTypes:         messageTypes,
 		Enabled:              enabled,
 		Action:               action,
+		AudienceType:         audienceType,
 		AutoName:             autoName,
 		UserMessage:          userMessage,
+		Prompt:               prompt,
+		ModelConfig:          modelConfig,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").LogError(ctx, s.logger)
+	}
+
+	if err := syncRiskPolicyAudienceGrants(ctx, dbtx, authCtx.ActiveOrganizationID, row.ID.String(), audienceType, audiencePrincipalURNs); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync risk policy audience").LogError(ctx, s.logger)
 	}
 
 	if err := s.audit.LogRiskPolicyUpdate(ctx, dbtx, audit.LogRiskPolicyUpdateEvent{
@@ -503,28 +665,20 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		RiskPolicyID:     row.ID,
 		RiskPolicyName:   row.Name,
 		SnapshotBefore:   snapshotBefore,
-		SnapshotAfter:    policyRowSnapshot(row),
+		SnapshotAfter:    policyRowSnapshotWithAudience(row, audiencePrincipalURNs),
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy update").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy update").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy update").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy update").LogError(ctx, s.logger)
 	}
 
 	if s.shadowMCPClient != nil {
 		s.shadowMCPClient.Invalidate(ctx, row.ProjectID)
 	}
 
-	// Signal the drain workflow — it reads the current enabled/version
-	// from the DB, so it will clean up results if the policy was
-	// disabled. Policy edits default to the recent-N budget; full
-	// backfill is opt-in via TriggerRiskAnalysis.
-	_ = s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
-		ProjectID:    row.ProjectID,
-		RiskPolicyID: row.ID,
-		MaxMessages:  background.DefaultRecentMessagesBudget,
-	})
+	_ = s.signaler.Signal(ctx, row.ProjectID)
 
 	return s.policyToType(ctx, row)
 }
@@ -550,22 +704,46 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	// Soft-delete only — list queries already filter out results for deleted
-	// policies via the risk_policies join, so orphaned rows are harmless.
-	if err := repo.New(dbtx).DeleteRiskPolicy(ctx, repo.DeleteRiskPolicyParams{
+	q := repo.New(dbtx)
+	if err := q.DeleteRiskPolicy(ctx, repo.DeleteRiskPolicyParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete risk policy").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "delete risk policy").LogError(ctx, s.logger)
+	}
+
+	if err := q.DeleteRiskPolicyBypassRequestsByPolicy(ctx, repo.DeleteRiskPolicyBypassRequestsByPolicyParams{
+		RiskPolicyID: id,
+		ProjectID:    *authCtx.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete risk policy bypass requests").LogError(ctx, s.logger)
+	}
+
+	deletedExclusions, err := q.DeleteRiskExclusionsByPolicy(ctx, repo.DeleteRiskExclusionsByPolicyParams{
+		RiskPolicyID: uuid.NullUUID{UUID: id, Valid: true},
+		ProjectID:    *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete risk exclusions by policy").LogError(ctx, s.logger)
+	}
+	if deletedExclusions > 0 {
+		s.logger.InfoContext(ctx, "deleted risk exclusions for policy",
+			attr.SlogRiskPolicyID(id.String()),
+			attr.SlogDBDeletedRowsCount(deletedExclusions),
+		)
+	}
+
+	if err := clearRiskPolicyAudienceGrants(ctx, dbtx, authCtx.ActiveOrganizationID, id.String()); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "clear risk policy audience").LogError(ctx, s.logger)
 	}
 
 	if err := s.audit.LogRiskPolicyDelete(ctx, dbtx, audit.LogRiskPolicyDeleteEvent{
@@ -577,18 +755,33 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		RiskPolicyID:     id,
 		RiskPolicyName:   existing.Name,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log risk policy delete").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "log risk policy delete").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit risk policy delete").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "commit risk policy delete").LogError(ctx, s.logger)
 	}
 
 	if s.shadowMCPClient != nil {
 		s.shadowMCPClient.Invalidate(ctx, *authCtx.ProjectID)
 	}
 
+	s.cleanPolicyResults(ctx, *authCtx.ProjectID, id)
+
 	return nil
+}
+
+func (s *Service) cleanPolicyResults(ctx context.Context, projectID, policyID uuid.UUID) {
+	if s.resultsCleaner == nil {
+		return
+	}
+	if err := s.resultsCleaner.Clean(ctx, projectID, policyID); err != nil {
+		s.logger.ErrorContext(ctx, "trigger risk policy results cleanup",
+			attr.SlogError(err),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogRiskPolicyID(policyID.String()),
+		)
+	}
 }
 
 const riskDefaultPageSize = 50
@@ -657,7 +850,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 
 	cursor, err := parseRiskResultsCursor(payload.Cursor)
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor").LogError(ctx, s.logger)
 	}
 
 	pageSize := resolvePageSize(payload.Limit)
@@ -682,19 +875,23 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 	if payload.RuleID != nil {
 		ruleID = *payload.RuleID
 	}
+	userID := ""
+	if payload.UserID != nil {
+		userID = *payload.UserID
+	}
 	uniqueMatch := false
 	if payload.UniqueMatch != nil {
 		uniqueMatch = *payload.UniqueMatch
 	}
 	fromTime, err := parseOptionalTimestamptz(payload.From)
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid from").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeInvalid, err, "invalid from").LogError(ctx, s.logger)
 	}
 	toTime, err := parseOptionalTimestamptz(payload.To)
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid to").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeInvalid, err, "invalid to").LogError(ctx, s.logger)
 	}
-	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, category, ruleID, uniqueMatch, fromTime, toTime)
+	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, category, ruleID, userID, uniqueMatch, fromTime, toTime)
 }
 
 func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
@@ -727,6 +924,7 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 		ChatID:           payload.ChatID,
 		Category:         payload.Category,
 		RuleID:           payload.RuleID,
+		UserID:           payload.UserID,
 		UniqueMatch:      payload.UniqueMatch,
 		From:             payload.From,
 		To:               payload.To,
@@ -824,7 +1022,7 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 
 	cursor, err := conv.PtrToNullUUID(payload.Cursor)
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor").LogError(ctx, s.logger)
 	}
 
 	pageSize := resolvePageSize(payload.Limit)
@@ -835,7 +1033,7 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 		PageLimit: conv.SafeInt32(pageSize + 1),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").LogError(ctx, s.logger)
 	}
 
 	chats := make([]*types.RiskChatSummary, 0, len(rows))
@@ -870,7 +1068,7 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 
 	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid overview window").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeInvalid, err, "invalid overview window").LogError(ctx, s.logger)
 	}
 
 	window := riskOverviewWindowParams(from, to)
@@ -880,7 +1078,7 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 		ToTime:    window.to,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview counts").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview counts").LogError(ctx, s.logger)
 	}
 
 	userRows, err := s.repo.ListRiskOverviewTopUsers(ctx, repo.ListRiskOverviewTopUsersParams{
@@ -893,7 +1091,7 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 		RowLimit: 200,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top users").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top users").LogError(ctx, s.logger)
 	}
 
 	timeSeriesRows, err := s.repo.ListRiskOverviewTimeSeriesFindings(ctx, repo.ListRiskOverviewTimeSeriesFindingsParams{
@@ -902,7 +1100,7 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 		ToTime:    window.to,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview time series findings").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview time series findings").LogError(ctx, s.logger)
 	}
 
 	ruleRows, err := s.repo.ListRiskOverviewTopRules(ctx, repo.ListRiskOverviewTopRulesParams{
@@ -915,7 +1113,7 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 		RowLimit: 200,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top rules").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk overview top rules").LogError(ctx, s.logger)
 	}
 
 	topCategories := riskOverviewTopCategories(timeSeriesRows, 10)
@@ -1068,7 +1266,7 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 		PageLimit:              conv.SafeInt32(pageSize + 1),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").LogError(ctx, s.logger)
 	}
 	results := make([]*types.RiskResult, 0, len(rows))
 	var nextCursor *riskResultsCursor
@@ -1096,7 +1294,7 @@ func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, 
 		PageLimit:              conv.SafeInt32(pageSize + 1),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by policy").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by policy").LogError(ctx, s.logger)
 	}
 	results := make([]*types.RiskResult, 0, len(rows))
 	var nextCursor *riskResultsCursor
@@ -1110,7 +1308,7 @@ func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, 
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, category string, ruleID string, uniqueMatch bool, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, category string, ruleID string, userID string, uniqueMatch bool, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
 	cursorCreatedAt, cursorID := cursorToParams(cursor)
 	rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
 		ProjectID:              projectID,
@@ -1118,13 +1316,14 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 		ToTime:                 toTime,
 		Category:               category,
 		RuleID:                 ruleID,
+		UserID:                 userID,
 		UniqueMatch:            uniqueMatch,
 		CursorMessageCreatedAt: cursorCreatedAt,
 		CursorID:               cursorID,
 		PageLimit:              conv.SafeInt32(pageSize + 1),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk results").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk results").LogError(ctx, s.logger)
 	}
 	results := make([]*types.RiskResult, 0, len(rows))
 	var nextCursor *riskResultsCursor
@@ -1176,7 +1375,7 @@ func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRisk
 
 	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid window").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeInvalid, err, "invalid window").LogError(ctx, s.logger)
 	}
 	window := riskOverviewWindowParams(from, to)
 
@@ -1187,7 +1386,7 @@ func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRisk
 		ExternalUserID: payload.ExternalUserID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list user category breakdown").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list user category breakdown").LogError(ctx, s.logger)
 	}
 
 	ruleRows, err := s.repo.ListRiskUserRuleBreakdown(ctx, repo.ListRiskUserRuleBreakdownParams{
@@ -1197,7 +1396,7 @@ func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRisk
 		ExternalUserID: payload.ExternalUserID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list user rule breakdown").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list user rule breakdown").LogError(ctx, s.logger)
 	}
 
 	categories := make([]*gen.RiskOverviewCategory, 0, len(categoryRows))
@@ -1241,7 +1440,7 @@ func (s *Service) GetRiskRuleBreakdown(ctx context.Context, payload *gen.GetRisk
 
 	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid window").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeInvalid, err, "invalid window").LogError(ctx, s.logger)
 	}
 
 	window := riskOverviewWindowParams(from, to)
@@ -1252,7 +1451,7 @@ func (s *Service) GetRiskRuleBreakdown(ctx context.Context, payload *gen.GetRisk
 		Category:  payload.Category,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list rule breakdown").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list rule breakdown").LogError(ctx, s.logger)
 	}
 
 	rules := make([]*gen.RiskRuleBreakdownEntry, 0, len(rows))
@@ -1295,12 +1494,12 @@ func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskP
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
 
 	totalMessages, err := s.repo.CountTotalMessages(ctx, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count total messages").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "count total messages").LogError(ctx, s.logger)
 	}
 
 	analyzedMessages, err := s.repo.CountAnalyzedMessages(ctx, repo.CountAnalyzedMessagesParams{
@@ -1309,7 +1508,7 @@ func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskP
 		RiskPolicyVersion: policy.Version,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count analyzed messages").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "count analyzed messages").LogError(ctx, s.logger)
 	}
 
 	findingsCount, err := s.repo.CountFindingsByPolicy(ctx, repo.CountFindingsByPolicyParams{
@@ -1318,7 +1517,7 @@ func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskP
 		RiskPolicyVersion: policy.Version,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count findings").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "count findings").LogError(ctx, s.logger)
 	}
 
 	pending := max(totalMessages-analyzedMessages, 0)
@@ -1342,7 +1541,165 @@ func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskP
 	}, nil
 }
 
-func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerRiskAnalysisPayload) error {
+func (s *Service) TriggerRiskAnalysis(_ context.Context, _ *gen.TriggerRiskAnalysisPayload) error {
+	return oops.E(oops.CodeNotImplemented, nil, "operation not supported")
+}
+
+func (s *Service) CreateCustomDetectionRule(ctx context.Context, payload *gen.CreateCustomDetectionRulePayload) (*types.RiskCustomDetectionRule, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	ruleID := strings.TrimSpace(payload.RuleID)
+	title := strings.TrimSpace(payload.Title)
+	description := ""
+	if payload.Description != nil {
+		description = strings.TrimSpace(*payload.Description)
+	}
+	regexPattern := strings.TrimSpace(payload.Regex)
+	severity := payload.Severity
+	if severity == "" {
+		severity = "medium"
+	}
+	if err := validateCustomDetectionRule(ruleID, title, regexPattern, severity); err != nil {
+		return nil, err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	row, err := repo.New(dbtx).CreateCustomDetectionRule(ctx, repo.CreateCustomDetectionRuleParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		RuleID:         ruleID,
+		Title:          title,
+		Description:    description,
+		Regex:          pgtype.Text{String: regexPattern, Valid: true},
+		Severity:       severity,
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, nil, "custom detection rule already exists")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "create custom detection rule").LogError(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit custom detection rule create").LogError(ctx, s.logger)
+	}
+
+	return customDetectionRuleToType(row), nil
+}
+
+func (s *Service) ListCustomDetectionRules(ctx context.Context, payload *gen.ListCustomDetectionRulesPayload) (*gen.ListCustomDetectionRulesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.repo.ListCustomDetectionRules(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list custom detection rules").LogError(ctx, s.logger)
+	}
+
+	rules := make([]*types.RiskCustomDetectionRule, 0, len(rows))
+	for _, row := range rows {
+		rules = append(rules, customDetectionRuleToType(row))
+	}
+
+	return &gen.ListCustomDetectionRulesResult{Rules: rules}, nil
+}
+
+func (s *Service) GetCustomDetectionRule(ctx context.Context, payload *gen.GetCustomDetectionRulePayload) (*types.RiskCustomDetectionRule, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.C(oops.CodeInvalid)
+	}
+
+	row, err := s.repo.GetCustomDetectionRule(ctx, repo.GetCustomDetectionRuleParams{
+		ID:        id,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "custom detection rule not found").LogError(ctx, s.logger)
+	}
+
+	return customDetectionRuleToType(row), nil
+}
+
+func (s *Service) UpdateCustomDetectionRule(ctx context.Context, payload *gen.UpdateCustomDetectionRulePayload) (*types.RiskCustomDetectionRule, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.C(oops.CodeInvalid)
+	}
+
+	title := strings.TrimSpace(payload.Title)
+	description := ""
+	if payload.Description != nil {
+		description = strings.TrimSpace(*payload.Description)
+	}
+	regexPattern := strings.TrimSpace(payload.Regex)
+	if err := validateCustomDetectionRuleFields(title, regexPattern, payload.Severity); err != nil {
+		return nil, err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	row, err := repo.New(dbtx).UpdateCustomDetectionRule(ctx, repo.UpdateCustomDetectionRuleParams{
+		ID:          id,
+		ProjectID:   *authCtx.ProjectID,
+		Title:       title,
+		Description: description,
+		Regex:       pgtype.Text{String: regexPattern, Valid: true},
+		Severity:    payload.Severity,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "custom detection rule not found").LogError(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit custom detection rule update").LogError(ctx, s.logger)
+	}
+
+	return customDetectionRuleToType(row), nil
+}
+
+func (s *Service) DeleteCustomDetectionRule(ctx context.Context, payload *gen.DeleteCustomDetectionRulePayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
@@ -1357,39 +1714,455 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 		return oops.C(oops.CodeInvalid)
 	}
 
-	policy, err := s.repo.BumpRiskPolicyVersion(ctx, repo.BumpRiskPolicyVersionParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	if err := repo.New(dbtx).DeleteCustomDetectionRule(ctx, repo.DeleteCustomDetectionRuleParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
-	})
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete custom detection rule").LogError(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit custom detection rule delete").LogError(ctx, s.logger)
+	}
+
+	return nil
+}
+
+// SuggestCustomDetectionRule turns a natural-language description ("what do
+// you want to detect?") into a structured custom-rule suggestion. The
+// response is intentionally minimal — the dashboard prefills its create
+// form with these values and the operator edits before saving.
+func (s *Service) SuggestCustomDetectionRule(ctx context.Context, payload *gen.SuggestCustomDetectionRulePayload) (*gen.SuggestCustomDetectionRuleResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	prompt := strings.TrimSpace(payload.Prompt)
+	if prompt == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "prompt is required")
+	}
+
+	if s.completionClient == nil {
+		s.logger.WarnContext(ctx, "completion client not configured; returning heuristic suggestion")
+		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
+	}
+
+	suggestion, err := s.suggestCustomRuleViaLLM(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt, payload.ExistingRuleIds)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "bump policy version").Log(ctx, s.logger)
+		s.logger.WarnContext(ctx, "openrouter suggestion failed; returning heuristic suggestion", attr.SlogError(err))
+		return heuristicCustomRuleSuggestion(prompt, payload.ExistingRuleIds), nil
+	}
+	return suggestion, nil
+}
+
+// heuristicCustomRuleSuggestion is the deterministic fallback when the LLM
+// is unavailable (no provisioned key, transport failure, etc). It produces
+// a usable starting point so the operator can finish the form rather than
+// hit a dead end.
+func heuristicCustomRuleSuggestion(prompt string, existingIDs []string) *gen.SuggestCustomDetectionRuleResult {
+	slug := slugifyPrompt(prompt)
+	if slug == "" {
+		slug = "rule"
+	}
+	ruleID := "custom." + slug
+	if slices.Contains(existingIDs, ruleID) {
+		ruleID = ruleID + "_" + time.Now().UTC().Format("20060102150405")
 	}
 
-	if err := s.audit.LogRiskPolicyTrigger(ctx, s.db, audit.LogRiskPolicyTriggerEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        *authCtx.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		RiskPolicyID:     policy.ID,
-		RiskPolicyName:   policy.Name,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log risk policy trigger").Log(ctx, s.logger)
+	title := titleizeSlug(slug)
+	if title == "" {
+		title = "Custom Rule"
 	}
 
-	// payload.Limit defaults to 100 (Goa fills in the recent-N budget
-	// when callers omit it). Explicit 0 requests a full backfill of
-	// every unanalyzed message.
-	maxMessages := payload.Limit
+	return &gen.SuggestCustomDetectionRuleResult{
+		RuleID:      ruleID,
+		Title:       title,
+		Description: strings.TrimSpace(prompt),
+		Regex:       "",
+		Severity:    "medium",
+	}
+}
 
-	if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
-		ProjectID:    policy.ProjectID,
-		RiskPolicyID: policy.ID,
-		MaxMessages:  maxMessages,
-	}); err != nil {
-		return fmt.Errorf("signal risk analysis workflow: %w", err)
+var slugStripRE = regexp.MustCompile(`[^a-z0-9]+`)
+
+func slugifyPrompt(prompt string) string {
+	lower := strings.ToLower(strings.TrimSpace(prompt))
+	slug := slugStripRE.ReplaceAllString(lower, "_")
+	slug = strings.Trim(slug, "_")
+	if len(slug) > 40 {
+		slug = slug[:40]
+		slug = strings.TrimRight(slug, "_")
+	}
+	return slug
+}
+
+func titleizeSlug(slug string) string {
+	if slug == "" {
+		return ""
+	}
+	parts := strings.Split(slug, "_")
+	out := make([]string, 0, len(parts))
+	for i, p := range parts {
+		if i >= 5 {
+			break
+		}
+		if p == "" {
+			continue
+		}
+		out = append(out, strings.ToUpper(p[:1])+p[1:])
+	}
+	return strings.Join(out, " ")
+}
+
+// Severity returned by the LLM is constrained by the JSON schema; we still
+// enforce membership in case the model strays.
+var customRuleSeverityAllow = map[string]bool{
+	"info":     true,
+	"low":      true,
+	"medium":   true,
+	"high":     true,
+	"critical": true,
+}
+
+var customRuleIDPattern = regexp.MustCompile(`^custom\.[a-z0-9_]+$`)
+
+func validateCustomRuleIDs(ids []string) error {
+	for _, id := range ids {
+		if !strings.HasPrefix(id, "custom.") {
+			return oops.E(oops.CodeInvalid, nil, "custom rule id %q must start with custom.", id)
+		}
 	}
 	return nil
+}
+
+func validateMessageTypes(messageTypes []string) error {
+	for _, messageType := range messageTypes {
+		if message.IsTypeValid(messageType) {
+			continue
+		}
+		return oops.E(
+			oops.CodeInvalid,
+			nil,
+			"message_type %q must be one of: %s",
+			messageType,
+			strings.Join(message.AllTypes(), ", "),
+		)
+	}
+	return nil
+}
+
+func validateCustomDetectionRule(ruleID, title, regexPattern, severity string) error {
+	if !customRuleIDPattern.MatchString(ruleID) {
+		return oops.E(oops.CodeInvalid, nil, "rule_id must match custom.[a-z0-9_]+")
+	}
+	return validateCustomDetectionRuleFields(title, regexPattern, severity)
+}
+
+func validateCustomDetectionRuleFields(title, regexPattern, severity string) error {
+	if title == "" {
+		return oops.E(oops.CodeInvalid, nil, "title must not be empty")
+	}
+	if _, err := regexp.Compile(regexPattern); err != nil {
+		return oops.E(oops.CodeInvalid, err, "regex is invalid")
+	}
+	if !customRuleSeverityAllow[severity] {
+		return oops.E(oops.CodeInvalid, nil, "severity must be one of info, low, medium, high, critical")
+	}
+	return nil
+}
+
+func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
+	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
+
+Given a single natural-language description of what an operator wants to detect, return a JSON object that the dashboard will use to prefill a "create custom detection rule" form.
+
+Rules:
+- "rule_id" must start with the literal prefix "custom." and contain only [a-z0-9_]. Pick a stable, descriptive slug derived from the subject (e.g. "custom.acme_internal_token", "custom.qa_signing_key"). It must NOT appear in the provided existing_rule_ids list.
+- "title" is 2-6 words, title case.
+- "description" is 1-2 sentences describing what is detected and why it matters. No marketing copy.
+- "regex" is an RE2-compatible pattern that matches the described payload. Prefer anchors and character classes that minimise false positives. Do not include leading/trailing slashes.
+- "severity" is one of "info", "low", "medium", "high", "critical". Pick based on the leakage cost of the data described — credentials, PII, financial, healthcare are typically high or critical; logging IDs and internal references are typically low or medium.
+
+Output ONLY the JSON object. No prose, no markdown fences.`
+
+	existingList := strings.Join(existingIDs, ", ")
+	if existingList == "" {
+		existingList = "(none)"
+	}
+	userMessage := fmt.Sprintf("Operator request: %s\n\nExisting rule ids (avoid colliding): %s", userPrompt, existingList)
+
+	strict := true
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"rule_id":     map[string]any{"type": "string", "pattern": "^custom\\.[a-z0-9_]+$"},
+			"title":       map[string]any{"type": "string", "minLength": 1, "maxLength": 80},
+			"description": map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
+			"regex":       map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
+			"severity":    map[string]any{"type": "string", "enum": []string{"info", "low", "medium", "high", "critical"}},
+		},
+		"required":             []string{"rule_id", "title", "description", "regex", "severity"},
+		"additionalProperties": false,
+	}
+
+	jsonSchema := or.ChatJSONSchemaConfig{
+		Name:        "custom_detection_rule_suggestion",
+		Schema:      schema,
+		Description: nil,
+		Strict:      optionalnullable.From(&strict),
+	}
+
+	suggestCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	temperature := 0.2
+	response, err := s.completionClient.GetObjectCompletion(suggestCtx, openrouter.ObjectCompletionRequest{
+		OrgID:          orgID,
+		ProjectID:      projectID,
+		Model:          "",
+		SystemPrompt:   systemPrompt,
+		Prompt:         userMessage,
+		Temperature:    &temperature,
+		UsageSource:    billing.ModelUsageSourceGram,
+		UserID:         "",
+		ExternalUserID: "",
+		HTTPMetadata:   nil,
+		JSONSchema:     &jsonSchema,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("openrouter object completion: %w", err)
+	}
+	if response == nil || response.Message == nil {
+		return nil, fmt.Errorf("empty completion response")
+	}
+
+	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
+	if raw == "" {
+		return nil, fmt.Errorf("empty completion content")
+	}
+
+	var parsed struct {
+		RuleID      string `json:"rule_id"`
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		Regex       string `json:"regex"`
+		Severity    string `json:"severity"`
+	}
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return nil, fmt.Errorf("parse llm response: %w", err)
+	}
+
+	parsed.RuleID = strings.TrimSpace(parsed.RuleID)
+	parsed.Title = strings.TrimSpace(parsed.Title)
+	parsed.Description = strings.TrimSpace(parsed.Description)
+	parsed.Regex = strings.TrimSpace(parsed.Regex)
+	parsed.Severity = strings.ToLower(strings.TrimSpace(parsed.Severity))
+
+	if !strings.HasPrefix(parsed.RuleID, "custom.") || !customRuleIDPattern.MatchString(parsed.RuleID) {
+		return nil, fmt.Errorf("model returned invalid rule_id %q", parsed.RuleID)
+	}
+	if _, err := regexp.Compile(parsed.Regex); err != nil {
+		return nil, fmt.Errorf("model returned invalid regex: %w", err)
+	}
+	if !customRuleSeverityAllow[parsed.Severity] {
+		parsed.Severity = "medium"
+	}
+	if slices.Contains(existingIDs, parsed.RuleID) {
+		parsed.RuleID = parsed.RuleID + "_" + time.Now().UTC().Format("20060102150405")
+	}
+
+	return &gen.SuggestCustomDetectionRuleResult{
+		RuleID:      parsed.RuleID,
+		Title:       parsed.Title,
+		Description: parsed.Description,
+		Regex:       parsed.Regex,
+		Severity:    parsed.Severity,
+	}, nil
+}
+
+// TestDetectionRule runs a single detection rule against pasted sample text
+// and returns its matches. The handler dispatches to the same scanners the
+// worker uses during chat-message analysis (gitleaks for secrets.*, the
+// configured PIIScanner for pii.*, the PromptInjectionScanner for
+// prompt_injection.*, and a regex matcher for custom.*) so the playground
+// output mirrors what would be recorded as a risk_result in production.
+//
+// shadow_mcp.* and destructive_tool.* are inherently tool-call shaped —
+// they have no text-only detector — so the handler returns supported:false
+// for them rather than fabricating a match.
+func (s *Service) TestDetectionRule(ctx context.Context, payload *gen.TestDetectionRulePayload) (*gen.TestDetectionRuleResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	ruleID := strings.TrimSpace(payload.RuleID)
+	text := payload.Text
+	if ruleID == "" || text == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "rule_id and text are required")
+	}
+
+	switch {
+	case strings.HasPrefix(ruleID, "secret."):
+		return s.testGitleaksRule(ctx, ruleID, text)
+	case strings.HasPrefix(ruleID, "pii."):
+		return s.testPresidioRule(ctx, ruleID, text)
+	case ruleID == "prompt_injection.default" || strings.HasPrefix(ruleID, "prompt_injection."):
+		return s.testPromptInjectionRule(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), text)
+	case strings.HasPrefix(ruleID, "custom."):
+		regex := ""
+		if payload.Regex != nil {
+			regex = *payload.Regex
+		}
+		return s.testCustomRule(ruleID, regex, text)
+	default:
+		return &gen.TestDetectionRuleResult{
+			Matches:   nil,
+			Supported: false,
+			Reason:    new("This rule has no text-only detector. Playground requires gitleaks/presidio/prompt-injection/custom rule families."),
+		}, nil
+	}
+}
+
+func (s *Service) testGitleaksRule(ctx context.Context, ruleID, text string) (*gen.TestDetectionRuleResult, error) {
+	findings, err := ra.ScanWithGitleaks(text)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "run gitleaks").LogError(ctx, s.logger)
+	}
+	matches := make([]*gen.TestDetectionRuleMatch, 0, len(findings))
+	for _, f := range findings {
+		if f.RuleID != ruleID {
+			continue
+		}
+		matches = append(matches, findingToMatch(f))
+	}
+	return &gen.TestDetectionRuleResult{
+		Matches:   matches,
+		Supported: true,
+		Reason:    nil,
+	}, nil
+}
+
+func (s *Service) testPresidioRule(ctx context.Context, ruleID, text string) (*gen.TestDetectionRuleResult, error) {
+	if s.piiScanner == nil {
+		return &gen.TestDetectionRuleResult{
+			Matches:   nil,
+			Supported: false,
+			Reason:    new("PII scanner is not configured on this server."),
+		}, nil
+	}
+	entity := strings.ToUpper(strings.TrimPrefix(ruleID, "pii."))
+	batches, err := s.piiScanner.AnalyzeBatch(ctx, []string{text}, []string{entity}, nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "run presidio").LogError(ctx, s.logger)
+	}
+	matches := make([]*gen.TestDetectionRuleMatch, 0)
+	if len(batches) > 0 {
+		for _, f := range batches[0] {
+			if f.DeadLetterReason != "" {
+				continue
+			}
+			if f.RuleID != ruleID {
+				continue
+			}
+			matches = append(matches, findingToMatch(f))
+		}
+	}
+	return &gen.TestDetectionRuleResult{
+		Matches:   matches,
+		Supported: true,
+		Reason:    nil,
+	}, nil
+}
+
+func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID, text string) (*gen.TestDetectionRuleResult, error) {
+	if s.piScanner == nil {
+		return &gen.TestDetectionRuleResult{
+			Matches:   nil,
+			Supported: false,
+			Reason:    new("Prompt-injection scanner is not configured on this server."),
+		}, nil
+	}
+	// A rule-test preview runs the deterministic, free L0 heuristics only; the
+	// billable LLM-judge L1 engine is not invoked on a test click (l1Enabled=false),
+	// so the structured message is unused here and carries just the sample text.
+	findings, err := s.piScanner.Scan(ctx, text, orgID, projectID, ra.NewJudgeMessage(message.User, "", text), false)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "run prompt-injection scanner").LogError(ctx, s.logger)
+	}
+	matches := make([]*gen.TestDetectionRuleMatch, 0, len(findings))
+	for _, f := range findings {
+		if f.DeadLetterReason != "" {
+			continue
+		}
+		matches = append(matches, findingToMatch(f))
+	}
+	return &gen.TestDetectionRuleResult{
+		Matches:   matches,
+		Supported: true,
+		Reason:    nil,
+	}, nil
+}
+
+func (s *Service) testCustomRule(ruleID, pattern, text string) (*gen.TestDetectionRuleResult, error) {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return &gen.TestDetectionRuleResult{
+			Matches:   nil,
+			Supported: false,
+			Reason:    new("Custom rules require a regex pattern. Custom rules are stored client-side, so pass `regex` in the request body."),
+		}, nil
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid custom regex")
+	}
+	idxs := re.FindAllStringIndex(text, -1)
+	matches := make([]*gen.TestDetectionRuleMatch, 0, len(idxs))
+	for _, pair := range idxs {
+		matches = append(matches, &gen.TestDetectionRuleMatch{
+			RuleID:      ruleID,
+			Description: new("Custom regex match"),
+			Match:       text[pair[0]:pair[1]],
+			StartPos:    pair[0],
+			EndPos:      pair[1],
+			Source:      "custom",
+			Confidence:  1.0,
+			Tags:        nil,
+		})
+	}
+	return &gen.TestDetectionRuleResult{
+		Matches:   matches,
+		Supported: true,
+		Reason:    nil,
+	}, nil
+}
+
+func findingToMatch(f ra.Finding) *gen.TestDetectionRuleMatch {
+	return &gen.TestDetectionRuleMatch{
+		RuleID:      f.RuleID,
+		Description: new(f.Description),
+		Match:       f.Match,
+		StartPos:    f.StartPos,
+		EndPos:      f.EndPos,
+		Source:      f.Source,
+		Confidence:  f.Confidence,
+		Tags:        f.Tags,
+	}
 }
 
 // policyToType converts a database row to the API type, enriching it with
@@ -1410,46 +2183,79 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	}
 	pendingMessages := max(totalMessages-analyzedMessages, 0)
 
+	audiencePrincipalURNs, err := riskPolicyAudiencePrincipalURNs(ctx, s.db, row.OrganizationID, row.ID.String())
+	if err != nil {
+		return nil, fmt.Errorf("load risk policy audience: %w", err)
+	}
+
 	return &types.RiskPolicy{
-		ID:                   row.ID.String(),
-		ProjectID:            row.ProjectID.String(),
-		Name:                 row.Name,
-		Sources:              row.Sources,
-		PresidioEntities:     row.PresidioEntities,
-		PromptInjectionRules: row.PromptInjectionRules,
-		Enabled:              row.Enabled,
-		Action:               row.Action,
-		AutoName:             row.AutoName,
-		UserMessage:          conv.FromPGText[string](row.UserMessage),
-		Version:              row.Version,
-		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:      pendingMessages,
-		TotalMessages:        totalMessages,
+		ID:                    row.ID.String(),
+		ProjectID:             row.ProjectID.String(),
+		Name:                  row.Name,
+		PolicyType:            row.PolicyType,
+		Sources:               row.Sources,
+		PresidioEntities:      row.PresidioEntities,
+		PromptInjectionRules:  row.PromptInjectionRules,
+		DisabledRules:         row.DisabledRules,
+		CustomRuleIds:         row.CustomRuleIds,
+		MessageTypes:          row.MessageTypes,
+		Enabled:               row.Enabled,
+		Action:                row.Action,
+		AudienceType:          row.AudienceType,
+		AudiencePrincipalUrns: audiencePrincipalURNs,
+		AutoName:              row.AutoName,
+		UserMessage:           conv.FromPGText[string](row.UserMessage),
+		Prompt:                conv.FromPGText[string](row.Prompt),
+		ModelConfig:           unmarshalModelConfig(row.ModelConfig),
+		Version:               row.Version,
+		CreatedAt:             row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:             row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:       pendingMessages,
+		TotalMessages:         totalMessages,
 	}, nil
 }
 
-// policyRowSnapshot returns a *types.RiskPolicy suitable for audit log
-// snapshots. Unlike policyToType it skips the extra DB queries for message
-// counts, keeping transactions short. Count fields are set to -1 to indicate
-// they were not computed.
-func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
+func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []string) *types.RiskPolicy {
+	if audiencePrincipalURNs == nil {
+		audiencePrincipalURNs = []string{}
+	}
 	return &types.RiskPolicy{
-		ID:                   row.ID.String(),
-		ProjectID:            row.ProjectID.String(),
-		Name:                 row.Name,
-		Sources:              row.Sources,
-		PresidioEntities:     row.PresidioEntities,
-		PromptInjectionRules: row.PromptInjectionRules,
-		Enabled:              row.Enabled,
-		Action:               row.Action,
-		AutoName:             row.AutoName,
-		UserMessage:          conv.FromPGText[string](row.UserMessage),
-		Version:              row.Version,
-		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:      -1,
-		TotalMessages:        -1,
+		ID:                    row.ID.String(),
+		ProjectID:             row.ProjectID.String(),
+		Name:                  row.Name,
+		PolicyType:            row.PolicyType,
+		Sources:               row.Sources,
+		PresidioEntities:      row.PresidioEntities,
+		PromptInjectionRules:  row.PromptInjectionRules,
+		DisabledRules:         row.DisabledRules,
+		CustomRuleIds:         row.CustomRuleIds,
+		MessageTypes:          row.MessageTypes,
+		Enabled:               row.Enabled,
+		Action:                row.Action,
+		AudienceType:          row.AudienceType,
+		AudiencePrincipalUrns: audiencePrincipalURNs,
+		AutoName:              row.AutoName,
+		UserMessage:           conv.FromPGText[string](row.UserMessage),
+		Prompt:                conv.FromPGText[string](row.Prompt),
+		ModelConfig:           unmarshalModelConfig(row.ModelConfig),
+		Version:               row.Version,
+		CreatedAt:             row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:             row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:       -1,
+		TotalMessages:         -1,
+	}
+}
+
+func customDetectionRuleToType(row repo.RiskCustomDetectionRule) *types.RiskCustomDetectionRule {
+	return &types.RiskCustomDetectionRule{
+		ID:          row.ID.String(),
+		RuleID:      row.RuleID,
+		Title:       row.Title,
+		Description: row.Description,
+		Regex:       conv.PtrValOr(conv.FromPGText[string](row.Regex), ""),
+		Severity:    row.Severity,
+		CreatedAt:   row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:   row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 
@@ -1567,6 +2373,64 @@ func (s *Service) fallbackPolicyName(sources []string, action string) string {
 	return strings.Join(parts, " & ") + " " + actionLabel
 }
 
+func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID, prompt string, existingNames []string) string {
+	fallback := fallbackPromptPolicyName(prompt, existingNames)
+	if s.completionClient == nil {
+		return fallback
+	}
+
+	namePrompt := fmt.Sprintf(
+		"Generate a short, human-friendly name (2-5 words) for a prompt-based security policy.\n"+
+			"- Guardrail prompt: %q\n"+
+			"- Existing policy names to avoid: %v\n\n"+
+			"Return ONLY the name, no quotes or explanation. Make it descriptive and distinct from existing names. "+
+			"Name what the policy is trying to catch or prevent.",
+		prompt, existingNames,
+	)
+
+	// Tight timeout: this runs synchronously in the API request path. If
+	// OpenRouter is slow we fall back to a deterministic prompt-derived name.
+	nameCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	response, err := s.completionClient.GetCompletion(nameCtx, openrouter.CompletionRequest{
+		OrgID:     orgID,
+		ProjectID: projectID,
+		ChatID:    uuid.Nil,
+		Messages: []or.ChatMessages{
+			openrouter.CreateMessageUser(namePrompt),
+		},
+		Tools:                     nil,
+		Temperature:               nil,
+		Model:                     "",
+		Stream:                    false,
+		UsageSource:               billing.ModelUsageSourceGram,
+		UserID:                    "",
+		ExternalUserID:            "",
+		UserEmail:                 "",
+		HTTPMetadata:              nil,
+		APIKeyID:                  "",
+		JSONSchema:                nil,
+		Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
+		CacheControl:              nil,
+		NormalizeOutboundMessages: false,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to generate prompt policy name via OpenRouter", attr.SlogError(err))
+		return fallback
+	}
+	if response == nil || response.Message == nil {
+		return fallback
+	}
+
+	name := strings.TrimSpace(openrouter.GetText(*response.Message))
+	if name == "" {
+		return fallback
+	}
+
+	return promptPolicyNameFromBase(name, existingNames)
+}
+
 func validateAction(action string) error {
 	switch action {
 	case "flag", "block":
@@ -1609,6 +2473,163 @@ func validatePolicyName(name string) error {
 	return nil
 }
 
+// validatePolicyType ensures policy_type is one of the supported discriminators.
+func validatePolicyType(policyType string) error {
+	switch policyType {
+	case "standard", "prompt_based":
+		return nil
+	default:
+		return oops.E(oops.CodeInvalid, nil, "policy_type must be one of: standard, prompt_based")
+	}
+}
+
+func payloadHasPromptPolicyDetectionConfig(payload *gen.UpdateRiskPolicyPayload) bool {
+	return len(payload.Sources) > 0 ||
+		len(payload.PresidioEntities) > 0 ||
+		len(payload.PromptInjectionRules) > 0 ||
+		len(payload.DisabledRules) > 0 ||
+		len(payload.CustomRuleIds) > 0
+}
+
+func payloadHasCreatePromptPolicyDetectionConfig(payload *gen.CreateRiskPolicyPayload) bool {
+	return len(payload.Sources) > 0 ||
+		len(payload.PresidioEntities) > 0 ||
+		len(payload.PromptInjectionRules) > 0 ||
+		len(payload.DisabledRules) > 0 ||
+		len(payload.CustomRuleIds) > 0
+}
+
+func createPolicyDetectionField(policyType string, values []string) []string {
+	if policyType == "prompt_based" {
+		return nil
+	}
+	return values
+}
+
+// maxPromptPolicyPromptLength bounds the guardrail prompt a prompt_based policy
+// can carry. The judge prompt is operator-authored and short; the cap keeps
+// per-message judge calls bounded.
+const maxPromptPolicyPromptLength = 8000
+
+// validatePromptPolicyFields validates the prompt + model config supplied for a
+// prompt_based policy and returns the normalized prompt plus the JSON-encoded
+// model config (nil when none was supplied).
+func validatePromptPolicyFields(promptPtr *string, mc *types.RiskPolicyModelConfig) (string, []byte, error) {
+	prompt := strings.TrimSpace(conv.PtrValOr(promptPtr, ""))
+	if prompt == "" {
+		return "", nil, oops.E(oops.CodeInvalid, nil, "prompt is required for prompt-based policies")
+	}
+	if len([]rune(prompt)) > maxPromptPolicyPromptLength {
+		return "", nil, oops.E(oops.CodeInvalid, nil, "prompt must be at most %d characters", maxPromptPolicyPromptLength)
+	}
+	encoded, err := marshalModelConfig(mc)
+	if err != nil {
+		return "", nil, err
+	}
+	return prompt, encoded, nil
+}
+
+// promptModelConfig is the JSONB storage shape for a prompt_based policy's
+// model_config column. Stored with stable snake_case keys independent of the
+// generated API type.
+type promptModelConfig struct {
+	Model       *string  `json:"model,omitempty"`
+	Temperature *float64 `json:"temperature,omitempty"`
+	FailOpen    *bool    `json:"fail_open,omitempty"`
+}
+
+// marshalModelConfig encodes an API model config into the JSONB column value.
+// Returns nil (SQL NULL) when no config was supplied.
+func marshalModelConfig(mc *types.RiskPolicyModelConfig) ([]byte, error) {
+	if mc == nil {
+		return nil, nil
+	}
+	var model *string
+	if mc.Model != nil {
+		trimmed := strings.TrimSpace(*mc.Model)
+		if trimmed != "" {
+			model = &trimmed
+		}
+	}
+	raw, err := json.Marshal(promptModelConfig{
+		Model:       model,
+		Temperature: mc.Temperature,
+		FailOpen:    mc.FailOpen,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid model_config")
+	}
+	return raw, nil
+}
+
+// unmarshalModelConfig decodes the JSONB column value into the API model config.
+// Returns nil for NULL/empty or unparseable values so a malformed row never
+// breaks policy reads.
+func unmarshalModelConfig(raw []byte) *types.RiskPolicyModelConfig {
+	if len(raw) == 0 {
+		return nil
+	}
+	var mc promptModelConfig
+	if err := json.Unmarshal(raw, &mc); err != nil {
+		return nil
+	}
+	return &types.RiskPolicyModelConfig{
+		Model:       mc.Model,
+		Temperature: mc.Temperature,
+		FailOpen:    mc.FailOpen,
+	}
+}
+
+// fallbackPromptPolicyName derives a stable display name from the guardrail
+// prompt when the LLM namer is unavailable.
+func fallbackPromptPolicyName(prompt string, existing []string) string {
+	return promptPolicyNameFromBase(prompt, existing)
+}
+
+func promptPolicyNameFromBase(base string, existing []string) string {
+	base = strings.TrimSpace(strings.Join(strings.Fields(base), " "))
+	if len([]rune(base)) > 60 {
+		base = string([]rune(base)[:60])
+	}
+	if base == "" {
+		base = "Prompt Policy"
+	}
+
+	taken := make(map[string]struct{}, len(existing))
+	for _, n := range existing {
+		taken[n] = struct{}{}
+	}
+	if _, ok := taken[base]; !ok {
+		return base
+	}
+	for i := 2; ; i++ {
+		candidate := fmt.Sprintf("%s %d", base, i)
+		if _, ok := taken[candidate]; !ok {
+			return candidate
+		}
+	}
+}
+
+// promptPoliciesEnabled reports whether the prompt-based policy MVP is enabled
+// for the org. The flag is targeted by PostHog group (org/project slug) the
+// same way the dashboard evaluates it, so we forward the groups built from the
+// auth context. A nil provider or a failed lookup degrades to disabled.
+func (s *Service) promptPoliciesEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
+	if s.flags == nil {
+		return false
+	}
+	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
+	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, authCtx.ActiveOrganizationID, groups)
+	if err != nil {
+		s.logger.WarnContext(ctx, "prompt-policies flag check failed; treating as disabled",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		)
+		return false
+	}
+	return on
+}
+
 func foundRowToResult(
 	id, policyID uuid.UUID, policyVersion int64, chatMessageID uuid.UUID, chatID *string, chatTitle, chatUserID pgtype.Text,
 	source string, ruleID, description, match pgtype.Text,
@@ -1632,118 +2653,5 @@ func foundRowToResult(
 		Confidence:    conv.FromPGFloat8(confidence),
 		Tags:          tags,
 		CreatedAt:     createdAt.Time.Format(time.RFC3339),
-	}
-}
-
-// ensureApprovalPolicy validates the policy ID for an approval endpoint and
-// confirms the policy belongs to the active project. Returns the parsed
-// UUID on success.
-func (s *Service) ensureApprovalPolicy(ctx context.Context, authCtx *contextvalues.AuthContext, rawPolicyID string) (uuid.UUID, error) {
-	policyID, err := uuid.Parse(rawPolicyID)
-	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeInvalid, err, "invalid policy id")
-	}
-	if _, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
-		ID:        policyID,
-		ProjectID: *authCtx.ProjectID,
-	}); err != nil {
-		return uuid.Nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
-	}
-	return policyID, nil
-}
-
-func (s *Service) ListShadowMCPApprovals(ctx context.Context, payload *gen.ListShadowMCPApprovalsPayload) (*gen.ListShadowMCPApprovalsResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	policyID, err := s.ensureApprovalPolicy(ctx, authCtx, payload.PolicyID)
-	if err != nil {
-		return nil, err
-	}
-
-	rows, err := shadowmcp.ListShadowMCPApprovals(ctx, s.cache, authCtx.ProjectID.String(), policyID.String())
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list shadow-mcp approvals").Log(ctx, s.logger)
-	}
-
-	out := make([]*types.ShadowMCPApproval, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, shadowMCPApprovalToType(policyID, r))
-	}
-	return &gen.ListShadowMCPApprovalsResult{Approvals: out}, nil
-}
-
-func (s *Service) ApproveShadowMCP(ctx context.Context, payload *gen.ApproveShadowMCPPayload) (*types.ShadowMCPApproval, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	policyID, err := s.ensureApprovalPolicy(ctx, authCtx, payload.PolicyID)
-	if err != nil {
-		return nil, err
-	}
-
-	canonical := shadowmcp.CanonicalizeMatch(payload.Match)
-	if canonical == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "approval match is empty")
-	}
-
-	approval := shadowmcp.ShadowMCPApproval{
-		Match:      canonical,
-		ServerName: strings.TrimSpace(conv.PtrValOr(payload.ServerName, "")),
-		ApprovedBy: conv.PtrValOr(authCtx.Email, ""),
-		ApprovedAt: time.Now().UTC(),
-	}
-	if err := shadowmcp.AddShadowMCPApproval(ctx, s.cache, authCtx.ProjectID.String(), policyID.String(), approval); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "store shadow-mcp approval").Log(ctx, s.logger)
-	}
-	return shadowMCPApprovalToType(policyID, approval), nil
-}
-
-func (s *Service) RevokeShadowMCPApproval(ctx context.Context, payload *gen.RevokeShadowMCPApprovalPayload) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return err
-	}
-
-	policyID, err := s.ensureApprovalPolicy(ctx, authCtx, payload.PolicyID)
-	if err != nil {
-		return err
-	}
-
-	if err := shadowmcp.RemoveShadowMCPApproval(ctx, s.cache, authCtx.ProjectID.String(), policyID.String(), payload.Match); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "remove shadow-mcp approval").Log(ctx, s.logger)
-	}
-	return nil
-}
-
-func shadowMCPApprovalToType(policyID uuid.UUID, a shadowmcp.ShadowMCPApproval) *types.ShadowMCPApproval {
-	var serverName, approvedBy *string
-	if a.ServerName != "" {
-		s := a.ServerName
-		serverName = &s
-	}
-	if a.ApprovedBy != "" {
-		s := a.ApprovedBy
-		approvedBy = &s
-	}
-	return &types.ShadowMCPApproval{
-		PolicyID:   policyID.String(),
-		Match:      a.Match,
-		ServerName: serverName,
-		ApprovedBy: approvedBy,
-		ApprovedAt: a.ApprovedAt.UTC().Format(time.RFC3339),
 	}
 }

@@ -110,12 +110,12 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		ProjectID:             &projectID,
 		OrganizationSlug:      claims.OrganizationSlug,
 		ProjectSlug:           &claims.ProjectSlug,
-		UserID:                "",
+		UserID:                claims.UserID,
 		ExternalUserID:        externalUserID,
 		APIKeyID:              claims.APIKeyID,
-		SessionID:             nil, // DO NOT SET THIS for chat sessions. The existence of this field implies that this is a dashboard-authenticated request.
+		SessionID:             claims.SessionID, // When set, the authz engine loads and enforces RBAC grants for the user
 		Email:                 nil,
-		AccountType:           "",
+		AccountType:           claims.AccountType, // Required for RBAC enforcement (only "enterprise" accounts)
 		HasActiveSubscription: false,
 		Whitelisted:           false,
 		APIKeyScopes:          nil,

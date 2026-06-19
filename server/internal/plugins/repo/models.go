@@ -32,20 +32,22 @@ type PluginAssignment struct {
 }
 
 type PluginGithubConnection struct {
-	ID               uuid.UUID
-	ProjectID        uuid.UUID
-	InstallationID   int64
-	RepoOwner        string
-	RepoName         string
-	MarketplaceToken pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	InstallationID       int64
+	RepoOwner            string
+	RepoName             string
+	MarketplaceToken     pgtype.Text
+	PublishedFingerprint pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
 }
 
 type PluginServer struct {
 	ID          uuid.UUID
 	PluginID    uuid.UUID
-	ToolsetID   uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
 	DisplayName string
 	Policy      string
 	SortOrder   int32
@@ -53,4 +55,11 @@ type PluginServer struct {
 	UpdatedAt   pgtype.Timestamptz
 	DeletedAt   pgtype.Timestamptz
 	Deleted     bool
+}
+
+type ProjectMarketplaceSetting struct {
+	ProjectID       uuid.UUID
+	MarketplaceName pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }

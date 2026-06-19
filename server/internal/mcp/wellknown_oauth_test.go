@@ -97,9 +97,11 @@ func Test_writeOAuthProtectedResourceMetadataResponse_Success(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	metadata := &wellknown.OAuthProtectedResourceMetadata{
-		Resource:             "https://example.test/mcp/foo",
-		AuthorizationServers: []string{"https://example.test/oauth/foo"},
-		ScopesSupported:      []string{"offline_access"},
+		Resource:               "https://example.test/mcp/foo",
+		AuthorizationServers:   []string{"https://example.test/oauth/foo"},
+		ScopesSupported:        []string{"offline_access"},
+		BearerMethodsSupported: nil,
+		ResourceDocumentation:  "",
 	}
 
 	err := writeOAuthProtectedResourceMetadataResponse(t.Context(), logger, w, metadata)
@@ -110,4 +112,68 @@ func Test_writeOAuthProtectedResourceMetadataResponse_Success(t *testing.T) {
 	var got wellknown.OAuthProtectedResourceMetadata
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 	require.Equal(t, *metadata, got)
+}
+
+// Test_writeOAuthProtectedResourceMetadataResponse_OmitsOptionalFields locks
+// down the served wire shape against accidental expansion. Fields beyond the
+// minimum set required by existing server-side callers are tagged omitempty
+// on [wellknown.OAuthProtectedResourceMetadata]; if any of them stop being
+// omitempty, or new always-emitted fields are added, this test fails so the
+// change is made consciously.
+func Test_writeOAuthProtectedResourceMetadataResponse_OmitsOptionalFields(t *testing.T) {
+	t.Parallel()
+
+	logger := testenv.NewLogger(t)
+	w := httptest.NewRecorder()
+
+	metadata := &wellknown.OAuthProtectedResourceMetadata{
+		Resource:               "https://example.test/mcp/foo",
+		AuthorizationServers:   []string{"https://example.test/oauth/foo"},
+		ScopesSupported:        []string{"offline_access"},
+		BearerMethodsSupported: nil,
+		ResourceDocumentation:  "",
+	}
+
+	err := writeOAuthProtectedResourceMetadataResponse(t.Context(), logger, w, metadata)
+	require.NoError(t, err)
+
+	const expected = `{
+		"resource": "https://example.test/mcp/foo",
+		"authorization_servers": ["https://example.test/oauth/foo"],
+		"scopes_supported": ["offline_access"]
+	}`
+	require.JSONEq(t, expected, w.Body.String())
+	require.NotContains(t, w.Body.String(), "bearer_methods_supported")
+	require.NotContains(t, w.Body.String(), "resource_documentation")
+}
+
+// Test_writeOAuthProtectedResourceMetadataResponse_EmitsAllFields asserts that
+// every field on [wellknown.OAuthProtectedResourceMetadata] serializes under
+// its expected RFC 9728 JSON name when set. Pairs with the OmitsOptionalFields
+// test to lock the full wire shape.
+func Test_writeOAuthProtectedResourceMetadataResponse_EmitsAllFields(t *testing.T) {
+	t.Parallel()
+
+	logger := testenv.NewLogger(t)
+	w := httptest.NewRecorder()
+
+	metadata := &wellknown.OAuthProtectedResourceMetadata{
+		Resource:               "https://example.test/mcp/foo",
+		AuthorizationServers:   []string{"https://example.test/oauth/foo"},
+		ScopesSupported:        []string{"offline_access", "read"},
+		BearerMethodsSupported: []string{"header"},
+		ResourceDocumentation:  "https://docs.example.test",
+	}
+
+	err := writeOAuthProtectedResourceMetadataResponse(t.Context(), logger, w, metadata)
+	require.NoError(t, err)
+
+	const expected = `{
+		"resource": "https://example.test/mcp/foo",
+		"authorization_servers": ["https://example.test/oauth/foo"],
+		"scopes_supported": ["offline_access", "read"],
+		"bearer_methods_supported": ["header"],
+		"resource_documentation": "https://docs.example.test"
+	}`
+	require.JSONEq(t, expected, w.Body.String())
 }

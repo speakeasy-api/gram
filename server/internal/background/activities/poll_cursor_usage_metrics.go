@@ -37,7 +37,7 @@ func NewPollCursorUsageMetrics(
 ) *PollCursorUsageMetrics {
 	return &PollCursorUsageMetrics{
 		integrations: aiintegrations.NewStore(logger, db, encryptionClient),
-		usagePoller: aiintegrations.NewUsagePollService(db, telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
+		usagePoller: aiintegrations.NewUsagePollService(telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
 			activity.RecordHeartbeat(ctx, map[string]any{
 				"page": page,
 			})
@@ -66,7 +66,7 @@ func (p *PollCursorUsageMetrics) Do(ctx context.Context, configID string) (err e
 		recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
 
-		if recordErr := p.integrations.RecordUsagePollFailure(recordCtx, id, endTime, err); recordErr != nil {
+		if recordErr := p.integrations.RecordUsagePollFailure(recordCtx, id, aiintegrations.ProviderCursor, endTime, err); recordErr != nil {
 			err = errors.Join(err, fmt.Errorf("record usage poll failure: %w", recordErr))
 		}
 	}()
@@ -88,7 +88,7 @@ func (p *PollCursorUsageMetrics) Do(ctx context.Context, configID string) (err e
 		return oops.E(oops.CodeUnexpected, err, "fetch cursor usage window")
 	}
 
-	if err := p.integrations.RecordUsagePollSuccess(ctx, id, endTime); err != nil {
+	if err := p.integrations.RecordUsagePollSuccess(ctx, id, aiintegrations.ProviderCursor, endTime, cfg.LastCursor); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "record usage poll success")
 	}
 

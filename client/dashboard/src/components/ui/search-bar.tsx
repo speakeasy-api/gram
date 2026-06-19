@@ -14,7 +14,7 @@ export function SearchBar({
   placeholder?: string;
   className?: string;
   disabled?: boolean;
-}) {
+}): JSX.Element {
   return (
     <Stack
       direction="horizontal"
@@ -31,6 +31,17 @@ export function SearchBar({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          // Escape clears the search, matching the × button. Only when there
+          // is something to clear: stop propagation so this Escape only clears,
+          // then an empty box lets the next Escape bubble (e.g. to close a
+          // surrounding popover).
+          if (e.key === "Escape" && value) {
+            e.preventDefault();
+            e.stopPropagation();
+            onChange("");
+          }
+        }}
         disabled={disabled}
         className="min-w-0 flex-1 bg-transparent outline-none disabled:cursor-not-allowed"
       />

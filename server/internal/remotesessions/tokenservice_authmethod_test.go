@@ -99,7 +99,7 @@ func setupRefreshFixture(t *testing.T, authMethod string, spy *upstreamSpy) (con
 	authzEP := tokenServer.URL + "/authorize"
 	tokenEP := tokenServer.URL + "/token"
 	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         *authCtx.ProjectID,
+		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		Slug:                              "auth-method-" + strings.ReplaceAll(authMethod, "_", "-"),
 		Issuer:                            tokenServer.URL,
 		AuthorizationEndpoint:             conv.ToPGText(authzEP),
@@ -120,9 +120,9 @@ func setupRefreshFixture(t *testing.T, authMethod string, spy *upstreamSpy) (con
 	secretCiphertext, err := enc.Encrypt([]byte(clientSecret))
 	require.NoError(t, err)
 	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
-		ProjectID:               *authCtx.ProjectID,
+		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		RemoteSessionIssuerID:   issuer.ID,
-		UserSessionIssuerID:     userIssuer,
+		UserSessionIssuerID:     conv.ToNullUUID(userIssuer),
 		ClientID:                externalCID,
 		ClientSecretEncrypted:   conv.ToPGText(secretCiphertext),
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now()),

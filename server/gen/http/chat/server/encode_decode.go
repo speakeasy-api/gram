@@ -38,10 +38,109 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 	return func(r *http.Request) (*chat.ListChatsPayload, error) {
 		var payload *chat.ListChatsPayload
 		var (
+			search            *string
+			externalUserID    *string
+			assistantID       *string
+			hasRisk           *string
+			from              *string
+			to                *string
+			limit             int
+			offset            int
+			sortBy            string
+			sortOrder         string
 			sessionToken      *string
 			projectSlugInput  *string
 			chatSessionsToken *string
+			err               error
 		)
+		qp := r.URL.Query()
+		searchRaw := qp.Get("search")
+		if searchRaw != "" {
+			search = &searchRaw
+		}
+		externalUserIDRaw := qp.Get("external_user_id")
+		if externalUserIDRaw != "" {
+			externalUserID = &externalUserIDRaw
+		}
+		assistantIDRaw := qp.Get("assistant_id")
+		if assistantIDRaw != "" {
+			assistantID = &assistantIDRaw
+		}
+		if assistantID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", *assistantID, goa.FormatUUID))
+		}
+		hasRiskRaw := qp.Get("has_risk")
+		if hasRiskRaw != "" {
+			hasRisk = &hasRiskRaw
+		}
+		if hasRisk != nil {
+			if !(*hasRisk == "" || *hasRisk == "true" || *hasRisk == "false") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("has_risk", *hasRisk, []any{"", "true", "false"}))
+			}
+		}
+		fromRaw := qp.Get("from")
+		if fromRaw != "" {
+			from = &fromRaw
+		}
+		if from != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+		}
+		toRaw := qp.Get("to")
+		if toRaw != "" {
+			to = &toRaw
+		}
+		if to != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw == "" {
+				limit = 50
+			} else {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				limit = int(v)
+			}
+		}
+		if limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+		}
+		if limit > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+		}
+		{
+			offsetRaw := qp.Get("offset")
+			if offsetRaw != "" {
+				v, err2 := strconv.ParseInt(offsetRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("offset", offsetRaw, "integer"))
+				}
+				offset = int(v)
+			}
+		}
+		if offset < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("offset", offset, 0, true))
+		}
+		sortByRaw := qp.Get("sort_by")
+		if sortByRaw != "" {
+			sortBy = sortByRaw
+		} else {
+			sortBy = "last_message_timestamp"
+		}
+		if !(sortBy == "last_message_timestamp" || sortBy == "num_messages") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_by", sortBy, []any{"last_message_timestamp", "num_messages"}))
+		}
+		sortOrderRaw := qp.Get("sort_order")
+		if sortOrderRaw != "" {
+			sortOrder = sortOrderRaw
+		} else {
+			sortOrder = "desc"
+		}
+		if !(sortOrder == "asc" || sortOrder == "desc") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_order", sortOrder, []any{"asc", "desc"}))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -54,7 +153,10 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if chatSessionsTokenRaw != "" {
 			chatSessionsToken = &chatSessionsTokenRaw
 		}
-		payload = NewListChatsPayload(sessionToken, projectSlugInput, chatSessionsToken)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListChatsPayload(search, externalUserID, assistantID, hasRisk, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -911,330 +1013,6 @@ func EncodeCreditUsageError(encoder func(context.Context, http.ResponseWriter) g
 	}
 }
 
-// EncodeListChatsWithResolutionsResponse returns an encoder for responses
-// returned by the chat listChatsWithResolutions endpoint.
-func EncodeListChatsWithResolutionsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
-	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*chat.ListChatsWithResolutionsResult)
-		enc := encoder(ctx, w)
-		body := NewListChatsWithResolutionsResponseBody(res)
-		w.WriteHeader(http.StatusOK)
-		return enc.Encode(body)
-	}
-}
-
-// DecodeListChatsWithResolutionsRequest returns a decoder for requests sent to
-// the chat listChatsWithResolutions endpoint.
-func DecodeListChatsWithResolutionsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*chat.ListChatsWithResolutionsPayload, error) {
-	return func(r *http.Request) (*chat.ListChatsWithResolutionsPayload, error) {
-		var payload *chat.ListChatsWithResolutionsPayload
-		var (
-			search            *string
-			externalUserID    *string
-			assistantID       *string
-			resolutionStatus  *string
-			hasRisk           *string
-			from              *string
-			to                *string
-			limit             int
-			offset            int
-			sortBy            string
-			sortOrder         string
-			sessionToken      *string
-			projectSlugInput  *string
-			chatSessionsToken *string
-			err               error
-		)
-		qp := r.URL.Query()
-		searchRaw := qp.Get("search")
-		if searchRaw != "" {
-			search = &searchRaw
-		}
-		externalUserIDRaw := qp.Get("external_user_id")
-		if externalUserIDRaw != "" {
-			externalUserID = &externalUserIDRaw
-		}
-		assistantIDRaw := qp.Get("assistant_id")
-		if assistantIDRaw != "" {
-			assistantID = &assistantIDRaw
-		}
-		if assistantID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", *assistantID, goa.FormatUUID))
-		}
-		resolutionStatusRaw := qp.Get("resolution_status")
-		if resolutionStatusRaw != "" {
-			resolutionStatus = &resolutionStatusRaw
-		}
-		hasRiskRaw := qp.Get("has_risk")
-		if hasRiskRaw != "" {
-			hasRisk = &hasRiskRaw
-		}
-		if hasRisk != nil {
-			if !(*hasRisk == "" || *hasRisk == "true" || *hasRisk == "false") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("has_risk", *hasRisk, []any{"", "true", "false"}))
-			}
-		}
-		fromRaw := qp.Get("from")
-		if fromRaw != "" {
-			from = &fromRaw
-		}
-		if from != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
-		}
-		toRaw := qp.Get("to")
-		if toRaw != "" {
-			to = &toRaw
-		}
-		if to != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
-		}
-		{
-			limitRaw := qp.Get("limit")
-			if limitRaw == "" {
-				limit = 50
-			} else {
-				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
-				}
-				limit = int(v)
-			}
-		}
-		if limit < 1 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
-		}
-		if limit > 100 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
-		}
-		{
-			offsetRaw := qp.Get("offset")
-			if offsetRaw != "" {
-				v, err2 := strconv.ParseInt(offsetRaw, 10, strconv.IntSize)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("offset", offsetRaw, "integer"))
-				}
-				offset = int(v)
-			}
-		}
-		if offset < 0 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("offset", offset, 0, true))
-		}
-		sortByRaw := qp.Get("sort_by")
-		if sortByRaw != "" {
-			sortBy = sortByRaw
-		} else {
-			sortBy = "created_at"
-		}
-		if !(sortBy == "created_at" || sortBy == "num_messages" || sortBy == "score") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_by", sortBy, []any{"created_at", "num_messages", "score"}))
-		}
-		sortOrderRaw := qp.Get("sort_order")
-		if sortOrderRaw != "" {
-			sortOrder = sortOrderRaw
-		} else {
-			sortOrder = "desc"
-		}
-		if !(sortOrder == "asc" || sortOrder == "desc") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_order", sortOrder, []any{"asc", "desc"}))
-		}
-		sessionTokenRaw := r.Header.Get("Gram-Session")
-		if sessionTokenRaw != "" {
-			sessionToken = &sessionTokenRaw
-		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		chatSessionsTokenRaw := r.Header.Get("Gram-Chat-Session")
-		if chatSessionsTokenRaw != "" {
-			chatSessionsToken = &chatSessionsTokenRaw
-		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewListChatsWithResolutionsPayload(search, externalUserID, assistantID, resolutionStatus, hasRisk, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
-		if payload.SessionToken != nil {
-			if strings.Contains(*payload.SessionToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
-				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
-			}
-		}
-		if payload.ChatSessionsToken != nil {
-			if strings.Contains(*payload.ChatSessionsToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ChatSessionsToken, " ", 2)[1]
-				payload.ChatSessionsToken = &cred
-			}
-		}
-
-		return payload, nil
-	}
-}
-
-// EncodeListChatsWithResolutionsError returns an encoder for errors returned
-// by the listChatsWithResolutions chat endpoint.
-func EncodeListChatsWithResolutionsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
-	encodeError := goahttp.ErrorEncoder(encoder, formatter)
-	return func(ctx context.Context, w http.ResponseWriter, v error) error {
-		var en goa.GoaErrorNamer
-		if !errors.As(v, &en) {
-			return encodeError(ctx, w, v)
-		}
-		switch en.GoaErrorName() {
-		case "unauthorized":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListChatsWithResolutionsUnauthorizedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnauthorized)
-			return enc.Encode(body)
-		case "forbidden":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListChatsWithResolutionsForbiddenResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
-			return enc.Encode(body)
-		case "bad_request":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListChatsWithResolutionsBadRequestResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadRequest)
-			return enc.Encode(body)
-		case "not_found":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListChatsWithResolutionsNotFoundResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusNotFound)
-			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListChatsWithResolutionsConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "unsupported_media":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListChatsWithResolutionsUnsupportedMediaResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnsupportedMediaType)
-			return enc.Encode(body)
-		case "invalid":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListChatsWithResolutionsInvalidResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			return enc.Encode(body)
-		case "invariant_violation":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListChatsWithResolutionsInvariantViolationResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "unexpected":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListChatsWithResolutionsUnexpectedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "gateway_error":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListChatsWithResolutionsGatewayErrorResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadGateway)
-			return enc.Encode(body)
-		default:
-			return encodeError(ctx, w, v)
-		}
-	}
-}
-
 // EncodeDeleteChatResponse returns an encoder for responses returned by the
 // chat deleteChat endpoint.
 func EncodeDeleteChatResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -1717,6 +1495,7 @@ func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatM
 		ToolCallID:     v.ToolCallID,
 		ToolCalls:      v.ToolCalls,
 		FinishReason:   v.FinishReason,
+		PromptID:       v.PromptID,
 		UserID:         v.UserID,
 		ExternalUserID: v.ExternalUserID,
 		CreatedAt:      v.CreatedAt,
@@ -1726,60 +1505,103 @@ func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatM
 	return res
 }
 
-// marshalChatChatOverviewWithResolutionsToChatOverviewWithResolutionsResponseBody
-// builds a value of type *ChatOverviewWithResolutionsResponseBody from a value
-// of type *chat.ChatOverviewWithResolutions.
-func marshalChatChatOverviewWithResolutionsToChatOverviewWithResolutionsResponseBody(v *chat.ChatOverviewWithResolutions) *ChatOverviewWithResolutionsResponseBody {
-	res := &ChatOverviewWithResolutionsResponseBody{
-		ID:                   v.ID,
-		Title:                v.Title,
-		UserID:               v.UserID,
-		ExternalUserID:       v.ExternalUserID,
-		NumMessages:          v.NumMessages,
-		Source:               v.Source,
-		CreatedAt:            v.CreatedAt,
-		UpdatedAt:            v.UpdatedAt,
-		TotalInputTokens:     v.TotalInputTokens,
-		TotalOutputTokens:    v.TotalOutputTokens,
-		TotalTokens:          v.TotalTokens,
-		TotalCost:            v.TotalCost,
-		LastMessageTimestamp: v.LastMessageTimestamp,
-		RiskFindingsCount:    v.RiskFindingsCount,
+// marshalChatAgentUsageToAgentUsageResponseBody builds a value of type
+// *AgentUsageResponseBody from a value of type *chat.AgentUsage.
+func marshalChatAgentUsageToAgentUsageResponseBody(v *chat.AgentUsage) *AgentUsageResponseBody {
+	if v == nil {
+		return nil
 	}
-	if v.Resolutions != nil {
-		res.Resolutions = make([]*ChatResolutionResponseBody, len(v.Resolutions))
-		for i, val := range v.Resolutions {
-			if val == nil {
-				res.Resolutions[i] = nil
-				continue
-			}
-			res.Resolutions[i] = marshalChatChatResolutionToChatResolutionResponseBody(val)
-		}
-	} else {
-		res.Resolutions = []*ChatResolutionResponseBody{}
+	res := &AgentUsageResponseBody{
+		Type: v.Type,
+	}
+	if v.Claude != nil {
+		res.Claude = marshalChatClaudeAgentUsageToClaudeAgentUsageResponseBody(v.Claude)
 	}
 
 	return res
 }
 
-// marshalChatChatResolutionToChatResolutionResponseBody builds a value of type
-// *ChatResolutionResponseBody from a value of type *chat.ChatResolution.
-func marshalChatChatResolutionToChatResolutionResponseBody(v *chat.ChatResolution) *ChatResolutionResponseBody {
-	res := &ChatResolutionResponseBody{
-		ID:              v.ID,
-		UserGoal:        v.UserGoal,
-		Resolution:      v.Resolution,
-		ResolutionNotes: v.ResolutionNotes,
-		Score:           v.Score,
-		CreatedAt:       v.CreatedAt,
+// marshalChatClaudeAgentUsageToClaudeAgentUsageResponseBody builds a value of
+// type *ClaudeAgentUsageResponseBody from a value of type
+// *chat.ClaudeAgentUsage.
+func marshalChatClaudeAgentUsageToClaudeAgentUsageResponseBody(v *chat.ClaudeAgentUsage) *ClaudeAgentUsageResponseBody {
+	if v == nil {
+		return nil
 	}
-	if v.MessageIds != nil {
-		res.MessageIds = make([]string, len(v.MessageIds))
-		for i, val := range v.MessageIds {
-			res.MessageIds[i] = val
+	res := &ClaudeAgentUsageResponseBody{}
+	if v.Turns != nil {
+		res.Turns = make([]*ClaudeTurnUsageResponseBody, len(v.Turns))
+		for i, val := range v.Turns {
+			if val == nil {
+				res.Turns[i] = nil
+				continue
+			}
+			res.Turns[i] = marshalChatClaudeTurnUsageToClaudeTurnUsageResponseBody(val)
 		}
 	} else {
-		res.MessageIds = []string{}
+		res.Turns = []*ClaudeTurnUsageResponseBody{}
+	}
+	if v.Tools != nil {
+		res.Tools = make([]*ClaudeToolUsageResponseBody, len(v.Tools))
+		for i, val := range v.Tools {
+			if val == nil {
+				res.Tools[i] = nil
+				continue
+			}
+			res.Tools[i] = marshalChatClaudeToolUsageToClaudeToolUsageResponseBody(val)
+		}
+	} else {
+		res.Tools = []*ClaudeToolUsageResponseBody{}
+	}
+
+	return res
+}
+
+// marshalChatClaudeTurnUsageToClaudeTurnUsageResponseBody builds a value of
+// type *ClaudeTurnUsageResponseBody from a value of type *chat.ClaudeTurnUsage.
+func marshalChatClaudeTurnUsageToClaudeTurnUsageResponseBody(v *chat.ClaudeTurnUsage) *ClaudeTurnUsageResponseBody {
+	res := &ClaudeTurnUsageResponseBody{
+		PromptID:            v.PromptID,
+		StartTimeUnixNano:   v.StartTimeUnixNano,
+		EndTimeUnixNano:     v.EndTimeUnixNano,
+		RequestCount:        v.RequestCount,
+		InputTokens:         v.InputTokens,
+		OutputTokens:        v.OutputTokens,
+		CacheReadTokens:     v.CacheReadTokens,
+		CacheCreationTokens: v.CacheCreationTokens,
+		TotalTokens:         v.TotalTokens,
+		CostUsd:             v.CostUsd,
+		CostMicros:          v.CostMicros,
+	}
+	if v.Models != nil {
+		res.Models = make([]string, len(v.Models))
+		for i, val := range v.Models {
+			res.Models[i] = val
+		}
+	} else {
+		res.Models = []string{}
+	}
+	if v.QuerySources != nil {
+		res.QuerySources = make([]string, len(v.QuerySources))
+		for i, val := range v.QuerySources {
+			res.QuerySources[i] = val
+		}
+	} else {
+		res.QuerySources = []string{}
+	}
+
+	return res
+}
+
+// marshalChatClaudeToolUsageToClaudeToolUsageResponseBody builds a value of
+// type *ClaudeToolUsageResponseBody from a value of type *chat.ClaudeToolUsage.
+func marshalChatClaudeToolUsageToClaudeToolUsageResponseBody(v *chat.ClaudeToolUsage) *ClaudeToolUsageResponseBody {
+	res := &ClaudeToolUsageResponseBody{
+		ToolUseID:       v.ToolUseID,
+		PromptID:        v.PromptID,
+		ToolName:        v.ToolName,
+		InputSizeBytes:  v.InputSizeBytes,
+		ResultSizeBytes: v.ResultSizeBytes,
 	}
 
 	return res

@@ -23,7 +23,7 @@ import {
 import { ToolCollectionBadge } from "../tool-collection-badge";
 import { Badge } from "@speakeasy-api/moonshine";
 
-export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
+export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
   const { installPageUrl } = useMcpUrl(toolset);
@@ -48,7 +48,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
 
   const handleClick = () => {
     if (oauthStatus === "required-unconfigured") {
-      navigate(`${routes.mcp.details.href(toolset.slug)}#authentication`);
+      void navigate(`${routes.mcp.details.href(toolset.slug)}#authentication`);
     } else {
       routes.mcp.details.goTo(toolset.slug);
     }
@@ -57,6 +57,16 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   const installSourceTooltip = toolset.origin?.registrySpecifier
     ? `Installed from ${toolset.origin.registrySpecifier}`
     : undefined;
+
+  // External MCP "proxy" servers can't enumerate their tools until a user
+  // authenticates against them, so hide the misleading "No Tools" badge and
+  // surface the visible (non-proxy) tools only.
+  const visibleToolNames = toolset.tools
+    .filter((t) => !(t.type === "externalmcp" && t.name.endsWith(":proxy")))
+    .map((t) => t.name);
+  const isExternalMcpProxy = toolset.tools.some(
+    (t) => t.type === "externalmcp" && t.name.endsWith(":proxy"),
+  );
 
   return (
     <DotCard
@@ -117,7 +127,10 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
               <Package className="text-muted-foreground group-hover:text-foreground h-4 w-4" />
             </Button>
           )}
-          <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
+          <ToolCollectionBadge
+            toolNames={visibleToolNames}
+            emptyLabel={isExternalMcpProxy ? null : undefined}
+          />
         </div>
       </div>
 
@@ -143,7 +156,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
   );
 }
 
-export function MCPCardSkeleton() {
+export function MCPCardSkeleton(): JSX.Element {
   return (
     <DotCard>
       <div className="mb-2 flex items-start justify-between gap-2">

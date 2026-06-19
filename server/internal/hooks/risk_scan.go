@@ -3,20 +3,24 @@ package hooks
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
 
 // scanClaudeForEnforcement extracts the scannable text from a Claude hook
-// payload, resolves the project (session metadata wins; falls back to the
-// plugin-auth context populated by Gram-Key + Gram-Project headers), and
-// runs the risk scanner. Returns nil when the scanner is unavailable, the
-// project cannot be resolved, or no enforcing policy matches.
+// payload, resolves the project (plugin-auth context populated by Gram-Key +
+// Gram-Project wins; session metadata is the legacy fallback), and runs the
+// risk scanner. Returns nil when the scanner is unavailable, the project cannot
+// be resolved, or no enforcing policy matches.
 //
 // The authCtx fallback is critical for UserPromptSubmit on the very first
 // hook of a session: Claude Code's OTEL Logs exporter is async, so the
@@ -29,17 +33,35 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
-	text := extractClaudeText(payload)
-	if text == "" {
-		return nil
-	}
-
-	projectID, ok := s.resolveClaudeScanProjectID(ctx, *payload.SessionID)
+	hookEvent, ok := parseClaudeHookEvent(payload.HookEventName)
 	if !ok {
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, projectID, text)
+	text := extractClaudeText(payload, hookEvent)
+	// A no-arg/no-output tool call carries an empty body but still names a tool
+	// (+ MCP server/function) a tool-scoped prompt policy can match, so only skip
+	// when there is neither body nor tool attribution.
+	toolName := conv.PtrValOr(payload.ToolName, "")
+	if text == "" && toolName == "" {
+		return nil
+	}
+
+	scanContext, err := s.resolveClaudeScanContext(ctx, payload)
+	if err != nil {
+		s.logger.WarnContext(ctx, "could not resolve Claude risk scan context",
+			attr.SlogError(err),
+			attr.SlogEvent("risk_scan_context_error"),
+		)
+		return nil
+	}
+
+	messageType, ok := hookEventToMessageType(hookEvent)
+	if !ok {
+		return nil
+	}
+
+	result, err := s.riskScanner.ScanForEnforcement(ctx, scanContext.organizationID, scanContext.projectID, scanContext.userID, text, messageType, toolName)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Claude hook",
 			attr.SlogError(err),
@@ -51,35 +73,64 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 	return result
 }
 
-// resolveClaudeScanProjectID resolves the project_id used to scope a Claude
-// hook risk scan. Session metadata cached by the OTEL Logs endpoint wins;
-// the plugin-auth context populated by Gram-Key + Gram-Project headers is
-// the fallback. Returns ok=false when neither source yields a project_id.
-func (s *Service) resolveClaudeScanProjectID(ctx context.Context, sessionID string) (uuid.UUID, bool) {
-	metadata, err := s.getSessionMetadata(ctx, sessionID)
-	if err == nil {
-		pid, perr := uuid.Parse(metadata.ProjectID)
-		if perr == nil {
-			return pid, true
-		}
-		return uuid.Nil, false
+type claudeScanContext struct {
+	organizationID string
+	projectID      uuid.UUID
+	userID         string
+}
+
+// resolveClaudeScanContext resolves the org/project/user used to scope a Claude
+// hook risk scan. The plugin-auth context populated by Gram-Key + Gram-Project
+// wins when present. Session metadata cached by the OTEL Logs endpoint remains
+// the fallback for legacy hooks without plugin auth.
+func (s *Service) resolveClaudeScanContext(ctx context.Context, payload *gen.ClaudePayload) (claudeScanContext, error) {
+	if payload == nil {
+		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, errors.New("claude payload is nil")
 	}
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return uuid.Nil, false
+	if payload.SessionID == nil || *payload.SessionID == "" {
+		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, errors.New("claude payload missing session id")
 	}
-	return *authCtx.ProjectID, true
+	sessionID := *payload.SessionID
+	payloadUserEmail := ""
+	if payload.UserEmail != nil {
+		payloadUserEmail = *payload.UserEmail
+	}
+	metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, payloadUserEmail)
+	if err != nil {
+		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, fmt.Errorf("resolve claude session metadata: %w", err)
+	}
+	if strings.TrimSpace(metadata.UserEmail) == "" {
+		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, errors.New("claude session metadata missing user email")
+	}
+	projectID, err := uuid.Parse(metadata.ProjectID)
+	if err != nil {
+		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, fmt.Errorf("parse claude project id: %w", err)
+	}
+
+	return claudeScanContext{
+		organizationID: metadata.GramOrgID,
+		projectID:      projectID,
+		userID:         metadata.UserID,
+	}, nil
 }
 
 // scanCursorForEnforcement runs the risk scanner for a Cursor hook payload.
 // Unlike Claude, Cursor hooks are authenticated so the project ID is known.
-func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.CursorPayload, orgID, projectID string) *risk.ScanResult {
+func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.CursorPayload, orgID, projectID, userID string) *risk.ScanResult {
 	if s.riskScanner == nil {
 		return nil
 	}
 
-	text := extractCursorText(payload)
-	if text == "" {
+	hookEvent, ok := parseCursorHookEvent(payload.HookEventName)
+	if !ok {
+		return nil
+	}
+
+	text := extractCursorText(payload, hookEvent)
+	// Empty body + tool attribution still matters for tool-scoped policies; only
+	// skip when there is neither.
+	toolName := conv.PtrValOr(payload.ToolName, "")
+	if text == "" && toolName == "" {
 		return nil
 	}
 
@@ -88,7 +139,12 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text)
+	messageType, ok := hookEventToMessageType(hookEvent)
+	if !ok {
+		return nil
+	}
+
+	result, err := s.riskScanner.ScanForEnforcement(ctx, orgID, pid, userID, text, messageType, toolName)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Cursor hook",
 			attr.SlogError(err),
@@ -102,13 +158,21 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 
 // scanCodexForEnforcement runs the risk scanner for a Codex hook payload.
 // Like Cursor, Codex hooks are authenticated so the project ID is known.
-func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) *risk.ScanResult {
+func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.CodexPayload, orgID, projectID, userID string) *risk.ScanResult {
 	if s.riskScanner == nil {
 		return nil
 	}
 
-	text := extractCodexText(payload)
-	if text == "" {
+	hookEvent, ok := parseCodexHookEvent(payload.HookEventName)
+	if !ok {
+		return nil
+	}
+
+	text := extractCodexText(payload, hookEvent)
+	// Empty body + tool attribution still matters for tool-scoped policies; only
+	// skip when there is neither.
+	toolName := conv.PtrValOr(payload.ToolName, "")
+	if text == "" && toolName == "" {
 		return nil
 	}
 
@@ -117,7 +181,12 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text)
+	messageType, ok := hookEventToMessageType(hookEvent)
+	if !ok {
+		return nil
+	}
+
+	result, err := s.riskScanner.ScanForEnforcement(ctx, orgID, pid, userID, text, messageType, toolName)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Codex hook",
 			attr.SlogError(err),
@@ -127,6 +196,19 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 	}
 
 	return result
+}
+
+func hookEventToMessageType(hookEvent HookEvent) (message.Type, bool) {
+	switch hookEvent {
+	case HookEventUserPromptSubmit, HookEventBeforeSubmitPrompt:
+		return message.User, true
+	case HookEventPreToolUse, HookEventBeforeMCPExecution, HookEventPermissionRequest:
+		return message.ToolRequest, true
+	case HookEventPostToolUse:
+		return message.ToolResponse, true
+	default:
+		return "", false
+	}
 }
 
 // renderUserBlockReason returns the message shown to the agent when a tool
@@ -143,13 +225,13 @@ func renderUserBlockReason(userMessage *string, auditReason string) string {
 }
 
 // extractClaudeText returns the scannable text content from a Claude hook payload.
-func extractClaudeText(payload *gen.ClaudePayload) string {
-	switch payload.HookEventName {
-	case "UserPromptSubmit":
+func extractClaudeText(payload *gen.ClaudePayload, hookEvent HookEvent) string {
+	switch hookEvent {
+	case HookEventUserPromptSubmit:
 		if payload.Prompt != nil {
 			return *payload.Prompt
 		}
-	case "PreToolUse":
+	case HookEventPreToolUse:
 		if payload.ToolInput != nil {
 			b, err := json.Marshal(payload.ToolInput)
 			if err != nil {
@@ -157,7 +239,7 @@ func extractClaudeText(payload *gen.ClaudePayload) string {
 			}
 			return string(b)
 		}
-	case "PostToolUse":
+	case HookEventPostToolUse:
 		if payload.ToolResponse != nil {
 			b, err := json.Marshal(payload.ToolResponse)
 			if err != nil {
@@ -165,18 +247,20 @@ func extractClaudeText(payload *gen.ClaudePayload) string {
 			}
 			return string(b)
 		}
+	default:
+		return ""
 	}
 	return ""
 }
 
 // extractCursorText returns the scannable text content from a Cursor hook payload.
-func extractCursorText(payload *gen.CursorPayload) string {
-	switch payload.HookEventName {
-	case "beforeSubmitPrompt":
+func extractCursorText(payload *gen.CursorPayload, hookEvent HookEvent) string {
+	switch hookEvent {
+	case HookEventBeforeSubmitPrompt:
 		if payload.Prompt != nil {
 			return *payload.Prompt
 		}
-	case "preToolUse", "beforeMCPExecution":
+	case HookEventPreToolUse, HookEventBeforeMCPExecution:
 		if payload.ToolInput != nil {
 			b, err := json.Marshal(payload.ToolInput)
 			if err != nil {
@@ -184,18 +268,20 @@ func extractCursorText(payload *gen.CursorPayload) string {
 			}
 			return string(b)
 		}
+	default:
+		return ""
 	}
 	return ""
 }
 
 // extractCodexText returns the scannable text content from a Codex hook payload.
-func extractCodexText(payload *gen.CodexPayload) string {
-	switch payload.HookEventName {
-	case "UserPromptSubmit":
+func extractCodexText(payload *gen.CodexPayload, hookEvent HookEvent) string {
+	switch hookEvent {
+	case HookEventUserPromptSubmit:
 		if payload.Prompt != nil {
 			return *payload.Prompt
 		}
-	case "PreToolUse", "PermissionRequest":
+	case HookEventPreToolUse, HookEventPermissionRequest:
 		if payload.ToolInput != nil {
 			b, err := json.Marshal(payload.ToolInput)
 			if err != nil {
@@ -203,6 +289,8 @@ func extractCodexText(payload *gen.CodexPayload) string {
 			}
 			return string(b)
 		}
+	default:
+		return ""
 	}
 	return ""
 }

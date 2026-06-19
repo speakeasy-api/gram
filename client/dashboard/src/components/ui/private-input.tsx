@@ -20,7 +20,7 @@ export function PrivateInput({
   className,
   readOnly,
   disabled,
-}: PrivateInputProps) {
+}: PrivateInputProps): JSX.Element {
   const [isVisible, setIsVisible] = useState(false);
 
   return (

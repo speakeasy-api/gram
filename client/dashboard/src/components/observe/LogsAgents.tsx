@@ -1,43 +1,35 @@
-import { InsightsConfig } from "@/components/insights-sidebar";
+import { InsightsConfig } from "@/components/insights-dock";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
-import type { ChatOverviewWithResolutions } from "@gram/client/models/components";
+import type { ChatOverview } from "@gram/client/models/components";
 import {
   HasRisk,
   SortBy,
   SortOrder as ApiSortOrder,
-} from "@gram/client/models/operations/listchatswithresolutions";
+} from "@gram/client/models/operations/listchats";
 import {
-  useListChatsWithResolutions,
   useChatDeleteMutation,
-  invalidateAllListChatsWithResolutions,
+  invalidateAllListChats,
   useAssistantsGet,
+  useListChats,
 } from "@gram/client/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router";
-import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
-import { ChatLogsFilters } from "@/pages/chatLogs/ChatLogsFilters";
+import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { ChatLogsTable } from "@/pages/chatLogs/ChatLogsTable";
 import {
-  TimeRangePicker,
-  type DateRangePreset,
-  getPresetRange,
-} from "@gram-ai/elements";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { ArrowUpIcon, ArrowDownIcon } from "lucide-react";
+  defineFilters,
+  type FilterValue,
+  type OptionsById,
+} from "@/components/filters";
+import { Page } from "@/components/page-layout";
+import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
 import { isValidPreset } from "@/components/observe/observeFilterUtils";
 
 type SortField = "chronological" | "messageCount";
@@ -46,7 +38,7 @@ type SortOrder = "asc" | "desc";
 function toApiSortBy(field: SortField): SortBy {
   switch (field) {
     case "chronological":
-      return SortBy.CreatedAt;
+      return SortBy.LastMessageTimestamp;
     case "messageCount":
       return SortBy.NumMessages;
   }
@@ -69,14 +61,31 @@ function isUuid(value: string | null): value is string {
   return !!value && UUID_RE.test(value);
 }
 
-export function LogsAgentsContent() {
+const SESSION_FILTERS = defineFilters([
+  {
+    id: "date",
+    label: "Date range",
+    kind: "daterange",
+    pinned: true,
+    defaultPreset: "30d",
+  },
+  { id: "has_risk", label: "Risk", kind: "select", allLabel: "All" },
+]);
+
+const HAS_RISK_OPTIONS: OptionsById = {
+  has_risk: [
+    { value: "true", label: "With Risk" },
+    { value: "false", label: "No Risk" },
+  ],
+};
+
+export function LogsAgentsContent(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [offset, setOffset] = useState(0);
   const limit = 50;
 
-  const [cachedChat, setCachedChat] =
-    useState<ChatOverviewWithResolutions | null>(null);
+  const [cachedChat, setCachedChat] = useState<ChatOverview | null>(null);
 
   const mcpConfig = useObservabilityMcpConfig({
     toolsToInclude: [
@@ -106,7 +115,7 @@ export function LogsAgentsContent() {
             setCachedChat((current) =>
               current?.id === chatId ? null : current,
             );
-            invalidateAllListChatsWithResolutions(queryClient);
+            void invalidateAllListChats(queryClient);
           },
         },
       );
@@ -217,6 +226,12 @@ export function LogsAgentsContent() {
     [updateSearchParams],
   );
 
+  // Single setSearchParams so the synchronous clears don't clobber each other
+  // (react-router's setSearchParams reads a memoized snapshot).
+  const clearAllFilters = useCallback(() => {
+    updateSearchParams({ range: null, from: null, to: null, has_risk: null });
+  }, [updateSearchParams]);
+
   const clearAssistantFilter = useCallback(() => {
     updateSearchParams({ assistantId: null });
   }, [updateSearchParams]);
@@ -235,13 +250,9 @@ export function LogsAgentsContent() {
     [updateSearchParams],
   );
 
-  const toggleSortOrder = useCallback(() => {
-    setSortOrder(sortOrder === "desc" ? "asc" : "desc");
-  }, [sortOrder, setSortOrder]);
-
   const { data, isLoading, error, refetch, isLogsDisabled } =
     useLogsEnabledErrorCheck(
-      useListChatsWithResolutions(
+      useListChats(
         {
           search: searchQuery || undefined,
           hasRisk: toApiHasRisk(hasRisk),
@@ -267,7 +278,7 @@ export function LogsAgentsContent() {
   const hasMore =
     total > 0 ? offset + chats.length < total : chats.length === limit;
 
-  const selectedChat = useMemo<ChatOverviewWithResolutions | null>(() => {
+  const selectedChat = useMemo<ChatOverview | null>(() => {
     if (!urlChatId) return null;
     const fromList = chats.find((c) => c.id === urlChatId);
     if (fromList) return fromList;
@@ -287,7 +298,7 @@ export function LogsAgentsContent() {
   }, [urlChatId, chats, cachedChat]);
 
   const setSelectedChat = useCallback(
-    (chat: ChatOverviewWithResolutions | null) => {
+    (chat: ChatOverview | null) => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         if (chat) {
@@ -326,26 +337,7 @@ export function LogsAgentsContent() {
         subtitle="Search agent sessions, analyze failures, or explore logs"
         contextInfo={dateRangeContext}
         hideTrigger={isLogsDisabled}
-        suggestions={[
-          {
-            title: "Failed Chats",
-            label: "Analyze failed chats",
-            prompt:
-              "Show me recent agent sessions that failed. What patterns do you see in the failures?",
-          },
-          {
-            title: "Search Logs",
-            label: "Search raw logs",
-            prompt:
-              "Search the raw telemetry logs for errors or warnings in the current period",
-          },
-          {
-            title: "Debug Session",
-            label: "Debug a specific chat",
-            prompt:
-              "Help me debug an agent session. Search both the chat data and raw logs to understand what happened.",
-          },
-        ]}
+        suggestions={INSIGHTS_SUGGESTIONS["agent-sessions"]}
       />
       <AgentSessionsPageContent
         dateRange={dateRange}
@@ -357,20 +349,21 @@ export function LogsAgentsContent() {
         setSearchQuery={setSearchQuery}
         hasRisk={hasRisk}
         setHasRisk={setHasRisk}
+        clearAllFilters={clearAllFilters}
         assistantName={filteredAssistant?.name ?? null}
         hasAssistantFilter={!!assistantId}
         clearAssistantFilter={clearAssistantFilter}
         sortField={sortField}
         setSortField={setSortField}
         sortOrder={sortOrder}
-        toggleSortOrder={toggleSortOrder}
+        setSortOrder={setSortOrder}
         chats={chats}
         selectedChat={selectedChat}
         setSelectedChat={setSelectedChat}
         isLoading={isLoading}
         error={error}
         isLogsDisabled={isLogsDisabled}
-        onLogsEnabled={refetch}
+        onLogsEnabled={() => void refetch()}
         hasMore={hasMore}
         offset={offset}
         setOffset={setOffset}
@@ -392,13 +385,14 @@ function AgentSessionsPageContent({
   setSearchQuery,
   hasRisk,
   setHasRisk,
+  clearAllFilters,
   assistantName,
   hasAssistantFilter,
   clearAssistantFilter,
   sortField,
   setSortField,
   sortOrder,
-  toggleSortOrder,
+  setSortOrder,
   chats,
   selectedChat,
   setSelectedChat,
@@ -422,16 +416,17 @@ function AgentSessionsPageContent({
   setSearchQuery: (value: string) => void;
   hasRisk: string;
   setHasRisk: (value: string) => void;
+  clearAllFilters: () => void;
   assistantName: string | null;
   hasAssistantFilter: boolean;
   clearAssistantFilter: () => void;
   sortField: SortField;
   setSortField: (value: SortField) => void;
   sortOrder: SortOrder;
-  toggleSortOrder: () => void;
-  chats: ChatOverviewWithResolutions[];
-  selectedChat: ChatOverviewWithResolutions | null;
-  setSelectedChat: (chat: ChatOverviewWithResolutions | null) => void;
+  setSortOrder: (value: SortOrder) => void;
+  chats: ChatOverview[];
+  selectedChat: ChatOverview | null;
+  setSelectedChat: (chat: ChatOverview | null) => void;
   isLoading: boolean;
   error: Error | null;
   isLogsDisabled: boolean;
@@ -499,67 +494,64 @@ function AgentSessionsPageContent({
               </button>
             </Badge>
           )}
-          <div className="flex items-center gap-3">
-            <ChatLogsFilters
-              searchQuery={searchQuery}
-              onSearchQueryChange={setSearchQuery}
-              hasRisk={hasRisk}
-              onHasRiskChange={setHasRisk}
+          <Page.Toolbar>
+            <Page.Toolbar.Search
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search by chat ID, user ID, or title..."
+              debounceMs={500}
             />
-            <div className="ml-auto flex shrink-0 items-center gap-3">
-              <div className="border-border flex h-10 items-center rounded-md border">
-                <span className="text-muted-foreground px-3 text-sm font-medium">
-                  Sort
-                </span>
-                <div className="bg-border h-5 w-px" />
-                <Select
-                  value={sortField}
-                  onValueChange={(v) => setSortField(v as SortField)}
-                >
-                  <SelectTrigger className="h-full min-w-[100px] rounded-none border-0 shadow-none">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="w-[280px]">
-                    <SelectItem
-                      value="chronological"
-                      description="Sort by when the chat was created"
-                    >
-                      Date
-                    </SelectItem>
-                    <SelectItem
-                      value="messageCount"
-                      description="Sort by number of messages in the chat"
-                    >
-                      Messages
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <div className="bg-border h-5 w-px" />
-                <div className="flex items-center px-1.5">
-                  <SimpleTooltip tooltip="Sort direction">
-                    <button
-                      type="button"
-                      onClick={toggleSortOrder}
-                      className="text-muted-foreground hover:text-foreground hover:bg-accent flex size-7 items-center justify-center rounded transition-colors"
-                    >
-                      {sortOrder === "desc" ? (
-                        <ArrowDownIcon className="size-4" />
-                      ) : (
-                        <ArrowUpIcon className="size-4" />
-                      )}
-                    </button>
-                  </SimpleTooltip>
-                </div>
-              </div>
-              <TimeRangePicker
-                preset={customRange ? null : dateRange}
-                customRange={customRange}
-                onPresetChange={setDateRangeParam}
-                onCustomRangeChange={setCustomRangeParam}
-                onClearCustomRange={clearCustomRange}
-              />
-            </div>
-          </div>
+            <Page.Toolbar.Filters
+              schema={SESSION_FILTERS}
+              values={{
+                date: {
+                  preset: customRange ? null : dateRange,
+                  customRange,
+                  customLabel: null,
+                },
+                has_risk: hasRisk || null,
+              }}
+              optionsById={HAS_RISK_OPTIONS}
+              onChange={(id: string, value: FilterValue) => {
+                if (id === "date") {
+                  const dateValue = value as {
+                    preset: DateRangePreset | null;
+                    customRange: { from: Date; to: Date } | null;
+                  };
+                  if (dateValue.customRange) {
+                    setCustomRangeParam(
+                      dateValue.customRange.from,
+                      dateValue.customRange.to,
+                    );
+                  } else if (dateValue.preset) {
+                    setDateRangeParam(dateValue.preset);
+                  } else {
+                    clearCustomRange();
+                  }
+                } else if (id === "has_risk") {
+                  setHasRisk((value as string | null) ?? "");
+                }
+              }}
+              onClear={(id: string) => {
+                if (id === "date") {
+                  setDateRangeParam("30d");
+                } else if (id === "has_risk") {
+                  setHasRisk("");
+                }
+              }}
+              onClearAll={clearAllFilters}
+            />
+            <Page.Toolbar.SortBy
+              value={sortField}
+              onChange={(v) => setSortField(v as SortField)}
+              options={[
+                { value: "chronological", label: "Date" },
+                { value: "messageCount", label: "Message Count" },
+              ]}
+              direction={sortOrder}
+              onDirectionChange={setSortOrder}
+            />
+          </Page.Toolbar>
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden border-t">
@@ -598,21 +590,11 @@ function AgentSessionsPageContent({
         </div>
       </div>
 
-      <Drawer
-        open={!!selectedChat}
-        onOpenChange={(open) => !open && setSelectedChat(null)}
-        direction="right"
-      >
-        <DrawerContent className="w-[720px]! sm:max-w-[720px]!">
-          {selectedChat && (
-            <ChatDetailPanel
-              chatId={selectedChat.id}
-              onClose={() => setSelectedChat(null)}
-              onDelete={onDeleteChat}
-            />
-          )}
-        </DrawerContent>
-      </Drawer>
+      <ChatDetailSheet
+        chatId={selectedChat?.id ?? null}
+        onClose={() => setSelectedChat(null)}
+        onDelete={onDeleteChat}
+      />
     </>
   );
 }

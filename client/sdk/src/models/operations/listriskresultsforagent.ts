@@ -38,6 +38,10 @@ export type ListRiskResultsForAgentRequest = {
    */
   ruleId?: string | undefined;
   /**
+   * Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).
+   */
+  userId?: string | undefined;
+  /**
    * If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.
    */
   uniqueMatch?: boolean | undefined;
@@ -184,6 +188,7 @@ export type ListRiskResultsForAgentRequest$Outbound = {
   chat_id?: string | undefined;
   category?: string | undefined;
   rule_id?: string | undefined;
+  user_id?: string | undefined;
   unique_match?: boolean | undefined;
   from?: string | undefined;
   to?: string | undefined;
@@ -204,6 +209,7 @@ export const ListRiskResultsForAgentRequest$outboundSchema: z.ZodMiniType<
     chatId: z.optional(z.string()),
     category: z.optional(z.string()),
     ruleId: z.optional(z.string()),
+    userId: z.optional(z.string()),
     uniqueMatch: z.optional(z.boolean()),
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
@@ -218,6 +224,7 @@ export const ListRiskResultsForAgentRequest$outboundSchema: z.ZodMiniType<
       policyId: "policy_id",
       chatId: "chat_id",
       ruleId: "rule_id",
+      userId: "user_id",
       uniqueMatch: "unique_match",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",

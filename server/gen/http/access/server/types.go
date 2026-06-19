@@ -34,8 +34,10 @@ type UpdateRoleRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Updated description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Updated scope grants.
-	Grants []*RoleGrantRequestBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
+	// Scope grants to add.
+	AddGrants []*RoleGrantRequestBody `form:"add_grants,omitempty" json:"add_grants,omitempty" xml:"add_grants,omitempty"`
+	// Scope grants to remove.
+	RemoveGrants []*RoleGrantRequestBody `form:"remove_grants,omitempty" json:"remove_grants,omitempty" xml:"remove_grants,omitempty"`
 	// Optional member IDs to additionally assign to this role. Existing
 	// assignments are preserved.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
@@ -48,6 +50,81 @@ type UpdateMemberRolesRequestBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The role IDs to assign. Replaces all existing role assignments.
 	RoleIds []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
+}
+
+// CreateShadowMCPApprovalRequestRequestBody is the type of the "access"
+// service "createShadowMCPApprovalRequest" endpoint HTTP request body.
+type CreateShadowMCPApprovalRequestRequestBody struct {
+	// Signed token from the Shadow MCP block response.
+	RequestToken *string `form:"request_token,omitempty" json:"request_token,omitempty" xml:"request_token,omitempty"`
+}
+
+// ApproveShadowMCPApprovalRequestRequestBody is the type of the "access"
+// service "approveShadowMCPApprovalRequest" endpoint HTTP request body.
+type ApproveShadowMCPApprovalRequestRequestBody struct {
+	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	AccessScope *string `form:"access_scope,omitempty" json:"access_scope,omitempty" xml:"access_scope,omitempty"`
+	// Project ids to create project-scoped rules for. Empty falls back to the
+	// request project.
+	ProjectIds             []string `form:"project_ids,omitempty" json:"project_ids,omitempty" xml:"project_ids,omitempty"`
+	MatchBreadth           *string  `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
+	MatchValue             *string  `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
+	DisplayName            *string  `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
+// DenyShadowMCPApprovalRequestRequestBody is the type of the "access" service
+// "denyShadowMCPApprovalRequest" endpoint HTTP request body.
+type DenyShadowMCPApprovalRequestRequestBody struct {
+	ID             *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	CreateDenyRule *bool   `form:"create_deny_rule,omitempty" json:"create_deny_rule,omitempty" xml:"create_deny_rule,omitempty"`
+	// Project ids to create project-scoped deny rules for. Empty falls back to the
+	// request project.
+	ProjectIds             []string `form:"project_ids,omitempty" json:"project_ids,omitempty" xml:"project_ids,omitempty"`
+	MatchBreadth           *string  `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
+	MatchValue             *string  `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
+	DisplayName            *string  `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
+// CreateShadowMCPAccessRuleRequestBody is the type of the "access" service
+// "createShadowMCPAccessRule" endpoint HTTP request body.
+type CreateShadowMCPAccessRuleRequestBody struct {
+	// Project ids to create project-scoped rules for. Empty uses project_id for
+	// single-rule creation.
+	ProjectIds             []string `form:"project_ids,omitempty" json:"project_ids,omitempty" xml:"project_ids,omitempty"`
+	Disposition            *string  `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
+	AccessScope            *string  `form:"access_scope,omitempty" json:"access_scope,omitempty" xml:"access_scope,omitempty"`
+	ProjectID              *string  `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	MatchBreadth           *string  `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
+	MatchValue             *string  `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
+	DisplayName            *string  `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
+// UpdateShadowMCPAccessRuleRequestBody is the type of the "access" service
+// "updateShadowMCPAccessRule" endpoint HTTP request body.
+type UpdateShadowMCPAccessRuleRequestBody struct {
+	ID                     *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Disposition            *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
+	AccessScope            *string `form:"access_scope,omitempty" json:"access_scope,omitempty" xml:"access_scope,omitempty"`
+	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	MatchBreadth           *string `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
+	MatchValue             *string `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
+	DisplayName            *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
 // ResolveChallengeRequestBody is the type of the "access" service
@@ -81,6 +158,8 @@ type ListRolesResponseBody struct {
 type GetRoleResponseBody struct {
 	// Unique role identifier.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this role.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Stable WorkOS role slug.
@@ -102,6 +181,8 @@ type GetRoleResponseBody struct {
 type CreateRoleResponseBody struct {
 	// Unique role identifier.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this role.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Stable WorkOS role slug.
@@ -123,6 +204,8 @@ type CreateRoleResponseBody struct {
 type UpdateRoleResponseBody struct {
 	// Unique role identifier.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this role.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Stable WorkOS role slug.
@@ -165,6 +248,8 @@ type ListGrantsResponseBody struct {
 type UpdateMemberRolesResponseBody struct {
 	// User ID.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this member.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Email address.
@@ -175,6 +260,98 @@ type UpdateMemberRolesResponseBody struct {
 	RoleIds []string `form:"role_ids" json:"role_ids" xml:"role_ids"`
 	// When the member joined the organization.
 	JoinedAt string `form:"joined_at" json:"joined_at" xml:"joined_at"`
+}
+
+// ListShadowMCPApprovalRequestsResponseBody is the type of the "access"
+// service "listShadowMCPApprovalRequests" endpoint HTTP response body.
+type ListShadowMCPApprovalRequestsResponseBody struct {
+	Requests []*ShadowMCPApprovalRequestResponseBody `form:"requests" json:"requests" xml:"requests"`
+	// Cursor for the next page of results.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// CreateShadowMCPApprovalRequestResponseBody is the type of the "access"
+// service "createShadowMCPApprovalRequest" endpoint HTTP response body.
+type CreateShadowMCPApprovalRequestResponseBody struct {
+	ID                     string  `form:"id" json:"id" xml:"id"`
+	OrganizationID         string  `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID              string  `form:"project_id" json:"project_id" xml:"project_id"`
+	ResourceType           string  `form:"resource_type" json:"resource_type" xml:"resource_type"`
+	RequesterUserID        *string `form:"requester_user_id,omitempty" json:"requester_user_id,omitempty" xml:"requester_user_id,omitempty"`
+	RequesterEmail         *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
+	RequesterDisplayName   *string `form:"requester_display_name,omitempty" json:"requester_display_name,omitempty" xml:"requester_display_name,omitempty"`
+	Status                 string  `form:"status" json:"status" xml:"status"`
+	RiskPolicyID           *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	RiskResultID           *string `form:"risk_result_id,omitempty" json:"risk_result_id,omitempty" xml:"risk_result_id,omitempty"`
+	ObservedName           *string `form:"observed_name,omitempty" json:"observed_name,omitempty" xml:"observed_name,omitempty"`
+	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	ToolName               *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	ToolCall               *string `form:"tool_call,omitempty" json:"tool_call,omitempty" xml:"tool_call,omitempty"`
+	BlockReason            *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
+	BlockedCount           int     `form:"blocked_count" json:"blocked_count" xml:"blocked_count"`
+	FirstBlockedAt         *string `form:"first_blocked_at,omitempty" json:"first_blocked_at,omitempty" xml:"first_blocked_at,omitempty"`
+	LastBlockedAt          *string `form:"last_blocked_at,omitempty" json:"last_blocked_at,omitempty" xml:"last_blocked_at,omitempty"`
+	RequestedAt            string  `form:"requested_at" json:"requested_at" xml:"requested_at"`
+	DecidedAt              *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+	DecidedBy              *string `form:"decided_by,omitempty" json:"decided_by,omitempty" xml:"decided_by,omitempty"`
+	DecisionNote           *string `form:"decision_note,omitempty" json:"decision_note,omitempty" xml:"decision_note,omitempty"`
+	CreatedAt              string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt              string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ApproveShadowMCPApprovalRequestResponseBody is the type of the "access"
+// service "approveShadowMCPApprovalRequest" endpoint HTTP response body.
+type ApproveShadowMCPApprovalRequestResponseBody struct {
+	Request *ShadowMCPApprovalRequestResponseBody `form:"request" json:"request" xml:"request"`
+	Rule    *ShadowMCPAccessRuleResponseBody      `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
+	Rules   []*ShadowMCPAccessRuleResponseBody    `form:"rules" json:"rules" xml:"rules"`
+}
+
+// DenyShadowMCPApprovalRequestResponseBody is the type of the "access" service
+// "denyShadowMCPApprovalRequest" endpoint HTTP response body.
+type DenyShadowMCPApprovalRequestResponseBody struct {
+	Request *ShadowMCPApprovalRequestResponseBody `form:"request" json:"request" xml:"request"`
+	Rule    *ShadowMCPAccessRuleResponseBody      `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
+	Rules   []*ShadowMCPAccessRuleResponseBody    `form:"rules" json:"rules" xml:"rules"`
+}
+
+// ListShadowMCPAccessRulesResponseBody is the type of the "access" service
+// "listShadowMCPAccessRules" endpoint HTTP response body.
+type ListShadowMCPAccessRulesResponseBody struct {
+	Rules []*ShadowMCPAccessRuleResponseBody `form:"rules" json:"rules" xml:"rules"`
+	// Cursor for the next page of results.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// CreateShadowMCPAccessRuleResponseBody is the type of the "access" service
+// "createShadowMCPAccessRule" endpoint HTTP response body.
+type CreateShadowMCPAccessRuleResponseBody struct {
+	Rules []*ShadowMCPAccessRuleResponseBody `form:"rules" json:"rules" xml:"rules"`
+}
+
+// UpdateShadowMCPAccessRuleResponseBody is the type of the "access" service
+// "updateShadowMCPAccessRule" endpoint HTTP response body.
+type UpdateShadowMCPAccessRuleResponseBody struct {
+	ID                     string  `form:"id" json:"id" xml:"id"`
+	OrganizationID         string  `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	AccessScope            string  `form:"access_scope" json:"access_scope" xml:"access_scope"`
+	ResourceType           string  `form:"resource_type" json:"resource_type" xml:"resource_type"`
+	Disposition            string  `form:"disposition" json:"disposition" xml:"disposition"`
+	MatchBreadth           string  `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
+	MatchValue             string  `form:"match_value" json:"match_value" xml:"match_value"`
+	DisplayName            string  `form:"display_name" json:"display_name" xml:"display_name"`
+	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	SourceRequestID        *string `form:"source_request_id,omitempty" json:"source_request_id,omitempty" xml:"source_request_id,omitempty"`
+	CreatedBy              *string `form:"created_by,omitempty" json:"created_by,omitempty" xml:"created_by,omitempty"`
+	UpdatedBy              *string `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	CreatedAt              string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt              string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetRBACStatusResponseBody is the type of the "access" service
@@ -1834,6 +2011,1526 @@ type UpdateMemberRolesGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListShadowMCPApprovalRequestsUnauthorizedResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListShadowMCPApprovalRequestsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPApprovalRequestsForbiddenResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "forbidden" error.
+type ListShadowMCPApprovalRequestsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPApprovalRequestsBadRequestResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "bad_request" error.
+type ListShadowMCPApprovalRequestsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPApprovalRequestsNotFoundResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "not_found" error.
+type ListShadowMCPApprovalRequestsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPApprovalRequestsConflictResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "conflict" error.
+type ListShadowMCPApprovalRequestsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPApprovalRequestsUnsupportedMediaResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ListShadowMCPApprovalRequestsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPApprovalRequestsInvalidResponseBody is the type of the "access"
+// service "listShadowMCPApprovalRequests" endpoint HTTP response body for the
+// "invalid" error.
+type ListShadowMCPApprovalRequestsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPApprovalRequestsInvariantViolationResponseBody is the type of
+// the "access" service "listShadowMCPApprovalRequests" endpoint HTTP response
+// body for the "invariant_violation" error.
+type ListShadowMCPApprovalRequestsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPApprovalRequestsUnexpectedResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "unexpected" error.
+type ListShadowMCPApprovalRequestsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPApprovalRequestsGatewayErrorResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListShadowMCPApprovalRequestsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPApprovalRequestUnauthorizedResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "unauthorized" error.
+type CreateShadowMCPApprovalRequestUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPApprovalRequestForbiddenResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "forbidden" error.
+type CreateShadowMCPApprovalRequestForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPApprovalRequestBadRequestResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "bad_request" error.
+type CreateShadowMCPApprovalRequestBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPApprovalRequestNotFoundResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "not_found" error.
+type CreateShadowMCPApprovalRequestNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPApprovalRequestConflictResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "conflict" error.
+type CreateShadowMCPApprovalRequestConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPApprovalRequestUnsupportedMediaResponseBody is the type of
+// the "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "unsupported_media" error.
+type CreateShadowMCPApprovalRequestUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPApprovalRequestInvalidResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "invalid" error.
+type CreateShadowMCPApprovalRequestInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPApprovalRequestInvariantViolationResponseBody is the type of
+// the "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "invariant_violation" error.
+type CreateShadowMCPApprovalRequestInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPApprovalRequestUnexpectedResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "unexpected" error.
+type CreateShadowMCPApprovalRequestUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPApprovalRequestGatewayErrorResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "gateway_error" error.
+type CreateShadowMCPApprovalRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveShadowMCPApprovalRequestUnauthorizedResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "unauthorized" error.
+type ApproveShadowMCPApprovalRequestUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveShadowMCPApprovalRequestForbiddenResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "forbidden" error.
+type ApproveShadowMCPApprovalRequestForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveShadowMCPApprovalRequestBadRequestResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "bad_request" error.
+type ApproveShadowMCPApprovalRequestBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveShadowMCPApprovalRequestNotFoundResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "not_found" error.
+type ApproveShadowMCPApprovalRequestNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveShadowMCPApprovalRequestConflictResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "conflict" error.
+type ApproveShadowMCPApprovalRequestConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveShadowMCPApprovalRequestUnsupportedMediaResponseBody is the type of
+// the "access" service "approveShadowMCPApprovalRequest" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ApproveShadowMCPApprovalRequestUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveShadowMCPApprovalRequestInvalidResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "invalid" error.
+type ApproveShadowMCPApprovalRequestInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveShadowMCPApprovalRequestInvariantViolationResponseBody is the type of
+// the "access" service "approveShadowMCPApprovalRequest" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ApproveShadowMCPApprovalRequestInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveShadowMCPApprovalRequestUnexpectedResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "unexpected" error.
+type ApproveShadowMCPApprovalRequestUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApproveShadowMCPApprovalRequestGatewayErrorResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "gateway_error" error.
+type ApproveShadowMCPApprovalRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyShadowMCPApprovalRequestUnauthorizedResponseBody is the type of the
+// "access" service "denyShadowMCPApprovalRequest" endpoint HTTP response body
+// for the "unauthorized" error.
+type DenyShadowMCPApprovalRequestUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyShadowMCPApprovalRequestForbiddenResponseBody is the type of the
+// "access" service "denyShadowMCPApprovalRequest" endpoint HTTP response body
+// for the "forbidden" error.
+type DenyShadowMCPApprovalRequestForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyShadowMCPApprovalRequestBadRequestResponseBody is the type of the
+// "access" service "denyShadowMCPApprovalRequest" endpoint HTTP response body
+// for the "bad_request" error.
+type DenyShadowMCPApprovalRequestBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyShadowMCPApprovalRequestNotFoundResponseBody is the type of the "access"
+// service "denyShadowMCPApprovalRequest" endpoint HTTP response body for the
+// "not_found" error.
+type DenyShadowMCPApprovalRequestNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyShadowMCPApprovalRequestConflictResponseBody is the type of the "access"
+// service "denyShadowMCPApprovalRequest" endpoint HTTP response body for the
+// "conflict" error.
+type DenyShadowMCPApprovalRequestConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyShadowMCPApprovalRequestUnsupportedMediaResponseBody is the type of the
+// "access" service "denyShadowMCPApprovalRequest" endpoint HTTP response body
+// for the "unsupported_media" error.
+type DenyShadowMCPApprovalRequestUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyShadowMCPApprovalRequestInvalidResponseBody is the type of the "access"
+// service "denyShadowMCPApprovalRequest" endpoint HTTP response body for the
+// "invalid" error.
+type DenyShadowMCPApprovalRequestInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyShadowMCPApprovalRequestInvariantViolationResponseBody is the type of
+// the "access" service "denyShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "invariant_violation" error.
+type DenyShadowMCPApprovalRequestInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyShadowMCPApprovalRequestUnexpectedResponseBody is the type of the
+// "access" service "denyShadowMCPApprovalRequest" endpoint HTTP response body
+// for the "unexpected" error.
+type DenyShadowMCPApprovalRequestUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DenyShadowMCPApprovalRequestGatewayErrorResponseBody is the type of the
+// "access" service "denyShadowMCPApprovalRequest" endpoint HTTP response body
+// for the "gateway_error" error.
+type DenyShadowMCPApprovalRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPAccessRulesUnauthorizedResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListShadowMCPAccessRulesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPAccessRulesForbiddenResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "forbidden" error.
+type ListShadowMCPAccessRulesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPAccessRulesBadRequestResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "bad_request" error.
+type ListShadowMCPAccessRulesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPAccessRulesNotFoundResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "not_found" error.
+type ListShadowMCPAccessRulesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPAccessRulesConflictResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "conflict" error.
+type ListShadowMCPAccessRulesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPAccessRulesUnsupportedMediaResponseBody is the type of the
+// "access" service "listShadowMCPAccessRules" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListShadowMCPAccessRulesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPAccessRulesInvalidResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "invalid" error.
+type ListShadowMCPAccessRulesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPAccessRulesInvariantViolationResponseBody is the type of the
+// "access" service "listShadowMCPAccessRules" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListShadowMCPAccessRulesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPAccessRulesUnexpectedResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "unexpected" error.
+type ListShadowMCPAccessRulesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListShadowMCPAccessRulesGatewayErrorResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListShadowMCPAccessRulesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPAccessRuleUnauthorizedResponseBody is the type of the
+// "access" service "createShadowMCPAccessRule" endpoint HTTP response body for
+// the "unauthorized" error.
+type CreateShadowMCPAccessRuleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPAccessRuleForbiddenResponseBody is the type of the "access"
+// service "createShadowMCPAccessRule" endpoint HTTP response body for the
+// "forbidden" error.
+type CreateShadowMCPAccessRuleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPAccessRuleBadRequestResponseBody is the type of the "access"
+// service "createShadowMCPAccessRule" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateShadowMCPAccessRuleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPAccessRuleNotFoundResponseBody is the type of the "access"
+// service "createShadowMCPAccessRule" endpoint HTTP response body for the
+// "not_found" error.
+type CreateShadowMCPAccessRuleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPAccessRuleConflictResponseBody is the type of the "access"
+// service "createShadowMCPAccessRule" endpoint HTTP response body for the
+// "conflict" error.
+type CreateShadowMCPAccessRuleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPAccessRuleUnsupportedMediaResponseBody is the type of the
+// "access" service "createShadowMCPAccessRule" endpoint HTTP response body for
+// the "unsupported_media" error.
+type CreateShadowMCPAccessRuleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPAccessRuleInvalidResponseBody is the type of the "access"
+// service "createShadowMCPAccessRule" endpoint HTTP response body for the
+// "invalid" error.
+type CreateShadowMCPAccessRuleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPAccessRuleInvariantViolationResponseBody is the type of the
+// "access" service "createShadowMCPAccessRule" endpoint HTTP response body for
+// the "invariant_violation" error.
+type CreateShadowMCPAccessRuleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPAccessRuleUnexpectedResponseBody is the type of the "access"
+// service "createShadowMCPAccessRule" endpoint HTTP response body for the
+// "unexpected" error.
+type CreateShadowMCPAccessRuleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateShadowMCPAccessRuleGatewayErrorResponseBody is the type of the
+// "access" service "createShadowMCPAccessRule" endpoint HTTP response body for
+// the "gateway_error" error.
+type CreateShadowMCPAccessRuleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateShadowMCPAccessRuleUnauthorizedResponseBody is the type of the
+// "access" service "updateShadowMCPAccessRule" endpoint HTTP response body for
+// the "unauthorized" error.
+type UpdateShadowMCPAccessRuleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateShadowMCPAccessRuleForbiddenResponseBody is the type of the "access"
+// service "updateShadowMCPAccessRule" endpoint HTTP response body for the
+// "forbidden" error.
+type UpdateShadowMCPAccessRuleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateShadowMCPAccessRuleBadRequestResponseBody is the type of the "access"
+// service "updateShadowMCPAccessRule" endpoint HTTP response body for the
+// "bad_request" error.
+type UpdateShadowMCPAccessRuleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateShadowMCPAccessRuleNotFoundResponseBody is the type of the "access"
+// service "updateShadowMCPAccessRule" endpoint HTTP response body for the
+// "not_found" error.
+type UpdateShadowMCPAccessRuleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateShadowMCPAccessRuleConflictResponseBody is the type of the "access"
+// service "updateShadowMCPAccessRule" endpoint HTTP response body for the
+// "conflict" error.
+type UpdateShadowMCPAccessRuleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateShadowMCPAccessRuleUnsupportedMediaResponseBody is the type of the
+// "access" service "updateShadowMCPAccessRule" endpoint HTTP response body for
+// the "unsupported_media" error.
+type UpdateShadowMCPAccessRuleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateShadowMCPAccessRuleInvalidResponseBody is the type of the "access"
+// service "updateShadowMCPAccessRule" endpoint HTTP response body for the
+// "invalid" error.
+type UpdateShadowMCPAccessRuleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateShadowMCPAccessRuleInvariantViolationResponseBody is the type of the
+// "access" service "updateShadowMCPAccessRule" endpoint HTTP response body for
+// the "invariant_violation" error.
+type UpdateShadowMCPAccessRuleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateShadowMCPAccessRuleUnexpectedResponseBody is the type of the "access"
+// service "updateShadowMCPAccessRule" endpoint HTTP response body for the
+// "unexpected" error.
+type UpdateShadowMCPAccessRuleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateShadowMCPAccessRuleGatewayErrorResponseBody is the type of the
+// "access" service "updateShadowMCPAccessRule" endpoint HTTP response body for
+// the "gateway_error" error.
+type UpdateShadowMCPAccessRuleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPAccessRuleUnauthorizedResponseBody is the type of the
+// "access" service "deleteShadowMCPAccessRule" endpoint HTTP response body for
+// the "unauthorized" error.
+type DeleteShadowMCPAccessRuleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPAccessRuleForbiddenResponseBody is the type of the "access"
+// service "deleteShadowMCPAccessRule" endpoint HTTP response body for the
+// "forbidden" error.
+type DeleteShadowMCPAccessRuleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPAccessRuleBadRequestResponseBody is the type of the "access"
+// service "deleteShadowMCPAccessRule" endpoint HTTP response body for the
+// "bad_request" error.
+type DeleteShadowMCPAccessRuleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPAccessRuleNotFoundResponseBody is the type of the "access"
+// service "deleteShadowMCPAccessRule" endpoint HTTP response body for the
+// "not_found" error.
+type DeleteShadowMCPAccessRuleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPAccessRuleConflictResponseBody is the type of the "access"
+// service "deleteShadowMCPAccessRule" endpoint HTTP response body for the
+// "conflict" error.
+type DeleteShadowMCPAccessRuleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPAccessRuleUnsupportedMediaResponseBody is the type of the
+// "access" service "deleteShadowMCPAccessRule" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DeleteShadowMCPAccessRuleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPAccessRuleInvalidResponseBody is the type of the "access"
+// service "deleteShadowMCPAccessRule" endpoint HTTP response body for the
+// "invalid" error.
+type DeleteShadowMCPAccessRuleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPAccessRuleInvariantViolationResponseBody is the type of the
+// "access" service "deleteShadowMCPAccessRule" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DeleteShadowMCPAccessRuleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPAccessRuleUnexpectedResponseBody is the type of the "access"
+// service "deleteShadowMCPAccessRule" endpoint HTTP response body for the
+// "unexpected" error.
+type DeleteShadowMCPAccessRuleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteShadowMCPAccessRuleGatewayErrorResponseBody is the type of the
+// "access" service "deleteShadowMCPAccessRule" endpoint HTTP response body for
+// the "gateway_error" error.
+type DeleteShadowMCPAccessRuleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetRBACStatusUnauthorizedResponseBody is the type of the "access" service
 // "getRBACStatus" endpoint HTTP response body for the "unauthorized" error.
 type GetRBACStatusUnauthorizedResponseBody struct {
@@ -2932,6 +4629,8 @@ type ResolveChallengeGatewayErrorResponseBody struct {
 type RoleResponseBody struct {
 	// Unique role identifier.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this role.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Stable WorkOS role slug.
@@ -2972,6 +4671,9 @@ type SelectorResponseBody struct {
 	// Project filter (MCP scopes only). When set with resource_id='*', grants
 	// access to all servers in the project.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Server URL filter (risk policy scopes only). Include the URI scheme, for
+	// example https://api.example.com.
+	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
 }
 
 // ScopeDefinitionResponseBody is used to define fields on response body types.
@@ -2988,6 +4690,8 @@ type ScopeDefinitionResponseBody struct {
 type AccessMemberResponseBody struct {
 	// User ID.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this member.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Email address.
@@ -3011,6 +4715,60 @@ type ListRoleGrantResponseBody struct {
 	SubScopes []string `form:"sub_scopes,omitempty" json:"sub_scopes,omitempty" xml:"sub_scopes,omitempty"`
 	// Selector constraints. Null means unrestricted.
 	Selectors []*SelectorResponseBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
+}
+
+// ShadowMCPApprovalRequestResponseBody is used to define fields on response
+// body types.
+type ShadowMCPApprovalRequestResponseBody struct {
+	ID                     string  `form:"id" json:"id" xml:"id"`
+	OrganizationID         string  `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID              string  `form:"project_id" json:"project_id" xml:"project_id"`
+	ResourceType           string  `form:"resource_type" json:"resource_type" xml:"resource_type"`
+	RequesterUserID        *string `form:"requester_user_id,omitempty" json:"requester_user_id,omitempty" xml:"requester_user_id,omitempty"`
+	RequesterEmail         *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
+	RequesterDisplayName   *string `form:"requester_display_name,omitempty" json:"requester_display_name,omitempty" xml:"requester_display_name,omitempty"`
+	Status                 string  `form:"status" json:"status" xml:"status"`
+	RiskPolicyID           *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	RiskResultID           *string `form:"risk_result_id,omitempty" json:"risk_result_id,omitempty" xml:"risk_result_id,omitempty"`
+	ObservedName           *string `form:"observed_name,omitempty" json:"observed_name,omitempty" xml:"observed_name,omitempty"`
+	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	ToolName               *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	ToolCall               *string `form:"tool_call,omitempty" json:"tool_call,omitempty" xml:"tool_call,omitempty"`
+	BlockReason            *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
+	BlockedCount           int     `form:"blocked_count" json:"blocked_count" xml:"blocked_count"`
+	FirstBlockedAt         *string `form:"first_blocked_at,omitempty" json:"first_blocked_at,omitempty" xml:"first_blocked_at,omitempty"`
+	LastBlockedAt          *string `form:"last_blocked_at,omitempty" json:"last_blocked_at,omitempty" xml:"last_blocked_at,omitempty"`
+	RequestedAt            string  `form:"requested_at" json:"requested_at" xml:"requested_at"`
+	DecidedAt              *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+	DecidedBy              *string `form:"decided_by,omitempty" json:"decided_by,omitempty" xml:"decided_by,omitempty"`
+	DecisionNote           *string `form:"decision_note,omitempty" json:"decision_note,omitempty" xml:"decision_note,omitempty"`
+	CreatedAt              string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt              string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ShadowMCPAccessRuleResponseBody is used to define fields on response body
+// types.
+type ShadowMCPAccessRuleResponseBody struct {
+	ID                     string  `form:"id" json:"id" xml:"id"`
+	OrganizationID         string  `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	AccessScope            string  `form:"access_scope" json:"access_scope" xml:"access_scope"`
+	ResourceType           string  `form:"resource_type" json:"resource_type" xml:"resource_type"`
+	Disposition            string  `form:"disposition" json:"disposition" xml:"disposition"`
+	MatchBreadth           string  `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
+	MatchValue             string  `form:"match_value" json:"match_value" xml:"match_value"`
+	DisplayName            string  `form:"display_name" json:"display_name" xml:"display_name"`
+	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	SourceRequestID        *string `form:"source_request_id,omitempty" json:"source_request_id,omitempty" xml:"source_request_id,omitempty"`
+	CreatedBy              *string `form:"created_by,omitempty" json:"created_by,omitempty" xml:"created_by,omitempty"`
+	UpdatedBy              *string `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	CreatedAt              string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt              string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AuthzChallengeResponseBody is used to define fields on response body types.
@@ -3154,6 +4912,9 @@ type SelectorRequestBody struct {
 	// Project filter (MCP scopes only). When set with resource_id='*', grants
 	// access to all servers in the project.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Server URL filter (risk policy scopes only). Include the URI scheme, for
+	// example https://api.example.com.
+	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
 }
 
 // NewListRolesResponseBody builds the HTTP response body from the result of
@@ -3179,14 +4940,15 @@ func NewListRolesResponseBody(res *access.ListRolesResult) *ListRolesResponseBod
 // "getRole" endpoint of the "access" service.
 func NewGetRoleResponseBody(res *access.Role) *GetRoleResponseBody {
 	body := &GetRoleResponseBody{
-		ID:          res.ID,
-		Name:        res.Name,
-		Slug:        res.Slug,
-		Description: res.Description,
-		IsSystem:    res.IsSystem,
-		MemberCount: res.MemberCount,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
+		ID:           res.ID,
+		PrincipalUrn: res.PrincipalUrn,
+		Name:         res.Name,
+		Slug:         res.Slug,
+		Description:  res.Description,
+		IsSystem:     res.IsSystem,
+		MemberCount:  res.MemberCount,
+		CreatedAt:    res.CreatedAt,
+		UpdatedAt:    res.UpdatedAt,
 	}
 	if res.Grants != nil {
 		body.Grants = make([]*RoleGrantResponseBody, len(res.Grants))
@@ -3207,14 +4969,15 @@ func NewGetRoleResponseBody(res *access.Role) *GetRoleResponseBody {
 // the "createRole" endpoint of the "access" service.
 func NewCreateRoleResponseBody(res *access.Role) *CreateRoleResponseBody {
 	body := &CreateRoleResponseBody{
-		ID:          res.ID,
-		Name:        res.Name,
-		Slug:        res.Slug,
-		Description: res.Description,
-		IsSystem:    res.IsSystem,
-		MemberCount: res.MemberCount,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
+		ID:           res.ID,
+		PrincipalUrn: res.PrincipalUrn,
+		Name:         res.Name,
+		Slug:         res.Slug,
+		Description:  res.Description,
+		IsSystem:     res.IsSystem,
+		MemberCount:  res.MemberCount,
+		CreatedAt:    res.CreatedAt,
+		UpdatedAt:    res.UpdatedAt,
 	}
 	if res.Grants != nil {
 		body.Grants = make([]*RoleGrantResponseBody, len(res.Grants))
@@ -3235,14 +4998,15 @@ func NewCreateRoleResponseBody(res *access.Role) *CreateRoleResponseBody {
 // the "updateRole" endpoint of the "access" service.
 func NewUpdateRoleResponseBody(res *access.Role) *UpdateRoleResponseBody {
 	body := &UpdateRoleResponseBody{
-		ID:          res.ID,
-		Name:        res.Name,
-		Slug:        res.Slug,
-		Description: res.Description,
-		IsSystem:    res.IsSystem,
-		MemberCount: res.MemberCount,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
+		ID:           res.ID,
+		PrincipalUrn: res.PrincipalUrn,
+		Name:         res.Name,
+		Slug:         res.Slug,
+		Description:  res.Description,
+		IsSystem:     res.IsSystem,
+		MemberCount:  res.MemberCount,
+		CreatedAt:    res.CreatedAt,
+		UpdatedAt:    res.UpdatedAt,
 	}
 	if res.Grants != nil {
 		body.Grants = make([]*RoleGrantResponseBody, len(res.Grants))
@@ -3320,11 +5084,12 @@ func NewListGrantsResponseBody(res *access.ListUserGrantsResult) *ListGrantsResp
 // result of the "updateMemberRoles" endpoint of the "access" service.
 func NewUpdateMemberRolesResponseBody(res *access.AccessMember) *UpdateMemberRolesResponseBody {
 	body := &UpdateMemberRolesResponseBody{
-		ID:       res.ID,
-		Name:     res.Name,
-		Email:    res.Email,
-		PhotoURL: res.PhotoURL,
-		JoinedAt: res.JoinedAt,
+		ID:           res.ID,
+		PrincipalUrn: res.PrincipalUrn,
+		Name:         res.Name,
+		Email:        res.Email,
+		PhotoURL:     res.PhotoURL,
+		JoinedAt:     res.JoinedAt,
 	}
 	if res.RoleIds != nil {
 		body.RoleIds = make([]string, len(res.RoleIds))
@@ -3333,6 +5098,184 @@ func NewUpdateMemberRolesResponseBody(res *access.AccessMember) *UpdateMemberRol
 		}
 	} else {
 		body.RoleIds = []string{}
+	}
+	return body
+}
+
+// NewListShadowMCPApprovalRequestsResponseBody builds the HTTP response body
+// from the result of the "listShadowMCPApprovalRequests" endpoint of the
+// "access" service.
+func NewListShadowMCPApprovalRequestsResponseBody(res *access.ListShadowMCPApprovalRequestsResult) *ListShadowMCPApprovalRequestsResponseBody {
+	body := &ListShadowMCPApprovalRequestsResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Requests != nil {
+		body.Requests = make([]*ShadowMCPApprovalRequestResponseBody, len(res.Requests))
+		for i, val := range res.Requests {
+			if val == nil {
+				body.Requests[i] = nil
+				continue
+			}
+			body.Requests[i] = marshalAccessShadowMCPApprovalRequestToShadowMCPApprovalRequestResponseBody(val)
+		}
+	} else {
+		body.Requests = []*ShadowMCPApprovalRequestResponseBody{}
+	}
+	return body
+}
+
+// NewCreateShadowMCPApprovalRequestResponseBody builds the HTTP response body
+// from the result of the "createShadowMCPApprovalRequest" endpoint of the
+// "access" service.
+func NewCreateShadowMCPApprovalRequestResponseBody(res *access.ShadowMCPApprovalRequest) *CreateShadowMCPApprovalRequestResponseBody {
+	body := &CreateShadowMCPApprovalRequestResponseBody{
+		ID:                     res.ID,
+		OrganizationID:         res.OrganizationID,
+		ProjectID:              res.ProjectID,
+		ResourceType:           res.ResourceType,
+		RequesterUserID:        res.RequesterUserID,
+		RequesterEmail:         res.RequesterEmail,
+		RequesterDisplayName:   res.RequesterDisplayName,
+		Status:                 res.Status,
+		RiskPolicyID:           res.RiskPolicyID,
+		RiskResultID:           res.RiskResultID,
+		ObservedName:           res.ObservedName,
+		ObservedFullURL:        res.ObservedFullURL,
+		ObservedURLHost:        res.ObservedURLHost,
+		ObservedServerIdentity: res.ObservedServerIdentity,
+		ToolName:               res.ToolName,
+		ToolCall:               res.ToolCall,
+		BlockReason:            res.BlockReason,
+		BlockedCount:           res.BlockedCount,
+		FirstBlockedAt:         res.FirstBlockedAt,
+		LastBlockedAt:          res.LastBlockedAt,
+		RequestedAt:            res.RequestedAt,
+		DecidedAt:              res.DecidedAt,
+		DecidedBy:              res.DecidedBy,
+		DecisionNote:           res.DecisionNote,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
+	}
+	return body
+}
+
+// NewApproveShadowMCPApprovalRequestResponseBody builds the HTTP response body
+// from the result of the "approveShadowMCPApprovalRequest" endpoint of the
+// "access" service.
+func NewApproveShadowMCPApprovalRequestResponseBody(res *access.ShadowMCPApprovalDecisionResult) *ApproveShadowMCPApprovalRequestResponseBody {
+	body := &ApproveShadowMCPApprovalRequestResponseBody{}
+	if res.Request != nil {
+		body.Request = marshalAccessShadowMCPApprovalRequestToShadowMCPApprovalRequestResponseBody(res.Request)
+	}
+	if res.Rule != nil {
+		body.Rule = marshalAccessShadowMCPAccessRuleToShadowMCPAccessRuleResponseBody(res.Rule)
+	}
+	if res.Rules != nil {
+		body.Rules = make([]*ShadowMCPAccessRuleResponseBody, len(res.Rules))
+		for i, val := range res.Rules {
+			if val == nil {
+				body.Rules[i] = nil
+				continue
+			}
+			body.Rules[i] = marshalAccessShadowMCPAccessRuleToShadowMCPAccessRuleResponseBody(val)
+		}
+	} else {
+		body.Rules = []*ShadowMCPAccessRuleResponseBody{}
+	}
+	return body
+}
+
+// NewDenyShadowMCPApprovalRequestResponseBody builds the HTTP response body
+// from the result of the "denyShadowMCPApprovalRequest" endpoint of the
+// "access" service.
+func NewDenyShadowMCPApprovalRequestResponseBody(res *access.ShadowMCPApprovalDecisionResult) *DenyShadowMCPApprovalRequestResponseBody {
+	body := &DenyShadowMCPApprovalRequestResponseBody{}
+	if res.Request != nil {
+		body.Request = marshalAccessShadowMCPApprovalRequestToShadowMCPApprovalRequestResponseBody(res.Request)
+	}
+	if res.Rule != nil {
+		body.Rule = marshalAccessShadowMCPAccessRuleToShadowMCPAccessRuleResponseBody(res.Rule)
+	}
+	if res.Rules != nil {
+		body.Rules = make([]*ShadowMCPAccessRuleResponseBody, len(res.Rules))
+		for i, val := range res.Rules {
+			if val == nil {
+				body.Rules[i] = nil
+				continue
+			}
+			body.Rules[i] = marshalAccessShadowMCPAccessRuleToShadowMCPAccessRuleResponseBody(val)
+		}
+	} else {
+		body.Rules = []*ShadowMCPAccessRuleResponseBody{}
+	}
+	return body
+}
+
+// NewListShadowMCPAccessRulesResponseBody builds the HTTP response body from
+// the result of the "listShadowMCPAccessRules" endpoint of the "access"
+// service.
+func NewListShadowMCPAccessRulesResponseBody(res *access.ListShadowMCPAccessRulesResult) *ListShadowMCPAccessRulesResponseBody {
+	body := &ListShadowMCPAccessRulesResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Rules != nil {
+		body.Rules = make([]*ShadowMCPAccessRuleResponseBody, len(res.Rules))
+		for i, val := range res.Rules {
+			if val == nil {
+				body.Rules[i] = nil
+				continue
+			}
+			body.Rules[i] = marshalAccessShadowMCPAccessRuleToShadowMCPAccessRuleResponseBody(val)
+		}
+	} else {
+		body.Rules = []*ShadowMCPAccessRuleResponseBody{}
+	}
+	return body
+}
+
+// NewCreateShadowMCPAccessRuleResponseBody builds the HTTP response body from
+// the result of the "createShadowMCPAccessRule" endpoint of the "access"
+// service.
+func NewCreateShadowMCPAccessRuleResponseBody(res *access.CreateShadowMCPAccessRuleResult) *CreateShadowMCPAccessRuleResponseBody {
+	body := &CreateShadowMCPAccessRuleResponseBody{}
+	if res.Rules != nil {
+		body.Rules = make([]*ShadowMCPAccessRuleResponseBody, len(res.Rules))
+		for i, val := range res.Rules {
+			if val == nil {
+				body.Rules[i] = nil
+				continue
+			}
+			body.Rules[i] = marshalAccessShadowMCPAccessRuleToShadowMCPAccessRuleResponseBody(val)
+		}
+	} else {
+		body.Rules = []*ShadowMCPAccessRuleResponseBody{}
+	}
+	return body
+}
+
+// NewUpdateShadowMCPAccessRuleResponseBody builds the HTTP response body from
+// the result of the "updateShadowMCPAccessRule" endpoint of the "access"
+// service.
+func NewUpdateShadowMCPAccessRuleResponseBody(res *access.ShadowMCPAccessRule) *UpdateShadowMCPAccessRuleResponseBody {
+	body := &UpdateShadowMCPAccessRuleResponseBody{
+		ID:                     res.ID,
+		OrganizationID:         res.OrganizationID,
+		ProjectID:              res.ProjectID,
+		AccessScope:            res.AccessScope,
+		ResourceType:           res.ResourceType,
+		Disposition:            res.Disposition,
+		MatchBreadth:           res.MatchBreadth,
+		MatchValue:             res.MatchValue,
+		DisplayName:            res.DisplayName,
+		ObservedFullURL:        res.ObservedFullURL,
+		ObservedURLHost:        res.ObservedURLHost,
+		ObservedServerIdentity: res.ObservedServerIdentity,
+		SourceRequestID:        res.SourceRequestID,
+		CreatedBy:              res.CreatedBy,
+		UpdatedBy:              res.UpdatedBy,
+		Reason:                 res.Reason,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
 	}
 	return body
 }
@@ -4669,6 +6612,1206 @@ func NewUpdateMemberRolesGatewayErrorResponseBody(res *goa.ServiceError) *Update
 	return body
 }
 
+// NewListShadowMCPApprovalRequestsUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPApprovalRequests"
+// endpoint of the "access" service.
+func NewListShadowMCPApprovalRequestsUnauthorizedResponseBody(res *goa.ServiceError) *ListShadowMCPApprovalRequestsUnauthorizedResponseBody {
+	body := &ListShadowMCPApprovalRequestsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPApprovalRequestsForbiddenResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPApprovalRequests"
+// endpoint of the "access" service.
+func NewListShadowMCPApprovalRequestsForbiddenResponseBody(res *goa.ServiceError) *ListShadowMCPApprovalRequestsForbiddenResponseBody {
+	body := &ListShadowMCPApprovalRequestsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPApprovalRequestsBadRequestResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPApprovalRequests"
+// endpoint of the "access" service.
+func NewListShadowMCPApprovalRequestsBadRequestResponseBody(res *goa.ServiceError) *ListShadowMCPApprovalRequestsBadRequestResponseBody {
+	body := &ListShadowMCPApprovalRequestsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPApprovalRequestsNotFoundResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPApprovalRequests"
+// endpoint of the "access" service.
+func NewListShadowMCPApprovalRequestsNotFoundResponseBody(res *goa.ServiceError) *ListShadowMCPApprovalRequestsNotFoundResponseBody {
+	body := &ListShadowMCPApprovalRequestsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPApprovalRequestsConflictResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPApprovalRequests"
+// endpoint of the "access" service.
+func NewListShadowMCPApprovalRequestsConflictResponseBody(res *goa.ServiceError) *ListShadowMCPApprovalRequestsConflictResponseBody {
+	body := &ListShadowMCPApprovalRequestsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPApprovalRequestsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPApprovalRequests"
+// endpoint of the "access" service.
+func NewListShadowMCPApprovalRequestsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListShadowMCPApprovalRequestsUnsupportedMediaResponseBody {
+	body := &ListShadowMCPApprovalRequestsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPApprovalRequestsInvalidResponseBody builds the HTTP response
+// body from the result of the "listShadowMCPApprovalRequests" endpoint of the
+// "access" service.
+func NewListShadowMCPApprovalRequestsInvalidResponseBody(res *goa.ServiceError) *ListShadowMCPApprovalRequestsInvalidResponseBody {
+	body := &ListShadowMCPApprovalRequestsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPApprovalRequestsInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "listShadowMCPApprovalRequests"
+// endpoint of the "access" service.
+func NewListShadowMCPApprovalRequestsInvariantViolationResponseBody(res *goa.ServiceError) *ListShadowMCPApprovalRequestsInvariantViolationResponseBody {
+	body := &ListShadowMCPApprovalRequestsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPApprovalRequestsUnexpectedResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPApprovalRequests"
+// endpoint of the "access" service.
+func NewListShadowMCPApprovalRequestsUnexpectedResponseBody(res *goa.ServiceError) *ListShadowMCPApprovalRequestsUnexpectedResponseBody {
+	body := &ListShadowMCPApprovalRequestsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPApprovalRequestsGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPApprovalRequests"
+// endpoint of the "access" service.
+func NewListShadowMCPApprovalRequestsGatewayErrorResponseBody(res *goa.ServiceError) *ListShadowMCPApprovalRequestsGatewayErrorResponseBody {
+	body := &ListShadowMCPApprovalRequestsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPApprovalRequestUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "createShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewCreateShadowMCPApprovalRequestUnauthorizedResponseBody(res *goa.ServiceError) *CreateShadowMCPApprovalRequestUnauthorizedResponseBody {
+	body := &CreateShadowMCPApprovalRequestUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPApprovalRequestForbiddenResponseBody builds the HTTP
+// response body from the result of the "createShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewCreateShadowMCPApprovalRequestForbiddenResponseBody(res *goa.ServiceError) *CreateShadowMCPApprovalRequestForbiddenResponseBody {
+	body := &CreateShadowMCPApprovalRequestForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPApprovalRequestBadRequestResponseBody builds the HTTP
+// response body from the result of the "createShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewCreateShadowMCPApprovalRequestBadRequestResponseBody(res *goa.ServiceError) *CreateShadowMCPApprovalRequestBadRequestResponseBody {
+	body := &CreateShadowMCPApprovalRequestBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPApprovalRequestNotFoundResponseBody builds the HTTP
+// response body from the result of the "createShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewCreateShadowMCPApprovalRequestNotFoundResponseBody(res *goa.ServiceError) *CreateShadowMCPApprovalRequestNotFoundResponseBody {
+	body := &CreateShadowMCPApprovalRequestNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPApprovalRequestConflictResponseBody builds the HTTP
+// response body from the result of the "createShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewCreateShadowMCPApprovalRequestConflictResponseBody(res *goa.ServiceError) *CreateShadowMCPApprovalRequestConflictResponseBody {
+	body := &CreateShadowMCPApprovalRequestConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPApprovalRequestUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "createShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewCreateShadowMCPApprovalRequestUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateShadowMCPApprovalRequestUnsupportedMediaResponseBody {
+	body := &CreateShadowMCPApprovalRequestUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPApprovalRequestInvalidResponseBody builds the HTTP
+// response body from the result of the "createShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewCreateShadowMCPApprovalRequestInvalidResponseBody(res *goa.ServiceError) *CreateShadowMCPApprovalRequestInvalidResponseBody {
+	body := &CreateShadowMCPApprovalRequestInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPApprovalRequestInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "createShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewCreateShadowMCPApprovalRequestInvariantViolationResponseBody(res *goa.ServiceError) *CreateShadowMCPApprovalRequestInvariantViolationResponseBody {
+	body := &CreateShadowMCPApprovalRequestInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPApprovalRequestUnexpectedResponseBody builds the HTTP
+// response body from the result of the "createShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewCreateShadowMCPApprovalRequestUnexpectedResponseBody(res *goa.ServiceError) *CreateShadowMCPApprovalRequestUnexpectedResponseBody {
+	body := &CreateShadowMCPApprovalRequestUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPApprovalRequestGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "createShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewCreateShadowMCPApprovalRequestGatewayErrorResponseBody(res *goa.ServiceError) *CreateShadowMCPApprovalRequestGatewayErrorResponseBody {
+	body := &CreateShadowMCPApprovalRequestGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveShadowMCPApprovalRequestUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "approveShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewApproveShadowMCPApprovalRequestUnauthorizedResponseBody(res *goa.ServiceError) *ApproveShadowMCPApprovalRequestUnauthorizedResponseBody {
+	body := &ApproveShadowMCPApprovalRequestUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveShadowMCPApprovalRequestForbiddenResponseBody builds the HTTP
+// response body from the result of the "approveShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewApproveShadowMCPApprovalRequestForbiddenResponseBody(res *goa.ServiceError) *ApproveShadowMCPApprovalRequestForbiddenResponseBody {
+	body := &ApproveShadowMCPApprovalRequestForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveShadowMCPApprovalRequestBadRequestResponseBody builds the HTTP
+// response body from the result of the "approveShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewApproveShadowMCPApprovalRequestBadRequestResponseBody(res *goa.ServiceError) *ApproveShadowMCPApprovalRequestBadRequestResponseBody {
+	body := &ApproveShadowMCPApprovalRequestBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveShadowMCPApprovalRequestNotFoundResponseBody builds the HTTP
+// response body from the result of the "approveShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewApproveShadowMCPApprovalRequestNotFoundResponseBody(res *goa.ServiceError) *ApproveShadowMCPApprovalRequestNotFoundResponseBody {
+	body := &ApproveShadowMCPApprovalRequestNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveShadowMCPApprovalRequestConflictResponseBody builds the HTTP
+// response body from the result of the "approveShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewApproveShadowMCPApprovalRequestConflictResponseBody(res *goa.ServiceError) *ApproveShadowMCPApprovalRequestConflictResponseBody {
+	body := &ApproveShadowMCPApprovalRequestConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveShadowMCPApprovalRequestUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "approveShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewApproveShadowMCPApprovalRequestUnsupportedMediaResponseBody(res *goa.ServiceError) *ApproveShadowMCPApprovalRequestUnsupportedMediaResponseBody {
+	body := &ApproveShadowMCPApprovalRequestUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveShadowMCPApprovalRequestInvalidResponseBody builds the HTTP
+// response body from the result of the "approveShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewApproveShadowMCPApprovalRequestInvalidResponseBody(res *goa.ServiceError) *ApproveShadowMCPApprovalRequestInvalidResponseBody {
+	body := &ApproveShadowMCPApprovalRequestInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveShadowMCPApprovalRequestInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "approveShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewApproveShadowMCPApprovalRequestInvariantViolationResponseBody(res *goa.ServiceError) *ApproveShadowMCPApprovalRequestInvariantViolationResponseBody {
+	body := &ApproveShadowMCPApprovalRequestInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveShadowMCPApprovalRequestUnexpectedResponseBody builds the HTTP
+// response body from the result of the "approveShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewApproveShadowMCPApprovalRequestUnexpectedResponseBody(res *goa.ServiceError) *ApproveShadowMCPApprovalRequestUnexpectedResponseBody {
+	body := &ApproveShadowMCPApprovalRequestUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApproveShadowMCPApprovalRequestGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "approveShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewApproveShadowMCPApprovalRequestGatewayErrorResponseBody(res *goa.ServiceError) *ApproveShadowMCPApprovalRequestGatewayErrorResponseBody {
+	body := &ApproveShadowMCPApprovalRequestGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyShadowMCPApprovalRequestUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "denyShadowMCPApprovalRequest" endpoint
+// of the "access" service.
+func NewDenyShadowMCPApprovalRequestUnauthorizedResponseBody(res *goa.ServiceError) *DenyShadowMCPApprovalRequestUnauthorizedResponseBody {
+	body := &DenyShadowMCPApprovalRequestUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyShadowMCPApprovalRequestForbiddenResponseBody builds the HTTP
+// response body from the result of the "denyShadowMCPApprovalRequest" endpoint
+// of the "access" service.
+func NewDenyShadowMCPApprovalRequestForbiddenResponseBody(res *goa.ServiceError) *DenyShadowMCPApprovalRequestForbiddenResponseBody {
+	body := &DenyShadowMCPApprovalRequestForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyShadowMCPApprovalRequestBadRequestResponseBody builds the HTTP
+// response body from the result of the "denyShadowMCPApprovalRequest" endpoint
+// of the "access" service.
+func NewDenyShadowMCPApprovalRequestBadRequestResponseBody(res *goa.ServiceError) *DenyShadowMCPApprovalRequestBadRequestResponseBody {
+	body := &DenyShadowMCPApprovalRequestBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyShadowMCPApprovalRequestNotFoundResponseBody builds the HTTP response
+// body from the result of the "denyShadowMCPApprovalRequest" endpoint of the
+// "access" service.
+func NewDenyShadowMCPApprovalRequestNotFoundResponseBody(res *goa.ServiceError) *DenyShadowMCPApprovalRequestNotFoundResponseBody {
+	body := &DenyShadowMCPApprovalRequestNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyShadowMCPApprovalRequestConflictResponseBody builds the HTTP response
+// body from the result of the "denyShadowMCPApprovalRequest" endpoint of the
+// "access" service.
+func NewDenyShadowMCPApprovalRequestConflictResponseBody(res *goa.ServiceError) *DenyShadowMCPApprovalRequestConflictResponseBody {
+	body := &DenyShadowMCPApprovalRequestConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyShadowMCPApprovalRequestUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "denyShadowMCPApprovalRequest" endpoint
+// of the "access" service.
+func NewDenyShadowMCPApprovalRequestUnsupportedMediaResponseBody(res *goa.ServiceError) *DenyShadowMCPApprovalRequestUnsupportedMediaResponseBody {
+	body := &DenyShadowMCPApprovalRequestUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyShadowMCPApprovalRequestInvalidResponseBody builds the HTTP response
+// body from the result of the "denyShadowMCPApprovalRequest" endpoint of the
+// "access" service.
+func NewDenyShadowMCPApprovalRequestInvalidResponseBody(res *goa.ServiceError) *DenyShadowMCPApprovalRequestInvalidResponseBody {
+	body := &DenyShadowMCPApprovalRequestInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyShadowMCPApprovalRequestInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "denyShadowMCPApprovalRequest"
+// endpoint of the "access" service.
+func NewDenyShadowMCPApprovalRequestInvariantViolationResponseBody(res *goa.ServiceError) *DenyShadowMCPApprovalRequestInvariantViolationResponseBody {
+	body := &DenyShadowMCPApprovalRequestInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyShadowMCPApprovalRequestUnexpectedResponseBody builds the HTTP
+// response body from the result of the "denyShadowMCPApprovalRequest" endpoint
+// of the "access" service.
+func NewDenyShadowMCPApprovalRequestUnexpectedResponseBody(res *goa.ServiceError) *DenyShadowMCPApprovalRequestUnexpectedResponseBody {
+	body := &DenyShadowMCPApprovalRequestUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDenyShadowMCPApprovalRequestGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "denyShadowMCPApprovalRequest" endpoint
+// of the "access" service.
+func NewDenyShadowMCPApprovalRequestGatewayErrorResponseBody(res *goa.ServiceError) *DenyShadowMCPApprovalRequestGatewayErrorResponseBody {
+	body := &DenyShadowMCPApprovalRequestGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPAccessRulesUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listShadowMCPAccessRules" endpoint of the
+// "access" service.
+func NewListShadowMCPAccessRulesUnauthorizedResponseBody(res *goa.ServiceError) *ListShadowMCPAccessRulesUnauthorizedResponseBody {
+	body := &ListShadowMCPAccessRulesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPAccessRulesForbiddenResponseBody builds the HTTP response
+// body from the result of the "listShadowMCPAccessRules" endpoint of the
+// "access" service.
+func NewListShadowMCPAccessRulesForbiddenResponseBody(res *goa.ServiceError) *ListShadowMCPAccessRulesForbiddenResponseBody {
+	body := &ListShadowMCPAccessRulesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPAccessRulesBadRequestResponseBody builds the HTTP response
+// body from the result of the "listShadowMCPAccessRules" endpoint of the
+// "access" service.
+func NewListShadowMCPAccessRulesBadRequestResponseBody(res *goa.ServiceError) *ListShadowMCPAccessRulesBadRequestResponseBody {
+	body := &ListShadowMCPAccessRulesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPAccessRulesNotFoundResponseBody builds the HTTP response
+// body from the result of the "listShadowMCPAccessRules" endpoint of the
+// "access" service.
+func NewListShadowMCPAccessRulesNotFoundResponseBody(res *goa.ServiceError) *ListShadowMCPAccessRulesNotFoundResponseBody {
+	body := &ListShadowMCPAccessRulesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPAccessRulesConflictResponseBody builds the HTTP response
+// body from the result of the "listShadowMCPAccessRules" endpoint of the
+// "access" service.
+func NewListShadowMCPAccessRulesConflictResponseBody(res *goa.ServiceError) *ListShadowMCPAccessRulesConflictResponseBody {
+	body := &ListShadowMCPAccessRulesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPAccessRulesUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPAccessRules" endpoint of
+// the "access" service.
+func NewListShadowMCPAccessRulesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListShadowMCPAccessRulesUnsupportedMediaResponseBody {
+	body := &ListShadowMCPAccessRulesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPAccessRulesInvalidResponseBody builds the HTTP response body
+// from the result of the "listShadowMCPAccessRules" endpoint of the "access"
+// service.
+func NewListShadowMCPAccessRulesInvalidResponseBody(res *goa.ServiceError) *ListShadowMCPAccessRulesInvalidResponseBody {
+	body := &ListShadowMCPAccessRulesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPAccessRulesInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listShadowMCPAccessRules" endpoint of
+// the "access" service.
+func NewListShadowMCPAccessRulesInvariantViolationResponseBody(res *goa.ServiceError) *ListShadowMCPAccessRulesInvariantViolationResponseBody {
+	body := &ListShadowMCPAccessRulesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPAccessRulesUnexpectedResponseBody builds the HTTP response
+// body from the result of the "listShadowMCPAccessRules" endpoint of the
+// "access" service.
+func NewListShadowMCPAccessRulesUnexpectedResponseBody(res *goa.ServiceError) *ListShadowMCPAccessRulesUnexpectedResponseBody {
+	body := &ListShadowMCPAccessRulesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListShadowMCPAccessRulesGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listShadowMCPAccessRules" endpoint of the
+// "access" service.
+func NewListShadowMCPAccessRulesGatewayErrorResponseBody(res *goa.ServiceError) *ListShadowMCPAccessRulesGatewayErrorResponseBody {
+	body := &ListShadowMCPAccessRulesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPAccessRuleUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "createShadowMCPAccessRule" endpoint of
+// the "access" service.
+func NewCreateShadowMCPAccessRuleUnauthorizedResponseBody(res *goa.ServiceError) *CreateShadowMCPAccessRuleUnauthorizedResponseBody {
+	body := &CreateShadowMCPAccessRuleUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPAccessRuleForbiddenResponseBody builds the HTTP response
+// body from the result of the "createShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewCreateShadowMCPAccessRuleForbiddenResponseBody(res *goa.ServiceError) *CreateShadowMCPAccessRuleForbiddenResponseBody {
+	body := &CreateShadowMCPAccessRuleForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPAccessRuleBadRequestResponseBody builds the HTTP response
+// body from the result of the "createShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewCreateShadowMCPAccessRuleBadRequestResponseBody(res *goa.ServiceError) *CreateShadowMCPAccessRuleBadRequestResponseBody {
+	body := &CreateShadowMCPAccessRuleBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPAccessRuleNotFoundResponseBody builds the HTTP response
+// body from the result of the "createShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewCreateShadowMCPAccessRuleNotFoundResponseBody(res *goa.ServiceError) *CreateShadowMCPAccessRuleNotFoundResponseBody {
+	body := &CreateShadowMCPAccessRuleNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPAccessRuleConflictResponseBody builds the HTTP response
+// body from the result of the "createShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewCreateShadowMCPAccessRuleConflictResponseBody(res *goa.ServiceError) *CreateShadowMCPAccessRuleConflictResponseBody {
+	body := &CreateShadowMCPAccessRuleConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPAccessRuleUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "createShadowMCPAccessRule" endpoint of
+// the "access" service.
+func NewCreateShadowMCPAccessRuleUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateShadowMCPAccessRuleUnsupportedMediaResponseBody {
+	body := &CreateShadowMCPAccessRuleUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPAccessRuleInvalidResponseBody builds the HTTP response
+// body from the result of the "createShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewCreateShadowMCPAccessRuleInvalidResponseBody(res *goa.ServiceError) *CreateShadowMCPAccessRuleInvalidResponseBody {
+	body := &CreateShadowMCPAccessRuleInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPAccessRuleInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createShadowMCPAccessRule" endpoint of
+// the "access" service.
+func NewCreateShadowMCPAccessRuleInvariantViolationResponseBody(res *goa.ServiceError) *CreateShadowMCPAccessRuleInvariantViolationResponseBody {
+	body := &CreateShadowMCPAccessRuleInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPAccessRuleUnexpectedResponseBody builds the HTTP response
+// body from the result of the "createShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewCreateShadowMCPAccessRuleUnexpectedResponseBody(res *goa.ServiceError) *CreateShadowMCPAccessRuleUnexpectedResponseBody {
+	body := &CreateShadowMCPAccessRuleUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateShadowMCPAccessRuleGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "createShadowMCPAccessRule" endpoint of
+// the "access" service.
+func NewCreateShadowMCPAccessRuleGatewayErrorResponseBody(res *goa.ServiceError) *CreateShadowMCPAccessRuleGatewayErrorResponseBody {
+	body := &CreateShadowMCPAccessRuleGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateShadowMCPAccessRuleUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "updateShadowMCPAccessRule" endpoint of
+// the "access" service.
+func NewUpdateShadowMCPAccessRuleUnauthorizedResponseBody(res *goa.ServiceError) *UpdateShadowMCPAccessRuleUnauthorizedResponseBody {
+	body := &UpdateShadowMCPAccessRuleUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateShadowMCPAccessRuleForbiddenResponseBody builds the HTTP response
+// body from the result of the "updateShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewUpdateShadowMCPAccessRuleForbiddenResponseBody(res *goa.ServiceError) *UpdateShadowMCPAccessRuleForbiddenResponseBody {
+	body := &UpdateShadowMCPAccessRuleForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateShadowMCPAccessRuleBadRequestResponseBody builds the HTTP response
+// body from the result of the "updateShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewUpdateShadowMCPAccessRuleBadRequestResponseBody(res *goa.ServiceError) *UpdateShadowMCPAccessRuleBadRequestResponseBody {
+	body := &UpdateShadowMCPAccessRuleBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateShadowMCPAccessRuleNotFoundResponseBody builds the HTTP response
+// body from the result of the "updateShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewUpdateShadowMCPAccessRuleNotFoundResponseBody(res *goa.ServiceError) *UpdateShadowMCPAccessRuleNotFoundResponseBody {
+	body := &UpdateShadowMCPAccessRuleNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateShadowMCPAccessRuleConflictResponseBody builds the HTTP response
+// body from the result of the "updateShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewUpdateShadowMCPAccessRuleConflictResponseBody(res *goa.ServiceError) *UpdateShadowMCPAccessRuleConflictResponseBody {
+	body := &UpdateShadowMCPAccessRuleConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateShadowMCPAccessRuleUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "updateShadowMCPAccessRule" endpoint of
+// the "access" service.
+func NewUpdateShadowMCPAccessRuleUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateShadowMCPAccessRuleUnsupportedMediaResponseBody {
+	body := &UpdateShadowMCPAccessRuleUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateShadowMCPAccessRuleInvalidResponseBody builds the HTTP response
+// body from the result of the "updateShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewUpdateShadowMCPAccessRuleInvalidResponseBody(res *goa.ServiceError) *UpdateShadowMCPAccessRuleInvalidResponseBody {
+	body := &UpdateShadowMCPAccessRuleInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateShadowMCPAccessRuleInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "updateShadowMCPAccessRule" endpoint of
+// the "access" service.
+func NewUpdateShadowMCPAccessRuleInvariantViolationResponseBody(res *goa.ServiceError) *UpdateShadowMCPAccessRuleInvariantViolationResponseBody {
+	body := &UpdateShadowMCPAccessRuleInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateShadowMCPAccessRuleUnexpectedResponseBody builds the HTTP response
+// body from the result of the "updateShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewUpdateShadowMCPAccessRuleUnexpectedResponseBody(res *goa.ServiceError) *UpdateShadowMCPAccessRuleUnexpectedResponseBody {
+	body := &UpdateShadowMCPAccessRuleUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateShadowMCPAccessRuleGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "updateShadowMCPAccessRule" endpoint of
+// the "access" service.
+func NewUpdateShadowMCPAccessRuleGatewayErrorResponseBody(res *goa.ServiceError) *UpdateShadowMCPAccessRuleGatewayErrorResponseBody {
+	body := &UpdateShadowMCPAccessRuleGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPAccessRuleUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "deleteShadowMCPAccessRule" endpoint of
+// the "access" service.
+func NewDeleteShadowMCPAccessRuleUnauthorizedResponseBody(res *goa.ServiceError) *DeleteShadowMCPAccessRuleUnauthorizedResponseBody {
+	body := &DeleteShadowMCPAccessRuleUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPAccessRuleForbiddenResponseBody builds the HTTP response
+// body from the result of the "deleteShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewDeleteShadowMCPAccessRuleForbiddenResponseBody(res *goa.ServiceError) *DeleteShadowMCPAccessRuleForbiddenResponseBody {
+	body := &DeleteShadowMCPAccessRuleForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPAccessRuleBadRequestResponseBody builds the HTTP response
+// body from the result of the "deleteShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewDeleteShadowMCPAccessRuleBadRequestResponseBody(res *goa.ServiceError) *DeleteShadowMCPAccessRuleBadRequestResponseBody {
+	body := &DeleteShadowMCPAccessRuleBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPAccessRuleNotFoundResponseBody builds the HTTP response
+// body from the result of the "deleteShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewDeleteShadowMCPAccessRuleNotFoundResponseBody(res *goa.ServiceError) *DeleteShadowMCPAccessRuleNotFoundResponseBody {
+	body := &DeleteShadowMCPAccessRuleNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPAccessRuleConflictResponseBody builds the HTTP response
+// body from the result of the "deleteShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewDeleteShadowMCPAccessRuleConflictResponseBody(res *goa.ServiceError) *DeleteShadowMCPAccessRuleConflictResponseBody {
+	body := &DeleteShadowMCPAccessRuleConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPAccessRuleUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "deleteShadowMCPAccessRule" endpoint of
+// the "access" service.
+func NewDeleteShadowMCPAccessRuleUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteShadowMCPAccessRuleUnsupportedMediaResponseBody {
+	body := &DeleteShadowMCPAccessRuleUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPAccessRuleInvalidResponseBody builds the HTTP response
+// body from the result of the "deleteShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewDeleteShadowMCPAccessRuleInvalidResponseBody(res *goa.ServiceError) *DeleteShadowMCPAccessRuleInvalidResponseBody {
+	body := &DeleteShadowMCPAccessRuleInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPAccessRuleInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "deleteShadowMCPAccessRule" endpoint of
+// the "access" service.
+func NewDeleteShadowMCPAccessRuleInvariantViolationResponseBody(res *goa.ServiceError) *DeleteShadowMCPAccessRuleInvariantViolationResponseBody {
+	body := &DeleteShadowMCPAccessRuleInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPAccessRuleUnexpectedResponseBody builds the HTTP response
+// body from the result of the "deleteShadowMCPAccessRule" endpoint of the
+// "access" service.
+func NewDeleteShadowMCPAccessRuleUnexpectedResponseBody(res *goa.ServiceError) *DeleteShadowMCPAccessRuleUnexpectedResponseBody {
+	body := &DeleteShadowMCPAccessRuleUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteShadowMCPAccessRuleGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "deleteShadowMCPAccessRule" endpoint of
+// the "access" service.
+func NewDeleteShadowMCPAccessRuleGatewayErrorResponseBody(res *goa.ServiceError) *DeleteShadowMCPAccessRuleGatewayErrorResponseBody {
+	body := &DeleteShadowMCPAccessRuleGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetRBACStatusUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "getRBACStatus" endpoint of the "access" service.
 func NewGetRBACStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetRBACStatusUnauthorizedResponseBody {
@@ -5574,14 +8717,24 @@ func NewUpdateRolePayload(body *UpdateRoleRequestBody, apikeyToken *string, sess
 		Name:        body.Name,
 		Description: body.Description,
 	}
-	if body.Grants != nil {
-		v.Grants = make([]*access.RoleGrant, len(body.Grants))
-		for i, val := range body.Grants {
+	if body.AddGrants != nil {
+		v.AddGrants = make([]*access.RoleGrant, len(body.AddGrants))
+		for i, val := range body.AddGrants {
 			if val == nil {
-				v.Grants[i] = nil
+				v.AddGrants[i] = nil
 				continue
 			}
-			v.Grants[i] = unmarshalRoleGrantRequestBodyToAccessRoleGrant(val)
+			v.AddGrants[i] = unmarshalRoleGrantRequestBodyToAccessRoleGrant(val)
+		}
+	}
+	if body.RemoveGrants != nil {
+		v.RemoveGrants = make([]*access.RoleGrant, len(body.RemoveGrants))
+		for i, val := range body.RemoveGrants {
+			if val == nil {
+				v.RemoveGrants[i] = nil
+				continue
+			}
+			v.RemoveGrants[i] = unmarshalRoleGrantRequestBodyToAccessRoleGrant(val)
 		}
 	}
 	if body.MemberIds != nil {
@@ -5644,6 +8797,151 @@ func NewUpdateMemberRolesPayload(body *UpdateMemberRolesRequestBody, apikeyToken
 		v.RoleIds[i] = val
 	}
 	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListShadowMCPApprovalRequestsPayload builds a access service
+// listShadowMCPApprovalRequests endpoint payload.
+func NewListShadowMCPApprovalRequestsPayload(status *string, projectID *string, limit int, cursor *string, sessionToken *string) *access.ListShadowMCPApprovalRequestsPayload {
+	v := &access.ListShadowMCPApprovalRequestsPayload{}
+	v.Status = status
+	v.ProjectID = projectID
+	v.Limit = limit
+	v.Cursor = cursor
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewCreateShadowMCPApprovalRequestPayload builds a access service
+// createShadowMCPApprovalRequest endpoint payload.
+func NewCreateShadowMCPApprovalRequestPayload(body *CreateShadowMCPApprovalRequestRequestBody, sessionToken *string) *access.CreateShadowMCPApprovalRequestPayload {
+	v := &access.CreateShadowMCPApprovalRequestPayload{
+		RequestToken: *body.RequestToken,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewApproveShadowMCPApprovalRequestPayload builds a access service
+// approveShadowMCPApprovalRequest endpoint payload.
+func NewApproveShadowMCPApprovalRequestPayload(body *ApproveShadowMCPApprovalRequestRequestBody, sessionToken *string) *access.ApproveShadowMCPApprovalRequestPayload {
+	v := &access.ApproveShadowMCPApprovalRequestPayload{
+		ID:                     *body.ID,
+		AccessScope:            *body.AccessScope,
+		MatchBreadth:           *body.MatchBreadth,
+		MatchValue:             *body.MatchValue,
+		DisplayName:            *body.DisplayName,
+		ObservedFullURL:        body.ObservedFullURL,
+		ObservedURLHost:        body.ObservedURLHost,
+		ObservedServerIdentity: body.ObservedServerIdentity,
+		Reason:                 body.Reason,
+	}
+	if body.ProjectIds != nil {
+		v.ProjectIds = make([]string, len(body.ProjectIds))
+		for i, val := range body.ProjectIds {
+			v.ProjectIds[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewDenyShadowMCPApprovalRequestPayload builds a access service
+// denyShadowMCPApprovalRequest endpoint payload.
+func NewDenyShadowMCPApprovalRequestPayload(body *DenyShadowMCPApprovalRequestRequestBody, sessionToken *string) *access.DenyShadowMCPApprovalRequestPayload {
+	v := &access.DenyShadowMCPApprovalRequestPayload{
+		ID:                     *body.ID,
+		CreateDenyRule:         *body.CreateDenyRule,
+		MatchBreadth:           body.MatchBreadth,
+		MatchValue:             body.MatchValue,
+		DisplayName:            body.DisplayName,
+		ObservedFullURL:        body.ObservedFullURL,
+		ObservedURLHost:        body.ObservedURLHost,
+		ObservedServerIdentity: body.ObservedServerIdentity,
+		Reason:                 body.Reason,
+	}
+	if body.ProjectIds != nil {
+		v.ProjectIds = make([]string, len(body.ProjectIds))
+		for i, val := range body.ProjectIds {
+			v.ProjectIds[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListShadowMCPAccessRulesPayload builds a access service
+// listShadowMCPAccessRules endpoint payload.
+func NewListShadowMCPAccessRulesPayload(disposition *string, accessScope *string, projectID *string, limit int, cursor *string, sessionToken *string) *access.ListShadowMCPAccessRulesPayload {
+	v := &access.ListShadowMCPAccessRulesPayload{}
+	v.Disposition = disposition
+	v.AccessScope = accessScope
+	v.ProjectID = projectID
+	v.Limit = limit
+	v.Cursor = cursor
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewCreateShadowMCPAccessRulePayload builds a access service
+// createShadowMCPAccessRule endpoint payload.
+func NewCreateShadowMCPAccessRulePayload(body *CreateShadowMCPAccessRuleRequestBody, sessionToken *string) *access.CreateShadowMCPAccessRulePayload {
+	v := &access.CreateShadowMCPAccessRulePayload{
+		Disposition:            *body.Disposition,
+		AccessScope:            *body.AccessScope,
+		ProjectID:              body.ProjectID,
+		MatchBreadth:           *body.MatchBreadth,
+		MatchValue:             *body.MatchValue,
+		DisplayName:            *body.DisplayName,
+		ObservedFullURL:        body.ObservedFullURL,
+		ObservedURLHost:        body.ObservedURLHost,
+		ObservedServerIdentity: body.ObservedServerIdentity,
+		Reason:                 body.Reason,
+	}
+	if body.ProjectIds != nil {
+		v.ProjectIds = make([]string, len(body.ProjectIds))
+		for i, val := range body.ProjectIds {
+			v.ProjectIds[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewUpdateShadowMCPAccessRulePayload builds a access service
+// updateShadowMCPAccessRule endpoint payload.
+func NewUpdateShadowMCPAccessRulePayload(body *UpdateShadowMCPAccessRuleRequestBody, sessionToken *string) *access.UpdateShadowMCPAccessRulePayload {
+	v := &access.UpdateShadowMCPAccessRulePayload{
+		ID:                     *body.ID,
+		Disposition:            *body.Disposition,
+		AccessScope:            *body.AccessScope,
+		ProjectID:              body.ProjectID,
+		MatchBreadth:           *body.MatchBreadth,
+		MatchValue:             *body.MatchValue,
+		DisplayName:            *body.DisplayName,
+		ObservedFullURL:        body.ObservedFullURL,
+		ObservedURLHost:        body.ObservedURLHost,
+		ObservedServerIdentity: body.ObservedServerIdentity,
+		Reason:                 body.Reason,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewDeleteShadowMCPAccessRulePayload builds a access service
+// deleteShadowMCPAccessRule endpoint payload.
+func NewDeleteShadowMCPAccessRulePayload(id string, sessionToken *string) *access.DeleteShadowMCPAccessRulePayload {
+	v := &access.DeleteShadowMCPAccessRulePayload{}
+	v.ID = id
 	v.SessionToken = sessionToken
 
 	return v
@@ -5758,7 +9056,14 @@ func ValidateUpdateRoleRequestBody(body *UpdateRoleRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	for _, e := range body.Grants {
+	for _, e := range body.AddGrants {
+		if e != nil {
+			if err2 := ValidateRoleGrantRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.RemoveGrants {
 		if e != nil {
 			if err2 := ValidateRoleGrantRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
@@ -5776,6 +9081,153 @@ func ValidateUpdateMemberRolesRequestBody(body *UpdateMemberRolesRequestBody) (e
 	}
 	if body.RoleIds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPApprovalRequestRequestBody runs the validations
+// defined on CreateShadowMCPApprovalRequestRequestBody
+func ValidateCreateShadowMCPApprovalRequestRequestBody(body *CreateShadowMCPApprovalRequestRequestBody) (err error) {
+	if body.RequestToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_token", "body"))
+	}
+	return
+}
+
+// ValidateApproveShadowMCPApprovalRequestRequestBody runs the validations
+// defined on ApproveShadowMCPApprovalRequestRequestBody
+func ValidateApproveShadowMCPApprovalRequestRequestBody(body *ApproveShadowMCPApprovalRequestRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.AccessScope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("access_scope", "body"))
+	}
+	if body.MatchBreadth == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_breadth", "body"))
+	}
+	if body.MatchValue == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_value", "body"))
+	}
+	if body.DisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.AccessScope != nil {
+		if !(*body.AccessScope == "organization" || *body.AccessScope == "project") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_scope", *body.AccessScope, []any{"organization", "project"}))
+		}
+	}
+	if body.MatchBreadth != nil {
+		if !(*body.MatchBreadth == "full_url" || *body.MatchBreadth == "url_host") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url", "url_host"}))
+		}
+	}
+	return
+}
+
+// ValidateDenyShadowMCPApprovalRequestRequestBody runs the validations defined
+// on DenyShadowMCPApprovalRequestRequestBody
+func ValidateDenyShadowMCPApprovalRequestRequestBody(body *DenyShadowMCPApprovalRequestRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.CreateDenyRule == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("create_deny_rule", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.MatchBreadth != nil {
+		if !(*body.MatchBreadth == "full_url" || *body.MatchBreadth == "url_host") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url", "url_host"}))
+		}
+	}
+	return
+}
+
+// ValidateCreateShadowMCPAccessRuleRequestBody runs the validations defined on
+// CreateShadowMCPAccessRuleRequestBody
+func ValidateCreateShadowMCPAccessRuleRequestBody(body *CreateShadowMCPAccessRuleRequestBody) (err error) {
+	if body.Disposition == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disposition", "body"))
+	}
+	if body.AccessScope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("access_scope", "body"))
+	}
+	if body.MatchBreadth == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_breadth", "body"))
+	}
+	if body.MatchValue == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_value", "body"))
+	}
+	if body.DisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
+	}
+	if body.Disposition != nil {
+		if !(*body.Disposition == "allowed" || *body.Disposition == "denied") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"allowed", "denied"}))
+		}
+	}
+	if body.AccessScope != nil {
+		if !(*body.AccessScope == "organization" || *body.AccessScope == "project") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_scope", *body.AccessScope, []any{"organization", "project"}))
+		}
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.MatchBreadth != nil {
+		if !(*body.MatchBreadth == "full_url" || *body.MatchBreadth == "url_host") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url", "url_host"}))
+		}
+	}
+	return
+}
+
+// ValidateUpdateShadowMCPAccessRuleRequestBody runs the validations defined on
+// UpdateShadowMCPAccessRuleRequestBody
+func ValidateUpdateShadowMCPAccessRuleRequestBody(body *UpdateShadowMCPAccessRuleRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Disposition == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disposition", "body"))
+	}
+	if body.MatchBreadth == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_breadth", "body"))
+	}
+	if body.MatchValue == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_value", "body"))
+	}
+	if body.DisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
+	}
+	if body.AccessScope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("access_scope", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Disposition != nil {
+		if !(*body.Disposition == "allowed" || *body.Disposition == "denied") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"allowed", "denied"}))
+		}
+	}
+	if body.AccessScope != nil {
+		if !(*body.AccessScope == "organization" || *body.AccessScope == "project") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_scope", *body.AccessScope, []any{"organization", "project"}))
+		}
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.MatchBreadth != nil {
+		if !(*body.MatchBreadth == "full_url" || *body.MatchBreadth == "url_host") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url", "url_host"}))
+		}
 	}
 	return
 }
@@ -5810,8 +9262,8 @@ func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass"}))
 		}
 	}
 	if body.Effect != nil {
@@ -5839,14 +9291,17 @@ func ValidateSelectorRequestBody(body *SelectorRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "risk_policy", "*"}))
 		}
 	}
 	if body.Disposition != nil {
 		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world"}))
 		}
+	}
+	if body.ServerURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", *body.ServerURL, goa.FormatURI))
 	}
 	return
 }

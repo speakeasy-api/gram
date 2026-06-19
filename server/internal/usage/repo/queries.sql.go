@@ -7,7 +7,31 @@ package repo
 
 import (
 	"context"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const getBillingMetadata = `-- name: GetBillingMetadata :one
+SELECT id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, created_at, updated_at
+FROM billing_metadata
+WHERE organization_id = $1
+`
+
+func (q *Queries) GetBillingMetadata(ctx context.Context, organizationID string) (BillingMetadatum, error) {
+	row := q.db.QueryRow(ctx, getBillingMetadata, organizationID)
+	var i BillingMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.TumMonthlyTokenLimit,
+		&i.AlertEmail,
+		&i.BillingCycleAnchorDay,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
 
 const getEnabledServerCount = `-- name: GetEnabledServerCount :one
 SELECT COUNT(*)
@@ -22,4 +46,78 @@ func (q *Queries) GetEnabledServerCount(ctx context.Context, organizationID stri
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const listProjectIDsByOrganization = `-- name: ListProjectIDsByOrganization :many
+SELECT id
+FROM projects
+WHERE organization_id = $1
+  AND deleted IS FALSE
+`
+
+func (q *Queries) ListProjectIDsByOrganization(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectIDsByOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertBillingMetadata = `-- name: UpsertBillingMetadata :one
+INSERT INTO billing_metadata (
+    organization_id
+  , tum_monthly_token_limit
+  , alert_email
+  , billing_cycle_anchor_day
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+)
+ON CONFLICT (organization_id) DO UPDATE SET
+    tum_monthly_token_limit = EXCLUDED.tum_monthly_token_limit
+  , alert_email = EXCLUDED.alert_email
+  , billing_cycle_anchor_day = EXCLUDED.billing_cycle_anchor_day
+  , updated_at = clock_timestamp()
+RETURNING id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, created_at, updated_at
+`
+
+type UpsertBillingMetadataParams struct {
+	OrganizationID        string
+	TumMonthlyTokenLimit  pgtype.Int8
+	AlertEmail            pgtype.Text
+	BillingCycleAnchorDay int32
+}
+
+func (q *Queries) UpsertBillingMetadata(ctx context.Context, arg UpsertBillingMetadataParams) (BillingMetadatum, error) {
+	row := q.db.QueryRow(ctx, upsertBillingMetadata,
+		arg.OrganizationID,
+		arg.TumMonthlyTokenLimit,
+		arg.AlertEmail,
+		arg.BillingCycleAnchorDay,
+	)
+	var i BillingMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.TumMonthlyTokenLimit,
+		&i.AlertEmail,
+		&i.BillingCycleAnchorDay,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

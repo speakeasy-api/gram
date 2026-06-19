@@ -6,14 +6,15 @@ import { useEffect, useState } from "react";
 // (a) the slug format constraints (lowercase, alnum + dash/underscore, length)
 // and (b) availability in the relevant uniqueness namespace.
 //
-// Availability is checked against BOTH `mcpEndpoints.checkSlugAvailability`
-// (the canonical check for the mcp_endpoints table) AND
-// `toolsets.checkMCPSlugAvailability` (which spans the legacy toolsets table).
-// The dual check is intentional and temporary while toolsets-backed MCP
-// servers continue to live under `/mcp/<mcpSlug>` and Remote-MCP-backed
-// servers live under `/x/mcp/<slug>` — until the AGE-1902 / AGE-1880 cutover
-// consolidates both onto mcp_servers/mcp_endpoints, a slug taken by either
-// namespace would collide at runtime if reused.
+// Availability is checked with `mcpEndpoints.checkSlugAvailability` (the
+// canonical check for the mcp_endpoints table). Platform-domain endpoints
+// also check `toolsets.checkMCPSlugAvailability`, which spans the legacy
+// toolsets table. That legacy check is intentional and temporary while
+// toolsets-backed MCP servers and mcp_endpoints-backed servers share the
+// same `/mcp/<slug>` runtime path (the runtime resolves mcp_endpoints first,
+// then falls back to toolsets.mcp_slug — see AGE-2555). Until the AGE-1902 /
+// AGE-1880 cutover consolidates both onto mcp_servers/mcp_endpoints, a
+// platform slug taken by either namespace would collide at runtime if reused.
 //
 // Returns the latest validation error, or null when the draft is valid.
 //
@@ -22,6 +23,8 @@ import { useEffect, useState } from "react";
 // mcp_endpoints uniqueness index covers all slugs.
 
 const DEBOUNCE_MS = 250;
+const PLATFORM_SLUG_MAX_LENGTH = 40;
+const CUSTOM_DOMAIN_SLUG_MAX_LENGTH = 128;
 
 export function useMcpEndpointSlugValidation(
   draftSlug: string,
@@ -41,8 +44,10 @@ export function useMcpEndpointSlugValidation(
 
   // No error to show when the draft matches the persisted value — nothing has
   // changed, so we skip both format and availability checks.
-  const formatError =
-    draftSlug === currentSlug ? null : validateSlugFormat(draftSlug);
+  let formatError: string | null = null;
+  if (draftSlug !== currentSlug) {
+    formatError = validateSlugFormat(draftSlug, customDomainId);
+  }
 
   const shouldCheck =
     formatError === null &&
@@ -64,13 +69,18 @@ export function useMcpEndpointSlugValidation(
     //   AVAILABLE (`NOT EXISTS`).
     // The wrapper normalises both to a single "available" boolean.
     queryFn: async () => {
-      const [toolsetTaken, endpointAvailable] = await Promise.all([
-        client.toolsets.checkMCPSlugAvailability({ slug: debouncedSlug }),
-        client.mcpEndpoints.checkSlugAvailability({
+      const endpointAvailable = await client.mcpEndpoints.checkSlugAvailability(
+        {
           slug: debouncedSlug,
           customDomainId: customDomainId ?? undefined,
-        }),
-      ]);
+        },
+      );
+
+      if (customDomainId) return endpointAvailable;
+
+      const toolsetTaken = await client.toolsets.checkMCPSlugAvailability({
+        slug: debouncedSlug,
+      });
       return !toolsetTaken && endpointAvailable;
     },
   });
@@ -80,9 +90,18 @@ export function useMcpEndpointSlugValidation(
   return null;
 }
 
-function validateSlugFormat(slug: string): string | null {
+function validateSlugFormat(
+  slug: string,
+  customDomainId: string | null,
+): string | null {
+  let maxLength = PLATFORM_SLUG_MAX_LENGTH;
+  if (customDomainId) {
+    maxLength = CUSTOM_DOMAIN_SLUG_MAX_LENGTH;
+  }
+
   if (!slug) return "Slug is required";
-  if (slug.length > 128) return "Must be 128 characters or fewer";
+  if (slug.length > maxLength)
+    return `Must be ${maxLength} characters or fewer`;
   if (!/^[a-z0-9_-]+$/.test(slug))
     return "Lowercase letters, numbers, _ or - only";
   return null;

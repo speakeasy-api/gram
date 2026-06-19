@@ -97,6 +97,7 @@ func TestApplyMCPInventoryAttrs(t *testing.T) {
 		applyMCPInventoryAttrs(attrs, &MCPServerEntry{
 			Source: "claude.ai", Name: "Slack", URL: "https://mcp.example.com/slack",
 			ConnectorUUID: "a1b2c3d4-uuid",
+			ToolPrefix:    "",
 		})
 		assert.Equal(t, "Slack", attrs[attr.ToolCallSourceKey])
 		assert.Equal(t, "https://mcp.example.com/slack", attrs[attr.MCPServerURLKey])
@@ -108,6 +109,7 @@ func TestApplyMCPInventoryAttrs(t *testing.T) {
 		applyMCPInventoryAttrs(attrs, &MCPServerEntry{
 			Source: "claude.ai", URL: "https://mcp.example.com/slack",
 			ConnectorUUID: "a1b2c3d4-uuid",
+			ToolPrefix:    "",
 		})
 		assert.Equal(t, "a1b2c3d4-uuid", attrs[attr.ToolCallSourceKey])
 		assert.Equal(t, "https://mcp.example.com/slack", attrs[attr.MCPServerURLKey])
@@ -180,6 +182,8 @@ func TestParseClaudeToolName(t *testing.T) {
 		{"Bash", "", "", false},
 		{"mcp__only", "", "", false},
 		{"mcp__server__", "", "", false},
+		{"mcp____do_thing", "", "", false},
+		{"MCP:send_message", "", "", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.raw, func(t *testing.T) {

@@ -217,7 +217,7 @@ func createIssuerGatedExternalMCPFixture(
 
 	remoteRepo := remotesessions_repo.New(ti.conn)
 	remoteIssuer, err := remoteRepo.CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         toolset.ProjectID,
+		ProjectID:                         uuid.NullUUID{UUID: toolset.ProjectID, Valid: true},
 		Slug:                              "resolver-extmcp-rsi-" + suffix,
 		Issuer:                            "https://upstream.example/" + suffix,
 		AuthorizationEndpoint:             conv.ToPGText("https://upstream.example/" + suffix + "/authorize"),
@@ -233,13 +233,19 @@ func createIssuerGatedExternalMCPFixture(
 	})
 	require.NoError(t, err)
 	remoteClient, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
-		ProjectID:             toolset.ProjectID,
+		ProjectID:             conv.ToNullUUID(toolset.ProjectID),
 		RemoteSessionIssuerID: remoteIssuer.ID,
-		UserSessionIssuerID:   userIssuer.ID,
+		UserSessionIssuerID:   conv.ToNullUUID(userIssuer.ID),
 		ClientID:              "resolver-extmcp-client-" + suffix,
 		ClientSecretEncrypted: pgtype.Text{},
 		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		ClientSecretExpiresAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+
+	err = remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: remoteClient.ID,
+		UserSessionIssuerID:   userIssuer.ID,
 	})
 	require.NoError(t, err)
 

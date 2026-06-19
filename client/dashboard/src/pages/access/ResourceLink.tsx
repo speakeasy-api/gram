@@ -13,7 +13,7 @@ export function ResourceLink({
   orgSlug: string;
   projectMap: Map<string, { slug: string; name: string }>;
   toolsetMap: Map<string, { slug: string; name: string; projectId: string }>;
-}) {
+}): JSX.Element {
   const { resourceKind, resourceId } = challenge;
 
   if (!resourceKind || !resourceId) {

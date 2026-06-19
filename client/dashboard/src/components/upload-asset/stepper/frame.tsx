@@ -6,7 +6,7 @@ type FrameProps = {
 };
 
 /* Layout component for steps */
-const Frame = ({ children, className }: FrameProps) => {
+const Frame = ({ children, className }: FrameProps): JSX.Element => {
   return (
     <div className={cn("flex flex-col gap-y-6", className)}>{children}</div>
   );

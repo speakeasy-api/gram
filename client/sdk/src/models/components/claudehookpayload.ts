@@ -11,6 +11,7 @@ import { ClosedEnum } from "../../types/enums.js";
  */
 export const HookEventName = {
   SessionStart: "SessionStart",
+  ConfigChange: "ConfigChange",
   PreToolUse: "PreToolUse",
   PostToolUse: "PostToolUse",
   PostToolUseFailure: "PostToolUseFailure",
@@ -108,6 +109,10 @@ export type ClaudeHookPayload = {
    * Path to the conversation transcript file
    */
   transcriptPath?: string | undefined;
+  /**
+   * Email of the authenticated user from the Speakeasy device agent, if available
+   */
+  userEmail?: string | undefined;
 };
 
 /** @internal */
@@ -136,6 +141,7 @@ export type ClaudeHookPayload$Outbound = {
   tool_response?: any | undefined;
   tool_use_id?: string | undefined;
   transcript_path?: string | undefined;
+  user_email?: string | undefined;
 };
 
 /** @internal */
@@ -164,6 +170,7 @@ export const ClaudeHookPayload$outboundSchema: z.ZodMiniType<
     toolResponse: z.optional(z.any()),
     toolUseId: z.optional(z.string()),
     transcriptPath: z.optional(z.string()),
+    userEmail: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -179,6 +186,7 @@ export const ClaudeHookPayload$outboundSchema: z.ZodMiniType<
       toolResponse: "tool_response",
       toolUseId: "tool_use_id",
       transcriptPath: "transcript_path",
+      userEmail: "user_email",
     });
   }),
 );

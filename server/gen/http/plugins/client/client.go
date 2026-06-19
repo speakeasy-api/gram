@@ -74,6 +74,14 @@ type Client struct {
 	// publishPlugins endpoint.
 	PublishPluginsDoer goahttp.Doer
 
+	// GetMarketplaceSettings Doer is the HTTP client used to make requests to the
+	// getMarketplaceSettings endpoint.
+	GetMarketplaceSettingsDoer goahttp.Doer
+
+	// UpdateMarketplaceSettings Doer is the HTTP client used to make requests to
+	// the updateMarketplaceSettings endpoint.
+	UpdateMarketplaceSettingsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -108,6 +116,8 @@ func NewClient(
 		DownloadCodexInstallScriptDoer:  doer,
 		GetPublishStatusDoer:            doer,
 		PublishPluginsDoer:              doer,
+		GetMarketplaceSettingsDoer:      doer,
+		UpdateMarketplaceSettingsDoer:   doer,
 		RestoreResponseBody:             restoreBody,
 		scheme:                          scheme,
 		host:                            host,
@@ -462,6 +472,54 @@ func (c *Client) PublishPlugins() goa.Endpoint {
 		resp, err := c.PublishPluginsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("plugins", "publishPlugins", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMarketplaceSettings returns an endpoint that makes HTTP requests to the
+// plugins service getMarketplaceSettings server.
+func (c *Client) GetMarketplaceSettings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMarketplaceSettingsRequest(c.encoder)
+		decodeResponse = DecodeGetMarketplaceSettingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMarketplaceSettingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMarketplaceSettingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "getMarketplaceSettings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateMarketplaceSettings returns an endpoint that makes HTTP requests to
+// the plugins service updateMarketplaceSettings server.
+func (c *Client) UpdateMarketplaceSettings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateMarketplaceSettingsRequest(c.encoder)
+		decodeResponse = DecodeUpdateMarketplaceSettingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateMarketplaceSettingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateMarketplaceSettingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "updateMarketplaceSettings", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -56,7 +56,7 @@ func callSearchUsers(ctx context.Context, client *apiClient, env toolconfig.Tool
 	setOptionalInt(request, "limit", input.Limit)
 	setOptionalBool(request, "include_locale", input.IncludeLocale)
 
-	body, err := client.call(ctx, "users.list", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "users.list", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

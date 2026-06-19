@@ -31,17 +31,19 @@ func TestService_GetRole(t *testing.T) {
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "", mockMember("", "membership_workos_only", "user_workos_only", "custom-builder"))
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeMCPConnect, authz.WildcardResource)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeRiskPolicyEvaluate, "policy-1")
 
 	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: customID})
 	require.NoError(t, err)
 	require.Equal(t, customID, role.ID)
+	require.Equal(t, "role:organization:"+customID, role.PrincipalUrn)
 	require.Equal(t, "Custom Builder", role.Name)
 	require.Equal(t, "Can build selected resources", role.Description)
 	require.False(t, role.IsSystem)
 	require.Equal(t, 2, role.MemberCount)
 	require.Equal(t, mockRoleTimestamp, role.CreatedAt)
 	require.Equal(t, mockRoleTimestamp, role.UpdatedAt)
-	require.Len(t, role.Grants, 2)
+	require.Len(t, role.Grants, 3)
 
 	grantsByScope := make(map[string]*gen.RoleGrant, len(role.Grants))
 	for _, grant := range role.Grants {
@@ -50,7 +52,10 @@ func TestService_GetRole(t *testing.T) {
 	sels := grantsByScope[string(authz.ScopeProjectRead)].Selectors
 	require.Len(t, sels, 1)
 	require.Equal(t, "project-1", sels[0].ResourceID)
-	require.Nil(t, grantsByScope[string(authz.ScopeMCPConnect)].Selectors)
+	mcpSelectors := grantsByScope[string(authz.ScopeMCPConnect)].Selectors
+	require.Len(t, mcpSelectors, 1)
+	require.Equal(t, authz.WildcardResource, mcpSelectors[0].ResourceID)
+	require.Equal(t, "policy-1", grantsByScope[string(authz.ScopeRiskPolicyEvaluate)].Selectors[0].ResourceID)
 }
 
 func TestService_GetRole_NotFound(t *testing.T) {

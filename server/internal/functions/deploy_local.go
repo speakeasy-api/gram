@@ -98,17 +98,17 @@ func (l *LocalRunner) ToolCall(ctx context.Context, req RunnerToolCallRequest) (
 	)
 
 	if err := invCheckLocalToolCall(req); err != nil {
-		return nil, oops.E(oops.CodeInvariantViolation, err, "malformed local tool call request").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvariantViolation, err, "malformed local tool call request").LogError(ctx, logger)
 	}
 
 	deployment, err := l.loadDeployment(req.FunctionsID)
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "local function runner not found").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, err, "local function runner not found").LogError(ctx, logger)
 	}
 
 	enc, err := encryption.New(deployment.BearerSecret)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create local function auth client").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create local function auth client").LogError(ctx, logger)
 	}
 
 	token, err := TokenV1(enc, TokenRequestV1{
@@ -117,7 +117,7 @@ func (l *LocalRunner) ToolCall(ctx context.Context, req RunnerToolCallRequest) (
 		Subject: req.ToolURN.String(),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create bearer token for local function tool call").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create bearer token for local function tool call").LogError(ctx, logger)
 	}
 
 	payload, err := json.Marshal(CallToolPayload{
@@ -126,17 +126,17 @@ func (l *LocalRunner) ToolCall(ctx context.Context, req RunnerToolCallRequest) (
 		Environment: req.Environment,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "marshal local function tool payload").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "marshal local function tool payload").LogError(ctx, logger)
 	}
 
 	endpoint, err := l.proxyEndpoint(req.FunctionsID, "tool-call")
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve local proxy endpoint").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve local proxy endpoint").LogError(ctx, logger)
 	}
 
 	httpreq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create local function tool request").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create local function tool request").LogError(ctx, logger)
 	}
 
 	httpreq.Header.Set("Authorization", "Bearer "+token)
@@ -156,17 +156,17 @@ func (l *LocalRunner) ReadResource(ctx context.Context, req RunnerResourceReadRe
 	)
 
 	if err := invCheckLocalReadResource(req); err != nil {
-		return nil, oops.E(oops.CodeInvariantViolation, err, "malformed local read resource request").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvariantViolation, err, "malformed local read resource request").LogError(ctx, logger)
 	}
 
 	deployment, err := l.loadDeployment(req.FunctionsID)
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "local function runner not found").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, err, "local function runner not found").LogError(ctx, logger)
 	}
 
 	enc, err := encryption.New(deployment.BearerSecret)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create local function auth client").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create local function auth client").LogError(ctx, logger)
 	}
 
 	token, err := TokenV1(enc, TokenRequestV1{
@@ -175,7 +175,7 @@ func (l *LocalRunner) ReadResource(ctx context.Context, req RunnerResourceReadRe
 		Subject: req.ResourceURN.String(),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create bearer token for local function read resource call").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create bearer token for local function read resource call").LogError(ctx, logger)
 	}
 
 	payload, err := json.Marshal(ReadResourcePayload{
@@ -184,17 +184,17 @@ func (l *LocalRunner) ReadResource(ctx context.Context, req RunnerResourceReadRe
 		Environment: req.Environment,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "marshal local function read resource payload").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "marshal local function read resource payload").LogError(ctx, logger)
 	}
 
 	endpoint, err := l.proxyEndpoint(req.FunctionsID, "resource-request")
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve local proxy endpoint").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve local proxy endpoint").LogError(ctx, logger)
 	}
 
 	httpreq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create local function resource request").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create local function resource request").LogError(ctx, logger)
 	}
 
 	httpreq.Header.Set("Authorization", "Bearer "+token)
@@ -214,20 +214,20 @@ func (l *LocalRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (*Run
 	)
 
 	if err := invCheckLocalDeploy(req); err != nil {
-		return nil, oops.E(oops.CodeInvariantViolation, err, "malformed local function deployment").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvariantViolation, err, "malformed local function deployment").LogError(ctx, logger)
 	}
 
 	functionDir := l.functionDir(req.FunctionID)
 	if err := os.RemoveAll(functionDir); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "clear local function directory").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "clear local function directory").LogError(ctx, logger)
 	}
 	if err := os.MkdirAll(functionDir, 0750); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create local function directory").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create local function directory").LogError(ctx, logger)
 	}
 
 	codePath := filepath.Join(functionDir, localRunnerCodeZipName)
 	if err := l.copyAsset(ctx, req.Assets[0].AssetURL, codePath); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "copy local function asset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "copy local function asset").LogError(ctx, logger)
 	}
 
 	deployment := localRunnerDeployment{
@@ -238,7 +238,7 @@ func (l *LocalRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (*Run
 		Runtime:      req.Runtime,
 	}
 	if err := writeJSONAtomic(filepath.Join(functionDir, localRunnerMetadataName), deployment, 0600); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "write local function deployment metadata").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "write local function deployment metadata").LogError(ctx, logger)
 	}
 
 	name := fmt.Sprintf("dev-%s", req.FunctionID.String())
@@ -261,11 +261,11 @@ func (l *LocalRunner) Reap(ctx context.Context, req ReapRequest) error {
 	)
 
 	if req.FunctionID == uuid.Nil {
-		return oops.E(oops.CodeInvariantViolation, nil, "local function reap request is missing function id").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, nil, "local function reap request is missing function id").LogError(ctx, logger)
 	}
 
 	if err := os.RemoveAll(l.functionDir(req.FunctionID)); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "remove local function deployment").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "remove local function deployment").LogError(ctx, logger)
 	}
 
 	return nil

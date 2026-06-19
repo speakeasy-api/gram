@@ -18,10 +18,10 @@ func TestResolveAssistantMCPServers_EmptyUserToolsetsStillGetsPlatformServer(t *
 	serverURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil)
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, []string{platformtools.AssistantsPlatformToolsetSlug})
 	require.Len(t, servers, 1)
 
-	require.Equal(t, "_platform-"+platformtools.AssistantsPlatformToolsetSlug, servers[0].ID)
+	require.Equal(t, "_p-"+platformtools.AssistantsPlatformToolsetSlug, servers[0].ID)
 	require.Equal(t,
 		"https://gram.test/platform/mcp/"+platformtools.AssistantsPlatformToolsetSlug,
 		servers[0].URL,
@@ -44,14 +44,14 @@ func TestResolveAssistantMCPServers_UserToolsetsListedBeforePlatformServer(t *te
 		},
 	}
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, rows)
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, rows, []string{platformtools.AssistantsPlatformToolsetSlug})
 	require.Len(t, servers, 2)
 
 	require.Equal(t, "billing", servers[0].ID)
 	require.Equal(t, "https://gram.test/mcp/billing-mcp", servers[0].URL)
 	require.Equal(t, "prod", servers[0].Headers["Gram-Environment"])
 
-	require.Equal(t, "_platform-"+platformtools.AssistantsPlatformToolsetSlug, servers[1].ID)
+	require.Equal(t, "_p-"+platformtools.AssistantsPlatformToolsetSlug, servers[1].ID)
 	require.Equal(t,
 		"https://gram.test/platform/mcp/"+platformtools.AssistantsPlatformToolsetSlug,
 		servers[1].URL,
@@ -86,11 +86,34 @@ func TestResolveAssistantMCPServers_MisconfiguredToolsetIsOmitted(t *testing.T) 
 		},
 	}
 
-	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, rows)
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, rows, []string{platformtools.AssistantsPlatformToolsetSlug})
 	require.Len(t, servers, 2)
 
 	require.Equal(t, "billing", servers[0].ID)
 	require.Equal(t, "https://gram.test/mcp/billing-mcp", servers[0].URL)
 
-	require.Equal(t, "_platform-"+platformtools.AssistantsPlatformToolsetSlug, servers[1].ID)
+	require.Equal(t, "_p-"+platformtools.AssistantsPlatformToolsetSlug, servers[1].ID)
+}
+
+// The managed assistant is granted the managed-assistant platform toolset (the
+// dashboard egress tool) in addition to the always-on assistants toolset; a
+// non-managed assistant is given only the assistants slug, so it never sees a
+// managed-assistant server.
+func TestResolveAssistantMCPServers_GrantsEachRequestedPlatformToolset(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://gram.test")
+	require.NoError(t, err)
+
+	servers := resolveAssistantMCPServers(context.Background(), testenv.NewLogger(t), serverURL, nil, []string{
+		platformtools.AssistantsPlatformToolsetSlug,
+		platformtools.ManagedAssistantPlatformToolsetSlug,
+	})
+	require.Len(t, servers, 2)
+	require.Equal(t, "_p-"+platformtools.AssistantsPlatformToolsetSlug, servers[0].ID)
+	require.Equal(t, "_p-"+platformtools.ManagedAssistantPlatformToolsetSlug, servers[1].ID)
+	require.Equal(t,
+		"https://gram.test/platform/mcp/"+platformtools.ManagedAssistantPlatformToolsetSlug,
+		servers[1].URL,
+	)
 }

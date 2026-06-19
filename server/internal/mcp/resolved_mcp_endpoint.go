@@ -303,9 +303,9 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case errors.Is(err, pgx.ErrNoRows):
 			return nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found")
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, s.logger)
 		}
-		mcpServer, err := mcpservers_repo.New(s.db).GetMCPServerByID(ctx, mcpservers_repo.GetMCPServerByIDParams{
+		mcpServer, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
 			ID:        mcpEndpoint.McpServerID,
 			ProjectID: mcpEndpoint.ProjectID,
 		})
@@ -313,7 +313,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case errors.Is(err, pgx.ErrNoRows):
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 		}
 		if !mcpServer.UserSessionIssuerID.Valid {
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
@@ -329,7 +329,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case errors.Is(err, pgx.ErrNoRows):
 			return nil, oops.E(oops.CodeNotFound, err, "project not found")
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "load project").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, s.logger)
 		}
 		return NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID), nil
 	}
@@ -339,7 +339,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 	case errors.Is(err, errToolsetNotFound):
 		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 	}
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
@@ -355,14 +355,15 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 }
 
 // loadResolvedMcpEndpointByToolsetSlug resolves an mcp_slug to a
-// ResolvedMcpEndpoint via the toolsets path and verifies its issuer FK
-// is still live. Returns CodeNotFound when either no toolset matches
-// the slug or the toolset is not issuer-gated. Used by the six
-// /mcp/{slug} OAuth handlers (Register, Authorize, Consent, Token,
-// Revoke); the well-known handlers keep their own toolset load so they
-// can fall through to the legacy non-issuer-gated metadata response
-// when user_session_issuer_id is unset.
-func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpSlug string) (*ResolvedMcpEndpoint, error) {
+// ResolvedMcpEndpoint via the legacy toolsets path and verifies its
+// issuer FK is still live. Returns CodeNotFound when either no toolset
+// matches the slug or the toolset is not issuer-gated. routeBase ("mcp"
+// or "x/mcp") is the surface the request arrived under and propagates
+// into the resolved endpoint's URL building. Used as the fallback leaf
+// of LoadResolvedMcpEndpointBySlug for slugs with no mcp_endpoint →
+// mcp_server row yet (issuer-gated toolset-backed servers predating the
+// toolsets → mcp_servers migration).
+func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpSlug, routeBase string) (*ResolvedMcpEndpoint, error) {
 	var customDomainID uuid.NullUUID
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
@@ -372,12 +373,12 @@ func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpS
 	case errors.Is(err, errToolsetNotFound):
 		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
-	endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")
+	endpoint := newResolvedMcpEndpointFromToolset(toolset, routeBase)
 	if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
 		return nil, err
 	}

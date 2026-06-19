@@ -97,7 +97,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 
 	orgData, err := p.projects.GetProjectWithOrganizationMetadata(ctx, uuid.MustParse(deployment.ProjectID))
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error loading organization metadata").Log(ctx, p.logger)
+		return oops.E(oops.CodeUnexpected, err, "error loading organization metadata").LogError(ctx, p.logger)
 	}
 
 	numOpenAPISources := len(deployment.Openapiv3Assets)
@@ -150,7 +150,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		Limit:        1,
 	})
 	if err != nil {
-		err = oops.E(oops.CodeUnexpected, err, "failed to read list of tools in deployment").Log(ctx, p.logger)
+		err = oops.E(oops.CodeUnexpected, err, "failed to read list of tools in deployment").LogError(ctx, p.logger)
 		return temporal.NewApplicationErrorWithOptions("deployment tools could not be verified", "deployment_error", temporal.ApplicationErrorOptions{
 			NonRetryable: true,
 			Cause:        err,
@@ -165,7 +165,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		Limit:        1,
 	})
 	if err != nil {
-		err = oops.E(oops.CodeUnexpected, err, "failed to read list of function tools in deployment").Log(ctx, p.logger)
+		err = oops.E(oops.CodeUnexpected, err, "failed to read list of function tools in deployment").LogError(ctx, p.logger)
 		return temporal.NewApplicationErrorWithOptions("deployment function tools could not be verified", "deployment_error", temporal.ApplicationErrorOptions{
 			NonRetryable: true,
 			Cause:        err,
@@ -179,7 +179,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		Limit:        1,
 	})
 	if err != nil {
-		err = oops.E(oops.CodeUnexpected, err, "failed to read list of function resources in deployment").Log(ctx, p.logger)
+		err = oops.E(oops.CodeUnexpected, err, "failed to read list of function resources in deployment").LogError(ctx, p.logger)
 		return temporal.NewApplicationErrorWithOptions("deployment function resources could not be verified", "deployment_error", temporal.ApplicationErrorOptions{
 			NonRetryable: true,
 			Cause:        err,
@@ -189,7 +189,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 	// Get external MCPs to check if deployment has any
 	externalMCPs, err := p.repo.ListDeploymentExternalMCPs(ctx, deploymentID)
 	if err != nil {
-		err = oops.E(oops.CodeUnexpected, err, "failed to read list of external mcps in deployment").Log(ctx, p.logger)
+		err = oops.E(oops.CodeUnexpected, err, "failed to read list of external mcps in deployment").LogError(ctx, p.logger)
 		return temporal.NewApplicationErrorWithOptions("deployment external mcps could not be verified", "deployment_error", temporal.ApplicationErrorOptions{
 			NonRetryable: true,
 			Cause:        err,
@@ -203,7 +203,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 	hasResources := len(functionResources) > 0
 	hasExternalMCPs := len(externalMCPs) > 0
 	if expectsTools && !hasTools && !hasResources && !hasExternalMCPs {
-		err = oops.E(oops.CodeUnexpected, err, "no tools were created for deployment").Log(ctx, p.logger)
+		err = oops.E(oops.CodeUnexpected, err, "no tools were created for deployment").LogError(ctx, p.logger)
 		return temporal.NewApplicationErrorWithOptions("empty deployment was not expected", "deployment_error", temporal.ApplicationErrorOptions{
 			NonRetryable: true,
 			Cause:        err,
@@ -237,12 +237,12 @@ func (p *ProcessDeployment) doOpenAPIv3(
 
 		openapiDocID, err := uuid.Parse(docInfo.ID)
 		if err != nil {
-			return oops.E(oops.CodeInvariantViolation, err, "error parsing openapi document id").Log(ctx, logger)
+			return oops.E(oops.CodeInvariantViolation, err, "error parsing openapi document id").LogError(ctx, logger)
 		}
 
 		assetID, err := uuid.Parse(docInfo.AssetID)
 		if err != nil {
-			return oops.E(oops.CodeInvariantViolation, err, "error parsing openapit asset id").Log(ctx, logger)
+			return oops.E(oops.CodeInvariantViolation, err, "error parsing openapit asset id").LogError(ctx, logger)
 		}
 
 		asset, err := p.assets.GetProjectAsset(ctx, assetsRepo.GetProjectAssetParams{
@@ -250,12 +250,12 @@ func (p *ProcessDeployment) doOpenAPIv3(
 			ProjectID: projectID,
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "error reading openapi asset url").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "error reading openapi asset url").LogError(ctx, logger)
 		}
 
 		u, err := url.Parse(asset.Url)
 		if err != nil {
-			return oops.E(oops.CodeBadRequest, err, "error parsing openapi asset URL").Log(ctx, logger)
+			return oops.E(oops.CodeBadRequest, err, "error parsing openapi asset URL").LogError(ctx, logger)
 		}
 
 		pool.Go(func() (err error) {
@@ -341,12 +341,12 @@ func (p *ProcessDeployment) doFunctions(
 
 		attachmentID, err := uuid.Parse(attachment.ID)
 		if err != nil {
-			return oops.E(oops.CodeInvariantViolation, err, "error parsing functions attachment id").Log(ctx, logger)
+			return oops.E(oops.CodeInvariantViolation, err, "error parsing functions attachment id").LogError(ctx, logger)
 		}
 
 		assetID, err := uuid.Parse(attachment.AssetID)
 		if err != nil {
-			return oops.E(oops.CodeInvariantViolation, err, "error parsing functions asset id").Log(ctx, logger)
+			return oops.E(oops.CodeInvariantViolation, err, "error parsing functions asset id").LogError(ctx, logger)
 		}
 
 		asset, err := p.assets.GetProjectAsset(ctx, assetsRepo.GetProjectAssetParams{
@@ -354,12 +354,12 @@ func (p *ProcessDeployment) doFunctions(
 			ProjectID: projectID,
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "error reading functions asset url").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "error reading functions asset url").LogError(ctx, logger)
 		}
 
 		u, err := url.Parse(asset.Url)
 		if err != nil {
-			return oops.E(oops.CodeBadRequest, err, "error parsing functions asset URL").Log(ctx, logger)
+			return oops.E(oops.CodeBadRequest, err, "error parsing functions asset URL").LogError(ctx, logger)
 		}
 
 		pool.Go(func() (err error) {
@@ -428,7 +428,7 @@ func (p *ProcessDeployment) doExternalMCPs(
 ) error {
 	externalMCPs, err := p.repo.ListDeploymentExternalMCPs(ctx, deploymentID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error listing external mcps for deployment").Log(ctx, p.logger)
+		return oops.E(oops.CodeUnexpected, err, "error listing external mcps for deployment").LogError(ctx, p.logger)
 	}
 
 	for _, mcp := range externalMCPs {

@@ -16,7 +16,6 @@ import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
 import type { Role } from "@gram/client/models/components/role.js";
-import type { RoleGrant as SdkRoleGrant } from "@gram/client/models/components/rolegrant.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
 import {
   invalidateAllMembers,
@@ -52,14 +51,11 @@ import {
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
 import type {
   ActivePanel,
-  AnnotationHint,
-  PolicyEffect,
   RoleGrant,
   Scope,
   ScopeRule,
+  Selector,
 } from "./types";
-import type { Selector } from "./types";
-import { DISPOSITION_TO_ANNOTATION } from "./types";
 import {
   isSaveDisabled,
   effectiveGrantCount,
@@ -67,74 +63,17 @@ import {
   computeRuleLabel,
   computeRuleTooltip,
 } from "./roleDialogState";
+import {
+  applyRemoveRule,
+  diffGrants,
+  grantsFromRole,
+  sdkGrantsFromForm,
+} from "./roleGrantTransform";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-/** Human-readable label for a rule chip. */
-/** Split a flat selector array into groups by hierarchy level. */
-function groupSelectorsByLevel(selectors: Selector[]): Selector[][] {
-  const projects: Selector[] = [];
-  const servers: Selector[] = [];
-  const tools: Selector[] = [];
-  const annotations: Selector[] = [];
-
-  for (const s of selectors) {
-    if (s.disposition) annotations.push(s);
-    else if (s.tool) tools.push(s);
-    else if (s.projectId) projects.push(s);
-    else servers.push(s);
-  }
-
-  const groups: Selector[][] = [];
-  if (projects.length) groups.push(projects);
-  if (servers.length) groups.push(servers);
-  if (tools.length) groups.push(tools);
-  if (annotations.length) groups.push(annotations);
-  return groups;
-}
-
-/** Convert API Role grants to rules-based RoleGrant map. */
-function grantsFromRole(role: Role): Record<string, RoleGrant> {
-  const result: Record<string, RoleGrant> = {};
-
-  for (const g of role.grants) {
-    if (!result[g.scope]) {
-      result[g.scope] = { scope: g.scope, rules: [] };
-    }
-
-    const effect: PolicyEffect = (g.effect as PolicyEffect) ?? "allow";
-
-    if (!g.selectors || g.selectors.length === 0) {
-      // Unrestricted rule
-      result[g.scope].rules.push({
-        id: crypto.randomUUID(),
-        effect,
-        selectors: null,
-      });
-    } else {
-      // Split selectors by hierarchy level into separate rules
-      const groups = groupSelectorsByLevel(g.selectors as Selector[]);
-      for (const sels of groups) {
-        const rule: ScopeRule = {
-          id: crypto.randomUUID(),
-          effect,
-          selectors: sels,
-        };
-        // Detect annotation-based rules and restore UI hints
-        if (sels.some((s) => s.disposition)) {
-          rule.customTab = "auto-groups";
-          rule.annotations = sels
-            .filter((s) => s.disposition)
-            .map((s) => DISPOSITION_TO_ANNOTATION[s.disposition!])
-            .filter((a): a is AnnotationHint => !!a);
-        }
-        result[g.scope].rules.push(rule);
-      }
-    }
-  }
-
-  return result;
-}
+//
+// Grant ↔ form transforms live in ./roleGrantTransform — kept in a plain TS
+// module so they can be unit-tested without pulling in React/react-query.
 
 /** Determine the broadest allow level from a scope's rules. */
 function getAllowLevel(
@@ -159,6 +98,7 @@ function getDenyPanels(allowLevel: string | null): ActivePanel[] {
       return ["servers", "tools"];
     case "server":
       return ["tools"];
+    case null:
     default:
       return []; // tool/annotation — already most specific, no deny possible
   }
@@ -178,7 +118,7 @@ export function CreateRoleDialog({
   onOpenChange,
   editingRole,
   onRoleCreated,
-}: CreateRoleDialogProps) {
+}: CreateRoleDialogProps): JSX.Element {
   const isEditing = !!editingRole;
   const isSystemRole = !!editingRole?.isSystem;
 
@@ -281,7 +221,25 @@ export function CreateRoleDialog({
   });
 
   const isMutating = createRole.isPending || updateRole.isPending;
-  const grantCount = effectiveGrantCount(grants);
+  const visibleScopeSlugs = useMemo(
+    () =>
+      new Set<Scope>(
+        scopeGroups.flatMap((group) =>
+          group.scopes.map((s) => s.slug as Scope),
+        ),
+      ),
+    [scopeGroups],
+  );
+  const visibleGrants = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(grants).filter(([scope]) =>
+          visibleScopeSlugs.has(scope as Scope),
+        ),
+      ),
+    [grants, visibleScopeSlugs],
+  );
+  const grantCount = effectiveGrantCount(visibleGrants);
 
   const saveDisabled = isSaveDisabled({
     isMutating,
@@ -325,7 +283,7 @@ export function CreateRoleDialog({
     const grant = grants[scopeSlug];
     if (ruleIndex >= 0 && grant?.rules[ruleIndex]) {
       // Edit existing rule — clone it as draft
-      setDraftRule({ ...grant.rules[ruleIndex] });
+      setDraftRule({ ...grant.rules[ruleIndex]! });
     } else {
       // New deny rule — or edit existing deny if one already exists
       const existingDenyIdx = grant?.rules.findIndex(
@@ -334,7 +292,7 @@ export function CreateRoleDialog({
       if (existingDenyIdx !== undefined && existingDenyIdx >= 0) {
         // Edit the existing deny rule instead of creating a new one
         setEditingRuleIndex(existingDenyIdx);
-        setDraftRule({ ...grant!.rules[existingDenyIdx] });
+        setDraftRule({ ...grant!.rules[existingDenyIdx]! });
       } else {
         setDraftRule({
           id: crypto.randomUUID(),
@@ -401,17 +359,14 @@ export function CreateRoleDialog({
     setGrants((prev) => {
       const grant = prev[scopeSlug];
       if (!grant) return prev;
-      let rules = grant.rules.filter((_, i) => i !== ruleIndex);
-      // No allows left → denies are orphaned, clear everything
-      if (!rules.some((r) => r.effect === "allow")) {
-        rules = [];
-      }
-      if (rules.length === 0) {
-        const next = { ...prev };
+      const result = applyRemoveRule(grant, ruleIndex);
+      const next = { ...prev };
+      if (result === null) {
         delete next[scopeSlug];
-        return next;
+      } else {
+        next[scopeSlug] = result;
       }
-      return { ...prev, [scopeSlug]: { ...grant, rules } };
+      return next;
     });
   };
 
@@ -479,47 +434,19 @@ export function CreateRoleDialog({
   // ─── Submit ───────────────────────────────────────────────────
 
   const handleSubmit = () => {
-    const sdkGrants: SdkRoleGrant[] = [];
-
-    for (const grant of Object.values(grants)) {
-      const allowSelectors: Selector[] = [];
-      const denySelectors: Selector[] = [];
-      let hasUnrestrictedAllow = false;
-
-      for (const rule of grant.rules) {
-        if (rule.effect === "allow") {
-          if (rule.selectors === null) hasUnrestrictedAllow = true;
-          else if (rule.selectors.length > 0)
-            allowSelectors.push(...rule.selectors);
-        } else {
-          if (rule.selectors && rule.selectors.length > 0)
-            denySelectors.push(...rule.selectors);
-        }
-      }
-
-      // Skip scopes with no effective allows
-      if (!hasUnrestrictedAllow && allowSelectors.length === 0) continue;
-
-      sdkGrants.push({
-        scope: grant.scope,
-        selectors: hasUnrestrictedAllow ? undefined : allowSelectors,
-      });
-
-      if (denySelectors.length > 0) {
-        sdkGrants.push({
-          scope: grant.scope,
-          effect: "deny",
-          selectors: denySelectors,
-        });
-      }
-    }
+    const sdkGrants = sdkGrantsFromForm(grants);
 
     if (isEditing) {
+      const initialGrants = sdkGrantsFromForm(grantsFromRole(editingRole));
+      const { addGrants, removeGrants } = diffGrants(initialGrants, sdkGrants);
+
       updateRole.mutate({
         request: {
           updateRoleForm: {
             id: editingRole.id,
-            ...(isSystemRole ? {} : { name, description, grants: sdkGrants }),
+            ...(isSystemRole
+              ? {}
+              : { name, description, addGrants, removeGrants }),
             memberIds:
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
@@ -685,8 +612,8 @@ export function CreateRoleDialog({
                     {isSystemRole && (
                       <div className="bg-muted/60 text-muted-foreground flex items-center gap-2 rounded-md px-3 py-2 text-xs">
                         <Info className="h-3.5 w-3.5 shrink-0" />
-                        System role permissions are managed by Gram and cannot
-                        be changed.
+                        System role permissions are managed by the platform and
+                        cannot be changed.
                       </div>
                     )}
                     {scopeGroups.map((group) => {
@@ -910,126 +837,130 @@ export function CreateRoleDialog({
                 )}
               </div>
 
-              {/* ─── Assign Members ─── */}
-              <div className="border-border border-t pt-4 pb-4">
-                <button
-                  type="button"
-                  onClick={() => setShowMembers(!showMembers)}
-                  className="flex w-full items-center gap-1 text-left"
-                >
-                  <ChevronRight
-                    className={cn(
-                      "h-4 w-4 transition-transform",
-                      showMembers && "rotate-90",
-                    )}
-                  />
-                  <Type variant="body" className="font-medium">
-                    Assign Members
-                  </Type>
-                  <Type variant="body" className="text-muted-foreground ml-1">
-                    (optional, {selectedMembers.size} selected)
-                  </Type>
-                </button>
+              {/* ─── Assign Members (hidden when directory sync manages assignment) ─── */}
+              {!organization.scimEnabled && (
+                <div className="border-border border-t pt-4 pb-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowMembers(!showMembers)}
+                    className="flex w-full items-center gap-1 text-left"
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "h-4 w-4 transition-transform",
+                        showMembers && "rotate-90",
+                      )}
+                    />
+                    <Type variant="body" className="font-medium">
+                      Assign Members
+                    </Type>
+                    <Type variant="body" className="text-muted-foreground ml-1">
+                      (optional, {selectedMembers.size} selected)
+                    </Type>
+                  </button>
 
-                {showMembers && (
-                  <div className="border-border divide-border mt-3 divide-y rounded-md border">
-                    {/* Select-all header */}
-                    {(() => {
-                      const selectableMembers = getSelectableMembers(
-                        members,
-                        isEditing,
-                        editingRole?.id,
-                      );
-                      const allSelected =
-                        selectableMembers.length > 0 &&
-                        selectableMembers.every((m) =>
-                          selectedMembers.has(m.id),
+                  {showMembers && (
+                    <div className="border-border divide-border mt-3 divide-y rounded-md border">
+                      {/* Select-all header */}
+                      {(() => {
+                        const selectableMembers = getSelectableMembers(
+                          members,
+                          isEditing,
+                          editingRole?.id,
                         );
-                      const someSelected =
-                        !allSelected &&
-                        selectableMembers.some((m) =>
-                          selectedMembers.has(m.id),
+                        const allSelected =
+                          selectableMembers.length > 0 &&
+                          selectableMembers.every((m) =>
+                            selectedMembers.has(m.id),
+                          );
+                        const someSelected =
+                          !allSelected &&
+                          selectableMembers.some((m) =>
+                            selectedMembers.has(m.id),
+                          );
+                        return (
+                          <label className="bg-muted/60 flex cursor-pointer items-center gap-3 px-3 py-2">
+                            <Checkbox
+                              checked={
+                                allSelected
+                                  ? true
+                                  : someSelected
+                                    ? "indeterminate"
+                                    : false
+                              }
+                              onCheckedChange={() => toggleAllMembers()}
+                            />
+                            <Type
+                              variant="body"
+                              className="text-muted-foreground text-sm font-medium"
+                            >
+                              Select all
+                            </Type>
+                          </label>
                         );
-                      return (
-                        <label className="bg-muted/60 flex cursor-pointer items-center gap-3 px-3 py-2">
-                          <Checkbox
-                            checked={
-                              allSelected
-                                ? true
-                                : someSelected
-                                  ? "indeterminate"
-                                  : false
-                            }
-                            onCheckedChange={() => toggleAllMembers()}
-                          />
-                          <Type
-                            variant="body"
-                            className="text-muted-foreground text-sm font-medium"
-                          >
-                            Select all
-                          </Type>
-                        </label>
-                      );
-                    })()}
-                    {members.map((member) => {
-                      const alreadyHasRole = isMemberLockedToRole(
-                        isEditing,
-                        editingRole?.id,
-                        member.roleIds,
-                      );
-                      return (
-                        <label
-                          key={member.id}
-                          className={cn(
-                            "hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5",
-                            alreadyHasRole && "cursor-default opacity-50",
-                          )}
-                        >
-                          <Checkbox
-                            checked={
-                              alreadyHasRole || selectedMembers.has(member.id)
-                            }
-                            disabled={alreadyHasRole}
-                            onCheckedChange={() =>
-                              !alreadyHasRole && toggleMember(member.id)
-                            }
-                          />
-                          <Avatar className="h-7 w-7">
-                            {member.photoUrl && (
-                              <AvatarImage
-                                src={member.photoUrl}
-                                alt={member.name}
-                              />
+                      })()}
+                      {members.map((member) => {
+                        const alreadyHasRole = isMemberLockedToRole(
+                          isEditing,
+                          editingRole?.id,
+                          member.roleIds,
+                        );
+                        return (
+                          <label
+                            key={member.id}
+                            className={cn(
+                              "hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5",
+                              alreadyHasRole && "cursor-default opacity-50",
                             )}
-                            <AvatarFallback className="text-xs">
-                              {member.name
-                                .split(" ")
-                                .map((n) => n[0])
-                                .join("")
-                                .toUpperCase()
-                                .slice(0, 2)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0 flex-1 space-y-0.5">
-                            <Type
-                              variant="body"
-                              className="text-sm font-medium"
-                            >
-                              {member.name}
-                            </Type>
-                            <Type
-                              variant="body"
-                              className="text-muted-foreground text-xs"
-                            >
-                              {member.email}
-                            </Type>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                          >
+                            <Checkbox
+                              checked={
+                                alreadyHasRole || selectedMembers.has(member.id)
+                              }
+                              disabled={alreadyHasRole}
+                              onCheckedChange={() => {
+                                void (
+                                  !alreadyHasRole && toggleMember(member.id)
+                                );
+                              }}
+                            />
+                            <Avatar className="h-7 w-7">
+                              {member.photoUrl && (
+                                <AvatarImage
+                                  src={member.photoUrl}
+                                  alt={member.name}
+                                />
+                              )}
+                              <AvatarFallback className="text-xs">
+                                {member.name
+                                  .split(" ")
+                                  .map((n) => n[0])
+                                  .join("")
+                                  .toUpperCase()
+                                  .slice(0, 2)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0 flex-1 space-y-0.5">
+                              <Type
+                                variant="body"
+                                className="text-sm font-medium"
+                              >
+                                {member.name}
+                              </Type>
+                              <Type
+                                variant="body"
+                                className="text-muted-foreground text-xs"
+                              >
+                                {member.email}
+                              </Type>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* ─── Panel 2: Rule editor (slides in from right) ─── */}

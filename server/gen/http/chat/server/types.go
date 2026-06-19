@@ -35,6 +35,8 @@ type SubmitFeedbackRequestBody struct {
 type ListChatsResponseBody struct {
 	// The list of chats
 	Chats []*ChatOverviewResponseBody `form:"chats" json:"chats" xml:"chats"`
+	// Total number of chats (before pagination)
+	Total int `form:"total" json:"total" xml:"total"`
 }
 
 // LoadChatResponseBody is the type of the "chat" service "loadChat" endpoint
@@ -50,6 +52,8 @@ type LoadChatResponseBody struct {
 	// history, walk from `max_generation` down to 0, requesting each generation in
 	// turn.
 	MaxGeneration int `form:"max_generation" json:"max_generation" xml:"max_generation"`
+	// Agent-specific usage enrichment for the chat, when available.
+	AgentUsage *AgentUsageResponseBody `form:"agent_usage,omitempty" json:"agent_usage,omitempty" xml:"agent_usage,omitempty"`
 	// The ID of the chat
 	ID string `form:"id" json:"id" xml:"id"`
 	// The title of the chat
@@ -97,15 +101,6 @@ type CreditUsageResponseBody struct {
 	CreditsUsed float64 `form:"credits_used" json:"credits_used" xml:"credits_used"`
 	// The number of monthly credits
 	MonthlyCredits int `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
-}
-
-// ListChatsWithResolutionsResponseBody is the type of the "chat" service
-// "listChatsWithResolutions" endpoint HTTP response body.
-type ListChatsWithResolutionsResponseBody struct {
-	// List of chats with resolutions
-	Chats []*ChatOverviewWithResolutionsResponseBody `form:"chats" json:"chats" xml:"chats"`
-	// Total number of chats (before pagination)
-	Total int `form:"total" json:"total" xml:"total"`
 }
 
 // SubmitFeedbackResponseBody is the type of the "chat" service
@@ -838,196 +833,6 @@ type CreditUsageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListChatsWithResolutionsUnauthorizedResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "unauthorized" error.
-type ListChatsWithResolutionsUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListChatsWithResolutionsForbiddenResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "forbidden" error.
-type ListChatsWithResolutionsForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListChatsWithResolutionsBadRequestResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "bad_request" error.
-type ListChatsWithResolutionsBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListChatsWithResolutionsNotFoundResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "not_found" error.
-type ListChatsWithResolutionsNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListChatsWithResolutionsConflictResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "conflict" error.
-type ListChatsWithResolutionsConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListChatsWithResolutionsUnsupportedMediaResponseBody is the type of the
-// "chat" service "listChatsWithResolutions" endpoint HTTP response body for
-// the "unsupported_media" error.
-type ListChatsWithResolutionsUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListChatsWithResolutionsInvalidResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "invalid" error.
-type ListChatsWithResolutionsInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListChatsWithResolutionsInvariantViolationResponseBody is the type of the
-// "chat" service "listChatsWithResolutions" endpoint HTTP response body for
-// the "invariant_violation" error.
-type ListChatsWithResolutionsInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListChatsWithResolutionsUnexpectedResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "unexpected" error.
-type ListChatsWithResolutionsUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListChatsWithResolutionsGatewayErrorResponseBody is the type of the "chat"
-// service "listChatsWithResolutions" endpoint HTTP response body for the
-// "gateway_error" error.
-type ListChatsWithResolutionsGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // DeleteChatUnauthorizedResponseBody is the type of the "chat" service
 // "deleteChat" endpoint HTTP response body for the "unauthorized" error.
 type DeleteChatUnauthorizedResponseBody struct {
@@ -1443,6 +1248,8 @@ type ChatMessageResponseBody struct {
 	ToolCalls *string `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
 	// The finish reason of the message
 	FinishReason *string `form:"finish_reason,omitempty" json:"finish_reason,omitempty" xml:"finish_reason,omitempty"`
+	// The agent prompt/turn ID associated with this message, when available.
+	PromptID *string `form:"prompt_id,omitempty" json:"prompt_id,omitempty" xml:"prompt_id,omitempty"`
 	// The ID of the user who created the message
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The ID of the external user who created the message
@@ -1453,66 +1260,72 @@ type ChatMessageResponseBody struct {
 	Generation int `form:"generation" json:"generation" xml:"generation"`
 }
 
-// ChatOverviewWithResolutionsResponseBody is used to define fields on response
-// body types.
-type ChatOverviewWithResolutionsResponseBody struct {
-	// List of resolutions for this chat
-	Resolutions []*ChatResolutionResponseBody `form:"resolutions" json:"resolutions" xml:"resolutions"`
-	// The ID of the chat
-	ID string `form:"id" json:"id" xml:"id"`
-	// The title of the chat
-	Title string `form:"title" json:"title" xml:"title"`
-	// The ID of the user who created the chat
-	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	// The ID of the external user who created the chat
-	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
-	// The number of messages in the chat
-	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
-	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
-	// messages)
-	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
-	// When the chat was created.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// When the chat was last updated.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-	// Total input tokens used in this chat
-	TotalInputTokens *int64 `form:"total_input_tokens,omitempty" json:"total_input_tokens,omitempty" xml:"total_input_tokens,omitempty"`
-	// Total output tokens used in this chat
-	TotalOutputTokens *int64 `form:"total_output_tokens,omitempty" json:"total_output_tokens,omitempty" xml:"total_output_tokens,omitempty"`
-	// Total tokens (input + output) used in this chat
-	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
-	// Total cost in USD for this chat
-	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
-	// When the last message in the chat was created.
-	LastMessageTimestamp string `form:"last_message_timestamp" json:"last_message_timestamp" xml:"last_message_timestamp"`
-	// Number of risk findings recorded against messages in this chat
-	// (project-scoped, found=true). Only populated by endpoints that join risk
-	// data; absent elsewhere.
-	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
+// AgentUsageResponseBody is used to define fields on response body types.
+type AgentUsageResponseBody struct {
+	// The agent usage payload discriminator.
+	Type string `form:"type" json:"type" xml:"type"`
+	// Claude Code usage details.
+	Claude *ClaudeAgentUsageResponseBody `form:"claude,omitempty" json:"claude,omitempty" xml:"claude,omitempty"`
 }
 
-// ChatResolutionResponseBody is used to define fields on response body types.
-type ChatResolutionResponseBody struct {
-	// Resolution ID
-	ID string `form:"id" json:"id" xml:"id"`
-	// User's intended goal
-	UserGoal string `form:"user_goal" json:"user_goal" xml:"user_goal"`
-	// Resolution status
-	Resolution string `form:"resolution" json:"resolution" xml:"resolution"`
-	// Notes about the resolution
-	ResolutionNotes string `form:"resolution_notes" json:"resolution_notes" xml:"resolution_notes"`
-	// Score 0-100
-	Score int `form:"score" json:"score" xml:"score"`
-	// When resolution was created
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// Message IDs associated with this resolution
-	MessageIds []string `form:"message_ids" json:"message_ids" xml:"message_ids"`
+// ClaudeAgentUsageResponseBody is used to define fields on response body types.
+type ClaudeAgentUsageResponseBody struct {
+	// Per-prompt Claude usage turns ordered by start time.
+	Turns []*ClaudeTurnUsageResponseBody `form:"turns" json:"turns" xml:"turns"`
+	// Per-tool Claude usage keyed by tool_use_id.
+	Tools []*ClaudeToolUsageResponseBody `form:"tools" json:"tools" xml:"tools"`
+}
+
+// ClaudeTurnUsageResponseBody is used to define fields on response body types.
+type ClaudeTurnUsageResponseBody struct {
+	// Claude prompt.id that correlates events for one user turn.
+	PromptID string `form:"prompt_id" json:"prompt_id" xml:"prompt_id"`
+	// Earliest OTEL log timestamp in this turn, as Unix nanoseconds.
+	StartTimeUnixNano string `form:"start_time_unix_nano" json:"start_time_unix_nano" xml:"start_time_unix_nano"`
+	// Latest OTEL log timestamp in this turn, as Unix nanoseconds.
+	EndTimeUnixNano string `form:"end_time_unix_nano" json:"end_time_unix_nano" xml:"end_time_unix_nano"`
+	// Number of Claude API request events in this turn.
+	RequestCount int64 `form:"request_count" json:"request_count" xml:"request_count"`
+	// Input tokens used by this turn.
+	InputTokens int64 `form:"input_tokens" json:"input_tokens" xml:"input_tokens"`
+	// Output tokens used by this turn.
+	OutputTokens int64 `form:"output_tokens" json:"output_tokens" xml:"output_tokens"`
+	// Cache read tokens used by this turn.
+	CacheReadTokens int64 `form:"cache_read_tokens" json:"cache_read_tokens" xml:"cache_read_tokens"`
+	// Cache creation tokens used by this turn.
+	CacheCreationTokens int64 `form:"cache_creation_tokens" json:"cache_creation_tokens" xml:"cache_creation_tokens"`
+	// Total tokens used by this turn.
+	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+	// Total USD cost for this turn.
+	CostUsd float64 `form:"cost_usd" json:"cost_usd" xml:"cost_usd"`
+	// Total cost for this turn in micros of a USD.
+	CostMicros int64 `form:"cost_micros" json:"cost_micros" xml:"cost_micros"`
+	// Distinct model names used by this turn.
+	Models []string `form:"models" json:"models" xml:"models"`
+	// Distinct Claude query sources used by this turn.
+	QuerySources []string `form:"query_sources" json:"query_sources" xml:"query_sources"`
+}
+
+// ClaudeToolUsageResponseBody is used to define fields on response body types.
+type ClaudeToolUsageResponseBody struct {
+	// Claude tool_use_id that correlates the tool call and result.
+	ToolUseID string `form:"tool_use_id" json:"tool_use_id" xml:"tool_use_id"`
+	// Claude prompt.id for the turn that used this tool.
+	PromptID string `form:"prompt_id" json:"prompt_id" xml:"prompt_id"`
+	// Tool name reported by Claude Code.
+	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
+	// Serialized tool input size in bytes.
+	InputSizeBytes int64 `form:"input_size_bytes" json:"input_size_bytes" xml:"input_size_bytes"`
+	// Serialized tool result size in bytes.
+	ResultSizeBytes int64 `form:"result_size_bytes" json:"result_size_bytes" xml:"result_size_bytes"`
 }
 
 // NewListChatsResponseBody builds the HTTP response body from the result of
 // the "listChats" endpoint of the "chat" service.
 func NewListChatsResponseBody(res *chat.ListChatsResult) *ListChatsResponseBody {
-	body := &ListChatsResponseBody{}
+	body := &ListChatsResponseBody{
+		Total: res.Total,
+	}
 	if res.Chats != nil {
 		body.Chats = make([]*ChatOverviewResponseBody, len(res.Chats))
 		for i, val := range res.Chats {
@@ -1561,6 +1374,9 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 	} else {
 		body.Messages = []*ChatMessageResponseBody{}
 	}
+	if res.AgentUsage != nil {
+		body.AgentUsage = marshalChatAgentUsageToAgentUsageResponseBody(res.AgentUsage)
+	}
 	return body
 }
 
@@ -1579,27 +1395,6 @@ func NewCreditUsageResponseBody(res *chat.CreditUsageResult) *CreditUsageRespons
 	body := &CreditUsageResponseBody{
 		CreditsUsed:    res.CreditsUsed,
 		MonthlyCredits: res.MonthlyCredits,
-	}
-	return body
-}
-
-// NewListChatsWithResolutionsResponseBody builds the HTTP response body from
-// the result of the "listChatsWithResolutions" endpoint of the "chat" service.
-func NewListChatsWithResolutionsResponseBody(res *chat.ListChatsWithResolutionsResult) *ListChatsWithResolutionsResponseBody {
-	body := &ListChatsWithResolutionsResponseBody{
-		Total: res.Total,
-	}
-	if res.Chats != nil {
-		body.Chats = make([]*ChatOverviewWithResolutionsResponseBody, len(res.Chats))
-		for i, val := range res.Chats {
-			if val == nil {
-				body.Chats[i] = nil
-				continue
-			}
-			body.Chats[i] = marshalChatChatOverviewWithResolutionsToChatOverviewWithResolutionsResponseBody(val)
-		}
-	} else {
-		body.Chats = []*ChatOverviewWithResolutionsResponseBody{}
 	}
 	return body
 }
@@ -2173,156 +1968,6 @@ func NewCreditUsageGatewayErrorResponseBody(res *goa.ServiceError) *CreditUsageG
 	return body
 }
 
-// NewListChatsWithResolutionsUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "listChatsWithResolutions" endpoint of the
-// "chat" service.
-func NewListChatsWithResolutionsUnauthorizedResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsUnauthorizedResponseBody {
-	body := &ListChatsWithResolutionsUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListChatsWithResolutionsForbiddenResponseBody builds the HTTP response
-// body from the result of the "listChatsWithResolutions" endpoint of the
-// "chat" service.
-func NewListChatsWithResolutionsForbiddenResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsForbiddenResponseBody {
-	body := &ListChatsWithResolutionsForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListChatsWithResolutionsBadRequestResponseBody builds the HTTP response
-// body from the result of the "listChatsWithResolutions" endpoint of the
-// "chat" service.
-func NewListChatsWithResolutionsBadRequestResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsBadRequestResponseBody {
-	body := &ListChatsWithResolutionsBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListChatsWithResolutionsNotFoundResponseBody builds the HTTP response
-// body from the result of the "listChatsWithResolutions" endpoint of the
-// "chat" service.
-func NewListChatsWithResolutionsNotFoundResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsNotFoundResponseBody {
-	body := &ListChatsWithResolutionsNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListChatsWithResolutionsConflictResponseBody builds the HTTP response
-// body from the result of the "listChatsWithResolutions" endpoint of the
-// "chat" service.
-func NewListChatsWithResolutionsConflictResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsConflictResponseBody {
-	body := &ListChatsWithResolutionsConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListChatsWithResolutionsUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "listChatsWithResolutions" endpoint of
-// the "chat" service.
-func NewListChatsWithResolutionsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsUnsupportedMediaResponseBody {
-	body := &ListChatsWithResolutionsUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListChatsWithResolutionsInvalidResponseBody builds the HTTP response body
-// from the result of the "listChatsWithResolutions" endpoint of the "chat"
-// service.
-func NewListChatsWithResolutionsInvalidResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsInvalidResponseBody {
-	body := &ListChatsWithResolutionsInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListChatsWithResolutionsInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "listChatsWithResolutions" endpoint of
-// the "chat" service.
-func NewListChatsWithResolutionsInvariantViolationResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsInvariantViolationResponseBody {
-	body := &ListChatsWithResolutionsInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListChatsWithResolutionsUnexpectedResponseBody builds the HTTP response
-// body from the result of the "listChatsWithResolutions" endpoint of the
-// "chat" service.
-func NewListChatsWithResolutionsUnexpectedResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsUnexpectedResponseBody {
-	body := &ListChatsWithResolutionsUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListChatsWithResolutionsGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "listChatsWithResolutions" endpoint of the
-// "chat" service.
-func NewListChatsWithResolutionsGatewayErrorResponseBody(res *goa.ServiceError) *ListChatsWithResolutionsGatewayErrorResponseBody {
-	body := &ListChatsWithResolutionsGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewDeleteChatUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "deleteChat" endpoint of the "chat" service.
 func NewDeleteChatUnauthorizedResponseBody(res *goa.ServiceError) *DeleteChatUnauthorizedResponseBody {
@@ -2604,8 +2249,18 @@ func NewSubmitFeedbackGatewayErrorResponseBody(res *goa.ServiceError) *SubmitFee
 }
 
 // NewListChatsPayload builds a chat service listChats endpoint payload.
-func NewListChatsPayload(sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
+func NewListChatsPayload(search *string, externalUserID *string, assistantID *string, hasRisk *string, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
 	v := &chat.ListChatsPayload{}
+	v.Search = search
+	v.ExternalUserID = externalUserID
+	v.AssistantID = assistantID
+	v.HasRisk = hasRisk
+	v.From = from
+	v.To = to
+	v.Limit = limit
+	v.Offset = offset
+	v.SortBy = sortBy
+	v.SortOrder = sortOrder
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
@@ -2641,28 +2296,6 @@ func NewGenerateTitlePayload(body *GenerateTitleRequestBody, sessionToken *strin
 func NewCreditUsagePayload(sessionToken *string) *chat.CreditUsagePayload {
 	v := &chat.CreditUsagePayload{}
 	v.SessionToken = sessionToken
-
-	return v
-}
-
-// NewListChatsWithResolutionsPayload builds a chat service
-// listChatsWithResolutions endpoint payload.
-func NewListChatsWithResolutionsPayload(search *string, externalUserID *string, assistantID *string, resolutionStatus *string, hasRisk *string, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsWithResolutionsPayload {
-	v := &chat.ListChatsWithResolutionsPayload{}
-	v.Search = search
-	v.ExternalUserID = externalUserID
-	v.AssistantID = assistantID
-	v.ResolutionStatus = resolutionStatus
-	v.HasRisk = hasRisk
-	v.From = from
-	v.To = to
-	v.Limit = limit
-	v.Offset = offset
-	v.SortBy = sortBy
-	v.SortOrder = sortOrder
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-	v.ChatSessionsToken = chatSessionsToken
 
 	return v
 }

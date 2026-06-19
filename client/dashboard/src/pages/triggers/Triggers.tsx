@@ -9,14 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Type } from "@/components/ui/type";
 import {
   Collapsible,
@@ -36,14 +28,20 @@ import {
 } from "@gram/client/react-query";
 import { TriggerInstance } from "@gram/client/models/components/triggerinstance.js";
 import { TriggerDefinition } from "@gram/client/models/components/triggerdefinition.js";
-import { TargetKind } from "@gram/client/models/components/createtriggerinstanceform.js";
+import { CreateTriggerInstanceFormTargetKind as TargetKind } from "@gram/client/models/components/createtriggerinstanceform.js";
 import { useRoutes } from "@/routes";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import {
+  Button,
+  type Column,
+  Icon,
+  Stack,
+  Table,
+} from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Outlet } from "react-router";
 
-export function TriggersRoot() {
+export function TriggersRoot(): JSX.Element {
   return <Outlet />;
 }
 
@@ -89,10 +87,17 @@ function isTriggerTargetKind(value: string): value is TriggerTargetKindValue {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === "active") {
-    return <Badge variant="default">Active</Badge>;
+  switch (status) {
+    case "active":
+      return <Badge variant="default">Active</Badge>;
+    case "fired":
+      return <Badge variant="secondary">Fired</Badge>;
+    case "cancelled":
+      return <Badge variant="secondary">Cancelled</Badge>;
+    case "paused":
+    default:
+      return <Badge variant="secondary">Paused</Badge>;
   }
-  return <Badge variant="secondary">Paused</Badge>;
 }
 
 function KindBadge({ kind }: { kind: string }) {
@@ -107,7 +112,7 @@ function WebhookUrlPill({ url }: { url: string }) {
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    navigator.clipboard.writeText(url);
+    void navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -169,64 +174,81 @@ function TriggersTable({
 }) {
   const routes = useRoutes();
   const defMap = new Map(definitions.map((d) => [d.slug, d]));
+  const columns: Column<TriggerInstance>[] = [
+    {
+      key: "name",
+      header: "Name",
+      width: "1fr",
+      render: (trigger) => <span className="font-medium">{trigger.name}</span>,
+    },
+    {
+      key: "definitionSlug",
+      header: "Type",
+      width: "2fr",
+      render: (trigger) => {
+        const def = defMap.get(trigger.definitionSlug);
+
+        return (
+          <div className="flex min-w-0 items-center gap-2">
+            <KindBadge kind={def?.kind ?? "webhook"} />
+            <span className="text-muted-foreground shrink-0 text-sm">
+              {def?.title ?? trigger.definitionSlug}
+            </span>
+            {def?.kind === "webhook" && trigger.webhookUrl && (
+              <WebhookUrlPill url={trigger.webhookUrl} />
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: "targetDisplay",
+      header: "Target",
+      width: "1fr",
+      render: (trigger) => (
+        <span className="text-muted-foreground">{trigger.targetDisplay}</span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "0.8fr",
+      render: (trigger) => <StatusBadge status={trigger.status} />,
+    },
+    {
+      key: "updatedAt",
+      header: "Updated",
+      width: "1fr",
+      render: (trigger) => (
+        <span className="text-muted-foreground">
+          <HumanizeDateTime date={trigger.updatedAt} />
+        </span>
+      ),
+    },
+    {
+      key: "logs",
+      header: "",
+      width: "auto",
+      render: (trigger) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <routes.logs.Link
+            queryParams={{ af: triggerLogsFilterParam(trigger.id) }}
+            className="text-muted-foreground hover:text-foreground no-underline hover:no-underline"
+          >
+            <Icon name="file-text" className="h-4 w-4" />
+          </routes.logs.Link>
+        </div>
+      ),
+    },
+  ];
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Name</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead>Target</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Updated</TableHead>
-          <TableHead className="w-10" />
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {triggers.map((trigger) => {
-          const def = defMap.get(trigger.definitionSlug);
-          return (
-            <TableRow
-              key={trigger.id}
-              className="cursor-pointer"
-              onClick={() => onEdit(trigger)}
-            >
-              <TableCell className="font-medium">{trigger.name}</TableCell>
-              <TableCell>
-                <div className="flex min-w-0 items-center gap-2">
-                  <KindBadge kind={def?.kind ?? "webhook"} />
-                  <span className="text-muted-foreground shrink-0 text-sm">
-                    {def?.title ?? trigger.definitionSlug}
-                  </span>
-                  {def?.kind === "webhook" && trigger.webhookUrl && (
-                    <WebhookUrlPill url={trigger.webhookUrl} />
-                  )}
-                </div>
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {trigger.targetDisplay}
-              </TableCell>
-              <TableCell>
-                <StatusBadge status={trigger.status} />
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                <HumanizeDateTime date={trigger.updatedAt} />
-              </TableCell>
-              <TableCell>
-                <div onClick={(e) => e.stopPropagation()}>
-                  <routes.logs.tools.Link
-                    queryParams={{ af: triggerLogsFilterParam(trigger.id) }}
-                    className="text-muted-foreground hover:text-foreground no-underline hover:no-underline"
-                  >
-                    <Icon name="file-text" className="h-4 w-4" />
-                  </routes.logs.tools.Link>
-                </div>
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+    <Table
+      columns={columns}
+      data={triggers}
+      rowKey={(trigger) => trigger.id}
+      onRowClick={onEdit}
+    />
   );
 }
 
@@ -488,8 +510,8 @@ function TriggerDialog({
     targetDisplay.trim().length > 0;
 
   const invalidateAll = () => {
-    invalidateAllTriggers(queryClient);
-    invalidateAllTrigger(queryClient);
+    void invalidateAllTriggers(queryClient);
+    void invalidateAllTrigger(queryClient);
   };
 
   const handleCreate = async () => {
@@ -725,7 +747,7 @@ function TriggerDialog({
                 <Stack direction="horizontal" gap={2}>
                   <Button
                     variant="destructive-primary"
-                    onClick={handleDelete}
+                    onClick={() => void handleDelete()}
                     disabled={isPending}
                   >
                     {deleteMutation.isPending
@@ -756,7 +778,7 @@ function TriggerDialog({
             Cancel
           </Button>
           <Button
-            onClick={isEditing ? handleUpdate : handleCreate}
+            onClick={() => void (isEditing ? handleUpdate() : handleCreate())}
             disabled={!isValid || isPending}
           >
             {isPending
@@ -773,7 +795,12 @@ function TriggerDialog({
   );
 }
 
-export default function TriggersIndex() {
+/**
+ * Triggers list, dialog, and empty/loading states without a surrounding
+ * `Page` shell. Rendered standalone by the `/triggers` route (`TriggersIndex`)
+ * and embedded as a tab on the Assistants page.
+ */
+export function TriggersPanel(): JSX.Element {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState<TriggerInstance | null>(
     null,
@@ -805,55 +832,63 @@ export default function TriggersIndex() {
   };
 
   return (
+    <>
+      <Page.Section>
+        <Page.Section.Title>Triggers</Page.Section.Title>
+        <Page.Section.Description>
+          Connect external events to your assistants via webhooks or cron
+          schedules.
+        </Page.Section.Description>
+        <Page.Section.CTA>
+          {triggers.length > 0 && (
+            <Button onClick={openCreate}>
+              <Button.LeftIcon>
+                <Icon name="plus" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Create Trigger</Button.Text>
+            </Button>
+          )}
+        </Page.Section.CTA>
+        <Page.Section.Body>
+          {isLoading ? (
+            <Stack align="center" justify="center" className="py-16">
+              <Icon
+                name="loader-circle"
+                className="text-muted-foreground h-6 w-6 animate-spin"
+              />
+            </Stack>
+          ) : triggers.length === 0 ? (
+            <TriggersEmptyState onCreate={openCreate} />
+          ) : (
+            <TriggersTable
+              triggers={triggers}
+              definitions={definitions}
+              onEdit={openEdit}
+            />
+          )}
+        </Page.Section.Body>
+      </Page.Section>
+
+      <TriggerDialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) setEditingTrigger(null);
+        }}
+        editingTrigger={editingTrigger}
+      />
+    </>
+  );
+}
+
+export default function TriggersIndex(): JSX.Element {
+  return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Triggers</Page.Section.Title>
-          <Page.Section.Description>
-            Connect external events to your assistants via webhooks or cron
-            schedules.
-          </Page.Section.Description>
-          <Page.Section.CTA>
-            {triggers.length > 0 && (
-              <Button onClick={openCreate}>
-                <Button.LeftIcon>
-                  <Icon name="plus" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Create Trigger</Button.Text>
-              </Button>
-            )}
-          </Page.Section.CTA>
-          <Page.Section.Body>
-            {isLoading ? (
-              <Stack align="center" justify="center" className="py-16">
-                <Icon
-                  name="loader-circle"
-                  className="text-muted-foreground h-6 w-6 animate-spin"
-                />
-              </Stack>
-            ) : triggers.length === 0 ? (
-              <TriggersEmptyState onCreate={openCreate} />
-            ) : (
-              <TriggersTable
-                triggers={triggers}
-                definitions={definitions}
-                onEdit={openEdit}
-              />
-            )}
-          </Page.Section.Body>
-        </Page.Section>
-
-        <TriggerDialog
-          open={dialogOpen}
-          onOpenChange={(open) => {
-            setDialogOpen(open);
-            if (!open) setEditingTrigger(null);
-          }}
-          editingTrigger={editingTrigger}
-        />
+        <TriggersPanel />
       </Page.Body>
     </Page>
   );

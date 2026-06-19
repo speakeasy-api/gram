@@ -27,11 +27,6 @@ func CreditUsageChatPath() string {
 	return "/rpc/chat.creditUsage"
 }
 
-// ListChatsWithResolutionsChatPath returns the URL path to the chat service listChatsWithResolutions HTTP endpoint.
-func ListChatsWithResolutionsChatPath() string {
-	return "/rpc/chat.listChatsWithResolutions"
-}
-
 // DeleteChatChatPath returns the URL path to the chat service deleteChat HTTP endpoint.
 func DeleteChatChatPath() string {
 	return "/rpc/chat.delete"

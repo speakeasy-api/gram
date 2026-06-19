@@ -422,7 +422,8 @@ function CursorInstallContent({
             <p className="text-muted-foreground text-sm">
               In Cursor's team marketplace settings, mark the observability
               plugin (it ships first in your marketplace) as required so tool
-              events flow to Gram for every team member without per-user setup.
+              events flow to the platform for every team member without per-user
+              setup.
             </p>
           </div>
 
@@ -504,7 +505,7 @@ function CodexInstallContent({
           variant="outline"
           size="sm"
           disabled={isDownloading}
-          onClick={handleDownloadInstallScript}
+          onClick={() => void handleDownloadInstallScript()}
           className="inline-flex items-center gap-2"
         >
           <Download className="size-4" />
@@ -619,7 +620,7 @@ type DialogProps = ContentProps & {
   onOpenChange: (open: boolean) => void;
 };
 
-export function InstallInstructionsDialog({
+function InstallInstructionsDialog({
   open,
   onOpenChange,
   ...content
@@ -638,7 +639,9 @@ export function InstallInstructionsDialog({
             const button = (
               <button
                 key={p.id}
-                onClick={() => p.available && setSelected(p.id)}
+                onClick={() => {
+                  void (p.available && setSelected(p.id));
+                }}
                 disabled={!p.available}
                 className={cn(
                   "relative flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
@@ -709,7 +712,7 @@ export function InstallInstructionsDialog({
  * Convenience trigger that owns its own open state. Use this when the page
  * doesn't need to control the dialog imperatively.
  */
-export function InstallInstructionsButton(props: ContentProps) {
+export function InstallInstructionsButton(props: ContentProps): JSX.Element {
   const [open, setOpen] = useState(false);
 
   return (

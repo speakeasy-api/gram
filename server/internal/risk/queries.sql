@@ -4,13 +4,20 @@ INSERT INTO risk_policies (
   , project_id
   , organization_id
   , name
+  , policy_type
   , sources
   , presidio_entities
   , prompt_injection_rules
+  , disabled_rules
+  , custom_rule_ids
+  , message_types
   , enabled
   , action
+  , audience_type
   , auto_name
   , user_message
+  , prompt
+  , model_config
   , version
 )
 VALUES (
@@ -18,13 +25,20 @@ VALUES (
   , @project_id
   , @organization_id
   , @name
+  , COALESCE(NULLIF(@policy_type, ''), 'standard')
   , @sources
   , @presidio_entities
   , @prompt_injection_rules
+  , @disabled_rules
+  , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
+  , sqlc.arg(message_types)::text[]
   , @enabled
   , @action
+  , @audience_type
   , @auto_name
   , @user_message
+  , sqlc.narg(prompt)::text
+  , sqlc.narg(model_config)::jsonb
   , 1
 )
 RETURNING *;
@@ -35,6 +49,20 @@ FROM risk_policies
 WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
+
+-- name: GetRiskPolicyForUpdate :one
+SELECT *
+FROM risk_policies
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: GetRiskPolicyNameIncludingDeleted :one
+SELECT name
+FROM risk_policies
+WHERE id = @id
+  AND project_id = @project_id;
 
 -- name: ListRiskPolicies :many
 SELECT *
@@ -56,16 +84,28 @@ SET name = @name
   , sources = @sources
   , presidio_entities = @presidio_entities
   , prompt_injection_rules = @prompt_injection_rules
+  , disabled_rules = @disabled_rules
+  , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
+  , message_types = sqlc.arg(message_types)::text[]
   , enabled = @enabled
   , action = @action
+  , audience_type = @audience_type
   , auto_name = @auto_name
   , user_message = @user_message
+  , prompt = sqlc.narg(prompt)::text
+  , model_config = sqlc.narg(model_config)::jsonb
   , version = CASE
       WHEN sources IS DISTINCT FROM @sources
         OR presidio_entities IS DISTINCT FROM @presidio_entities
         OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
+        OR disabled_rules IS DISTINCT FROM @disabled_rules
+        OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
+        OR message_types IS DISTINCT FROM sqlc.arg(message_types)::text[]
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
+        OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text
+        OR model_config IS DISTINCT FROM sqlc.narg(model_config)::jsonb
+        OR audience_type IS DISTINCT FROM @audience_type
       THEN version + 1
       ELSE version
     END
@@ -92,6 +132,174 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: DeleteRiskPolicyBypassRequestsByPolicy :exec
+UPDATE risk_policy_bypass_requests
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE risk_policy_id = @risk_policy_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: DeleteRiskResultsByPolicy :execrows
+DELETE FROM risk_results
+WHERE risk_policy_id = @risk_policy_id
+  AND project_id = @project_id;
+
+-- name: DeleteRiskExclusionsByPolicy :execrows
+DELETE FROM risk_exclusions
+WHERE risk_policy_id = @risk_policy_id
+  AND project_id = @project_id;
+
+-- name: CountRiskResultsByPolicyID :one
+SELECT COUNT(*)::BIGINT
+FROM risk_results
+WHERE risk_policy_id = @risk_policy_id
+  AND project_id = @project_id;
+
+-- name: UpsertRiskPolicyBypassRequest :one
+INSERT INTO risk_policy_bypass_requests (
+    id
+  , organization_id
+  , project_id
+  , risk_policy_id
+  , target_kind
+  , target_label
+  , target_key
+  , target_dimensions
+  , requester_user_id
+  , requester_email
+  , note
+  , status
+)
+VALUES (
+    @id
+  , @organization_id
+  , @project_id
+  , @risk_policy_id
+  , @target_kind
+  , @target_label
+  , @target_key
+  , @target_dimensions
+  , @requester_user_id
+  , @requester_email
+  , @note
+  , @status
+)
+ON CONFLICT (project_id, requester_user_id, risk_policy_id, target_kind, target_key)
+WHERE deleted IS FALSE
+DO UPDATE
+SET target_label = EXCLUDED.target_label
+  , target_dimensions = EXCLUDED.target_dimensions
+  , requester_email = EXCLUDED.requester_email
+  , note = EXCLUDED.note
+  , status = CASE
+      WHEN risk_policy_bypass_requests.status = 'approved' THEN risk_policy_bypass_requests.status
+      ELSE EXCLUDED.status
+    END
+  , decided_by = CASE
+      WHEN risk_policy_bypass_requests.status = 'approved' THEN risk_policy_bypass_requests.decided_by
+      ELSE NULL
+    END
+  , granted_principal_urns = CASE
+      WHEN risk_policy_bypass_requests.status = 'approved' THEN risk_policy_bypass_requests.granted_principal_urns
+      ELSE ARRAY[]::TEXT[]
+    END
+  , decided_at = CASE
+      WHEN risk_policy_bypass_requests.status = 'approved' THEN risk_policy_bypass_requests.decided_at
+      ELSE NULL
+    END
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: ListRiskPolicyBypassRequests :many
+SELECT *
+FROM risk_policy_bypass_requests
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND (
+    sqlc.narg(risk_policy_id)::uuid IS NULL
+    OR risk_policy_id = sqlc.narg(risk_policy_id)::uuid
+  )
+  AND (
+    sqlc.narg(status)::text IS NULL
+    OR status = sqlc.narg(status)::text
+  )
+ORDER BY updated_at DESC;
+
+-- name: GetRiskPolicyBypassRequest :one
+SELECT *
+FROM risk_policy_bypass_requests
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: UpdateRiskPolicyBypassRequestStatus :one
+UPDATE risk_policy_bypass_requests
+SET status = @status
+  , decided_by = @decided_by
+  , granted_principal_urns = @granted_principal_urns
+  , decided_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: CreateCustomDetectionRule :one
+INSERT INTO risk_custom_detection_rules (
+    project_id
+  , organization_id
+  , rule_id
+  , title
+  , description
+  , regex
+  , severity
+)
+VALUES (
+    @project_id
+  , @organization_id
+  , @rule_id
+  , @title
+  , @description
+  , @regex
+  , @severity
+)
+RETURNING *;
+
+-- name: ListCustomDetectionRules :many
+SELECT *
+FROM risk_custom_detection_rules
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
+
+-- name: GetCustomDetectionRule :one
+SELECT *
+FROM risk_custom_detection_rules
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: UpdateCustomDetectionRule :one
+UPDATE risk_custom_detection_rules
+SET title = @title
+  , description = @description
+  , regex = @regex
+  , severity = @severity
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteCustomDetectionRule :exec
+UPDATE risk_custom_detection_rules
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
 -- name: CountTotalMessages :one
 SELECT COUNT(*)::BIGINT
 FROM chat_messages cm
@@ -110,23 +318,25 @@ FROM risk_results
 WHERE project_id = @project_id
   AND risk_policy_id = @risk_policy_id
   AND risk_policy_version = @risk_policy_version
-  AND found IS TRUE;
+  AND found IS TRUE
+  AND excluded_at IS NULL
+  AND false_positive_at IS NULL;
 
 -- name: CountAllFindings :one
 SELECT COUNT(*)::BIGINT
 FROM risk_results rr
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = @project_id
-  AND rr.found IS TRUE;
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL;
 
 -- name: GetRiskOverviewCounts :one
 SELECT
     COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned
   , (COUNT(*) FILTER (
-      WHERE rr.found IS TRUE
+      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     ))::BIGINT AS findings
   , (COUNT(DISTINCT cm.chat_id) FILTER (
-      WHERE rr.found IS TRUE
+      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
         AND cm.chat_id IS NOT NULL
     ))::BIGINT AS flagged_sessions
   , (
@@ -150,7 +360,7 @@ SELECT
   COUNT(*)::BIGINT AS findings
 FROM risk_results rr
 WHERE rr.project_id = @project_id
-  AND rr.found IS TRUE
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND rr.created_at >= @from_time
   AND rr.created_at < @to_time
 GROUP BY rr.rule_id, rr.source
@@ -164,6 +374,7 @@ LIMIT @row_limit;
 WITH user_findings AS (
   SELECT
     CASE
+      WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
       WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
@@ -211,7 +422,7 @@ WITH user_findings AS (
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
   WHERE rr.project_id = @project_id
-    AND rr.found IS TRUE
+    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND rr.created_at >= @from_time
     AND rr.created_at < @to_time
     AND COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '') = @external_user_id::text
@@ -231,7 +442,7 @@ FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 WHERE rr.project_id = @project_id
-  AND rr.found IS TRUE
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND rr.created_at >= @from_time
   AND rr.created_at < @to_time
   AND COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '') = @external_user_id::text
@@ -247,6 +458,7 @@ WITH categorized AS (
     COALESCE(rr.rule_id, '')::TEXT AS rule_id,
     rr.source,
     CASE
+      WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
       WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
@@ -292,7 +504,7 @@ WITH categorized AS (
     END AS category
   FROM risk_results rr
   WHERE rr.project_id = @project_id
-    AND rr.found IS TRUE
+    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND rr.created_at >= @from_time
     AND rr.created_at < @to_time
 )
@@ -317,7 +529,7 @@ WITH user_findings AS (
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
   LEFT JOIN users u ON u.id = COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''))
   WHERE rr.project_id = @project_id
-    AND rr.found IS TRUE
+    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND rr.created_at >= @from_time
     AND rr.created_at < @to_time
 )
@@ -339,6 +551,7 @@ categorized AS (
   SELECT
       date_trunc('hour', rr.created_at)::timestamptz AS bucket_start
     , CASE
+        WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
         WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
         WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
         WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
@@ -384,7 +597,7 @@ categorized AS (
       END AS category
   FROM risk_results rr
   WHERE rr.project_id = sqlc.arg(project_id)::uuid
-    AND rr.found IS TRUE
+    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND rr.created_at >= @from_time
     AND rr.created_at < @to_time
 ),
@@ -410,30 +623,27 @@ LEFT JOIN findings_by_bucket ON findings_by_bucket.bucket_start = buckets.bucket
 ORDER BY buckets.bucket_start ASC, categories.category ASC;
 
 -- name: FetchUnanalyzedMessageIDs :many
--- uuidv7 is k-sortable. The existing composite index
--- chat_messages_project_id_id_idx (project_id, id) lets Postgres satisfy
--- ORDER BY cm.id DESC with an Index Only Scan Backward, so we get
--- "most recent first" without a Sort node or any new index. Combined
--- with LIMIT this lets the planner stop scanning early when only the
--- recent tail is needed (verified via EXPLAIN ANALYZE: LIMIT 100 over a
--- 15k-message table scans ~2k rows in ~2ms).
+-- Scans the partial index chat_messages_risk_analyzed_at_null_idx
+-- (project_id, id WHERE risk_analyzed_at IS NULL), which shrinks toward
+-- zero at steady state. The id >= @id_lower_bound bound (a UUIDv7 lower
+-- bound computed from the configured lookback) further limits the scan to
+-- recent messages, reusing the same partial index ordering.
 SELECT cm.id
 FROM chat_messages cm
 WHERE cm.project_id = @project_id
-  AND NOT EXISTS (
-    SELECT 1
-    FROM risk_results rr
-    WHERE rr.chat_message_id = cm.id
-      AND rr.project_id = @project_id
-      AND rr.risk_policy_id = @risk_policy_id
-      AND rr.risk_policy_version = @risk_policy_version
-    LIMIT 1
-  )
+  AND cm.risk_analyzed_at IS NULL
+  AND cm.id >= @id_lower_bound
 ORDER BY cm.id DESC
 LIMIT @batch_limit;
 
+-- name: MarkMessagesRiskAnalyzed :exec
+UPDATE chat_messages
+SET risk_analyzed_at = clock_timestamp()
+WHERE id = ANY(@message_ids::uuid[])
+  AND project_id = @project_id;
+
 -- name: GetMessageContentBatch :many
-SELECT id, content, tool_calls
+SELECT id, role, content, tool_calls
 FROM chat_messages
 WHERE id = ANY(@ids::uuid[])
   AND project_id = @project_id;
@@ -523,12 +733,14 @@ FROM (
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
   JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
   WHERE rr.project_id = @project_id
-    AND rr.found IS TRUE
+    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND (sqlc.narg(from_time)::timestamptz IS NULL OR cm.created_at >= sqlc.narg(from_time)::timestamptz)
     AND (sqlc.narg(to_time)::timestamptz IS NULL OR cm.created_at < sqlc.narg(to_time)::timestamptz)
     AND (@rule_id::text = '' OR rr.rule_id ILIKE '%' || @rule_id::text || '%')
+    AND (@user_id::text = '' OR c.external_user_id ILIKE '%' || @user_id::text || '%')
     AND (@category::text = '' OR (
     CASE
+      WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
       WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
@@ -590,7 +802,7 @@ LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
-  AND rr.found IS TRUE
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND (
     sqlc.narg(cursor_message_created_at)::timestamptz IS NULL
     OR (cm.created_at, rr.id) < (sqlc.narg(cursor_message_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
@@ -606,7 +818,7 @@ LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE cm.chat_id = @chat_id
   AND rr.project_id = @project_id
-  AND rr.found IS TRUE
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND (
     sqlc.narg(cursor_message_created_at)::timestamptz IS NULL
     OR (cm.created_at, rr.id) < (sqlc.narg(cursor_message_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
@@ -626,7 +838,7 @@ JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = @project_id
-  AND rr.found IS TRUE
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND (sqlc.narg(cursor)::uuid IS NULL OR cm.chat_id <= sqlc.narg(cursor)::uuid)
 GROUP BY cm.chat_id, c.title, c.external_user_id
 ORDER BY cm.chat_id DESC
@@ -639,6 +851,16 @@ WHERE project_id = @project_id
   AND enabled IS TRUE
   AND action = 'block'
   AND deleted IS FALSE;
+
+-- name: GetProjectFlagGroups :one
+-- Resolves the org and project slugs used to build PostHog flag-evaluation
+-- groups for background paths that only carry IDs. Both joins are on
+-- primary/unique keys, so this is a cheap indexed lookup.
+SELECT om.slug AS organization_slug, p.slug AS project_slug
+FROM projects p
+JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.id = @project_id
+  AND p.deleted IS FALSE;
 
 -- name: ListEnabledShadowMCPPoliciesByProject :many
 SELECT *
@@ -666,3 +888,199 @@ ORDER BY id;
 -- verify cache behavior without the soft-delete (DeleteRiskPolicy) leaving
 -- ghost rows that production lookups already filter out.
 DELETE FROM risk_policies WHERE project_id = @project_id;
+
+-- Risk exclusions ----------------------------------------------------------
+-- risk_policy_id is nullable: NULL = global (applies to every policy in the
+-- project), non-NULL = bound to a single policy.
+
+-- name: CreateRiskExclusion :one
+INSERT INTO risk_exclusions (
+    project_id
+  , organization_id
+  , risk_policy_id
+  , match_type
+  , match_value
+  , rule_id_filter
+  , source_filter
+  , enabled
+)
+VALUES (
+    @project_id
+  , @organization_id
+  , sqlc.narg(risk_policy_id)
+  , @match_type
+  , @match_value
+  , @rule_id_filter
+  , @source_filter
+  , @enabled
+)
+RETURNING *;
+
+-- name: GetRiskExclusion :one
+SELECT *
+FROM risk_exclusions
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: GetRiskExclusionForReconcile :one
+-- Fetches an exclusion regardless of deleted/enabled state so the reconcile
+-- sweep can decide whether to apply (enabled) or only reverse (deleted/disabled).
+-- Scoped by project_id to keep the IDOR-mitigation invariant (every query is
+-- bounded to a tenant) even though the caller is an internal activity.
+SELECT *
+FROM risk_exclusions
+WHERE id = @id
+  AND project_id = @project_id;
+
+-- name: ListRiskExclusionsByProject :many
+-- Lists a project's exclusions. Pass a null risk_policy_id to return all
+-- (global + every policy); pass a value to filter to that policy only.
+SELECT *
+FROM risk_exclusions
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND (sqlc.narg(risk_policy_id)::uuid IS NULL OR risk_policy_id = sqlc.narg(risk_policy_id))
+ORDER BY created_at DESC;
+
+-- name: ListEnabledExclusionsForPolicy :many
+-- Exclusions that apply when analyzing/enforcing a given policy: the policy's
+-- own plus every global one. Used to build the going-forward ExclusionSet.
+SELECT *
+FROM risk_exclusions
+WHERE project_id = @project_id
+  AND enabled IS TRUE
+  AND deleted IS FALSE
+  AND (risk_policy_id IS NULL OR risk_policy_id = @risk_policy_id)
+ORDER BY created_at;
+
+-- name: CountEnabledRegexExclusionsInScope :one
+-- Enforces the per-scope regex cap. Counts enabled regex exclusions sharing the
+-- same scope (same risk_policy_id, treating NULL/global as its own bucket).
+SELECT COUNT(*)::BIGINT
+FROM risk_exclusions
+WHERE project_id = @project_id
+  AND match_type = 'regex'
+  AND enabled IS TRUE
+  AND deleted IS FALSE
+  AND risk_policy_id IS NOT DISTINCT FROM sqlc.narg(risk_policy_id);
+
+-- name: UpdateRiskExclusion :one
+UPDATE risk_exclusions
+SET risk_policy_id = sqlc.narg(risk_policy_id)
+  , match_type = @match_type
+  , match_value = @match_value
+  , rule_id_filter = @rule_id_filter
+  , source_filter = @source_filter
+  , enabled = @enabled
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteRiskExclusion :exec
+UPDATE risk_exclusions
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- Exclusion reconcile sweep -------------------------------------------------
+-- All batches are keyset-paginated by id (id > @cursor, ORDER BY id, LIMIT
+-- @batch_limit) and RETURNING id so the caller can advance the cursor to the
+-- max returned id and loop until a batch comes back short.
+
+-- name: ReverseExclusionFlagsBatch :many
+-- Clears flags previously set by an exclusion (reversal / restore findings).
+UPDATE risk_results
+SET excluded_at = NULL
+  , excluded_exclusion_id = NULL
+WHERE id IN (
+  SELECT rr.id
+  FROM risk_results rr
+  WHERE rr.excluded_exclusion_id = @exclusion_id
+    AND rr.id > @cursor
+  ORDER BY rr.id
+  LIMIT @batch_limit
+)
+RETURNING id;
+
+-- name: ApplyExactExclusionBatch :many
+UPDATE risk_results
+SET excluded_at = clock_timestamp()
+  , excluded_exclusion_id = @exclusion_id
+WHERE id IN (
+  SELECT rr.id
+  FROM risk_results rr
+  WHERE rr.project_id = @project_id
+    AND (sqlc.narg(policy_id)::uuid IS NULL OR rr.risk_policy_id = sqlc.narg(policy_id))
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.match = @match_value
+    AND (sqlc.narg(rule_id_filter)::text IS NULL OR rr.rule_id = sqlc.narg(rule_id_filter))
+    AND (sqlc.narg(source_filter)::text IS NULL OR rr.source = sqlc.narg(source_filter))
+    AND rr.id > @cursor
+  ORDER BY rr.id
+  LIMIT @batch_limit
+)
+RETURNING id;
+
+-- name: ApplyRegexExclusionBatch :many
+UPDATE risk_results
+SET excluded_at = clock_timestamp()
+  , excluded_exclusion_id = @exclusion_id
+WHERE id IN (
+  SELECT rr.id
+  FROM risk_results rr
+  WHERE rr.project_id = @project_id
+    AND (sqlc.narg(policy_id)::uuid IS NULL OR rr.risk_policy_id = sqlc.narg(policy_id))
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.match ~ @pattern
+    AND (sqlc.narg(rule_id_filter)::text IS NULL OR rr.rule_id = sqlc.narg(rule_id_filter))
+    AND (sqlc.narg(source_filter)::text IS NULL OR rr.source = sqlc.narg(source_filter))
+    AND rr.id > @cursor
+  ORDER BY rr.id
+  LIMIT @batch_limit
+)
+RETURNING id;
+
+-- name: ApplyRuleIDExclusionBatch :many
+UPDATE risk_results
+SET excluded_at = clock_timestamp()
+  , excluded_exclusion_id = @exclusion_id
+WHERE id IN (
+  SELECT rr.id
+  FROM risk_results rr
+  WHERE rr.project_id = @project_id
+    AND (sqlc.narg(policy_id)::uuid IS NULL OR rr.risk_policy_id = sqlc.narg(policy_id))
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.rule_id = @match_value
+    AND (sqlc.narg(source_filter)::text IS NULL OR rr.source = sqlc.narg(source_filter))
+    AND rr.id > @cursor
+  ORDER BY rr.id
+  LIMIT @batch_limit
+)
+RETURNING id;
+
+-- name: ApplySourceExclusionBatch :many
+UPDATE risk_results
+SET excluded_at = clock_timestamp()
+  , excluded_exclusion_id = @exclusion_id
+WHERE id IN (
+  SELECT rr.id
+  FROM risk_results rr
+  WHERE rr.project_id = @project_id
+    AND (sqlc.narg(policy_id)::uuid IS NULL OR rr.risk_policy_id = sqlc.narg(policy_id))
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.source = @match_value
+    AND (sqlc.narg(rule_id_filter)::text IS NULL OR rr.rule_id = sqlc.narg(rule_id_filter))
+    AND rr.id > @cursor
+  ORDER BY rr.id
+  LIMIT @batch_limit
+)
+RETURNING id;

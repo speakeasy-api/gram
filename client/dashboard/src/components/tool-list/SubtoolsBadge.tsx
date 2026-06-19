@@ -14,13 +14,13 @@ export function SubtoolsBadge({
 }: {
   tool: Tool;
   availableToolUrns: string[];
-}) {
+}): JSX.Element | null {
   if (tool.type !== "prompt") return null;
   if (tool.toolsHint.length === 0) return null;
 
-  const nameFromUrn = (urn: string) => {
+  const nameFromUrn = (urn: string): string => {
     const split = urn.split(":");
-    return split[split.length - 1];
+    return split[split.length - 1]!;
   };
 
   let presentToolNames: string[] = [];
@@ -33,8 +33,8 @@ export function SubtoolsBadge({
       tool.toolUrnsHint?.filter((urn) => !availableToolUrns.includes(urn)) ??
       [];
 
-    presentToolNames = presentToolUrns.map((urn) => nameFromUrn(urn));
-    missingToolNames = missingToolUrns.map((urn) => nameFromUrn(urn));
+    presentToolNames = presentToolUrns.map((urn) => nameFromUrn(urn!));
+    missingToolNames = missingToolUrns.map((urn) => nameFromUrn(urn!));
   } else {
     const availableToolNames = availableToolUrns.map((urn) => nameFromUrn(urn));
     presentToolNames = tool.toolsHint.filter((name) =>

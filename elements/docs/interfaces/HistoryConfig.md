@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.33.1**](../README.md)
+[**@gram-ai/elements v1.37.1**](../README.md)
 
 ***
 
@@ -33,6 +33,64 @@ When true, threads will be saved and can be loaded from the thread list.
 
 ```ts
 false
+```
+
+***
+
+### threadListFilters?
+
+> `optional` **threadListFilters**: `Record`\<`string`, `string`\>
+
+Extra query parameters forwarded to the thread-list request, used to
+filter which conversations are shown. Opaque to Elements — the consumer
+decides the keys (e.g. a search term, or a backend-specific scope). When
+omitted, all of the caller's chats are listed.
+
+***
+
+### deferThreadIdMinting?
+
+> `optional` **deferThreadIdMinting**: `boolean`
+
+Let the backend own chat-id creation. When true, a brand-new thread does not
+get a client-generated id; instead the transport assigns the id (e.g. one
+the server minted on the first send, reported via the transport context's
+`adoptChatId`). Use with a server-backed `transport`.
+
+***
+
+### transformChatMessage()?
+
+> `optional` **transformChatMessage**: (`message`) => [`GramChatMessage`](GramChatMessage.md) \| `null`
+
+Optional hook to transform or drop each persisted message before it is
+rendered from history. Return a (possibly rewritten) message to render it,
+or `null` to omit it entirely. Elements applies this to every message
+returned by `chat.load` before conversion.
+
+Use this to keep product- or backend-specific transcript conventions out of
+the library — e.g. stripping a server-injected framing block from a turn's
+text, or hiding system events that carry no user-facing content. Elements
+itself stays agnostic to any such convention.
+
+#### Parameters
+
+##### message
+
+[`GramChatMessage`](GramChatMessage.md)
+
+#### Returns
+
+[`GramChatMessage`](GramChatMessage.md) \| `null`
+
+#### Example
+
+```ts
+// Strip a server-injected framing block and hide framing-only turns.
+transformChatMessage: (msg) => {
+  const cleaned = stripFraming(msg);
+  return isFramingOnly(cleaned) ? null : cleaned;
+}
 ```
 
 ***

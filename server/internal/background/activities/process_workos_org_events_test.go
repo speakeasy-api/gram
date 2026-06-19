@@ -1073,6 +1073,19 @@ func TestProcessWorkOSOrganizationEvents_MembershipFilterIncludesMembershipTypes
 		"organization_membership.created",
 		"organization_membership.updated",
 		"organization_membership.deleted",
+		"connection.activated",
+		"connection.deactivated",
+		"connection.deleted",
+		"dsync.activated",
+		"dsync.deleted",
+		"dsync.user.created",
+		"dsync.user.updated",
+		"dsync.user.deleted",
+		"dsync.group.created",
+		"dsync.group.updated",
+		"dsync.group.deleted",
+		"dsync.group.user_added",
+		"dsync.group.user_removed",
 	}, stub.EventCalls()[0].Events)
 }
 
@@ -1376,6 +1389,444 @@ func TestProcessWorkOSOrganizationEvents_MembershipMultipleRolesUnknownUserOptim
 		fmt.Sprintf("role:organization:%s", reviewerRole.ID.String()),
 	}
 	require.ElementsMatch(t, expectedURNs, assignedURNs)
+}
+
+// ---------------------------------------------------------------------------
+// SSO connection events
+// ---------------------------------------------------------------------------
+
+func newWorkOSConnectionEvent(t *testing.T, eventType, eventID, workosOrgID string) events.Event {
+	t.Helper()
+	data, err := json.Marshal(map[string]string{
+		"id":              "conn_01HZ" + eventID,
+		"object":          "connection",
+		"organization_id": workosOrgID,
+	})
+	require.NoError(t, err)
+	return events.Event{ID: eventID, Event: eventType, CreatedAt: time.Now(), Data: data}
+}
+
+func newWorkOSDSyncEvent(t *testing.T, eventType, eventID, workosOrgID string) events.Event {
+	t.Helper()
+	data, err := json.Marshal(map[string]string{
+		"id":              "dir_01HZ" + eventID,
+		"object":          "directory",
+		"organization_id": workosOrgID,
+	})
+	require.NoError(t, err)
+	return events.Event{ID: eventID, Event: eventType, CreatedAt: time.Now(), Data: data}
+}
+
+func TestProcessWorkOSOrganizationEvents_ConnectionActivatedSetsSSOEnabled(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_conn_activated")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_sso_activated"
+	const workosOrgID = "org_01HZSSOACT"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSOACT", workosOrgID)},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSSOACT", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.True(t, row.SsoEnabled.Valid)
+	require.True(t, row.SsoEnabled.Bool)
+}
+
+func TestProcessWorkOSOrganizationEvents_ConnectionDeactivatedClearsSSOEnabled(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_conn_deactivated")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_sso_deactivated"
+	const workosOrgID = "org_01HZSSODEACT"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	// First activate, then deactivate.
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSO1", workosOrgID),
+			newWorkOSConnectionEvent(t, "connection.deactivated", "event_01HZSSO2", workosOrgID),
+		},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSSO2", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.True(t, row.SsoEnabled.Valid)
+	require.False(t, row.SsoEnabled.Bool)
+}
+
+func TestProcessWorkOSOrganizationEvents_ConnectionDeletedClearsSSOEnabled(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_conn_deleted")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_sso_deleted"
+	const workosOrgID = "org_01HZSSODEL"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSO3", workosOrgID),
+			newWorkOSConnectionEvent(t, "connection.deleted", "event_01HZSSO4", workosOrgID),
+		},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSSO4", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.True(t, row.SsoEnabled.Valid)
+	require.False(t, row.SsoEnabled.Bool)
+}
+
+func TestProcessWorkOSOrganizationEvents_ConnectionEventEmptyOrgIDSkips(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_conn_empty_org")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZSSONULLORG"
+
+	// Connection event with empty organization_id — should be skipped gracefully.
+	data, err := json.Marshal(map[string]string{
+		"id":              "conn_01HZEMPTY",
+		"object":          "connection",
+		"organization_id": "",
+	})
+	require.NoError(t, err)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{{ID: "event_01HZSSONULL", Event: "connection.activated", CreatedAt: time.Now(), Data: data}},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSSONULL", res.LastEventID)
+}
+
+func TestProcessWorkOSOrganizationEvents_ConnectionActivatedIdempotent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_conn_idempotent")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_sso_idempotent"
+	const workosOrgID = "org_01HZSSOIDEM"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	// Two consecutive activations — second should be a no-op.
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSO5", workosOrgID),
+			newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSO6", workosOrgID),
+		},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSSO6", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.True(t, row.SsoEnabled.Valid)
+	require.True(t, row.SsoEnabled.Bool)
+}
+
+// ---------------------------------------------------------------------------
+// SCIM / Directory Sync events
+// ---------------------------------------------------------------------------
+
+func TestProcessWorkOSOrganizationEvents_DSyncActivatedSetsSCIMEnabled(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_dsync_activated")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_scim_activated"
+	const workosOrgID = "org_01HZSCIMACT"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZSCIMACT", workosOrgID)},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSCIMACT", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.True(t, row.ScimEnabled.Valid)
+	require.True(t, row.ScimEnabled.Bool)
+}
+
+func TestProcessWorkOSOrganizationEvents_DSyncDeletedClearsSCIMEnabled(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_dsync_deleted")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_scim_deleted"
+	const workosOrgID = "org_01HZSCIMDEL"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZSCIM3", workosOrgID),
+			newWorkOSDSyncEvent(t, "dsync.deleted", "event_01HZSCIM4", workosOrgID),
+		},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSCIM4", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.True(t, row.ScimEnabled.Valid)
+	require.False(t, row.ScimEnabled.Bool)
+}
+
+func TestProcessWorkOSOrganizationEvents_DSyncEventEmptyOrgIDSkips(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_dsync_empty_org")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZSCIMNULLORG"
+
+	data, err := json.Marshal(map[string]string{
+		"id":              "dir_01HZEMPTY",
+		"object":          "directory",
+		"organization_id": "",
+	})
+	require.NoError(t, err)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{{ID: "event_01HZSCIMNULL", Event: "dsync.activated", CreatedAt: time.Now(), Data: data}},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSCIMNULL", res.LastEventID)
+}
+
+func TestProcessWorkOSOrganizationEvents_DSyncActivatedIdempotent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_dsync_idempotent")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_scim_idempotent"
+	const workosOrgID = "org_01HZSCIMIDEMP"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZSCIM5", workosOrgID),
+			newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZSCIM6", workosOrgID),
+		},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSCIM6", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.True(t, row.ScimEnabled.Valid)
+	require.True(t, row.ScimEnabled.Bool)
+}
+
+// ---------------------------------------------------------------------------
+// Combined SSO + SCIM lifecycle
+// ---------------------------------------------------------------------------
+
+func TestProcessWorkOSOrganizationEvents_SSOAndSCIMFullLifecycle(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_sso_scim_lifecycle")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_sso_scim_full"
+	const workosOrgID = "org_01HZLIFECYCLE"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	// Full lifecycle: activate SSO → activate SCIM → deactivate SSO → delete SCIM
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSConnectionEvent(t, "connection.activated", "event_01HZL1", workosOrgID),
+			newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZL2", workosOrgID),
+			newWorkOSConnectionEvent(t, "connection.deactivated", "event_01HZL3", workosOrgID),
+			newWorkOSDSyncEvent(t, "dsync.deleted", "event_01HZL4", workosOrgID),
+		},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZL4", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.True(t, row.SsoEnabled.Valid)
+	require.False(t, row.SsoEnabled.Bool, "SSO should be disabled after connection.deactivated")
+	require.True(t, row.ScimEnabled.Valid)
+	require.False(t, row.ScimEnabled.Bool, "SCIM should be disabled after dsync.deleted")
+}
+
+func TestProcessWorkOSOrganizationEvents_StaleConnectionEventSkipped(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_conn_stale")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_sso_stale"
+	const workosOrgID = "org_01HZSSOSTALE"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	// Deliver activation with a high event ID, then a stale deactivation
+	// with a lower event ID (simulating out-of-order delivery).
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSOSTALE2", workosOrgID),
+			newWorkOSConnectionEvent(t, "connection.deactivated", "event_01HZSSOSTALE1", workosOrgID),
+		},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	// LastEventID tracks the last event processed by the loop (including
+	// skipped stale events), so it advances to the final event in the batch.
+	require.Equal(t, "event_01HZSSOSTALE1", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.True(t, row.SsoEnabled.Valid)
+	require.True(t, row.SsoEnabled.Bool, "SSO should remain enabled — stale deactivation must be skipped")
+	// The DB cursor should reflect the newer event that was actually applied,
+	// not the stale event that was skipped.
+	require.Equal(t, "event_01HZSSOSTALE2", row.WorkosLastEventID.String)
+}
+
+func TestProcessWorkOSOrganizationEvents_StaleDSyncEventSkipped(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_dsync_stale")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_scim_stale"
+	const workosOrgID = "org_01HZSCIMSTALE"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	// Deliver activation with a high event ID, then a stale deletion
+	// with a lower event ID (simulating out-of-order delivery).
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZSCIMSTALE2", workosOrgID),
+			newWorkOSDSyncEvent(t, "dsync.deleted", "event_01HZSCIMSTALE1", workosOrgID),
+		},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSCIMSTALE1", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.True(t, row.ScimEnabled.Valid)
+	require.True(t, row.ScimEnabled.Bool, "SCIM should remain enabled — stale deletion must be skipped")
+	require.Equal(t, "event_01HZSCIMSTALE2", row.WorkosLastEventID.String)
+}
+
+func TestProcessWorkOSOrganizationEvents_ConnectionEventUnknownOrgNoError(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_conn_unknown_org")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZSSOUNKORG"
+
+	// connection.activated for a workos org that has no matching Gram org — UPDATE
+	// matches 0 rows, which is fine (no error).
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSOUNK", workosOrgID)},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSSOUNK", res.LastEventID)
+}
+
+func TestProcessWorkOSOrganizationEvents_DSyncEventUnknownOrgNoError(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_dsync_unknown_org")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZSCIMUNKORG"
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZSCIMUNK", workosOrgID)},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSCIMUNK", res.LastEventID)
 }
 
 func TestProcessWorkOSOrganizationEvents_OrganizationRoleSkippedForUnknownOrg(t *testing.T) {

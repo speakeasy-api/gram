@@ -39,4 +39,5 @@ func TestBuildCursorUsageEventIncludesIntegrationConfigID(t *testing.T) {
 
 	require.Equal(t, configID.String(), logParam.Attributes[attr.AIIntegrationConfigIDKey])
 	require.Equal(t, "cursor", logParam.Attributes[attr.HookSourceKey])
+	require.Equal(t, "user@example.com", logParam.UserInfo.Email())
 }

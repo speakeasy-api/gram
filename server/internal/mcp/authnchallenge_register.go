@@ -59,9 +59,10 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
-	endpoint, err := s.loadResolvedMcpEndpointByToolsetSlug(ctx, mcpSlug)
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
 	if err != nil {
 		return err
 	}
@@ -104,7 +105,7 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 		if errors.As(err, &oauthErr) {
 			return writeDCRError(ctx, w, logger, oauthErr.Code, oauthErr.Description)
 		}
-		return oops.E(oops.CodeUnexpected, err, "validate DCR request").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "validate DCR request").LogError(ctx, logger)
 	}
 
 	clientID := "client_" + uuid.NewString()
@@ -118,11 +119,11 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 		var err error
 		clientSecret, err = generateClientSecret()
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to generate client secret").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to generate client secret").LogError(ctx, logger)
 		}
 		hashed, hashErr := bcrypt.GenerateFromPassword([]byte(clientSecret), bcrypt.DefaultCost)
 		if hashErr != nil {
-			return oops.E(oops.CodeUnexpected, hashErr, "failed to hash client secret").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, hashErr, "failed to hash client secret").LogError(ctx, logger)
 		}
 		clientSecretHash = pgtype.Text{String: string(hashed), Valid: true}
 	}
@@ -137,12 +138,18 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 		ClientSecretExpiresAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to create user session client").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to create user session client").LogError(ctx, logger)
 	}
 
 	logger.InfoContext(ctx, "user session client registered",
 		attr.SlogOAuthClientID(clientID),
 		attr.SlogOAuthClientName(req.ClientName),
+		attr.SlogToolsetMCPSlug(endpoint.Slug),
+		attr.SlogOAuthRegisteredAuthMethod(req.TokenEndpointAuthMethod),
+		attr.SlogOAuthClientSecretGenerated(clientSecretHash.Valid),
+		attr.SlogOAuthRedirectURICount(len(req.RedirectURIs)),
+		attr.SlogURLOriginal(r.URL.Path),
+		attr.SlogHTTPRequestHeaderUserAgent(r.UserAgent()),
 	)
 
 	// Confidential clients get client_secret + client_secret_expires_at=0
@@ -168,7 +175,7 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 
 	body, err := json.Marshal(resp)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal registration response").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal registration response").LogError(ctx, logger)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -176,7 +183,7 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 	w.Header().Set("Pragma", "no-cache")
 	w.WriteHeader(http.StatusCreated)
 	if _, err := w.Write(body); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write response body").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to write response body").LogError(ctx, logger)
 	}
 	return nil
 }
@@ -189,7 +196,7 @@ func writeDCRError(ctx context.Context, w http.ResponseWriter, logger *slog.Logg
 		"error_description": description,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal DCR error").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal DCR error").LogError(ctx, logger)
 	}
 
 	logger.InfoContext(ctx, "DCR registration rejected",
@@ -202,7 +209,7 @@ func writeDCRError(ctx context.Context, w http.ResponseWriter, logger *slog.Logg
 	w.Header().Set("Pragma", "no-cache")
 	w.WriteHeader(http.StatusBadRequest)
 	if _, werr := w.Write(body); werr != nil {
-		return oops.E(oops.CodeUnexpected, werr, "failed to write DCR error body").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, werr, "failed to write DCR error body").LogError(ctx, logger)
 	}
 	return nil
 }

@@ -100,22 +100,30 @@ function useMCPServers(enabled: boolean) {
         ? `${baseUrl}/mcp/${t.mcpSlug}`
         : `${baseUrl}/mcp/${project?.slug ?? ""}/${t.slug}/${t.defaultEnvironmentSlug ?? ""}`;
       const mcpUrl = fullUrl.replace(/^https?:\/\//, "");
-      // Skip toolsets containing proxy external MCP tools — proxy tools are not
-      // RBAC-compatible yet. Backend encodes proxy entries with a ":proxy" name
-      // suffix while direct entries get the real ":<tool-name>".
-      const hasProxyExternalMcp = t.tools.some(
+      // External MCP "proxy" entries (name suffix ":proxy") represent servers
+      // whose tools/list requires user auth, so we can't enumerate them at
+      // deploy time. They still resolve at call-time via mcp:connect, so the
+      // grant model supports them; we just don't surface the proxy entry as a
+      // selectable tool in the picker.
+      const tools = t.tools
+        .filter(
+          (tool) =>
+            !(tool.type === "externalmcp" && tool.name.endsWith(":proxy")),
+        )
+        .map((tool) => ({
+          id: tool.id,
+          name: tool.name,
+          type: tool.type,
+          httpMethod: tool.httpMethod,
+          annotations: tool.annotations,
+        }));
+      const isExternalMcpProxy = t.tools.some(
         (tool) => tool.type === "externalmcp" && tool.name.endsWith(":proxy"),
       );
-      if (hasProxyExternalMcp) continue;
-      const tools = t.tools.map((tool) => ({
-        id: tool.id,
-        name: tool.name,
-        type: tool.type,
-        httpMethod: tool.httpMethod,
-        annotations: tool.annotations,
-      }));
-      // Skip servers with no tools
-      if (tools.length === 0) continue;
+      // Skip servers with nothing grantable: zero visible tools and not a
+      // proxy server (proxy servers stay listed so users can grant at the
+      // server level).
+      if (tools.length === 0 && !isExternalMcpProxy) continue;
       group.servers.push({
         id: t.id,
         name: t.name,
@@ -138,7 +146,7 @@ export function GrantRuleDrawerContent({
   isDeny: isDenyProp,
   allowedPanels,
   allowSelectors,
-}: GrantRuleDrawerContentProps) {
+}: GrantRuleDrawerContentProps): JSX.Element {
   const organization = useOrganization();
   const mcpServers = useMCPServers(resourceType === "mcp");
   // Override for when user clicks a mode but selectors are still empty
@@ -176,7 +184,7 @@ export function GrantRuleDrawerContent({
   useEffect(() => {
     if (!allowedPanels || allowedPanels.length === 0) return;
     if (allowedPanels.includes(activePanel)) return;
-    switchPanel(allowedPanels[0]);
+    switchPanel(allowedPanels[0]!);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allowedPanels?.join(",")]);
 
@@ -283,6 +291,21 @@ export function GrantRuleDrawerContent({
       }))
       .filter((g) => g.servers.length > 0);
   }, [scopedMcpServers, resourceSearch]);
+
+  // The "Specific tools" picker only makes sense for servers with enumerable
+  // tools. Proxy servers (no tools/list at deploy time) appear in the
+  // "Specific servers" picker for server-level grants but must not render
+  // a zero-tools row here.
+  const toolPanelMcpServers = useMemo(
+    () =>
+      scopedMcpServers
+        .map((g) => ({
+          ...g,
+          servers: g.servers.filter((s) => s.tools.length > 0),
+        }))
+        .filter((g) => g.servers.length > 0),
+    [scopedMcpServers],
+  );
 
   // Fixed-scope permissions have no resource picker — their granularity is
   // baked into the scope definition. Org scopes are always org-wide;
@@ -532,7 +555,7 @@ export function GrantRuleDrawerContent({
 
   const customTabs = (toolScrollClass?: string) => (
     <ToolSelectionPanel
-      mcpServers={scopedMcpServers}
+      mcpServers={toolPanelMcpServers}
       selectors={selectors ?? []}
       annotations={annotations}
       onChangeAnnotations={onChangeAnnotations}
@@ -657,7 +680,7 @@ function ToolSelectionPanel({
   const [search, setSearch] = useState("");
   // Auto-expand if only one server; otherwise all collapsed
   const [expandedServers, setExpandedServers] = useState<Set<string>>(
-    () => new Set(allServers.length === 1 ? [allServers[0].id] : []),
+    () => new Set(allServers.length === 1 ? [allServers[0]!.id!] : []),
   );
 
   const toggleExpanded = (serverId: string) => {
@@ -1062,7 +1085,7 @@ function useCollectionGroups(
         const matchedServers: Server[] = [];
         for (const es of externalServers) {
           const parts = es.registrySpecifier.split("/");
-          const mcpSlug = parts[parts.length - 1];
+          const mcpSlug = parts[parts.length - 1]!;
           const server = mcpSlugToServer.get(mcpSlug);
           if (server) matchedServers.push(server);
         }

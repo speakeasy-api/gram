@@ -1,3 +1,4 @@
+*.tmp-*
 *.log
 mise.local.toml
 mise.*.local.toml
@@ -20,7 +21,9 @@ report.md
 /posting.env
 /client/sdk/docs
 /server/goa*
+/dev-idp/goa*
 /server/gram
+/risk-pi-report
 /server/risk_accuracy_metrics.json
 # Goa generates OpenAPI specs with non-deterministic examples. Nothing consumes them.
 /server/gen/http/openapi.yaml
@@ -70,3 +73,14 @@ package-lock.json
 .claude/hooks/*
 **/.claude/scheduled_tasks.lock
 flagged-chats.jsonl
+.superpowers/
+# Stray riskjudgebench build/output artifacts (compiled binary + bench result dumps)
+/server/riskjudgebench
+/results.json
+/finalists.json
+
+### Python ###
+__pycache__/
+*.py[cod]
+*$py.class
+.uv-cache

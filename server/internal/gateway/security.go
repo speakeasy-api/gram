@@ -47,6 +47,16 @@ func processSecurity(
 		// if tool calling logging is enabled this will record the headers that were set with redaction
 		attrRecorder.RecordRequestHeaders(securityHeadersProcessed, true)
 	}()
+	// Each tool declares one or more security schemes derived from its OpenAPI
+	// definition, and Gram maps every scheme to the environment variable(s) that
+	// are expected to hold the credential. When a credential is missing or empty we
+	// log at info and continue WITHOUT setting that scheme's header rather than
+	// failing the request: the credential may still reach the upstream by another
+	// path (for example a system environment variable applied as a raw header in the
+	// loop below), and if it genuinely doesn't, the upstream API returns its own
+	// 401/403 which is surfaced to the caller. These are expected configuration
+	// states, not server errors, so they must not be logged at error severity.
+	// Malformed tool definitions (unsupported scheme/placement/type) remain errors.
 	for _, security := range plan.Security {
 		if !security.Type.Valid {
 			logger.ErrorContext(ctx, "invalid security type in tool definition")
@@ -56,11 +66,11 @@ func processSecurity(
 		switch security.Type.Value {
 		case "apiKey":
 			if len(security.EnvVariables) == 0 {
-				logger.ErrorContext(ctx, "no environment variables provided for api key auth", attr.SlogSecurityScheme(security.Scheme.Value))
+				logger.InfoContext(ctx, "tool defines api key auth but no env var is configured, proceeding without api key", attr.SlogSecurityScheme(security.Scheme.Value))
 			} else if mergedEnv.Get(security.EnvVariables[0]) == "" {
-				logger.ErrorContext(ctx, "missing value for environment variable in api key auth", attr.SlogEnvVarName(security.EnvVariables[0]), attr.SlogSecurityScheme(security.Scheme.Value))
+				logger.InfoContext(ctx, "tool defines api key auth but its env var is empty, proceeding without api key", attr.SlogEnvVarName(security.EnvVariables[0]), attr.SlogSecurityScheme(security.Scheme.Value))
 			} else if !security.Name.Valid || security.Name.Value == "" {
-				logger.ErrorContext(ctx, "no name provided for api key auth", attr.SlogSecurityScheme(security.Scheme.Value))
+				logger.InfoContext(ctx, "tool defines api key auth but no parameter name is configured, proceeding without api key", attr.SlogSecurityScheme(security.Scheme.Value))
 			} else {
 				key := security.EnvVariables[0]
 				switch security.Placement.Value {
@@ -78,16 +88,16 @@ func processSecurity(
 			switch security.Scheme.Value {
 			case "bearer":
 				if len(security.EnvVariables) == 0 {
-					logger.ErrorContext(ctx, "no environment variables provided for bearer auth", attr.SlogSecurityScheme(security.Scheme.Value))
+					logger.InfoContext(ctx, "tool defines bearer auth but no env var is configured, proceeding without Authorization header", attr.SlogSecurityScheme(security.Scheme.Value))
 				} else if mergedEnv.Get(security.EnvVariables[0]) == "" {
-					logger.ErrorContext(ctx, "token value is empty for bearer auth", attr.SlogEnvVarName(security.EnvVariables[0]), attr.SlogSecurityScheme(security.Scheme.Value))
+					logger.InfoContext(ctx, "tool defines bearer auth but its env var is empty, proceeding without Authorization header", attr.SlogEnvVarName(security.EnvVariables[0]), attr.SlogSecurityScheme(security.Scheme.Value))
 				} else {
 					token := mergedEnv.Get(security.EnvVariables[0])
 					setHeader("Authorization", formatForBearer(token))
 				}
 			case "basic":
 				if len(security.EnvVariables) < 2 {
-					logger.ErrorContext(ctx, "not enough environment variables provided for basic auth", attr.SlogSecurityScheme(security.Scheme.Value))
+					logger.InfoContext(ctx, "tool defines basic auth but its env vars are not fully configured, proceeding without Authorization header", attr.SlogSecurityScheme(security.Scheme.Value))
 				} else {
 					var username, password string
 					for _, envVar := range security.EnvVariables {
@@ -99,8 +109,8 @@ func processSecurity(
 					}
 
 					if username == "" || password == "" {
-						logger.ErrorContext(ctx, "missing username or password value for basic auth",
-							attr.SlogValueString(fmt.Sprintf("env_username_present=%t env_password_present=%t", security.EnvVariables[0] == "", security.EnvVariables[1] == "")),
+						logger.InfoContext(ctx, "tool defines basic auth but its username or password env var is empty, proceeding without Authorization header",
+							attr.SlogValueString(fmt.Sprintf("env_username_present=%t env_password_present=%t", username != "", password != "")),
 							attr.SlogSecurityScheme(security.Scheme.Value))
 					} else {
 						req.SetBasicAuth(username, password)
@@ -116,7 +126,7 @@ func processSecurity(
 			for _, envVar := range security.EnvVariables {
 				if strings.Contains(envVar, "ACCESS_TOKEN") {
 					if token := mergedEnv.Get(envVar); token == "" {
-						logger.ErrorContext(ctx, "missing authorization code", attr.SlogEnvVarName(envVar))
+						logger.InfoContext(ctx, "tool defines openid connect auth but its access token env var is empty, proceeding without Authorization header", attr.SlogEnvVarName(envVar))
 					} else {
 						setHeader("Authorization", formatForBearer(token))
 					}
@@ -124,7 +134,7 @@ func processSecurity(
 			}
 		case "oauth2":
 			if security.OAuthTypes == nil {
-				logger.ErrorContext(ctx, "no oauth types provided for oauth2 auth", attr.SlogSecurityScheme(security.Scheme.Value))
+				logger.InfoContext(ctx, "tool defines oauth2 auth but no oauth flow types are configured, proceeding without oauth2 credentials", attr.SlogSecurityScheme(security.Scheme.Value))
 			}
 
 			for _, oauthType := range security.OAuthTypes {
@@ -133,7 +143,7 @@ func processSecurity(
 					for _, envVar := range security.EnvVariables {
 						if strings.Contains(envVar, "ACCESS_TOKEN") {
 							if token := mergedEnv.Get(envVar); token == "" {
-								logger.ErrorContext(ctx, "missing authorization code", attr.SlogEnvVarName(envVar))
+								logger.InfoContext(ctx, "tool defines oauth2 auth but its access token env var is empty, proceeding without Authorization header", attr.SlogEnvVarName(envVar))
 							} else {
 								setHeader("Authorization", formatForBearer(token))
 							}

@@ -11,6 +11,7 @@ import {
   buildCreateRemoteSessionIssuerMutation,
   buildCreateUserSessionIssuerMutation,
   buildDiscoverRemoteSessionIssuerMutation,
+  buildMigrateLegacyGramRegistrationsMutation,
   buildSetToolsetUserSessionIssuerMutation,
 } from "@gram/client/react-query";
 import { fromPromise } from "xstate";
@@ -25,6 +26,7 @@ import type {
   CreateRemoteSessionIssuerInput,
   CreateUserSessionIssuerInput,
   LinkToolsetUserSessionIssuerInput,
+  MigrateGramRegistrationsInput,
   ResolveRemoteSessionClientInput,
   ResolveRemoteSessionIssuerInput,
   ResolveUserSessionIssuerInput,
@@ -52,7 +54,7 @@ function narrowTokenEndpointAuthMethod(
 
 export type GramClient = Gram;
 
-export function createMigrationServices(
+function createMigrationServicesImpl(
   client: GramClient,
   authedFetch: AuthedFetch,
 ) {
@@ -300,6 +302,27 @@ export function createMigrationServices(
     },
   );
 
+  const migrateGramRegistrations = fromPromise(
+    async ({
+      input,
+      signal,
+    }: {
+      input: MigrateGramRegistrationsInput;
+    } & SignalArg) => {
+      const { mutationFn } =
+        buildMigrateLegacyGramRegistrationsMutation(client);
+      await mutationFn({
+        request: {
+          migrateLegacyGramRegistrationsForm: {
+            oauthProxyProviderId: input.oauthProxyProviderId,
+            userSessionIssuerId: input.userSessionIssuerId,
+          },
+        },
+        ...fetchOptions({ signal }),
+      });
+    },
+  );
+
   const linkToolsetUserSessionIssuer = fromPromise(
     async ({
       input,
@@ -327,8 +350,16 @@ export function createMigrationServices(
     createUserSessionIssuer,
     createRemoteSessionIssuer,
     createRemoteSessionClient,
+    migrateGramRegistrations,
     linkToolsetUserSessionIssuer,
   };
+}
+
+export function createMigrationServices(
+  client: GramClient,
+  authedFetch: AuthedFetch,
+): ReturnType<typeof createMigrationServicesImpl> {
+  return createMigrationServicesImpl(client, authedFetch);
 }
 
 function isNotFound(error: unknown): boolean {

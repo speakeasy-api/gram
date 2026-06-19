@@ -83,7 +83,7 @@ func createDeployment(
 	}
 
 	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert, externalMCPsToUpsert); err != nil {
-		return uuid.Nil, oops.E(oops.CodeInvalid, err, "one or more deployment assets are invalid:\n%s", err.Error()).Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeInvalid, err, "one or more deployment assets are invalid:\n%s", err.Error()).LogError(ctx, logger)
 	}
 
 	cmd, err := tx.CreateDeployment(ctx, repo.CreateDeploymentParams{
@@ -99,7 +99,7 @@ func createDeployment(
 		ExternalUrl: conv.ToPGTextEmpty(fields.externalURL),
 	})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error creating deployment").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error creating deployment").LogError(ctx, logger)
 	}
 
 	created := cmd.RowsAffected() > 0
@@ -109,7 +109,7 @@ func createDeployment(
 		ProjectID:      fields.projectID,
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error reading deployment").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error reading deployment").LogError(ctx, logger)
 	}
 
 	newID := d.Deployment.ID
@@ -142,7 +142,7 @@ func createDeployment(
 		Message:      "Deployment created",
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error logging deployment creation").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error logging deployment creation").LogError(ctx, logger)
 	}
 
 	return newID, nil
@@ -169,7 +169,7 @@ func cloneDeployment(
 	defer span.SetStatus(codes.Ok, "deployment cloned")
 
 	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert, externalMCPsToUpsert); err != nil {
-		return uuid.Nil, oops.E(oops.CodeInvalid, err, "one or more deployment assets are invalid:\n%s", err.Error()).Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeInvalid, err, "one or more deployment assets are invalid:\n%s", err.Error()).LogError(ctx, logger)
 	}
 
 	srcDepID := uuid.UUID(srcDeploymentID)
@@ -180,7 +180,7 @@ func cloneDeployment(
 		ProjectID: projID,
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").LogError(ctx, logger)
 	}
 
 	logger = logger.With(attr.SlogDeploymentID(newID.String()))
@@ -192,7 +192,7 @@ func cloneDeployment(
 		ExcludedIds:          packagesToExclude,
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment openapi v3 assets").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment openapi v3 assets").LogError(ctx, logger)
 	}
 
 	_, err = depRepo.CloneDeploymentOpenAPIv3Assets(ctx, repo.CloneDeploymentOpenAPIv3AssetsParams{
@@ -201,7 +201,7 @@ func cloneDeployment(
 		ExcludedIds:          openAPIv3ToExclude,
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment openapi v3 assets").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment openapi v3 assets").LogError(ctx, logger)
 	}
 
 	_, err = depRepo.CloneDeploymentFunctionsAssets(ctx, repo.CloneDeploymentFunctionsAssetsParams{
@@ -212,7 +212,7 @@ func cloneDeployment(
 		DefaultMemoryMib:     constants.DefaultFunctionMemoryMiB,
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment functions assets").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment functions assets").LogError(ctx, logger)
 	}
 
 	_, err = depRepo.CloneDeploymentExternalMCPs(ctx, repo.CloneDeploymentExternalMCPsParams{
@@ -221,7 +221,7 @@ func cloneDeployment(
 		ExcludedSlugs:        externalMCPsToExclude,
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment external mcps").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment external mcps").LogError(ctx, logger)
 	}
 
 	err = amendDeployment(ctx, logger, depRepo, DeploymentID(newID), openAPIv3ToUpsert, functionsToUpsert, packagesToUpsert, externalMCPsToUpsert)
@@ -237,7 +237,7 @@ func cloneDeployment(
 		Message:      "Deployment created",
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error logging deployment creation").Log(ctx, logger)
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error logging deployment creation").LogError(ctx, logger)
 	}
 
 	return newID, nil
@@ -263,7 +263,7 @@ func amendDeployment(
 			Slug:         a.slug,
 		})
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeUnexpected, err, "error adding deployment openapi v3 asset").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "error adding deployment openapi v3 asset").LogError(ctx, logger)
 		}
 	}
 
@@ -290,7 +290,7 @@ func amendDeployment(
 			Scale:        scale,
 		})
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeUnexpected, err, "error adding deployment functions asset").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "error adding deployment functions asset").LogError(ctx, logger)
 		}
 	}
 
@@ -301,7 +301,7 @@ func amendDeployment(
 			VersionID:    p.versionID,
 		})
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeUnexpected, err, "error adding deployment package").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "error adding deployment package").LogError(ctx, logger)
 		}
 	}
 
@@ -316,7 +316,7 @@ func amendDeployment(
 			SelectedRemotes:                     e.selectedRemotes,
 		})
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeUnexpected, err, "error adding deployment external mcp").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "error adding deployment external mcp").LogError(ctx, logger)
 		}
 	}
 

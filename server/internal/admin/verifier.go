@@ -37,7 +37,7 @@ func NewVerifier(logger *slog.Logger, sessions *SessionStore, oidc *OIDCClient) 
 // the Auther interface on the admin service.
 func (v *Verifier) Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
 	if scheme == nil || scheme.Name != constants.AdminAuthSecurityScheme {
-		return ctx, oops.E(oops.CodeUnauthorized, nil, "unsupported security scheme").Log(ctx, v.logger)
+		return ctx, oops.E(oops.CodeUnauthorized, nil, "unsupported security scheme").LogError(ctx, v.logger)
 	}
 
 	if key == "" {
@@ -56,13 +56,13 @@ func (v *Verifier) Authorize(ctx context.Context, key string, scheme *security.A
 
 	accessToken, err := v.sessions.DecryptAccessToken(session)
 	if err != nil {
-		return ctx, oops.E(oops.CodeUnexpected, err, "decrypt admin session").Log(ctx, v.logger)
+		return ctx, oops.E(oops.CodeUnexpected, err, "decrypt admin session").LogError(ctx, v.logger)
 	}
 
 	if NeedsRefresh(session.AccessTokenExpiresAt) {
 		refreshToken, err := v.sessions.DecryptRefreshToken(session)
 		if err != nil {
-			return ctx, oops.E(oops.CodeUnexpected, err, "decrypt admin session").Log(ctx, v.logger)
+			return ctx, oops.E(oops.CodeUnexpected, err, "decrypt admin session").LogError(ctx, v.logger)
 		}
 		if refreshToken == "" {
 			// No refresh token captured at login; re-auth required.
@@ -72,11 +72,11 @@ func (v *Verifier) Authorize(ctx context.Context, key string, scheme *security.A
 		tok, err := v.oidc.Refresh(ctx, refreshToken)
 		if err != nil {
 			_ = v.sessions.Delete(ctx, session.SessionID)
-			return ctx, oops.C(oops.CodeUnauthorized).Log(ctx, v.logger, attr.SlogError(err))
+			return ctx, oops.C(oops.CodeUnauthorized).LogError(ctx, v.logger, attr.SlogError(err))
 		}
 		session, err = v.sessions.UpdateAccessToken(ctx, session, tok.AccessToken, tok.Expiry)
 		if err != nil {
-			return ctx, oops.E(oops.CodeUnexpected, err, "persist refreshed admin session").Log(ctx, v.logger)
+			return ctx, oops.E(oops.CodeUnexpected, err, "persist refreshed admin session").LogError(ctx, v.logger)
 		}
 		accessToken = tok.AccessToken
 	}
@@ -85,16 +85,16 @@ func (v *Verifier) Authorize(ctx context.Context, key string, scheme *security.A
 	switch {
 	case errors.Is(err, ErrOIDCUnauthenticated), errors.Is(err, ErrAdminDomainNotAllowed):
 		_ = v.sessions.Delete(ctx, session.SessionID)
-		return ctx, oops.C(oops.CodeUnauthorized).Log(ctx, v.logger, attr.SlogError(err))
+		return ctx, oops.C(oops.CodeUnauthorized).LogError(ctx, v.logger, attr.SlogError(err))
 	case err != nil:
-		return ctx, oops.E(oops.CodeUnexpected, err, "validate admin session with oidc provider").Log(ctx, v.logger)
+		return ctx, oops.E(oops.CodeUnexpected, err, "validate admin session with oidc provider").LogError(ctx, v.logger)
 	}
 
 	if info.OIDCSubject != session.OIDCSubject {
 		// Token belongs to a different user than the cached session —
 		// treat as hostile and invalidate the session immediately.
 		_ = v.sessions.Delete(ctx, session.SessionID)
-		return ctx, oops.C(oops.CodeUnauthorized).Log(ctx, v.logger)
+		return ctx, oops.C(oops.CodeUnauthorized).LogError(ctx, v.logger)
 	}
 
 	authCtx := &contextvalues.AdminAuthContext{

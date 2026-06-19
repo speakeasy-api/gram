@@ -65,10 +65,10 @@ type OnboardingStep =
   | "toolset"
   | "mcp";
 
-export const START_PATH_PARAM = "start-path";
-export const START_STEP_PARAM = "start-step";
+const START_PATH_PARAM = "start-path";
+const START_STEP_PARAM = "start-step";
 
-export function OnboardingWizard() {
+export function OnboardingWizard(): JSX.Element {
   const { orgSlug } = useParams();
   const telemetry = useTelemetry();
   const routes = useRoutes();
@@ -161,7 +161,7 @@ const Step = ({
   );
 };
 
-export const ChoiceCard = ({
+const ChoiceCard = ({
   onClick,
   icon: Icon,
   title,
@@ -389,12 +389,9 @@ export const InitialChoiceStep = ({
   setSelectedPath?: (path: OnboardingPath) => void;
   routes: RoutesWithGoTo;
   isFunctionsEnabled: boolean;
-}) => {
+}): JSX.Element => {
   const navigate = useNavigate();
   const telemetry = useTelemetry();
-
-  const isRemoteMcpEnabled =
-    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
 
   const onChoiceSelected = (
     choice:
@@ -425,11 +422,11 @@ export const InitialChoiceStep = ({
     } else {
       // Navigate to onboarding with appropriate start params
       if (isFunctionsEnabled) {
-        navigate(
+        void navigate(
           routes.onboarding.href() + `?${START_STEP_PARAM}=first-party-choice`,
         );
       } else {
-        navigate(
+        void navigate(
           routes.onboarding.href() +
             `?${START_STEP_PARAM}=upload&${START_PATH_PARAM}=openapi`,
         );
@@ -440,7 +437,7 @@ export const InitialChoiceStep = ({
   return (
     <>
       <Stack gap={1}>
-        <span className="text-heading-md">Get Started with Gram</span>
+        <span className="text-heading-md">Get Started with the platform</span>
         <span className="text-body-sm">What would you like to do?</span>
       </Stack>
       <div className="grid grid-cols-1 gap-4">
@@ -453,17 +450,15 @@ export const InitialChoiceStep = ({
           title="Connect to Popular MCPs"
           description="Browse and connect to official and community-maintained MCP servers"
         />
-        {isRemoteMcpEnabled && (
-          <ChoiceCard
-            onClick={() => {
-              onChoiceSelected("connect_to_custom_remote_mcp");
-              routes.sources.addRemoteMcp.goTo();
-            }}
-            icon={Network}
-            title="Custom Remote MCP"
-            description="Connect to an existing MCP server by URL"
-          />
-        )}
+        <ChoiceCard
+          onClick={() => {
+            onChoiceSelected("connect_to_custom_remote_mcp");
+            routes.sources.addRemoteMcp.goTo();
+          }}
+          icon={Network}
+          title="Custom Remote MCP"
+          description="Connect to an existing MCP server by URL"
+        />
         <ChoiceCard
           onClick={handleConnectToData}
           icon={Database}
@@ -518,7 +513,7 @@ const ChoiceStep = ({
             onClick={() => handleChoice("cli")}
             icon={SquareFunction}
             title="Start from Code"
-            description="Deploy custom functions using the Gram CLI"
+            description="Deploy custom functions using the CLI"
           />
         )}
       </div>
@@ -599,7 +594,7 @@ const CliSetupStep = ({
       command: `${installCommandPrefix} build`,
     },
     {
-      label: "Push your functions to Gram",
+      label: "Push your functions to the platform",
       command: `${installCommandPrefix} push`,
     },
   ];
@@ -616,7 +611,7 @@ const CliSetupStep = ({
   return (
     <>
       <Stack gap={1}>
-        <span className="text-heading-md">Get Started with Gram Functions</span>
+        <span className="text-heading-md">Get Started with Functions</span>
         <span className="text-body-sm">
           Run these commands in your terminal
         </span>
@@ -652,7 +647,7 @@ const CliSetupStep = ({
                 </Stack>
               )}
             </Stack>
-            <CodeBlock children={item.command} language="bash" />
+            <CodeBlock language="bash">{item.command}</CodeBlock>
           </Stack>
         ))}
       </Stack>
@@ -661,7 +656,7 @@ const CliSetupStep = ({
         The build command should open a new window with the next step. If it
         doesn't, click{" "}
         <span
-          onClick={handleContinue}
+          onClick={() => void handleContinue()}
           className="text-primary cursor-pointer underline"
         >
           here
@@ -680,18 +675,18 @@ export const UploadedDocument = ({
   file: File;
   onReset: () => void;
   defaultExpanded?: boolean;
-}) => {
+}): JSX.Element => {
   const [fileText, setFileText] = useState<string>();
 
   useEffect(() => {
     if (!file) return;
     if (file.size > 10_000) {
-      file
+      void file
         .slice(0, 10_000)
         .text()
         .then((text) => setFileText(text + "\n..."));
     } else {
-      file.text().then(setFileText);
+      void file.text().then(setFileText);
     }
   }, [file]);
 
@@ -767,7 +762,9 @@ const UploadStep = ({
         <InputField
           placeholder="Petstore"
           value={apiName}
-          onChange={(e) => setApiName(e.target.value)}
+          onChange={(e) => {
+            setApiName(e.target.value);
+          }}
           maxLength={30}
           label="API Name"
           error={apiNameError}
@@ -781,7 +778,9 @@ const UploadStep = ({
     </Stack>
   ) : (
     <OpenApiSourceInput
-      onUpload={handleSpecUpload}
+      onUpload={(file) => {
+        void handleSpecUpload(file);
+      }}
       onUrlUpload={handleUrlUpload}
       className="max-w-full"
     />
@@ -887,8 +886,8 @@ const ToolsetStep = ({
       <Stack gap={1}>
         <span className="text-heading-md">Name Your MCP Server</span>
         <span className="text-body-sm">
-          This MCP server will hold the tools you've added to Gram. We'll make
-          it available in the next step.
+          This MCP server will hold the tools you've added to the platform.
+          We'll make it available in the next step.
         </span>
       </Stack>
       <InputField
@@ -1054,15 +1053,17 @@ const ContinueButton = ({
     <Button
       variant="brand"
       disabled={disabled || isLoading}
-      onClick={async () => {
-        setIsLoading(true);
-        try {
-          await onClick();
-        } catch (_error) {
-          // Error is already handled by the individual step components
-        } finally {
-          setIsLoading(false);
-        }
+      onClick={() => {
+        void (async () => {
+          setIsLoading(true);
+          try {
+            await onClick();
+          } catch (_error) {
+            // Error is already handled by the individual step components
+          } finally {
+            setIsLoading(false);
+          }
+        })();
       }}
       className="w-full"
     >

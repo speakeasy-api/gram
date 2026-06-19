@@ -116,6 +116,35 @@ func (q *Queries) CreateOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const getDeploymentFunctionInfraOverrides = `-- name: GetDeploymentFunctionInfraOverrides :many
+SELECT memory_mib_override, scale_override FROM deployments_functions WHERE deployment_id = $1
+`
+
+type GetDeploymentFunctionInfraOverridesRow struct {
+	MemoryMibOverride pgtype.Int4
+	ScaleOverride     pgtype.Int4
+}
+
+func (q *Queries) GetDeploymentFunctionInfraOverrides(ctx context.Context, deploymentID uuid.UUID) ([]GetDeploymentFunctionInfraOverridesRow, error) {
+	rows, err := q.db.Query(ctx, getDeploymentFunctionInfraOverrides, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetDeploymentFunctionInfraOverridesRow
+	for rows.Next() {
+		var i GetDeploymentFunctionInfraOverridesRow
+		if err := rows.Scan(&i.MemoryMibOverride, &i.ScaleOverride); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getOutboxEntry = `-- name: GetOutboxEntry :one
 SELECT id FROM outbox WHERE id = $1
 `
@@ -350,7 +379,7 @@ func (q *Queries) ListDeploymentHTTPTools(ctx context.Context, deploymentID uuid
 }
 
 const listRiskResultsAll = `-- name: ListRiskResultsAll :many
-SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, dead_letter_reason, created_at
+SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 FROM risk_results
 WHERE project_id = $1
   AND risk_policy_id = $2
@@ -391,6 +420,10 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 			&i.Confidence,
 			&i.Tags,
 			&i.DeadLetterReason,
+			&i.ExcludedAt,
+			&i.ExcludedExclusionID,
+			&i.FalsePositiveAt,
+			&i.FalsePositiveReason,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -410,6 +443,21 @@ UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deploymen
 // Simulates a legacy deployment by NULLing out memory_mib and scale, as if the row was inserted before these columns existed.
 func (q *Queries) ScrubDeploymentFunctionMachineSpecs(ctx context.Context, deploymentID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, scrubDeploymentFunctionMachineSpecs, deploymentID)
+	return err
+}
+
+const setDeploymentFunctionInfraOverrides = `-- name: SetDeploymentFunctionInfraOverrides :exec
+UPDATE deployments_functions SET memory_mib_override = $1, scale_override = $2 WHERE deployment_id = $3
+`
+
+type SetDeploymentFunctionInfraOverridesParams struct {
+	MemoryMibOverride pgtype.Int4
+	ScaleOverride     pgtype.Int4
+	DeploymentID      uuid.UUID
+}
+
+func (q *Queries) SetDeploymentFunctionInfraOverrides(ctx context.Context, arg SetDeploymentFunctionInfraOverridesParams) error {
+	_, err := q.db.Exec(ctx, setDeploymentFunctionInfraOverrides, arg.MemoryMibOverride, arg.ScaleOverride, arg.DeploymentID)
 	return err
 }
 

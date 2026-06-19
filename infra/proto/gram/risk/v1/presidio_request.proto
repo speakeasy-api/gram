@@ -1,0 +1,22 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+message PresidioRequest {
+  string request_id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  string reply_urn = 3;
+  repeated string contents = 4;
+  repeated string entities = 5;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 604800 /* 7 days */
+    }
+  };
+}

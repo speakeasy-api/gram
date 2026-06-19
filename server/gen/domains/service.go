@@ -20,6 +20,8 @@ type Service interface {
 	GetDomain(context.Context, *GetDomainPayload) (res *CustomDomain, err error)
 	// Create a custom domain for an organization
 	CreateDomain(context.Context, *CreateDomainPayload) (err error)
+	// Update the IP allowlist for the organization's custom domain
+	UpdateDomain(context.Context, *UpdateDomainPayload) (res *CustomDomain, err error)
 	// Delete a custom domain
 	DeleteDomain(context.Context, *DeleteDomainPayload) (err error)
 	// List the MCP endpoints registered under the organization's custom domain
@@ -49,7 +51,7 @@ const ServiceName = "domains"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"getDomain", "createDomain", "deleteDomain", "listMcpEndpoints"}
+var MethodNames = [5]string{"getDomain", "createDomain", "updateDomain", "deleteDomain", "listMcpEndpoints"}
 
 // CreateDomainPayload is the payload type of the domains service createDomain
 // method.
@@ -57,6 +59,8 @@ type CreateDomainPayload struct {
 	SessionToken *string
 	// The custom domain
 	Domain string
+	// IP addresses or CIDR ranges to allow. Leave empty for unrestricted access.
+	IPAllowlist []string
 }
 
 // CustomDomain is the result type of the domains service getDomain method.
@@ -77,6 +81,9 @@ type CustomDomain struct {
 	UpdatedAt string
 	// The custom domain is actively being registered
 	IsUpdating bool
+	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
+	// unrestricted.
+	IPAllowlist []string
 }
 
 // An MCP endpoint registered under a custom domain, with its parent MCP server
@@ -124,6 +131,14 @@ type ListCustomDomainMcpEndpointsResult struct {
 // listMcpEndpoints method.
 type ListMcpEndpointsPayload struct {
 	SessionToken *string
+}
+
+// UpdateDomainPayload is the payload type of the domains service updateDomain
+// method.
+type UpdateDomainPayload struct {
+	SessionToken *string
+	// Replacement IP allowlist. Pass an empty list to remove all restrictions.
+	IPAllowlist []string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

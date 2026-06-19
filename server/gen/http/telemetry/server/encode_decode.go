@@ -1690,6 +1690,243 @@ func EncodeGetUserMetricsSummaryError(encoder func(context.Context, http.Respons
 	}
 }
 
+// EncodeGetEmployeeDataFlowGraphResponse returns an encoder for responses
+// returned by the telemetry getEmployeeDataFlowGraph endpoint.
+func EncodeGetEmployeeDataFlowGraphResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*telemetry.GetEmployeeDataFlowGraphResult)
+		enc := encoder(ctx, w)
+		body := NewGetEmployeeDataFlowGraphResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetEmployeeDataFlowGraphRequest returns a decoder for requests sent to
+// the telemetry getEmployeeDataFlowGraph endpoint.
+func DecodeGetEmployeeDataFlowGraphRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.GetEmployeeDataFlowGraphPayload, error) {
+	return func(r *http.Request) (*telemetry.GetEmployeeDataFlowGraphPayload, error) {
+		var payload *telemetry.GetEmployeeDataFlowGraphPayload
+		var (
+			body GetEmployeeDataFlowGraphRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateGetEmployeeDataFlowGraphRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewGetEmployeeDataFlowGraphPayload(&body, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetEmployeeDataFlowGraphError returns an encoder for errors returned
+// by the getEmployeeDataFlowGraph telemetry endpoint.
+func EncodeGetEmployeeDataFlowGraphError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetEmployeeDataFlowGraphUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetEmployeeDataFlowGraphForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetEmployeeDataFlowGraphBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetEmployeeDataFlowGraphNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetEmployeeDataFlowGraphConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetEmployeeDataFlowGraphUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetEmployeeDataFlowGraphInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetEmployeeDataFlowGraphInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetEmployeeDataFlowGraphUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetEmployeeDataFlowGraphGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeGetObservabilityOverviewResponse returns an encoder for responses
 // returned by the telemetry getObservabilityOverview endpoint.
 func EncodeGetObservabilityOverviewResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -2154,6 +2391,432 @@ func EncodeGetProjectOverviewError(encoder func(context.Context, http.ResponseWr
 				body = formatter(ctx, res)
 			} else {
 				body = NewGetProjectOverviewGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeQueryResponse returns an encoder for responses returned by the
+// telemetry query endpoint.
+func EncodeQueryResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*telemetry.QueryResult)
+		enc := encoder(ctx, w)
+		body := NewQueryResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeQueryRequest returns a decoder for requests sent to the telemetry
+// query endpoint.
+func DecodeQueryRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.QueryPayload, error) {
+	return func(r *http.Request) (*telemetry.QueryPayload, error) {
+		var payload *telemetry.QueryPayload
+		var (
+			body QueryRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateQueryRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewQueryPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeQueryError returns an encoder for errors returned by the query
+// telemetry endpoint.
+func EncodeQueryError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewQueryGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeListSessionsResponse returns an encoder for responses returned by the
+// telemetry listSessions endpoint.
+func EncodeListSessionsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*telemetry.ListSessionsResult)
+		enc := encoder(ctx, w)
+		body := NewListSessionsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListSessionsRequest returns a decoder for requests sent to the
+// telemetry listSessions endpoint.
+func DecodeListSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.ListSessionsPayload, error) {
+	return func(r *http.Request) (*telemetry.ListSessionsPayload, error) {
+		var payload *telemetry.ListSessionsPayload
+		var (
+			body ListSessionsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateListSessionsRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewListSessionsPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListSessionsError returns an encoder for errors returned by the
+// listSessions telemetry endpoint.
+func EncodeListSessionsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSessionsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSessionsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSessionsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSessionsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSessionsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSessionsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSessionsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSessionsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSessionsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSessionsGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -2875,6 +3538,717 @@ func EncodeGetHooksSummaryError(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
+// EncodeGetToolUsageSummaryResponse returns an encoder for responses returned
+// by the telemetry getToolUsageSummary endpoint.
+func EncodeGetToolUsageSummaryResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*telemetry.GetToolUsageSummaryResult)
+		enc := encoder(ctx, w)
+		body := NewGetToolUsageSummaryResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetToolUsageSummaryRequest returns a decoder for requests sent to the
+// telemetry getToolUsageSummary endpoint.
+func DecodeGetToolUsageSummaryRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.GetToolUsageSummaryPayload, error) {
+	return func(r *http.Request) (*telemetry.GetToolUsageSummaryPayload, error) {
+		var payload *telemetry.GetToolUsageSummaryPayload
+		var (
+			body GetToolUsageSummaryRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateGetToolUsageSummaryRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewGetToolUsageSummaryPayload(&body, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetToolUsageSummaryError returns an encoder for errors returned by the
+// getToolUsageSummary telemetry endpoint.
+func EncodeGetToolUsageSummaryError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageSummaryUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageSummaryForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageSummaryBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageSummaryNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageSummaryConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageSummaryUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageSummaryInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageSummaryInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageSummaryUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageSummaryGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeListToolUsageTracesResponse returns an encoder for responses returned
+// by the telemetry listToolUsageTraces endpoint.
+func EncodeListToolUsageTracesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*telemetry.ListToolUsageTracesResult)
+		enc := encoder(ctx, w)
+		body := NewListToolUsageTracesResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListToolUsageTracesRequest returns a decoder for requests sent to the
+// telemetry listToolUsageTraces endpoint.
+func DecodeListToolUsageTracesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.ListToolUsageTracesPayload, error) {
+	return func(r *http.Request) (*telemetry.ListToolUsageTracesPayload, error) {
+		var payload *telemetry.ListToolUsageTracesPayload
+		var (
+			body ListToolUsageTracesRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateListToolUsageTracesRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewListToolUsageTracesPayload(&body, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListToolUsageTracesError returns an encoder for errors returned by the
+// listToolUsageTraces telemetry endpoint.
+func EncodeListToolUsageTracesError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolUsageTracesUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolUsageTracesForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolUsageTracesBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolUsageTracesNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolUsageTracesConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolUsageTracesUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolUsageTracesInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolUsageTracesInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolUsageTracesUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListToolUsageTracesGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeGetToolUsageFilterOptionsResponse returns an encoder for responses
+// returned by the telemetry getToolUsageFilterOptions endpoint.
+func EncodeGetToolUsageFilterOptionsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*telemetry.GetToolUsageFilterOptionsResult)
+		enc := encoder(ctx, w)
+		body := NewGetToolUsageFilterOptionsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetToolUsageFilterOptionsRequest returns a decoder for requests sent
+// to the telemetry getToolUsageFilterOptions endpoint.
+func DecodeGetToolUsageFilterOptionsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*telemetry.GetToolUsageFilterOptionsPayload, error) {
+	return func(r *http.Request) (*telemetry.GetToolUsageFilterOptionsPayload, error) {
+		var payload *telemetry.GetToolUsageFilterOptionsPayload
+		var (
+			body GetToolUsageFilterOptionsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateGetToolUsageFilterOptionsRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewGetToolUsageFilterOptionsPayload(&body, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetToolUsageFilterOptionsError returns an encoder for errors returned
+// by the getToolUsageFilterOptions telemetry endpoint.
+func EncodeGetToolUsageFilterOptionsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageFilterOptionsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageFilterOptionsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageFilterOptionsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageFilterOptionsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageFilterOptionsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageFilterOptionsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageFilterOptionsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageFilterOptionsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageFilterOptionsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetToolUsageFilterOptionsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListHooksTracesResponse returns an encoder for responses returned by
 // the telemetry listHooksTraces endpoint.
 func EncodeListHooksTracesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -3467,6 +4841,37 @@ func marshalTelemetryModelUsageToModelUsageResponseBody(v *telemetry.ModelUsage)
 	return res
 }
 
+// marshalTelemetryEmployeeDataFlowNodeToEmployeeDataFlowNodeResponseBody
+// builds a value of type *EmployeeDataFlowNodeResponseBody from a value of
+// type *telemetry.EmployeeDataFlowNode.
+func marshalTelemetryEmployeeDataFlowNodeToEmployeeDataFlowNodeResponseBody(v *telemetry.EmployeeDataFlowNode) *EmployeeDataFlowNodeResponseBody {
+	res := &EmployeeDataFlowNodeResponseBody{
+		ID:          v.ID,
+		Tier:        v.Tier,
+		Label:       v.Label,
+		TotalCalls:  v.TotalCalls,
+		ServerClass: v.ServerClass,
+	}
+
+	return res
+}
+
+// marshalTelemetryEmployeeDataFlowEdgeToEmployeeDataFlowEdgeResponseBody
+// builds a value of type *EmployeeDataFlowEdgeResponseBody from a value of
+// type *telemetry.EmployeeDataFlowEdge.
+func marshalTelemetryEmployeeDataFlowEdgeToEmployeeDataFlowEdgeResponseBody(v *telemetry.EmployeeDataFlowEdge) *EmployeeDataFlowEdgeResponseBody {
+	res := &EmployeeDataFlowEdgeResponseBody{
+		ID:           v.ID,
+		Source:       v.Source,
+		Target:       v.Target,
+		CallCount:    v.CallCount,
+		SuccessCount: v.SuccessCount,
+		FailureCount: v.FailureCount,
+	}
+
+	return res
+}
+
 // marshalTelemetryObservabilitySummaryToObservabilitySummaryResponseBody
 // builds a value of type *ObservabilitySummaryResponseBody from a value of
 // type *telemetry.ObservabilitySummary.
@@ -3620,6 +5025,125 @@ func marshalTelemetryLLMClientUsageToLLMClientUsageResponseBody(v *telemetry.LLM
 	return res
 }
 
+// unmarshalQueryFilterRequestBodyToTelemetryQueryFilter builds a value of type
+// *telemetry.QueryFilter from a value of type *QueryFilterRequestBody.
+func unmarshalQueryFilterRequestBodyToTelemetryQueryFilter(v *QueryFilterRequestBody) *telemetry.QueryFilter {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.QueryFilter{
+		Dimension: *v.Dimension,
+	}
+	res.Values = make([]string, len(v.Values))
+	for i, val := range v.Values {
+		res.Values[i] = val
+	}
+
+	return res
+}
+
+// marshalTelemetryQueryRowToQueryRowResponseBody builds a value of type
+// *QueryRowResponseBody from a value of type *telemetry.QueryRow.
+func marshalTelemetryQueryRowToQueryRowResponseBody(v *telemetry.QueryRow) *QueryRowResponseBody {
+	res := &QueryRowResponseBody{
+		GroupValue: v.GroupValue,
+	}
+	if v.Measures != nil {
+		res.Measures = marshalTelemetryQueryMeasuresToQueryMeasuresResponseBody(v.Measures)
+	}
+	if v.DimensionValues != nil {
+		res.DimensionValues = make(map[string][]string, len(v.DimensionValues))
+		for key, val := range v.DimensionValues {
+			tk := key
+			tv := make([]string, len(val))
+			for i, val := range val {
+				tv[i] = val
+			}
+			res.DimensionValues[tk] = tv
+		}
+	}
+
+	return res
+}
+
+// marshalTelemetryQueryMeasuresToQueryMeasuresResponseBody builds a value of
+// type *QueryMeasuresResponseBody from a value of type
+// *telemetry.QueryMeasures.
+func marshalTelemetryQueryMeasuresToQueryMeasuresResponseBody(v *telemetry.QueryMeasures) *QueryMeasuresResponseBody {
+	res := &QueryMeasuresResponseBody{
+		TotalCost:                v.TotalCost,
+		TotalInputTokens:         v.TotalInputTokens,
+		TotalOutputTokens:        v.TotalOutputTokens,
+		TotalTokens:              v.TotalTokens,
+		CacheReadInputTokens:     v.CacheReadInputTokens,
+		CacheCreationInputTokens: v.CacheCreationInputTokens,
+		TotalToolCalls:           v.TotalToolCalls,
+		TotalChats:               v.TotalChats,
+	}
+
+	return res
+}
+
+// marshalTelemetryQuerySeriesToQuerySeriesResponseBody builds a value of type
+// *QuerySeriesResponseBody from a value of type *telemetry.QuerySeries.
+func marshalTelemetryQuerySeriesToQuerySeriesResponseBody(v *telemetry.QuerySeries) *QuerySeriesResponseBody {
+	res := &QuerySeriesResponseBody{
+		GroupValue: v.GroupValue,
+	}
+	if v.Points != nil {
+		res.Points = make([]*QueryPointResponseBody, len(v.Points))
+		for i, val := range v.Points {
+			if val == nil {
+				res.Points[i] = nil
+				continue
+			}
+			res.Points[i] = marshalTelemetryQueryPointToQueryPointResponseBody(val)
+		}
+	} else {
+		res.Points = []*QueryPointResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTelemetryQueryPointToQueryPointResponseBody builds a value of type
+// *QueryPointResponseBody from a value of type *telemetry.QueryPoint.
+func marshalTelemetryQueryPointToQueryPointResponseBody(v *telemetry.QueryPoint) *QueryPointResponseBody {
+	res := &QueryPointResponseBody{
+		BucketTimeUnixNano: v.BucketTimeUnixNano,
+	}
+	if v.Measures != nil {
+		res.Measures = marshalTelemetryQueryMeasuresToQueryMeasuresResponseBody(v.Measures)
+	}
+
+	return res
+}
+
+// marshalTelemetrySessionSummaryToSessionSummaryResponseBody builds a value of
+// type *SessionSummaryResponseBody from a value of type
+// *telemetry.SessionSummary.
+func marshalTelemetrySessionSummaryToSessionSummaryResponseBody(v *telemetry.SessionSummary) *SessionSummaryResponseBody {
+	res := &SessionSummaryResponseBody{
+		GramChatID:        v.GramChatID,
+		ProjectID:         v.ProjectID,
+		UserEmail:         v.UserEmail,
+		HookSource:        v.HookSource,
+		Model:             v.Model,
+		StartTimeUnixNano: v.StartTimeUnixNano,
+		EndTimeUnixNano:   v.EndTimeUnixNano,
+		DurationSeconds:   v.DurationSeconds,
+		MessageCount:      v.MessageCount,
+		ToolCallCount:     v.ToolCallCount,
+		TotalInputTokens:  v.TotalInputTokens,
+		TotalOutputTokens: v.TotalOutputTokens,
+		TotalTokens:       v.TotalTokens,
+		TotalCost:         v.TotalCost,
+		Status:            v.Status,
+	}
+
+	return res
+}
+
 // marshalTelemetryFilterOptionToFilterOptionResponseBody builds a value of
 // type *FilterOptionResponseBody from a value of type *telemetry.FilterOption.
 func marshalTelemetryFilterOptionToFilterOptionResponseBody(v *telemetry.FilterOption) *FilterOptionResponseBody {
@@ -3728,6 +5252,227 @@ func marshalTelemetrySkillBreakdownRowToSkillBreakdownRowResponseBody(v *telemet
 		SkillName: v.SkillName,
 		UserEmail: v.UserEmail,
 		UseCount:  v.UseCount,
+	}
+
+	return res
+}
+
+// unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter builds
+// a value of type *telemetry.ToolUsageUserFilter from a value of type
+// *ToolUsageUserFilterRequestBody.
+func unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(v *ToolUsageUserFilterRequestBody) *telemetry.ToolUsageUserFilter {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.ToolUsageUserFilter{
+		Kind: telemetry.ToolUsageUserKind(*v.Kind),
+		Key:  *v.Key,
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageTotalsToToolUsageTotalsResponseBody builds a value
+// of type *ToolUsageTotalsResponseBody from a value of type
+// *telemetry.ToolUsageTotals.
+func marshalTelemetryToolUsageTotalsToToolUsageTotalsResponseBody(v *telemetry.ToolUsageTotals) *ToolUsageTotalsResponseBody {
+	res := &ToolUsageTotalsResponseBody{
+		EventCount:    v.EventCount,
+		SuccessCount:  v.SuccessCount,
+		FailureCount:  v.FailureCount,
+		FailureRate:   v.FailureRate,
+		UniqueTools:   v.UniqueTools,
+		UniqueUsers:   v.UniqueUsers,
+		UniqueTargets: v.UniqueTargets,
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageTargetSummaryToToolUsageTargetSummaryResponseBody
+// builds a value of type *ToolUsageTargetSummaryResponseBody from a value of
+// type *telemetry.ToolUsageTargetSummary.
+func marshalTelemetryToolUsageTargetSummaryToToolUsageTargetSummaryResponseBody(v *telemetry.ToolUsageTargetSummary) *ToolUsageTargetSummaryResponseBody {
+	res := &ToolUsageTargetSummaryResponseBody{
+		TargetType:   string(v.TargetType),
+		TargetKind:   string(v.TargetKind),
+		TargetID:     v.TargetID,
+		TargetLabel:  v.TargetLabel,
+		EventCount:   v.EventCount,
+		UniqueTools:  v.UniqueTools,
+		SuccessCount: v.SuccessCount,
+		FailureCount: v.FailureCount,
+		FailureRate:  v.FailureRate,
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageUserSummaryToToolUsageUserSummaryResponseBody
+// builds a value of type *ToolUsageUserSummaryResponseBody from a value of
+// type *telemetry.ToolUsageUserSummary.
+func marshalTelemetryToolUsageUserSummaryToToolUsageUserSummaryResponseBody(v *telemetry.ToolUsageUserSummary) *ToolUsageUserSummaryResponseBody {
+	res := &ToolUsageUserSummaryResponseBody{
+		UserKey:      v.UserKey,
+		UserLabel:    v.UserLabel,
+		UserKind:     string(v.UserKind),
+		EventCount:   v.EventCount,
+		UniqueTools:  v.UniqueTools,
+		SuccessCount: v.SuccessCount,
+		FailureCount: v.FailureCount,
+		FailureRate:  v.FailureRate,
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageTargetTimeSeriesPointToToolUsageTargetTimeSeriesPointResponseBody
+// builds a value of type *ToolUsageTargetTimeSeriesPointResponseBody from a
+// value of type *telemetry.ToolUsageTargetTimeSeriesPoint.
+func marshalTelemetryToolUsageTargetTimeSeriesPointToToolUsageTargetTimeSeriesPointResponseBody(v *telemetry.ToolUsageTargetTimeSeriesPoint) *ToolUsageTargetTimeSeriesPointResponseBody {
+	res := &ToolUsageTargetTimeSeriesPointResponseBody{
+		BucketStartNs: v.BucketStartNs,
+		TargetType:    string(v.TargetType),
+		TargetKind:    string(v.TargetKind),
+		TargetID:      v.TargetID,
+		TargetLabel:   v.TargetLabel,
+		EventCount:    v.EventCount,
+		FailureCount:  v.FailureCount,
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageUserTimeSeriesPointToToolUsageUserTimeSeriesPointResponseBody
+// builds a value of type *ToolUsageUserTimeSeriesPointResponseBody from a
+// value of type *telemetry.ToolUsageUserTimeSeriesPoint.
+func marshalTelemetryToolUsageUserTimeSeriesPointToToolUsageUserTimeSeriesPointResponseBody(v *telemetry.ToolUsageUserTimeSeriesPoint) *ToolUsageUserTimeSeriesPointResponseBody {
+	res := &ToolUsageUserTimeSeriesPointResponseBody{
+		BucketStartNs: v.BucketStartNs,
+		UserKey:       v.UserKey,
+		UserLabel:     v.UserLabel,
+		UserKind:      string(v.UserKind),
+		EventCount:    v.EventCount,
+		FailureCount:  v.FailureCount,
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageUsersByTargetRowToToolUsageUsersByTargetRowResponseBody
+// builds a value of type *ToolUsageUsersByTargetRowResponseBody from a value
+// of type *telemetry.ToolUsageUsersByTargetRow.
+func marshalTelemetryToolUsageUsersByTargetRowToToolUsageUsersByTargetRowResponseBody(v *telemetry.ToolUsageUsersByTargetRow) *ToolUsageUsersByTargetRowResponseBody {
+	res := &ToolUsageUsersByTargetRowResponseBody{
+		TargetType:   string(v.TargetType),
+		TargetKind:   string(v.TargetKind),
+		TargetID:     v.TargetID,
+		TargetLabel:  v.TargetLabel,
+		UserKey:      v.UserKey,
+		UserLabel:    v.UserLabel,
+		UserKind:     string(v.UserKind),
+		EventCount:   v.EventCount,
+		FailureCount: v.FailureCount,
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageTargetToolBreakdownRowToToolUsageTargetToolBreakdownRowResponseBody
+// builds a value of type *ToolUsageTargetToolBreakdownRowResponseBody from a
+// value of type *telemetry.ToolUsageTargetToolBreakdownRow.
+func marshalTelemetryToolUsageTargetToolBreakdownRowToToolUsageTargetToolBreakdownRowResponseBody(v *telemetry.ToolUsageTargetToolBreakdownRow) *ToolUsageTargetToolBreakdownRowResponseBody {
+	res := &ToolUsageTargetToolBreakdownRowResponseBody{
+		TargetType:   string(v.TargetType),
+		TargetKind:   string(v.TargetKind),
+		TargetID:     v.TargetID,
+		TargetLabel:  v.TargetLabel,
+		ToolName:     v.ToolName,
+		EventCount:   v.EventCount,
+		SuccessCount: v.SuccessCount,
+		FailureCount: v.FailureCount,
+		FailureRate:  v.FailureRate,
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageTraceSummaryToToolUsageTraceSummaryResponseBody
+// builds a value of type *ToolUsageTraceSummaryResponseBody from a value of
+// type *telemetry.ToolUsageTraceSummary.
+func marshalTelemetryToolUsageTraceSummaryToToolUsageTraceSummaryResponseBody(v *telemetry.ToolUsageTraceSummary) *ToolUsageTraceSummaryResponseBody {
+	res := &ToolUsageTraceSummaryResponseBody{
+		ID:                v.ID,
+		TraceID:           v.TraceID,
+		StartTimeUnixNano: v.StartTimeUnixNano,
+		LogCount:          v.LogCount,
+		GramUrn:           v.GramUrn,
+		ToolName:          v.ToolName,
+		TargetType:        string(v.TargetType),
+		TargetKind:        string(v.TargetKind),
+		TargetID:          v.TargetID,
+		TargetLabel:       v.TargetLabel,
+		UserKey:           v.UserKey,
+		UserLabel:         v.UserLabel,
+		UserKind:          string(v.UserKind),
+		HookSource:        v.HookSource,
+		EventSource:       v.EventSource,
+		HTTPStatusCode:    v.HTTPStatusCode,
+		HookStatus:        v.HookStatus,
+		BlockReason:       v.BlockReason,
+	}
+	if v.LogGroup != nil {
+		res.LogGroup = marshalTelemetryToolUsageTraceLogGroupToToolUsageTraceLogGroupResponseBody(v.LogGroup)
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageTraceLogGroupToToolUsageTraceLogGroupResponseBody
+// builds a value of type *ToolUsageTraceLogGroupResponseBody from a value of
+// type *telemetry.ToolUsageTraceLogGroup.
+func marshalTelemetryToolUsageTraceLogGroupToToolUsageTraceLogGroupResponseBody(v *telemetry.ToolUsageTraceLogGroup) *ToolUsageTraceLogGroupResponseBody {
+	res := &ToolUsageTraceLogGroupResponseBody{
+		Kind:  string(v.Kind),
+		Value: v.Value,
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageHostedServerFilterOptionToToolUsageHostedServerFilterOptionResponseBody
+// builds a value of type *ToolUsageHostedServerFilterOptionResponseBody from a
+// value of type *telemetry.ToolUsageHostedServerFilterOption.
+func marshalTelemetryToolUsageHostedServerFilterOptionToToolUsageHostedServerFilterOptionResponseBody(v *telemetry.ToolUsageHostedServerFilterOption) *ToolUsageHostedServerFilterOptionResponseBody {
+	res := &ToolUsageHostedServerFilterOptionResponseBody{
+		ToolsetSlug: v.ToolsetSlug,
+		EventCount:  v.EventCount,
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageShadowServerFilterOptionToToolUsageShadowServerFilterOptionResponseBody
+// builds a value of type *ToolUsageShadowServerFilterOptionResponseBody from a
+// value of type *telemetry.ToolUsageShadowServerFilterOption.
+func marshalTelemetryToolUsageShadowServerFilterOptionToToolUsageShadowServerFilterOptionResponseBody(v *telemetry.ToolUsageShadowServerFilterOption) *ToolUsageShadowServerFilterOptionResponseBody {
+	res := &ToolUsageShadowServerFilterOptionResponseBody{
+		ServerName: v.ServerName,
+		EventCount: v.EventCount,
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageUserFilterOptionToToolUsageUserFilterOptionResponseBody
+// builds a value of type *ToolUsageUserFilterOptionResponseBody from a value
+// of type *telemetry.ToolUsageUserFilterOption.
+func marshalTelemetryToolUsageUserFilterOptionToToolUsageUserFilterOptionResponseBody(v *telemetry.ToolUsageUserFilterOption) *ToolUsageUserFilterOptionResponseBody {
+	res := &ToolUsageUserFilterOptionResponseBody{
+		UserKey:    v.UserKey,
+		UserLabel:  v.UserLabel,
+		UserKind:   string(v.UserKind),
+		EventCount: v.EventCount,
 	}
 
 	return res

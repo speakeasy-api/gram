@@ -42,6 +42,7 @@ func createPublicMCPToolsetWithCustomDomain(
 		Domain:         domainName,
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 
@@ -157,6 +158,7 @@ func TestServePublic_CustomDomain_WrongDomainReturnsNotFound(t *testing.T) {
 		Domain:         "wrong-domain.example.com",
 		IngressName:    pgtype.Text{String: "", Valid: false},
 		CertSecretName: pgtype.Text{String: "", Valid: false},
+		IpAllowlist:    []string{},
 	})
 	require.NoError(t, err)
 

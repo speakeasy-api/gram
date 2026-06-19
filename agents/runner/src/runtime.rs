@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use agentkit_adapter_completions::CompletionsAdapter;
@@ -11,8 +11,8 @@ use agentkit_loop::{
     PromptCacheRetention, SessionConfig,
 };
 use agentkit_mcp::{
-    McpError, McpServerConfig, McpServerId, McpServerManager, McpTransportBinding,
-    StreamableHttpTransportConfig,
+    McpError, McpServerConfig, McpServerId, McpServerManager, McpServerOptions,
+    McpTransportBinding, StreamableHttpTransportConfig,
 };
 use agentkit_provider_openrouter::{OpenRouterConfig, OpenRouterProvider};
 use agentkit_reporting::TracingReporter;
@@ -26,10 +26,10 @@ use serde_json::Value;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::{OnceCell, oneshot};
 
-use agentkit_compaction::AgentBuilderCompactorExt;
+use agentkit_compaction::{AgentBuilderCompactorExt, CompactionReason, Compactor};
 
 use crate::clip::ClippedToolSource;
-use crate::compaction::build_compactor;
+use crate::compaction::{PersistingCompactor, build_compactor};
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_bootstrap_client, build_http};
@@ -39,6 +39,12 @@ use crate::workdir::ASSISTANT_WORKDIR;
 
 const TOOL_RESULT_SPILL_DIR: &str = "tool-results";
 const MCP_CMD_CAPACITY: usize = 32;
+
+/// TCP/TLS connect bound for runner-originated HTTP requests.
+const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Per-server bound on the MCP discovery handshake at connect time.
+const MCP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How long a thread's per-task state can sit idle before the host evicts
 /// it. The VM stays alive across all per-thread events; only individual
@@ -53,7 +59,11 @@ pub type AppState = Arc<RuntimeHost>;
 
 /// Singleton host shared by every per-thread task on the VM.
 pub struct RuntimeHost {
-    pub assistant_id: String,
+    /// The assistant this VM serves, surfaced in /state. Set from the
+    /// GRAM_ASSISTANT_ID boot env when present (Fly, GKE cold-start), or
+    /// stamped by the first turn that carries one (GKE warm-pool sandbox).
+    /// Set-once: boot env wins.
+    pub assistant_id: OnceLock<String>,
     pub started_at: Instant,
     /// Per-idempotency-key admission slot. The bool tracks whether the
     /// keyed turn has actually been enqueued: holding the mutex covers
@@ -118,7 +128,7 @@ impl ConfiguredThread {
 }
 
 pub async fn build_host(
-    assistant_id: String,
+    assistant_id: Option<String>,
     server_url: String,
     initial_token: String,
     thread_idle_ttl: Duration,
@@ -131,14 +141,21 @@ pub async fn build_host(
     let http_client = reqwest::Client::builder()
         .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
         .default_headers(default_headers)
+        .connect_timeout(HTTP_CONNECT_TIMEOUT)
         .build()?;
 
     let spill_root = PathBuf::from(ASSISTANT_WORKDIR).join(TOOL_RESULT_SPILL_DIR);
 
     let gram_client =
         GramBootstrapClient::new(server_url, build_bootstrap_client(http_client.clone()));
+    let assistant_id_cell = OnceLock::new();
+    // Ignore an empty/whitespace boot env so warm-pool pods stay unbound and
+    // can learn their assistant from the first turn.
+    if let Some(id) = assistant_id.filter(|id| !id.trim().is_empty()) {
+        let _ = assistant_id_cell.set(id);
+    }
     let host = Arc::new(RuntimeHost {
-        assistant_id,
+        assistant_id: assistant_id_cell,
         started_at: Instant::now(),
         seen: DashMap::new(),
         threads: DashMap::new(),
@@ -350,10 +367,22 @@ async fn spawn_thread(
     let compactor_adapter = CompletionsAdapter::with_client(provider, compactor_http);
 
     let compactor = build_compactor(
+        &bootstrap.compaction,
         &bootstrap.chat_id,
+        &thread_id,
         bootstrap.context_window.unwrap_or(0),
         compactor_adapter,
+        host.gram_client.clone(),
+        tokens.clone(),
     )?;
+    // An inline agent compactor runs right before the next model request, so
+    // OnTurnEnd's persistence-only output would be sent upstream. Run it
+    // terminally instead (see `run_loop`); Threshold shrinks-to-fit, so inline.
+    let (inline_compactor, turn_end_compactor) = if bootstrap.compaction.runs_at_turn_end() {
+        (None, compactor)
+    } else {
+        (compactor, None)
+    };
 
     let mut transcript = Vec::new();
     if !bootstrap.instructions.is_empty() {
@@ -378,18 +407,19 @@ async fn spawn_thread(
         tools::mcp_force_reconnect::McpForceReconnectTool::new(Arc::clone(host)),
     );
 
-    let mcp_source = ClippedToolSource::new(mcp_catalog, host.spill_root.clone());
+    let compose_source = agentkit_tool_compose::ComposeTool::wrap(mcp_catalog)
+        .with_source(native_tools.merge(agentkit_tool_fs::registry()));
+    let clipped_source = ClippedToolSource::new(compose_source, host.spill_root.clone());
+
     let mut builder = Agent::builder()
         .model(adapter)
-        .add_tool_source(native_tools)
-        .add_tool_source(agentkit_tool_fs::registry())
-        .add_tool_source(mcp_source)
+        .add_tool_source(clipped_source)
         .permissions(permissions)
         .resources(fs_resources)
         .observer(TracingReporter::new())
         .transcript(transcript);
 
-    if let Some(compactor) = compactor {
+    if let Some(compactor) = inline_compactor {
         builder = builder.compactor(compactor);
     }
 
@@ -411,7 +441,7 @@ async fn spawn_thread(
     let evict_thread_id = thread_id.clone();
 
     let task_handle = tokio::spawn(async move {
-        let outcome = AssertUnwindSafe(run_loop(driver, inbox_rx, loop_idle))
+        let outcome = AssertUnwindSafe(run_loop(driver, inbox_rx, loop_idle, turn_end_compactor))
             .catch_unwind()
             .await;
         match outcome {
@@ -461,25 +491,47 @@ async fn build_thread_mcp(
 
     for server in servers {
         let config = build_mcp_server_config(server, &host.http_client, tokens)?;
-        let server_id = McpServerId::new(server.id.clone());
-        manager.register_server(config);
-        match connect_and_log(&mut manager, &server_id, "register").await {
-            Ok(()) => {
-                known.insert(server.id.clone());
-            }
-            Err(err) if err.auth_required => {
-                known.insert(server.id.clone());
-                if let Some(notice) =
-                    create_auth_notice(host, thread_id, &server.id, &server.url, tokens).await
-                {
-                    auth_notices.push(notice);
-                }
-            }
-            Err(_) => {
-                // Transient transport failure: leave out of `known` so the
-                // next /turn reconcile retries instead of silently dropping
-                // the integration for the rest of the thread.
-            }
+        manager.register_server_with_options(
+            config,
+            McpServerOptions::new().with_timeout(MCP_HANDSHAKE_TIMEOUT),
+        );
+    }
+
+    let settled = manager.connect_all_settled().await;
+    for handle in settled.connected() {
+        tracing::info!(
+            server_id = %handle.server_id(),
+            tools = handle.snapshot().tools.len(),
+            action = "register",
+            "mcp connect ok"
+        );
+        known.insert(handle.server_id().0.clone());
+    }
+    for failure in settled.failed() {
+        let server_id = &failure.server_id;
+        tracing::warn!(
+            server_id = %server_id,
+            error = %failure.error,
+            action = "register",
+            "mcp connect failed"
+        );
+        // Non-auth failures are transient transport errors: leave them out of
+        // `known` so the next /turn reconcile retries instead of silently
+        // dropping the integration for the rest of the thread.
+        if !matches!(failure.error, McpError::AuthRequired(_)) {
+            continue;
+        }
+        // Auth-pending counts as known: the integration is part of the
+        // assistant's set, so reconcile must not re-add it and a manual
+        // force_reconnect should be allowed once the user authorizes.
+        known.insert(server_id.0.clone());
+        let Some(server) = servers.iter().find(|s| s.id == server_id.0) else {
+            continue;
+        };
+        if let Some(notice) =
+            create_auth_notice(host, thread_id, &server.id, &server.url, tokens).await
+        {
+            auth_notices.push(notice);
         }
     }
 
@@ -707,6 +759,7 @@ async fn run_loop<S>(
     mut driver: LoopDriver<S>,
     mut inbox: UnboundedReceiver<String>,
     idle_since: Arc<Mutex<Option<Instant>>>,
+    turn_end_compactor: Option<PersistingCompactor>,
 ) -> Result<&'static str, RunnerError>
 where
     S: ModelSession,
@@ -714,6 +767,9 @@ where
     loop {
         match driver.next().await? {
             LoopStep::Finished(_turn) => {
+                if let Some(compactor) = &turn_end_compactor {
+                    compact_at_turn_end(compactor, &driver).await;
+                }
                 mark_idle(&idle_since);
             }
             LoopStep::Interrupt(LoopInterrupt::AwaitingInput(req)) => {
@@ -743,6 +799,26 @@ where
                 pending.approve(&mut driver)?;
             }
         }
+    }
+}
+
+/// Compacts and persists the finished transcript for the next cold bootstrap,
+/// discarding the result — it is never fed back to the model. Failures are
+/// logged, not propagated, so a persistence hiccup can't kill the thread loop.
+async fn compact_at_turn_end<S: ModelSession>(
+    compactor: &PersistingCompactor,
+    driver: &LoopDriver<S>,
+) {
+    let transcript = driver.snapshot().transcript;
+    if let Err(err) = compactor
+        .compact(
+            &transcript,
+            CompactionReason::Custom("on_turn_end".to_string()),
+            None,
+        )
+        .await
+    {
+        tracing::warn!(error = %err, "turn-end compaction failed; skipping persist for this turn");
     }
 }
 
@@ -841,8 +917,10 @@ mod tests {
             "http://localhost".to_string(),
             build_bootstrap_client(http_client.clone()),
         );
+        let assistant_id = OnceLock::new();
+        let _ = assistant_id.set("asst".to_string());
         Arc::new(RuntimeHost {
-            assistant_id: "asst".to_string(),
+            assistant_id,
             started_at: Instant::now(),
             seen: DashMap::new(),
             threads: DashMap::new(),

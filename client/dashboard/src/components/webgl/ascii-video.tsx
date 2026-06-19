@@ -22,7 +22,7 @@ export function AsciiVideo({
   priority = false,
   flipX = false,
   flipY = false,
-}: AsciiVideoProps) {
+}: AsciiVideoProps): JSX.Element | null {
   const isWebGLAvailable = useWebGLStore((state) => state.isWebGLAvailable);
 
   // Gracefully skip rendering if WebGL is not available

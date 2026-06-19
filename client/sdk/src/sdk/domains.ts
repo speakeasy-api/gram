@@ -6,6 +6,7 @@ import { domainsDeleteDomain } from "../funcs/domainsDeleteDomain.js";
 import { domainsGetDomain } from "../funcs/domainsGetDomain.js";
 import { domainsListMcpEndpoints } from "../funcs/domainsListMcpEndpoints.js";
 import { domainsRegisterDomain } from "../funcs/domainsRegisterDomain.js";
+import { domainsUpdateDomain } from "../funcs/domainsUpdateDomain.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -81,6 +82,25 @@ export class Domains extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(domainsRegisterDomain(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateDomain domains
+   *
+   * @remarks
+   * Update the IP allowlist for the organization's custom domain
+   */
+  async updateDomain(
+    request: operations.UpdateDomainRequest,
+    security?: operations.UpdateDomainSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.CustomDomain> {
+    return unwrapAsync(domainsUpdateDomain(
       this,
       request,
       security,

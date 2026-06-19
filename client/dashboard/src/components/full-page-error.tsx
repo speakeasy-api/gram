@@ -5,7 +5,7 @@ interface FullPageErrorProps {
   error: Error;
 }
 
-export function FullPageError({ error }: FullPageErrorProps) {
+export function FullPageError({ error }: FullPageErrorProps): JSX.Element {
   return (
     <main className="bg-background flex min-h-screen items-center justify-center p-8">
       <Stack gap={6} align="center" className="max-w-md text-center">

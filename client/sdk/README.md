@@ -111,7 +111,7 @@ async function run() {
       description: "swerve hm receptor how",
       grants: [
         {
-          scope: "mcp:connect",
+          scope: "environment:write",
         },
       ],
       name: "<value>",
@@ -147,8 +147,20 @@ run();
 * [listRoles](docs/sdks/access/README.md#listroles) - listRoles access
 * [listScopes](docs/sdks/access/README.md#listscopes) - listScopes access
 * [resolveChallenge](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
+* [approveShadowMCPApprovalRequest](docs/sdks/access/README.md#approveshadowmcpapprovalrequest) - approveShadowMCPApprovalRequest access
+* [createShadowMCPApprovalRequest](docs/sdks/access/README.md#createshadowmcpapprovalrequest) - createShadowMCPApprovalRequest access
+* [denyShadowMCPApprovalRequest](docs/sdks/access/README.md#denyshadowmcpapprovalrequest) - denyShadowMCPApprovalRequest access
+* [listShadowMCPApprovalRequests](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
+* [createShadowMCPAccessRule](docs/sdks/access/README.md#createshadowmcpaccessrule) - createShadowMCPAccessRule access
+* [deleteShadowMCPAccessRule](docs/sdks/access/README.md#deleteshadowmcpaccessrule) - deleteShadowMCPAccessRule access
+* [listShadowMCPAccessRules](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
+* [updateShadowMCPAccessRule](docs/sdks/access/README.md#updateshadowmcpaccessrule) - updateShadowMCPAccessRule access
 * [updateMemberRoles](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 * [updateRole](docs/sdks/access/README.md#updaterole) - updateRole access
+
+### [Agent](docs/sdks/agent/README.md)
+
+* [getPlugins](docs/sdks/agent/README.md#getplugins) - getPlugins agent
 
 ### [AiIntegrations](docs/sdks/aiintegrations/README.md)
 
@@ -181,8 +193,11 @@ run();
 
 * [create](docs/sdks/assistants/README.md#create) - createAssistant assistants
 * [delete](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
+* [ensureManaged](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 * [get](docs/sdks/assistants/README.md#get) - getAssistant assistants
+* [getManaged](docs/sdks/assistants/README.md#getmanaged) - getManagedAssistant assistants
 * [list](docs/sdks/assistants/README.md#list) - listAssistants assistants
+* [sendMessage](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
 * [update](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 
 ### [Auditlogs](docs/sdks/auditlogs/README.md)
@@ -205,7 +220,6 @@ run();
 * [delete](docs/sdks/chat/README.md#delete) - deleteChat chat
 * [generateTitle](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 * [list](docs/sdks/chat/README.md#list) - listChats chat
-* [listChatsWithResolutions](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
 * [load](docs/sdks/chat/README.md#load) - loadChat chat
 * [submitFeedback](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 
@@ -241,6 +255,7 @@ run();
 * [getDomain](docs/sdks/domains/README.md#getdomain) - getDomain domains
 * [listMcpEndpoints](docs/sdks/domains/README.md#listmcpendpoints) - listMcpEndpoints domains
 * [registerDomain](docs/sdks/domains/README.md#registerdomain) - createDomain domains
+* [updateDomain](docs/sdks/domains/README.md#updatedomain) - updateDomain domains
 
 ### [Environments](docs/sdks/environments/README.md)
 
@@ -323,20 +338,46 @@ run();
 * [delete](docs/sdks/mcpservers/README.md#delete) - deleteMcpServer mcpServers
 * [get](docs/sdks/mcpservers/README.md#get) - getMcpServer mcpServers
 * [list](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
+* [listToolFilters](docs/sdks/mcpservers/README.md#listtoolfilters) - listToolFilters mcpServers
 * [update](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
+
+### [OrganizationRemoteSessionIssuers](docs/sdks/organizationremotesessionissuers/README.md)
+
+* [createIssuer](docs/sdks/organizationremotesessionissuers/README.md#createissuer) - createIssuer organizationRemoteSessionIssuers
+* [deleteClient](docs/sdks/organizationremotesessionissuers/README.md#deleteclient) - deleteClient organizationRemoteSessionIssuers
+* [deleteIssuer](docs/sdks/organizationremotesessionissuers/README.md#deleteissuer) - deleteIssuer organizationRemoteSessionIssuers
+* [getClient](docs/sdks/organizationremotesessionissuers/README.md#getclient) - getClient organizationRemoteSessionIssuers
+* [getClientDeletePreflight](docs/sdks/organizationremotesessionissuers/README.md#getclientdeletepreflight) - getClientDeletePreflight organizationRemoteSessionIssuers
+* [getIssuer](docs/sdks/organizationremotesessionissuers/README.md#getissuer) - getIssuer organizationRemoteSessionIssuers
+* [getIssuerDeletePreflight](docs/sdks/organizationremotesessionissuers/README.md#getissuerdeletepreflight) - getIssuerDeletePreflight organizationRemoteSessionIssuers
+* [listClientMcpServers](docs/sdks/organizationremotesessionissuers/README.md#listclientmcpservers) - listClientMcpServers organizationRemoteSessionIssuers
+* [listClientSessions](docs/sdks/organizationremotesessionissuers/README.md#listclientsessions) - listClientSessions organizationRemoteSessionIssuers
+* [listClients](docs/sdks/organizationremotesessionissuers/README.md#listclients) - listClients organizationRemoteSessionIssuers
+* [listIssuers](docs/sdks/organizationremotesessionissuers/README.md#listissuers) - listIssuers organizationRemoteSessionIssuers
+* [moveIssuer](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
+* [refreshSession](docs/sdks/organizationremotesessionissuers/README.md#refreshsession) - refreshSession organizationRemoteSessionIssuers
+* [removeClientFromMcpServer](docs/sdks/organizationremotesessionissuers/README.md#removeclientfrommcpserver) - removeClientFromMcpServer organizationRemoteSessionIssuers
+* [revokeAllClientSessions](docs/sdks/organizationremotesessionissuers/README.md#revokeallclientsessions) - revokeAllClientSessions organizationRemoteSessionIssuers
+* [revokeSession](docs/sdks/organizationremotesessionissuers/README.md#revokesession) - revokeSession organizationRemoteSessionIssuers
+* [updateClient](docs/sdks/organizationremotesessionissuers/README.md#updateclient) - updateClient organizationRemoteSessionIssuers
+* [updateIssuer](docs/sdks/organizationremotesessionissuers/README.md#updateissuer) - updateIssuer organizationRemoteSessionIssuers
 
 ### [Organizations](docs/sdks/organizations/README.md)
 
 * [createPortalSession](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
 * [disableWebhooks](docs/sdks/organizations/README.md#disablewebhooks) - disableWebhooks organizations
 * [enableWebhooks](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
+* [generateWorkOSAdminPortalLink](docs/sdks/organizations/README.md#generateworkosadminportallink) - generateWorkOSAdminPortalLink organizations
 * [get](docs/sdks/organizations/README.md#get) - get organizations
+* [getOnboardingStatus](docs/sdks/organizations/README.md#getonboardingstatus) - getOnboardingStatus organizations
 * [listInvites](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 * [listUsers](docs/sdks/organizations/README.md#listusers) - listUsers organizations
 * [removeUser](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 * [revokeInvite](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
+* [sendEnterpriseAdminOnboardingEmail](docs/sdks/organizations/README.md#sendenterpriseadminonboardingemail) - sendEnterpriseAdminOnboardingEmail organizations
 * [sendInvite](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
 * [updateInviteRole](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
+* [verifyOnboardingHooksSetup](docs/sdks/organizations/README.md#verifyonboardinghookssetup) - verifyOnboardingHooksSetup organizations
 
 ### [OtelForwarding](docs/sdks/otelforwarding/README.md)
 
@@ -360,12 +401,14 @@ run();
 * [downloadCodexInstallScript](docs/sdks/plugins/README.md#downloadcodexinstallscript) - downloadCodexInstallScript plugins
 * [downloadObservabilityPlugin](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 * [downloadPluginPackage](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
+* [getMarketplaceSettings](docs/sdks/plugins/README.md#getmarketplacesettings) - getMarketplaceSettings plugins
 * [getPlugin](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 * [getPublishStatus](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 * [listPlugins](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
 * [publishPlugins](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
 * [removePluginServer](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 * [setPluginAssignments](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
+* [updateMarketplaceSettings](docs/sdks/plugins/README.md#updatemarketplacesettings) - updateMarketplaceSettings plugins
 * [updatePlugin](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 * [updatePluginServer](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
 
@@ -384,6 +427,7 @@ run();
 
 * [createServer](docs/sdks/remotemcp/README.md#createserver) - createServer remoteMcp
 * [deleteServer](docs/sdks/remotemcp/README.md#deleteserver) - deleteServer remoteMcp
+* [discoverProtectedResourceMetadata](docs/sdks/remotemcp/README.md#discoverprotectedresourcemetadata) - discoverProtectedResourceMetadata remoteMcp
 * [getServer](docs/sdks/remotemcp/README.md#getserver) - getServer remoteMcp
 * [listServers](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
 * [updateServer](docs/sdks/remotemcp/README.md#updateserver) - updateServer remoteMcp
@@ -416,19 +460,25 @@ run();
 
 * [list](docs/sdks/resources/README.md#list) - listResources resources
 
-### [Risk.Approvals](docs/sdks/approvals/README.md)
-
-* [create](docs/sdks/approvals/README.md#create) - approveShadowMCP risk
-* [delete](docs/sdks/approvals/README.md#delete) - revokeShadowMCPApproval risk
-* [list](docs/sdks/approvals/README.md#list) - listShadowMCPApprovals risk
-
-### [Risk.Capabilities](docs/sdks/capabilities/README.md)
-
-* [get](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
-
 ### [Risk.Categories](docs/sdks/categories/README.md)
 
 * [list](docs/sdks/categories/README.md#list) - listRiskCategories risk
+
+### [Risk.CustomRules](docs/sdks/customrules/README.md)
+
+* [create](docs/sdks/customrules/README.md#create) - createCustomDetectionRule risk
+* [delete](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
+* [get](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
+* [list](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
+* [suggest](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
+* [update](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
+
+### [Risk.Exclusions](docs/sdks/exclusions/README.md)
+
+* [create](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
+* [delete](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
+* [list](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
+* [update](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
 
 ### [Risk.Overview](docs/sdks/overview/README.md)
 
@@ -446,32 +496,41 @@ run();
 * [trigger](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
 * [update](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
 
+### [Risk.PolicyBypassRequests](docs/sdks/policybypassrequests/README.md)
+
+* [approve](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
+* [create](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
+* [deny](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
+* [list](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
+* [revoke](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
+
 ### [Risk.Results](docs/sdks/results/README.md)
 
 * [byChat](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 * [list](docs/sdks/results/README.md#list) - listRiskResults risk
 * [listForAgent](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
 
-### [Slack](docs/sdks/slack/README.md)
+### [Risk.Rules](docs/sdks/rules/README.md)
 
-* [configureSlackApp](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
-* [createSlackApp](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
-* [deleteSlackApp](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
-* [getSlackApp](docs/sdks/slack/README.md#getslackapp) - getSlackApp slack
-* [listSlackApps](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
-* [updateSlackApp](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
+* [test](docs/sdks/rules/README.md#test) - testDetectionRule risk
 
 ### [Telemetry](docs/sdks/telemetry/README.md)
 
 * [captureEvent](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
+* [getEmployeeDataFlowGraph](docs/sdks/telemetry/README.md#getemployeedataflowgraph) - getEmployeeDataFlowGraph telemetry
 * [getHooksSummary](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
 * [getObservabilityOverview](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 * [getProjectMetricsSummary](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 * [getProjectOverview](docs/sdks/telemetry/README.md#getprojectoverview) - getProjectOverview telemetry
+* [getToolUsageFilterOptions](docs/sdks/telemetry/README.md#gettoolusagefilteroptions) - getToolUsageFilterOptions telemetry
+* [getToolUsageSummary](docs/sdks/telemetry/README.md#gettoolusagesummary) - getToolUsageSummary telemetry
 * [getUserMetricsSummary](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 * [listAttributeKeys](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 * [listFilterOptions](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
 * [listHooksTraces](docs/sdks/telemetry/README.md#listhookstraces) - listHooksTraces telemetry
+* [listSessions](docs/sdks/telemetry/README.md#listsessions) - listSessions telemetry
+* [listToolUsageTraces](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
+* [query](docs/sdks/telemetry/README.md#query) - query telemetry
 * [searchChats](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 * [searchLogs](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 * [searchToolCalls](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
@@ -502,7 +561,9 @@ run();
 * [getBySlug](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 * [list](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 * [listForOrg](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
+* [listToolFilters](docs/sdks/toolsets/README.md#listtoolfilters) - listToolFilters toolsets
 * [removeOAuthServer](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
+* [setToolVariationsGroup](docs/sdks/toolsets/README.md#settoolvariationsgroup) - setToolVariationsGroup toolsets
 * [setUserSessionIssuer](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
 * [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 * [updateOAuthProxyServer](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
@@ -524,7 +585,9 @@ run();
 * [createCustomerSession](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 * [createTopUpCheckout](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
 * [getPeriodUsage](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
+* [getTokensUnderManagement](docs/sdks/usage/README.md#gettokensundermanagement) - getTokensUnderManagement usage
 * [getUsageTiers](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
+* [setBillingMetadata](docs/sdks/usage/README.md#setbillingmetadata) - setBillingMetadata usage
 
 ### [UserSessionClients](docs/sdks/usersessionclients/README.md)
 
@@ -543,18 +606,22 @@ run();
 * [delete](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
 * [get](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
 * [list](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
+* [migrateLegacyGramRegistrations](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 * [update](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 
 ### [UserSessions](docs/sdks/usersessions/README.md)
 
 * [list](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
+* [listFacets](docs/sdks/usersessions/README.md#listfacets) - listFacets userSessions
 * [mint](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
 * [revoke](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
 
 ### [Variations](docs/sdks/variations/README.md)
 
+* [createGlobal](docs/sdks/variations/README.md#createglobal) - createGlobal variations
 * [deleteGlobal](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 * [listGlobal](docs/sdks/variations/README.md#listglobal) - listGlobal variations
+* [listGroups](docs/sdks/variations/README.md#listgroups) - listGroups variations
 * [upsertGlobal](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
 
 </details>
@@ -575,8 +642,13 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 
 <summary>Available standalone functions</summary>
 
+- [`accessApproveShadowMCPApprovalRequest`](docs/sdks/access/README.md#approveshadowmcpapprovalrequest) - approveShadowMCPApprovalRequest access
 - [`accessCreateRole`](docs/sdks/access/README.md#createrole) - createRole access
+- [`accessCreateShadowMCPAccessRule`](docs/sdks/access/README.md#createshadowmcpaccessrule) - createShadowMCPAccessRule access
+- [`accessCreateShadowMCPApprovalRequest`](docs/sdks/access/README.md#createshadowmcpapprovalrequest) - createShadowMCPApprovalRequest access
 - [`accessDeleteRole`](docs/sdks/access/README.md#deleterole) - deleteRole access
+- [`accessDeleteShadowMCPAccessRule`](docs/sdks/access/README.md#deleteshadowmcpaccessrule) - deleteShadowMCPAccessRule access
+- [`accessDenyShadowMCPApprovalRequest`](docs/sdks/access/README.md#denyshadowmcpapprovalrequest) - denyShadowMCPApprovalRequest access
 - [`accessDisableRBAC`](docs/sdks/access/README.md#disablerbac) - disableRBAC access
 - [`accessEnableRBAC`](docs/sdks/access/README.md#enablerbac) - enableRBAC access
 - [`accessGetRBACStatus`](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
@@ -587,9 +659,13 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`accessListMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`accessListRoles`](docs/sdks/access/README.md#listroles) - listRoles access
 - [`accessListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
+- [`accessListShadowMCPAccessRules`](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
+- [`accessListShadowMCPApprovalRequests`](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
 - [`accessResolveChallenge`](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
 - [`accessUpdateMemberRoles`](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 - [`accessUpdateRole`](docs/sdks/access/README.md#updaterole) - updateRole access
+- [`accessUpdateShadowMCPAccessRule`](docs/sdks/access/README.md#updateshadowmcpaccessrule) - updateShadowMCPAccessRule access
+- [`agentGetPlugins`](docs/sdks/agent/README.md#getplugins) - getPlugins agent
 - [`aiIntegrationsDeleteConfig`](docs/sdks/aiintegrations/README.md#deleteconfig) - deleteConfig aiIntegrations
 - [`aiIntegrationsGetConfig`](docs/sdks/aiintegrations/README.md#getconfig) - getConfig aiIntegrations
 - [`aiIntegrationsUpsertConfig`](docs/sdks/aiintegrations/README.md#upsertconfig) - upsertConfig aiIntegrations
@@ -610,8 +686,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assistantMemoriesList`](docs/sdks/assistantmemories/README.md#list) - listAssistantMemories assistantMemories
 - [`assistantsCreate`](docs/sdks/assistants/README.md#create) - createAssistant assistants
 - [`assistantsDelete`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
+- [`assistantsEnsureManaged`](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 - [`assistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
+- [`assistantsGetManaged`](docs/sdks/assistants/README.md#getmanaged) - getManagedAssistant assistants
 - [`assistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
+- [`assistantsSendMessage`](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
 - [`assistantsUpdate`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 - [`auditlogsList`](docs/sdks/auditlogs/README.md#list) - list auditlogs
 - [`auditlogsListFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
@@ -625,7 +704,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`chatDelete`](docs/sdks/chat/README.md#delete) - deleteChat chat
 - [`chatGenerateTitle`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`chatList`](docs/sdks/chat/README.md#list) - listChats chat
-- [`chatListChatsWithResolutions`](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
 - [`chatLoad`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`chatSessionsCreate`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`chatSessionsRevoke`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
@@ -649,6 +727,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`domainsGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`domainsListMcpEndpoints`](docs/sdks/domains/README.md#listmcpendpoints) - listMcpEndpoints domains
 - [`domainsRegisterDomain`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
+- [`domainsUpdateDomain`](docs/sdks/domains/README.md#updatedomain) - updateDomain domains
 - [`environmentsClone`](docs/sdks/environments/README.md#clone) - cloneEnvironment environments
 - [`environmentsCreate`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`environmentsDeleteBySlug`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
@@ -695,17 +774,40 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpServersDelete`](docs/sdks/mcpservers/README.md#delete) - deleteMcpServer mcpServers
 - [`mcpServersGet`](docs/sdks/mcpservers/README.md#get) - getMcpServer mcpServers
 - [`mcpServersList`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
+- [`mcpServersListToolFilters`](docs/sdks/mcpservers/README.md#listtoolfilters) - listToolFilters mcpServers
 - [`mcpServersUpdate`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
+- [`organizationRemoteSessionIssuersCreateIssuer`](docs/sdks/organizationremotesessionissuers/README.md#createissuer) - createIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersDeleteClient`](docs/sdks/organizationremotesessionissuers/README.md#deleteclient) - deleteClient organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersDeleteIssuer`](docs/sdks/organizationremotesessionissuers/README.md#deleteissuer) - deleteIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersGetClient`](docs/sdks/organizationremotesessionissuers/README.md#getclient) - getClient organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersGetClientDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getclientdeletepreflight) - getClientDeletePreflight organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersGetIssuer`](docs/sdks/organizationremotesessionissuers/README.md#getissuer) - getIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersGetIssuerDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getissuerdeletepreflight) - getIssuerDeletePreflight organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersListClientMcpServers`](docs/sdks/organizationremotesessionissuers/README.md#listclientmcpservers) - listClientMcpServers organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersListClients`](docs/sdks/organizationremotesessionissuers/README.md#listclients) - listClients organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersListClientSessions`](docs/sdks/organizationremotesessionissuers/README.md#listclientsessions) - listClientSessions organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersListIssuers`](docs/sdks/organizationremotesessionissuers/README.md#listissuers) - listIssuers organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersMoveIssuer`](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersRefreshSession`](docs/sdks/organizationremotesessionissuers/README.md#refreshsession) - refreshSession organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersRemoveClientFromMcpServer`](docs/sdks/organizationremotesessionissuers/README.md#removeclientfrommcpserver) - removeClientFromMcpServer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersRevokeAllClientSessions`](docs/sdks/organizationremotesessionissuers/README.md#revokeallclientsessions) - revokeAllClientSessions organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersRevokeSession`](docs/sdks/organizationremotesessionissuers/README.md#revokesession) - revokeSession organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersUpdateClient`](docs/sdks/organizationremotesessionissuers/README.md#updateclient) - updateClient organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersUpdateIssuer`](docs/sdks/organizationremotesessionissuers/README.md#updateissuer) - updateIssuer organizationRemoteSessionIssuers
 - [`organizationsCreatePortalSession`](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
 - [`organizationsDisableWebhooks`](docs/sdks/organizations/README.md#disablewebhooks) - disableWebhooks organizations
 - [`organizationsEnableWebhooks`](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
+- [`organizationsGenerateWorkOSAdminPortalLink`](docs/sdks/organizations/README.md#generateworkosadminportallink) - generateWorkOSAdminPortalLink organizations
 - [`organizationsGet`](docs/sdks/organizations/README.md#get) - get organizations
+- [`organizationsGetOnboardingStatus`](docs/sdks/organizations/README.md#getonboardingstatus) - getOnboardingStatus organizations
 - [`organizationsListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`organizationsListUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
 - [`organizationsRemoveUser`](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 - [`organizationsRevokeInvite`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
+- [`organizationsSendEnterpriseAdminOnboardingEmail`](docs/sdks/organizations/README.md#sendenterpriseadminonboardingemail) - sendEnterpriseAdminOnboardingEmail organizations
 - [`organizationsSendInvite`](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
 - [`organizationsUpdateInviteRole`](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
+- [`organizationsVerifyOnboardingHooksSetup`](docs/sdks/organizations/README.md#verifyonboardinghookssetup) - verifyOnboardingHooksSetup organizations
 - [`otelForwardingDeleteConfig`](docs/sdks/otelforwarding/README.md#deleteconfig) - deleteConfig otelForwarding
 - [`otelForwardingGetConfig`](docs/sdks/otelforwarding/README.md#getconfig) - getConfig otelForwarding
 - [`otelForwardingUpsertConfig`](docs/sdks/otelforwarding/README.md#upsertconfig) - upsertConfig otelForwarding
@@ -720,12 +822,14 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`pluginsDownloadCodexInstallScript`](docs/sdks/plugins/README.md#downloadcodexinstallscript) - downloadCodexInstallScript plugins
 - [`pluginsDownloadObservabilityPlugin`](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 - [`pluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
+- [`pluginsGetMarketplaceSettings`](docs/sdks/plugins/README.md#getmarketplacesettings) - getMarketplaceSettings plugins
 - [`pluginsGetPlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 - [`pluginsGetPublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 - [`pluginsListPlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
 - [`pluginsPublishPlugins`](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
 - [`pluginsRemovePluginServer`](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 - [`pluginsSetPluginAssignments`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
+- [`pluginsUpdateMarketplaceSettings`](docs/sdks/plugins/README.md#updatemarketplacesettings) - updateMarketplaceSettings plugins
 - [`pluginsUpdatePlugin`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 - [`pluginsUpdatePluginServer`](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
 - [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
@@ -738,6 +842,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`projectsUpsertAllowedOrigin`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`remoteMcpCreateServer`](docs/sdks/remotemcp/README.md#createserver) - createServer remoteMcp
 - [`remoteMcpDeleteServer`](docs/sdks/remotemcp/README.md#deleteserver) - deleteServer remoteMcp
+- [`remoteMcpDiscoverProtectedResourceMetadata`](docs/sdks/remotemcp/README.md#discoverprotectedresourcemetadata) - discoverProtectedResourceMetadata remoteMcp
 - [`remoteMcpGetServer`](docs/sdks/remotemcp/README.md#getserver) - getServer remoteMcp
 - [`remoteMcpListServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
 - [`remoteMcpUpdateServer`](docs/sdks/remotemcp/README.md#updateserver) - updateServer remoteMcp
@@ -757,11 +862,17 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`remoteSessionsList`](docs/sdks/remotesessions/README.md#list) - listRemoteSessions remoteSessions
 - [`remoteSessionsRevoke`](docs/sdks/remotesessions/README.md#revoke) - revokeRemoteSession remoteSessions
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
-- [`riskApprovalsCreate`](docs/sdks/approvals/README.md#create) - approveShadowMCP risk
-- [`riskApprovalsDelete`](docs/sdks/approvals/README.md#delete) - revokeShadowMCPApproval risk
-- [`riskApprovalsList`](docs/sdks/approvals/README.md#list) - listShadowMCPApprovals risk
-- [`riskCapabilitiesGet`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
 - [`riskCategoriesList`](docs/sdks/categories/README.md#list) - listRiskCategories risk
+- [`riskCustomRulesCreate`](docs/sdks/customrules/README.md#create) - createCustomDetectionRule risk
+- [`riskCustomRulesDelete`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
+- [`riskCustomRulesGet`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
+- [`riskCustomRulesList`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
+- [`riskCustomRulesSuggest`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
+- [`riskCustomRulesUpdate`](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
+- [`riskExclusionsCreate`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
+- [`riskExclusionsDelete`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
+- [`riskExclusionsList`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
+- [`riskExclusionsUpdate`](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
 - [`riskOverviewGet`](docs/sdks/overview/README.md#get) - getRiskOverview risk
 - [`riskOverviewRules`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
 - [`riskOverviewUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
@@ -772,24 +883,30 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskPoliciesStatus`](docs/sdks/policies/README.md#status) - getRiskPolicyStatus risk
 - [`riskPoliciesTrigger`](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
 - [`riskPoliciesUpdate`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
+- [`riskPolicyBypassRequestsApprove`](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
+- [`riskPolicyBypassRequestsCreate`](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
+- [`riskPolicyBypassRequestsDeny`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
+- [`riskPolicyBypassRequestsList`](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
+- [`riskPolicyBypassRequestsRevoke`](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
 - [`riskResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 - [`riskResultsList`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`riskResultsListForAgent`](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
-- [`slackConfigureSlackApp`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
-- [`slackCreateSlackApp`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
-- [`slackDeleteSlackApp`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
-- [`slackGetSlackApp`](docs/sdks/slack/README.md#getslackapp) - getSlackApp slack
-- [`slackListSlackApps`](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
-- [`slackUpdateSlackApp`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
+- [`riskRulesTest`](docs/sdks/rules/README.md#test) - testDetectionRule risk
 - [`telemetryCaptureEvent`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
+- [`telemetryGetEmployeeDataFlowGraph`](docs/sdks/telemetry/README.md#getemployeedataflowgraph) - getEmployeeDataFlowGraph telemetry
 - [`telemetryGetHooksSummary`](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
 - [`telemetryGetObservabilityOverview`](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 - [`telemetryGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 - [`telemetryGetProjectOverview`](docs/sdks/telemetry/README.md#getprojectoverview) - getProjectOverview telemetry
+- [`telemetryGetToolUsageFilterOptions`](docs/sdks/telemetry/README.md#gettoolusagefilteroptions) - getToolUsageFilterOptions telemetry
+- [`telemetryGetToolUsageSummary`](docs/sdks/telemetry/README.md#gettoolusagesummary) - getToolUsageSummary telemetry
 - [`telemetryGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`telemetryListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 - [`telemetryListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
 - [`telemetryListHooksTraces`](docs/sdks/telemetry/README.md#listhookstraces) - listHooksTraces telemetry
+- [`telemetryListSessions`](docs/sdks/telemetry/README.md#listsessions) - listSessions telemetry
+- [`telemetryListToolUsageTraces`](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
+- [`telemetryQuery`](docs/sdks/telemetry/README.md#query) - query telemetry
 - [`telemetrySearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 - [`telemetrySearchLogs`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`telemetrySearchToolCalls`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
@@ -810,7 +927,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`toolsetsGetBySlug`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`toolsetsList`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`toolsetsListForOrg`](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
+- [`toolsetsListToolFilters`](docs/sdks/toolsets/README.md#listtoolfilters) - listToolFilters toolsets
 - [`toolsetsRemoveOAuthServer`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
+- [`toolsetsSetToolVariationsGroup`](docs/sdks/toolsets/README.md#settoolvariationsgroup) - setToolVariationsGroup toolsets
 - [`toolsetsSetUserSessionIssuer`](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
 - [`toolsetsUpdateBySlug`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`toolsetsUpdateOAuthProxyServer`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
@@ -827,7 +946,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`usageCreateCustomerSession`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`usageCreateTopUpCheckout`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
 - [`usageGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
+- [`usageGetTokensUnderManagement`](docs/sdks/usage/README.md#gettokensundermanagement) - getTokensUnderManagement usage
 - [`usageGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
+- [`usageSetBillingMetadata`](docs/sdks/usage/README.md#setbillingmetadata) - setBillingMetadata usage
 - [`userSessionClientsGet`](docs/sdks/usersessionclients/README.md#get) - getUserSessionClient userSessionClients
 - [`userSessionClientsList`](docs/sdks/usersessionclients/README.md#list) - listUserSessionClients userSessionClients
 - [`userSessionClientsRevoke`](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
@@ -837,12 +958,16 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`userSessionIssuersDelete`](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
 - [`userSessionIssuersGet`](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
 - [`userSessionIssuersList`](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
+- [`userSessionIssuersMigrateLegacyGramRegistrations`](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 - [`userSessionIssuersUpdate`](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 - [`userSessionsList`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
+- [`userSessionsListFacets`](docs/sdks/usersessions/README.md#listfacets) - listFacets userSessions
 - [`userSessionsMint`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
 - [`userSessionsRevoke`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
+- [`variationsCreateGlobal`](docs/sdks/variations/README.md#createglobal) - createGlobal variations
 - [`variationsDeleteGlobal`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`variationsListGlobal`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
+- [`variationsListGroups`](docs/sdks/variations/README.md#listgroups) - listGroups variations
 - [`variationsUpsertGlobal`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
 
 </details>
@@ -874,11 +999,14 @@ To learn about this feature and how to get started, check
 - [`useAddExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`useAddOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 - [`useAddPluginServerMutation`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
+- [`useAgentPlugins`](docs/sdks/agent/README.md#getplugins) - getPlugins agent
 - [`useAiIntegrationConfig`](docs/sdks/aiintegrations/README.md#getconfig) - getConfig aiIntegrations
+- [`useApproveShadowMCPApprovalRequestMutation`](docs/sdks/access/README.md#approveshadowmcpapprovalrequest) - approveShadowMCPApprovalRequest access
 - [`useAssistantMemoriesDeleteMutation`](docs/sdks/assistantmemories/README.md#delete) - deleteAssistantMemory assistantMemories
 - [`useAssistantsCreateMutation`](docs/sdks/assistants/README.md#create) - createAssistant assistants
 - [`useAssistantsDeleteMutation`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
 - [`useAssistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
+- [`useAssistantsGetManaged`](docs/sdks/assistants/README.md#getmanaged) - getManagedAssistant assistants
 - [`useAssistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
 - [`useAssistantsUpdateMutation`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
@@ -901,14 +1029,15 @@ To learn about this feature and how to get started, check
 - [`useCollectionsDetachServerMutation`](docs/sdks/collections/README.md#detachserver) - detachServer collections
 - [`useCollectionsListServers`](docs/sdks/collections/README.md#listservers) - listServers collections
 - [`useCollectionsUpdateMutation`](docs/sdks/collections/README.md#update) - update collections
-- [`useConfigureSlackAppMutation`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
+- [`useCreateGlobalToolVariationGroupMutation`](docs/sdks/variations/README.md#createglobal) - createGlobal variations
 - [`useCreateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#create) - createMcpEndpoint mcpEndpoints
 - [`useCreateMcpServerMutation`](docs/sdks/mcpservers/README.md#create) - createMcpServer mcpServers
+- [`useCreateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#createissuer) - createIssuer organizationRemoteSessionIssuers
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreatePluginMutation`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 - [`useCreatePortalSessionMutation`](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
@@ -917,8 +1046,9 @@ To learn about this feature and how to get started, check
 - [`useCreateRemoteSessionClientMutation`](docs/sdks/remotesessionclients/README.md#create) - createRemoteSessionClient remoteSessionClients
 - [`useCreateRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#create) - createRemoteSessionIssuer remoteSessionIssuers
 - [`useCreateRoleMutation`](docs/sdks/access/README.md#createrole) - createRole access
+- [`useCreateShadowMCPAccessRuleMutation`](docs/sdks/access/README.md#createshadowmcpaccessrule) - createShadowMCPAccessRule access
+- [`useCreateShadowMCPApprovalRequestMutation`](docs/sdks/access/README.md#createshadowmcpapprovalrequest) - createShadowMCPApprovalRequest access
 - [`useCreateSignedChatAttachmentURLMutation`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
-- [`useCreateSlackAppMutation`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
 - [`useCreateTemplateMutation`](docs/sdks/templates/README.md#create) - createTemplate templates
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useCreateTopUpCheckoutMutation`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
@@ -931,6 +1061,8 @@ To learn about this feature and how to get started, check
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`useDeleteMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#delete) - deleteMcpEndpoint mcpEndpoints
 - [`useDeleteMcpServerMutation`](docs/sdks/mcpservers/README.md#delete) - deleteMcpServer mcpServers
+- [`useDeleteOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionissuers/README.md#deleteclient) - deleteClient organizationRemoteSessionIssuers
+- [`useDeleteOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#deleteissuer) - deleteIssuer organizationRemoteSessionIssuers
 - [`useDeleteOtelForwardingConfigMutation`](docs/sdks/otelforwarding/README.md#deleteconfig) - deleteConfig otelForwarding
 - [`useDeletePluginMutation`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
 - [`useDeleteProjectMutation`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
@@ -938,27 +1070,32 @@ To learn about this feature and how to get started, check
 - [`useDeleteRemoteSessionClientMutation`](docs/sdks/remotesessionclients/README.md#delete) - deleteRemoteSessionClient remoteSessionClients
 - [`useDeleteRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#delete) - deleteRemoteSessionIssuer remoteSessionIssuers
 - [`useDeleteRoleMutation`](docs/sdks/access/README.md#deleterole) - deleteRole access
-- [`useDeleteSlackAppMutation`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
+- [`useDeleteShadowMCPAccessRuleMutation`](docs/sdks/access/README.md#deleteshadowmcpaccessrule) - deleteShadowMCPAccessRule access
 - [`useDeleteSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
 - [`useDeleteTemplateMutation`](docs/sdks/templates/README.md#delete) - deleteTemplate templates
 - [`useDeleteToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletetoolsetlink) - deleteToolsetEnvironmentLink environments
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeleteTriggerMutation`](docs/sdks/triggers/README.md#delete) - deleteTriggerInstance triggers
 - [`useDeleteUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
+- [`useDenyShadowMCPApprovalRequestMutation`](docs/sdks/access/README.md#denyshadowmcpapprovalrequest) - denyShadowMCPApprovalRequest access
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`useDisableRBACMutation`](docs/sdks/access/README.md#disablerbac) - disableRBAC access
 - [`useDisableWebhooksMutation`](docs/sdks/organizations/README.md#disablewebhooks) - disableWebhooks organizations
+- [`useDiscoverRemoteMcpProtectedResourceMetadataMutation`](docs/sdks/remotemcp/README.md#discoverprotectedresourcemetadata) - discoverProtectedResourceMetadata remoteMcp
 - [`useDiscoverRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#discover) - discoverRemoteSessionIssuer remoteSessionIssuers
 - [`useEnableRBACMutation`](docs/sdks/access/README.md#enablerbac) - enableRBAC access
 - [`useEnableWebhooksMutation`](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
+- [`useEnsureManagedAssistantMutation`](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useExportMcpMetadataMutation`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
 - [`useFeaturesSetMutation`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`useFetchOpenAPIv3FromURLMutation`](docs/sdks/assets/README.md#fetchopenapiv3fromurl) - fetchOpenAPIv3FromURL assets
+- [`useGenerateWorkOSAdminPortalLinkMutation`](docs/sdks/organizations/README.md#generateworkosadminportallink) - generateWorkOSAdminPortalLink organizations
 - [`useGetAssistantMemory`](docs/sdks/assistantmemories/README.md#get) - getAssistantMemory assistantMemories
 - [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
+- [`useGetEmployeeDataFlowGraph`](docs/sdks/telemetry/README.md#getemployeedataflowgraph) - getEmployeeDataFlowGraph telemetry
 - [`useGetHooksSummary`](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
 - [`useGetMcpEndpoint`](docs/sdks/mcpendpoints/README.md#get) - getMcpEndpoint mcpEndpoints
 - [`useGetMcpMetadata`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
@@ -968,9 +1105,11 @@ To learn about this feature and how to get started, check
 - [`useGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 - [`useGetProjectOverview`](docs/sdks/telemetry/README.md#getprojectoverview) - getProjectOverview telemetry
 - [`useGetRemoteMcpServer`](docs/sdks/remotemcp/README.md#getserver) - getServer remoteMcp
-- [`useGetSlackApp`](docs/sdks/slack/README.md#getslackapp) - getSlackApp slack
 - [`useGetSourceEnvironment`](docs/sdks/environments/README.md#getbysource) - getSourceEnvironment environments
+- [`useGetTokensUnderManagement`](docs/sdks/usage/README.md#gettokensundermanagement) - getTokensUnderManagement usage
 - [`useGetToolsetEnvironment`](docs/sdks/environments/README.md#getbytoolset) - getToolsetEnvironment environments
+- [`useGetToolUsageFilterOptions`](docs/sdks/telemetry/README.md#gettoolusagefilteroptions) - getToolUsageFilterOptions telemetry
+- [`useGetToolUsageSummary`](docs/sdks/telemetry/README.md#gettoolusagesummary) - getToolUsageSummary telemetry
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
@@ -992,7 +1131,6 @@ To learn about this feature and how to get started, check
 - [`useListAssistantMemories`](docs/sdks/assistantmemories/README.md#list) - listAssistantMemories assistantMemories
 - [`useListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 - [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
-- [`useListChatsWithResolutions`](docs/sdks/chat/README.md#listchatswithresolutions) - listChatsWithResolutions chat
 - [`useListCollections`](docs/sdks/collections/README.md#list) - list collections
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
@@ -1002,26 +1140,41 @@ To learn about this feature and how to get started, check
 - [`useListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`useListMCPCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 - [`useListMCPRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
+- [`useListMcpServerToolFilters`](docs/sdks/mcpservers/README.md#listtoolfilters) - listToolFilters mcpServers
 - [`useListOrganizationUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
 - [`useListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
-- [`useListSlackApps`](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
+- [`useListSessions`](docs/sdks/telemetry/README.md#listsessions) - listSessions telemetry
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`useListToolsetsForOrg`](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
+- [`useListToolsetToolFilters`](docs/sdks/toolsets/README.md#listtoolfilters) - listToolFilters toolsets
+- [`useListToolUsageTraces`](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
+- [`useMarketplaceSettings`](docs/sdks/plugins/README.md#getmarketplacesettings) - getMarketplaceSettings plugins
 - [`useMcpEndpoints`](docs/sdks/mcpendpoints/README.md#list) - listMcpEndpoints mcpEndpoints
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`useMcpRegistriesClearCacheMutation`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`useMcpServers`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
+- [`useMigrateLegacyGramRegistrationsMutation`](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 - [`useMintUserSessionMutation`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
+- [`useMoveOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
+- [`useOnboardingStatus`](docs/sdks/organizations/README.md#getonboardingstatus) - getOnboardingStatus organizations
 - [`useOrganization`](docs/sdks/organizations/README.md#get) - get organizations
+- [`useOrganizationRemoteSessionClient`](docs/sdks/organizationremotesessionissuers/README.md#getclient) - getClient organizationRemoteSessionIssuers
+- [`useOrganizationRemoteSessionClientDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getclientdeletepreflight) - getClientDeletePreflight organizationRemoteSessionIssuers
+- [`useOrganizationRemoteSessionClientMcpServers`](docs/sdks/organizationremotesessionissuers/README.md#listclientmcpservers) - listClientMcpServers organizationRemoteSessionIssuers
+- [`useOrganizationRemoteSessionClients`](docs/sdks/organizationremotesessionissuers/README.md#listclients) - listClients organizationRemoteSessionIssuers
+- [`useOrganizationRemoteSessionClientSessions`](docs/sdks/organizationremotesessionissuers/README.md#listclientsessions) - listClientSessions organizationRemoteSessionIssuers
+- [`useOrganizationRemoteSessionIssuer`](docs/sdks/organizationremotesessionissuers/README.md#getissuer) - getIssuer organizationRemoteSessionIssuers
+- [`useOrganizationRemoteSessionIssuerDeletePreflight`](docs/sdks/organizationremotesessionissuers/README.md#getissuerdeletepreflight) - getIssuerDeletePreflight organizationRemoteSessionIssuers
+- [`useOrganizationRemoteSessionIssuers`](docs/sdks/organizationremotesessionissuers/README.md#listissuers) - listIssuers organizationRemoteSessionIssuers
 - [`useOtelForwardingConfig`](docs/sdks/otelforwarding/README.md#getconfig) - getConfig otelForwarding
 - [`usePauseTriggerMutation`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`usePlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
@@ -1037,6 +1190,7 @@ To learn about this feature and how to get started, check
 - [`usePublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 - [`useRbacStatus`](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
+- [`useRefreshOrganizationRemoteSessionMutation`](docs/sdks/organizationremotesessionissuers/README.md#refreshsession) - refreshSession organizationRemoteSessionIssuers
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
 - [`useRemoteMcpServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
@@ -1046,35 +1200,50 @@ To learn about this feature and how to get started, check
 - [`useRemoteSessionIssuers`](docs/sdks/remotesessionissuers/README.md#list) - listRemoteSessionIssuers remoteSessionIssuers
 - [`useRemoteSessions`](docs/sdks/remotesessions/README.md#list) - listRemoteSessions remoteSessions
 - [`useRemoveOAuthServerMutation`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
+- [`useRemoveOrganizationRemoteSessionClientFromMcpServerMutation`](docs/sdks/organizationremotesessionissuers/README.md#removeclientfrommcpserver) - removeClientFromMcpServer organizationRemoteSessionIssuers
 - [`useRemoveOrganizationUserMutation`](docs/sdks/organizations/README.md#removeuser) - removeUser organizations
 - [`useRemovePluginServerMutation`](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`useResolveChallengeMutation`](docs/sdks/access/README.md#resolvechallenge) - resolveChallenge access
 - [`useResumeTriggerMutation`](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
+- [`useRevokeAllOrganizationRemoteSessionClientSessionsMutation`](docs/sdks/organizationremotesessionissuers/README.md#revokeallclientsessions) - revokeAllClientSessions organizationRemoteSessionIssuers
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useRevokeInviteMutation`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
+- [`useRevokeOrganizationRemoteSessionMutation`](docs/sdks/organizationremotesessionissuers/README.md#revokesession) - revokeSession organizationRemoteSessionIssuers
 - [`useRevokeRemoteSessionMutation`](docs/sdks/remotesessions/README.md#revoke) - revokeRemoteSession remoteSessions
 - [`useRevokeUserSessionClientMutation`](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
 - [`useRevokeUserSessionConsentMutation`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
 - [`useRevokeUserSessionMutation`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
-- [`useRiskApprovalsDeleteMutation`](docs/sdks/approvals/README.md#delete) - revokeShadowMCPApproval risk
-- [`useRiskApproveShadowMCPMutation`](docs/sdks/approvals/README.md#create) - approveShadowMCP risk
-- [`useRiskCapabilities`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
+- [`useRiskApprovePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
 - [`useRiskCategories`](docs/sdks/categories/README.md#list) - listRiskCategories risk
+- [`useRiskCreateCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#create) - createCustomDetectionRule risk
+- [`useRiskCreateExclusionMutation`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
+- [`useRiskCreatePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
 - [`useRiskCreatePolicyMutation`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
+- [`useRiskDeleteCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
+- [`useRiskDeleteExclusionMutation`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
+- [`useRiskDenyPolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
+- [`useRiskGetCustomDetectionRule`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
+- [`useRiskListCustomDetectionRules`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
+- [`useRiskListExclusions`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
 - [`useRiskListPolicies`](docs/sdks/policies/README.md#list) - listRiskPolicies risk
+- [`useRiskListPolicyBypassRequests`](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
 - [`useRiskListResults`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`useRiskListResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 - [`useRiskListResultsForAgent`](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
-- [`useRiskListShadowMCPApprovals`](docs/sdks/approvals/README.md#list) - listShadowMCPApprovals risk
 - [`useRiskOverview`](docs/sdks/overview/README.md#get) - getRiskOverview risk
 - [`useRiskPoliciesDeleteMutation`](docs/sdks/policies/README.md#delete) - deleteRiskPolicy risk
 - [`useRiskPoliciesGet`](docs/sdks/policies/README.md#get) - getRiskPolicy risk
 - [`useRiskPoliciesStatus`](docs/sdks/policies/README.md#status) - getRiskPolicyStatus risk
 - [`useRiskPoliciesTriggerMutation`](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
 - [`useRiskPoliciesUpdateMutation`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
+- [`useRiskRevokePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
 - [`useRiskRuleBreakdown`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
+- [`useRiskSuggestCustomRuleMutation`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
+- [`useRiskTestDetectionRuleMutation`](docs/sdks/rules/README.md#test) - testDetectionRule risk
+- [`useRiskUpdateCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
+- [`useRiskUpdateExclusionMutation`](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
 - [`useRiskUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
 - [`useRole`](docs/sdks/access/README.md#getrole) - getRole access
 - [`useRoles`](docs/sdks/access/README.md#listroles) - listRoles access
@@ -1082,6 +1251,8 @@ To learn about this feature and how to get started, check
 - [`useSearchLogsMutation`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`useSearchToolCallsMutation`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
 - [`useSearchUsers`](docs/sdks/telemetry/README.md#searchusers) - searchUsers telemetry
+- [`useSendAssistantMessageMutation`](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
+- [`useSendEnterpriseAdminOnboardingEmailMutation`](docs/sdks/organizations/README.md#sendenterpriseadminonboardingemail) - sendEnterpriseAdminOnboardingEmail organizations
 - [`useSendInviteMutation`](docs/sdks/organizations/README.md#sendinvite) - sendInvite organizations
 - [`useServeChatAttachment`](docs/sdks/assets/README.md#servechatattachment) - serveChatAttachment assets
 - [`useServeChatAttachmentSigned`](docs/sdks/assets/README.md#servechatattachmentsigned) - serveChatAttachmentSigned assets
@@ -1089,25 +1260,35 @@ To learn about this feature and how to get started, check
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
+- [`useSetBillingMetadataMutation`](docs/sdks/usage/README.md#setbillingmetadata) - setBillingMetadata usage
 - [`useSetPluginAssignmentsMutation`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
 - [`useSetProjectLogoMutation`](docs/sdks/projects/README.md#setlogo) - setLogo projects
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
+- [`useSetToolsetToolVariationsGroupMutation`](docs/sdks/toolsets/README.md#settoolvariationsgroup) - setToolVariationsGroup toolsets
 - [`useSetToolsetUserSessionIssuerMutation`](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
+- [`useShadowMCPAccessRules`](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
+- [`useShadowMCPApprovalRequests`](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
+- [`useTelemetryQuery`](docs/sdks/telemetry/README.md#query) - query telemetry
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
+- [`useToolVariationGroups`](docs/sdks/variations/README.md#listgroups) - listGroups variations
 - [`useTrigger`](docs/sdks/triggers/README.md#get) - getTriggerInstance triggers
 - [`useTriggerDefinitions`](docs/sdks/triggers/README.md#listdefinitions) - listTriggerDefinitions triggers
 - [`useTriggers`](docs/sdks/triggers/README.md#list) - listTriggerInstances triggers
+- [`useUpdateDomainMutation`](docs/sdks/domains/README.md#updatedomain) - updateDomain domains
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`useUpdateInviteRoleMutation`](docs/sdks/organizations/README.md#updateinviterole) - updateInviteRole organizations
+- [`useUpdateMarketplaceSettingsMutation`](docs/sdks/plugins/README.md#updatemarketplacesettings) - updateMarketplaceSettings plugins
 - [`useUpdateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#update) - updateMcpEndpoint mcpEndpoints
 - [`useUpdateMcpServerMutation`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 - [`useUpdateMemberRolesMutation`](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
 - [`useUpdateOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
+- [`useUpdateOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionissuers/README.md#updateclient) - updateClient organizationRemoteSessionIssuers
+- [`useUpdateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#updateissuer) - updateIssuer organizationRemoteSessionIssuers
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`useUpdatePluginMutation`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
 - [`useUpdatePluginServerMutation`](docs/sdks/plugins/README.md#updatepluginserver) - updatePluginServer plugins
@@ -1115,7 +1296,7 @@ To learn about this feature and how to get started, check
 - [`useUpdateRemoteSessionClientMutation`](docs/sdks/remotesessionclients/README.md#update) - updateRemoteSessionClient remoteSessionClients
 - [`useUpdateRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#update) - updateRemoteSessionIssuer remoteSessionIssuers
 - [`useUpdateRoleMutation`](docs/sdks/access/README.md#updaterole) - updateRole access
-- [`useUpdateSlackAppMutation`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
+- [`useUpdateShadowMCPAccessRuleMutation`](docs/sdks/access/README.md#updateshadowmcpaccessrule) - updateShadowMCPAccessRule access
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`useUpdateTriggerMutation`](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
@@ -1131,10 +1312,12 @@ To learn about this feature and how to get started, check
 - [`useUserSessionClient`](docs/sdks/usersessionclients/README.md#get) - getUserSessionClient userSessionClients
 - [`useUserSessionClients`](docs/sdks/usersessionclients/README.md#list) - listUserSessionClients userSessionClients
 - [`useUserSessionConsents`](docs/sdks/usersessionconsents/README.md#list) - listUserSessionConsents userSessionConsents
+- [`useUserSessionFacets`](docs/sdks/usersessions/README.md#listfacets) - listFacets userSessions
 - [`useUserSessionIssuer`](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
 - [`useUserSessionIssuers`](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
 - [`useUserSessions`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
 - [`useValidateAPIKey`](docs/sdks/keys/README.md#validate) - verifyKey keys
+- [`useVerifyOnboardingHooksSetup`](docs/sdks/organizations/README.md#verifyonboardinghookssetup) - verifyOnboardingHooksSetup organizations
 - [`useVerifyRemoteMcpURLMutation`](docs/sdks/remotemcp/README.md#verifyurl) - verifyURL remoteMcp
 
 </details>
@@ -1224,7 +1407,7 @@ async function run() {
         description: "swerve hm receptor how",
         grants: [
           {
-            scope: "mcp:connect",
+            scope: "environment:write",
           },
         ],
         name: "<value>",
@@ -1275,7 +1458,7 @@ async function run() {
       description: "swerve hm receptor how",
       grants: [
         {
-          scope: "mcp:connect",
+          scope: "environment:write",
         },
       ],
       name: "<value>",
@@ -1318,7 +1501,7 @@ async function run() {
         description: "swerve hm receptor how",
         grants: [
           {
-            scope: "mcp:connect",
+            scope: "environment:write",
           },
         ],
         name: "<value>",
@@ -1394,7 +1577,7 @@ async function run() {
       description: "swerve hm receptor how",
       grants: [
         {
-          scope: "mcp:connect",
+          scope: "environment:write",
         },
       ],
       name: "<value>",

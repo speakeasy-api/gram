@@ -2,11 +2,10 @@ import { Scope } from "@gram/client/models/components/rolegrant.js";
 import type {
   Selector,
   Disposition,
-  ResourceKind,
 } from "@gram/client/models/components/selector.js";
 
 export { Scope };
-export type { Selector, Disposition, ResourceKind };
+export type { Selector, Disposition };
 
 /** Derive role slug from name the same way the server does (conv.ToSlug + "org-" prefix). */
 export function toRoleSlug(name: string): string {
@@ -23,7 +22,12 @@ export function toRoleSlug(name: string): string {
 }
 
 /** What kind of resource a scope protects. */
-export type ResourceType = "org" | "project" | "mcp" | "environment";
+export type ResourceType =
+  | "org"
+  | "project"
+  | "mcp"
+  | "environment"
+  | "risk_policy";
 
 /** The 4 MCP tool annotation hint keys. */
 export type AnnotationHint =

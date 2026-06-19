@@ -10,11 +10,11 @@ import { useCollections } from "./hooks";
 import { CollectionCard } from "./CollectionCard";
 import type { Collection } from "./types";
 
-export function CollectionsRoot() {
+export function CollectionsRoot(): JSX.Element {
   return <Outlet />;
 }
 
-export default function Collections() {
+export default function Collections(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -70,7 +70,7 @@ function CollectionsInner() {
           <CollectionGrid
             collections={collections}
             searchQuery={searchQuery}
-            onCreate={handleCreateCollection}
+            onCreate={() => void handleCreateCollection()}
           />
         </Stack>
       </Page.Section.Body>

@@ -32,6 +32,14 @@ export type ListAuditLogsRequest = {
    */
   action?: string | undefined;
   /**
+   * Subject type to filter audit logs to a specific kind of subject. When omitted, assistant activity events are excluded; pass 'assistant' to list them.
+   */
+  subjectType?: string | undefined;
+  /**
+   * Subject ID to filter audit logs to a specific subject (e.g. a single assistant).
+   */
+  subjectId?: string | undefined;
+  /**
    * API Key header
    */
   gramKey?: string | undefined;
@@ -82,6 +90,8 @@ export type ListAuditLogsRequest$Outbound = {
   project_slug?: string | undefined;
   actor_id?: string | undefined;
   action?: string | undefined;
+  subject_type?: string | undefined;
+  subject_id?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -96,6 +106,8 @@ export const ListAuditLogsRequest$outboundSchema: z.ZodMiniType<
     projectSlug: z.optional(z.string()),
     actorId: z.optional(z.string()),
     action: z.optional(z.string()),
+    subjectType: z.optional(z.string()),
+    subjectId: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
@@ -103,6 +115,8 @@ export const ListAuditLogsRequest$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       projectSlug: "project_slug",
       actorId: "actor_id",
+      subjectType: "subject_type",
+      subjectId: "subject_id",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
     });

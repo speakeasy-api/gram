@@ -1258,7 +1258,7 @@ func TestServeMCP_PublicRemoteBackend_ToolsCallForwardsToUpstream(t *testing.T) 
 }
 
 // TestServeMCP_CustomDomainMismatchReturns404 covers the resolution
-// scoping in [Service.resolveMCPEndpointAndServer]: an mcp_endpoint
+// scoping in [mcp.Service.ResolveMCPEndpointAndServer]: an mcp_endpoint
 // registered against a custom domain must not resolve for a request
 // arriving without that domain's context, even when the slug matches.
 // Catches a regression in the `custom_domain_id IS NOT DISTINCT FROM $2`

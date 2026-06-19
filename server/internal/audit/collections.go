@@ -158,15 +158,16 @@ type LogMcpCollectionAttachServerEvent struct {
 	CollectionURN  urn.McpCollection
 	CollectionName string
 	CollectionSlug string
-	ToolsetURN     urn.Toolset
+	// Exactly one of ToolsetURN / McpServerURN identifies the attached server
+	// backend, mirroring the toolset_id XOR mcp_server_id attachment row.
+	ToolsetURN   *urn.Toolset
+	McpServerURN *urn.McpServer
 }
 
 func (l *Logger) LogMcpCollectionAttachServer(ctx context.Context, dbtx repo.DBTX, event LogMcpCollectionAttachServerEvent) error {
 	action := ActionMcpCollectionAttachServer
 
-	metadata, err := marshalAuditPayload(map[string]string{
-		"toolset_id": event.ToolsetURN.ID.String(),
-	})
+	metadata, err := marshalAuditPayload(collectionServerBackendMetadata(event.ToolsetURN, event.McpServerURN))
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
@@ -205,15 +206,16 @@ type LogMcpCollectionDetachServerEvent struct {
 	CollectionURN  urn.McpCollection
 	CollectionName string
 	CollectionSlug string
-	ToolsetURN     urn.Toolset
+	// Exactly one of ToolsetURN / McpServerURN identifies the detached server
+	// backend, mirroring the toolset_id XOR mcp_server_id attachment row.
+	ToolsetURN   *urn.Toolset
+	McpServerURN *urn.McpServer
 }
 
 func (l *Logger) LogMcpCollectionDetachServer(ctx context.Context, dbtx repo.DBTX, event LogMcpCollectionDetachServerEvent) error {
 	action := ActionMcpCollectionDetachServer
 
-	metadata, err := marshalAuditPayload(map[string]string{
-		"toolset_id": event.ToolsetURN.ID.String(),
-	})
+	metadata, err := marshalAuditPayload(collectionServerBackendMetadata(event.ToolsetURN, event.McpServerURN))
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
@@ -240,4 +242,18 @@ func (l *Logger) LogMcpCollectionDetachServer(ctx context.Context, dbtx repo.DBT
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpCollectionV1})
+}
+
+// collectionServerBackendMetadata records the attached/detached server backend
+// in audit metadata. A collection attachment references exactly one backend, so
+// exactly one of toolsetURN / mcpServerURN is expected to be non-nil.
+func collectionServerBackendMetadata(toolsetURN *urn.Toolset, mcpServerURN *urn.McpServer) map[string]string {
+	metadata := make(map[string]string, 1)
+	if toolsetURN != nil {
+		metadata["toolset_id"] = toolsetURN.ID.String()
+	}
+	if mcpServerURN != nil {
+		metadata["mcp_server_id"] = mcpServerURN.ID.String()
+	}
+	return metadata
 }

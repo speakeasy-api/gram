@@ -139,7 +139,7 @@ describe("EditOAuthProxyModal", () => {
 
   it("submits the mutation with audience set when changed", async () => {
     const onClose = vi.fn();
-    renderModal({ onClose });
+    renderModal({ onClose: () => void onClose() });
 
     const audienceInput = screen.getByPlaceholderText(
       "https://api.example.com",
@@ -151,7 +151,7 @@ describe("EditOAuthProxyModal", () => {
       expect(mocks.updateOAuthProxy).toHaveBeenCalledTimes(1);
     });
 
-    const call = mocks.updateOAuthProxy.mock.calls[0][0];
+    const call = mocks!.updateOAuthProxy.mock.calls[0]![0]!;
     expect(
       call.request.updateOAuthProxyServerRequestBody.oauthProxyServer.audience,
     ).toBe("aud-changed");
@@ -180,7 +180,7 @@ describe("EditOAuthProxyModal", () => {
     });
 
     const body =
-      mocks.updateOAuthProxy.mock.calls[0][0].request
+      mocks!.updateOAuthProxy.mock.calls[0]![0]!.request
         .updateOAuthProxyServerRequestBody.oauthProxyServer;
     expect(body.audience).toBeUndefined();
     expect(body.authorizationEndpoint).toBe("https://e.example/new-auth");
@@ -198,7 +198,7 @@ describe("EditOAuthProxyModal", () => {
       expect(mocks.updateOAuthProxy).toHaveBeenCalledTimes(1);
     });
     const body =
-      mocks.updateOAuthProxy.mock.calls[0][0].request
+      mocks!.updateOAuthProxy.mock.calls[0]![0]!.request
         .updateOAuthProxyServerRequestBody.oauthProxyServer;
     expect(body.scopesSupported).toEqual([]);
   });

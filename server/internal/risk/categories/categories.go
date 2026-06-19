@@ -30,6 +30,7 @@ const (
 	CategoryGovernmentIDs   Category = "government_ids"
 	CategoryHealthcare      Category = "healthcare"
 	CategoryOffPolicy       Category = "off_policy"
+	CategoryPromptPolicy    Category = "prompt_policy"
 	CategoryPromptInjection Category = "prompt_injection"
 	CategoryShadowMCP       Category = "shadow_mcp"
 	CategoryDestructiveTool Category = "destructive_tool"
@@ -92,6 +93,13 @@ var Definitions = []Definition{
 		Source:      "cli_destructive",
 	},
 	{
+		Category:    CategoryPromptPolicy,
+		Label:       "Prompt Policies",
+		Description: "Natural-language guardrails evaluated by the policy judge",
+		Icon:        "message-square-warning",
+		Source:      "llm_judge",
+	},
+	{
 		Category:    CategoryPromptInjection,
 		Label:       "Prompt Injection",
 		Description: "Indirect injection via tool outputs, hidden instructions",
@@ -120,7 +128,6 @@ var Definitions = []Definition{
 		RuleIDs: []string{
 			"pii.us_ssn",
 			"pii.us_passport",
-			"pii.us_driver_license",
 			"pii.us_itin",
 			"pii.uk_nhs",
 			"pii.uk_nino",

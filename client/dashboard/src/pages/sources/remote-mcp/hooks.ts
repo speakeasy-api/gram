@@ -1,5 +1,7 @@
-import { useSdkClient } from "@/contexts/Sdk";
+import { useFetcher } from "@/contexts/Fetcher";
+import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { formatRemoteMcpDisplay } from "@/lib/sources";
+import { randomSlugSuffix } from "@/lib/slug";
 import type {
   McpServer,
   RemoteMcpServer,
@@ -8,12 +10,55 @@ import {
   invalidateAllMcpEndpoints,
   invalidateAllMcpServers,
   invalidateAllRemoteMcpServers,
+  invalidateAllRemoteSessionClients,
+  invalidateAllRemoteSessionIssuers,
+  invalidateAllUserSessionIssuers,
 } from "@gram/client/react-query/index.js";
 import {
   useMutation,
   useQueryClient,
   type UseMutationResult,
 } from "@tanstack/react-query";
+import { toast } from "sonner";
+import {
+  autoConfigureRemoteMcpAuth,
+  type AutoConfigureAuthResult,
+} from "./autoConfigureAuth";
+
+type SdkClient = ReturnType<typeof useSdkClient>;
+
+const DEFAULT_ENDPOINT_FAILED_MESSAGE =
+  "MCP server created, but the default endpoint failed. Add one from the server page.";
+
+// Auto-provisions a default platform MCP endpoint for a freshly created
+// mcp_server backed by a remote source, so the user doesn't have to create one
+// by hand afterwards. Platform endpoint slugs (no custom domain) must be
+// prefixed with the org slug; a short random suffix keeps them unique.
+//
+// Best-effort: a failure here leaves the source intact and only surfaces a
+// warning. The endpoint is a convenience and can always be added later from
+// the server detail page, so it should never roll back the source.
+async function createDefaultMcpEndpoint(
+  client: SdkClient,
+  mcpServer: McpServer,
+  orgSlug: string | undefined,
+): Promise<void> {
+  if (!orgSlug) {
+    toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
+    return;
+  }
+
+  try {
+    await client.mcpEndpoints.create({
+      createMcpEndpointForm: {
+        mcpServerId: mcpServer.id,
+        slug: `${orgSlug}-${randomSlugSuffix()}`,
+      },
+    });
+  } catch {
+    toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
+  }
+}
 
 export type CreateRemoteMcpSourceVariables = {
   name?: string | undefined;
@@ -23,6 +68,7 @@ export type CreateRemoteMcpSourceVariables = {
 export type CreateRemoteMcpSourceData = {
   remoteMcpServer: RemoteMcpServer;
   mcpServer: McpServer;
+  authAutoConfig: AutoConfigureAuthResult;
 };
 
 export function useCreateRemoteMcpSource(): UseMutationResult<
@@ -31,7 +77,9 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
   CreateRemoteMcpSourceVariables
 > {
   const client = useSdkClient();
+  const { fetch: authedFetch } = useFetcher();
   const queryClient = useQueryClient();
+  const { orgSlug } = useSlugs();
 
   return useMutation({
     mutationFn: async ({ name, url }) => {
@@ -75,16 +123,51 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
           : new Error(String(linkError));
       }
 
-      return { remoteMcpServer, mcpServer };
+      const authAutoConfig = await autoConfigureRemoteMcpAuth({
+        client,
+        authedFetch,
+        remoteMcpServer,
+        mcpServer,
+      });
+      const configuredMcpServer =
+        authAutoConfig.status === "configured"
+          ? authAutoConfig.mcpServer
+          : mcpServer;
+
+      // Pre-stage a default endpoint so the user doesn't have to create one
+      // before the server can serve. Best-effort: never rolls back the source.
+      await createDefaultMcpEndpoint(client, configuredMcpServer, orgSlug);
+
+      return {
+        remoteMcpServer,
+        mcpServer: configuredMcpServer,
+        authAutoConfig,
+      };
     },
-    onSuccess: async () => {
+    onSuccess: async ({ authAutoConfig }) => {
       // refetchType "all" forces the refetch even when there are no active
       // observers — Sources isn't mounted while the create form is, so without
       // this the listServers cache stays stale until the next mount.
-      await Promise.all([
+      const invalidations = [
         invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-      ]);
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+      ];
+      // The auth caches only change when auto-configuration actually ran to
+      // completion; a skipped run leaves them untouched, so don't force three
+      // extra refetches on the common no-OAuth path.
+      if (authAutoConfig.status === "configured") {
+        invalidations.push(
+          invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
+          invalidateAllRemoteSessionIssuers(queryClient, {
+            refetchType: "all",
+          }),
+          invalidateAllRemoteSessionClients(queryClient, {
+            refetchType: "all",
+          }),
+        );
+      }
+      await Promise.all(invalidations);
     },
   });
 }
@@ -105,19 +188,26 @@ export function useLinkMcpServerToRemote(): UseMutationResult<
 > {
   const client = useSdkClient();
   const queryClient = useQueryClient();
+  const { orgSlug } = useSlugs();
 
   return useMutation({
     mutationFn: async ({ remoteMcpServer }) => {
-      await client.mcpServers.create({
+      const mcpServer = await client.mcpServers.create({
         createMcpServerForm: {
           name: formatRemoteMcpDisplay(remoteMcpServer),
           remoteMcpServerId: remoteMcpServer.id,
           visibility: "disabled",
         },
       });
+
+      // Mirror the create flow: pre-stage a default endpoint. Best-effort.
+      await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
     },
     onSuccess: async () => {
-      await invalidateAllMcpServers(queryClient, { refetchType: "all" });
+      await Promise.all([
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+      ]);
     },
   });
 }

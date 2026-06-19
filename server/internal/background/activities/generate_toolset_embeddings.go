@@ -56,6 +56,7 @@ func (a *GenerateToolsetEmbeddings) Do(
 		mv.ProjectID(input.ProjectID),
 		mv.ToolsetSlug(conv.ToLower(input.ToolsetSlug)),
 		nil,
+		nil,
 	)
 
 	if getToolsetErr != nil {

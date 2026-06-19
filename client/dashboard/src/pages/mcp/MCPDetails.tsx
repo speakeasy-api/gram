@@ -1,6 +1,8 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
+import { MCPPublishingSection as SharedMCPPublishingSection } from "./MCPPublishingSection";
 import { DetailHero } from "@/components/detail-hero";
+import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
 import { InstallPageConfigForm } from "@/components/mcp_install_page/config_form";
 import {
   useMcpMetadataMetadataForm,
@@ -20,7 +22,6 @@ import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
   PageTabsTrigger,
@@ -39,35 +40,34 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useToolset } from "@/hooks/toolTypes";
+import { useToolUpdate } from "@/hooks/useToolUpdate";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { isNotFoundError } from "@/lib/route-errors";
-import { Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
+import { Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
-import {
-  useAttachServer,
-  useCollections,
-  useDetachServer,
-} from "@/pages/collections/hooks";
 import { PromptsTabContent } from "@/pages/toolsets/PromptsTab";
 import { ResourcesTabContent } from "@/pages/toolsets/resources/ResourcesTab";
 import { ServerTabContent } from "@/pages/toolsets/ServerTab";
+import {
+  EXCLUDED_TAG_KEY,
+  MCPToolFilterScopesPanel,
+} from "@/pages/mcp/MCPToolFilterScopesPanel";
 import { useRoutes } from "@/routes";
-import { Confirm } from "@gram/client/models/components";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   invalidateAllGetPeriodUsage,
   invalidateAllListToolsets,
   invalidateAllToolset,
-  invalidateTemplate,
-  buildCollectionsListServersQuery,
   useAddOAuthProxyServerMutation,
   useExportMcpMetadataMutation,
+  invalidateListToolsetToolFilters,
   useGetMcpMetadata,
   useLatestDeployment,
   useListEnvironments,
+  useListToolsetToolFilters,
   useRemoveOAuthServerMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
@@ -78,11 +78,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Grid,
   Icon,
   Stack,
 } from "@speakeasy-api/moonshine";
-import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircleIcon,
@@ -104,13 +103,13 @@ import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
 import { useToolsets } from "../toolsets/useToolsets";
 import { getSystemProvidedVariables } from "./environmentVariableUtils";
-import { useMcpConfigs, useMcpSlugValidation } from "./mcp-details-utils";
+import { useMcpSlugValidation } from "./mcp-details-utils";
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 import { MCPPerformanceTab } from "./MCPPerformanceTab";
 import { MCPTeamAccessTab } from "./MCPTeamAccessTab";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
 
-export function MCPDetailsRoot() {
+export function MCPDetailsRoot(): React.JSX.Element {
   return <Outlet />;
 }
 
@@ -163,7 +162,7 @@ function MCPLoading() {
   );
 }
 
-export function MCPDetailPage() {
+export function MCPDetailPage(): React.JSX.Element {
   return (
     <RequireScope scope={["mcp:read", "mcp:write"]} level="page">
       <MCPDetailPageInner />
@@ -365,7 +364,7 @@ function MCPDetailPageContent({
                   size="sm"
                   onClick={() => {
                     if (mcpUrl) {
-                      navigator.clipboard.writeText(mcpUrl);
+                      void navigator.clipboard.writeText(mcpUrl);
                       toast.success("URL copied to clipboard");
                     }
                   }}
@@ -527,8 +526,8 @@ function RenameMCPServerButton({ toolset }: { toolset: Toolset }) {
       },
       {
         onSuccess: () => {
-          invalidateAllToolset(queryClient);
-          invalidateAllListToolsets(queryClient);
+          void invalidateAllToolset(queryClient);
+          void invalidateAllListToolsets(queryClient);
           telemetry.capture("mcp_event", {
             action: "mcp_server_renamed",
             slug: toolset.slug,
@@ -640,7 +639,7 @@ const STATUS_OPTIONS: {
     value: "private",
     label: "Private",
     description:
-      "Only users with a Gram API Key from this project can read the tools hosted by this server.",
+      "Only users with a platform API Key from this project can read the tools hosted by this server.",
     dotClass: "bg-blue-400",
     hoverDotClass: "group-hover:bg-blue-400",
   },
@@ -654,7 +653,7 @@ const STATUS_OPTIONS: {
   },
 ];
 
-export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
+function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write");
   const queryClient = useQueryClient();
@@ -725,8 +724,8 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
       },
       {
         onSuccess: () => {
-          invalidateAllToolset(queryClient);
-          invalidateAllGetPeriodUsage(queryClient);
+          void invalidateAllToolset(queryClient);
+          void invalidateAllGetPeriodUsage(queryClient);
           telemetry.capture("mcp_event", {
             action:
               status === "disabled"
@@ -874,7 +873,7 @@ export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
  * Overview Tab - Hosted URL and Installation instructions
  */
 function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
-  const { url: mcpUrl } = useMcpUrl(toolset);
+  const { url: mcpUrl, installPageUrl } = useMcpUrl(toolset);
 
   const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
     retry: (_, err) => {
@@ -886,7 +885,10 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
     throwOnError: false,
   });
 
-  const form = useMcpMetadataMetadataForm(toolset.slug, result.data?.metadata);
+  const form = useMcpMetadataMetadataForm(
+    { kind: "toolset", toolsetSlug: toolset.slug },
+    result.data?.metadata,
+  );
   const isLoading = result.isLoading || form.isLoading;
 
   return (
@@ -910,7 +912,7 @@ function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
         )}
         <Stack className="mt-2" gap={1}>
           <InstallPageConfigForm
-            toolset={toolset}
+            installPageUrl={installPageUrl}
             form={form}
             isLoading={isLoading}
           />
@@ -976,13 +978,15 @@ function ServerInstructionsSection({
         <Stack direction="horizontal" gap={2} justify="end">
           <GenerateInstructionsButton toolset={toolset} form={form} />
           <Button
-            onClick={async () => {
-              try {
-                await form.saveAsync();
-                toast.success("Server instructions saved.");
-              } catch {
-                toast.error("Failed to save instructions.");
-              }
+            onClick={() => {
+              void (async () => {
+                try {
+                  await form.saveAsync();
+                  toast.success("Server instructions saved.");
+                } catch {
+                  toast.error("Failed to save instructions.");
+                }
+              })();
             }}
             disabled={isLoading || !form.instructionsDirty}
             size="sm"
@@ -1016,8 +1020,7 @@ function GenerateInstructionsButton({
     setGenerating(true);
     try {
       const res = await generateText({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        model: model as any,
+        model,
         prompt: `Write server instructions for the MCP server described below. Server instructions are returned to LLMs when they connect — they serve as a "user manual" independent of individual tool descriptions.
 
 Best practices:
@@ -1049,7 +1052,7 @@ Respond with ONLY the server instructions as plain text. Do not wrap in JSON or 
     <Button
       variant="secondary"
       size="sm"
-      onClick={handleGenerate}
+      onClick={() => void handleGenerate()}
       disabled={generating || tools.length === 0}
     >
       <Button.LeftIcon>
@@ -1074,9 +1077,43 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
   const routes = useRoutes();
   const { data: fullToolset, refetch } = useToolset(toolset.slug);
 
+  // Read-only tool filtering ("scopes") view. The resolved variation group, when
+  // present, mirrors what the runtime ?tags= filter exposes.
+  const { data: toolFilters } = useListToolsetToolFilters(
+    { slug: toolset.slug },
+    undefined,
+    { throwOnError: false },
+  );
+  const filteringEnabled = toolFilters?.filteringEnabled ?? false;
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+
   const [addToolsDialogOpen, setAddToolsDialogOpen] = useState(false);
 
   const tools = fullToolset?.tools ?? [];
+
+  // Validate the selected tag against the current filters (derived during render
+  // so a refetch that drops the selected scope cleanly falls back to "all tools"
+  // without a stale chip or a reset effect).
+  const effectiveActiveTag = useMemo(() => {
+    if (!toolFilters || activeTag === null) return null;
+    if (activeTag === EXCLUDED_TAG_KEY) {
+      return toolFilters.excluded.length > 0 ? EXCLUDED_TAG_KEY : null;
+    }
+    return toolFilters.scopes.some((s) => s.tag === activeTag)
+      ? activeTag
+      : null;
+  }, [activeTag, toolFilters]);
+
+  // When a scope chip is active, restrict the list below to that scope's tools
+  // (or the excluded set), matched by URN so variation renames don't break it.
+  const activeFilterUrns = useMemo(() => {
+    if (!effectiveActiveTag || !toolFilters) return null;
+    if (effectiveActiveTag === EXCLUDED_TAG_KEY) {
+      return new Set(toolFilters.excluded.map((tool) => tool.toolUrn));
+    }
+    const scope = toolFilters.scopes.find((s) => s.tag === effectiveActiveTag);
+    return scope ? new Set(scope.tools.map((tool) => tool.toolUrn)) : null;
+  }, [effectiveActiveTag, toolFilters]);
 
   // Check if this is an external MCP proxy server
   const isExternalMcpProxy = fullToolset?.kind === "external-mcp-proxy";
@@ -1089,8 +1126,8 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
       telemetry.capture("toolset_event", { action: "toolset_updated" });
-      refetch();
-      invalidateAllToolset(queryClient);
+      void refetch();
+      void invalidateAllToolset(queryClient);
     },
     onError: (error) => {
       telemetry.capture("toolset_event", {
@@ -1149,47 +1186,18 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recalculate only when the set of group keys changes
   }, [groupKeysJoined]);
 
-  const handleToolUpdate = async (
-    tool: Tool,
-    updates: {
-      name?: string;
-      description?: string;
-      title?: string;
-      readOnlyHint?: boolean;
-      destructiveHint?: boolean;
-      idempotentHint?: boolean;
-      openWorldHint?: boolean;
+  const { updateTool, isUpdating } = useToolUpdate({
+    telemetryEvent: "toolset_event",
+    // Refresh the toolset and the tool filtering scopes. Editing a tool's tags
+    // can add or remove filter scopes, so the read-only filtering panel above
+    // must be invalidated too — otherwise new tags only appear after a reload.
+    onSuccess: () => {
+      void refetch();
+      void invalidateListToolsetToolFilters(queryClient, [
+        { slug: toolset.slug },
+      ]);
     },
-  ) => {
-    if (tool.type === "prompt") {
-      await client.templates.update({
-        updatePromptTemplateForm: {
-          ...tool,
-          ...updates,
-        },
-      });
-      invalidateTemplate(queryClient, [{ name: tool.name }]);
-    } else {
-      await client.variations.upsertGlobal({
-        upsertGlobalToolVariationForm: {
-          ...tool.variation,
-          confirm: tool.variation?.confirm as Confirm,
-          ...updates,
-          srcToolName: tool.canonicalName,
-          srcToolUrn: tool.toolUrn,
-        },
-      });
-    }
-
-    telemetry.capture("toolset_event", {
-      action: "tool_variation_updated",
-      tool_name: tool.name,
-      overridden_fields: Object.keys(updates).join(", "),
-    });
-
-    toast.success("Tool updated");
-    refetch();
-  };
+  });
 
   // For external MCP proxy servers, show the server info instead of tools list
   if (isExternalMcpProxy && fullToolset) {
@@ -1211,6 +1219,11 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
   let toolsToDisplay = tools.filter((tool) => groupedToolNames.has(tool.name));
   if (toolsToDisplay.length === 0) {
     toolsToDisplay = tools;
+  }
+  if (activeFilterUrns) {
+    toolsToDisplay = toolsToDisplay.filter((tool) =>
+      activeFilterUrns.has(tool.toolUrn),
+    );
   }
 
   return (
@@ -1241,6 +1254,15 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
             )}
           </Stack>
         </Stack>
+      )}
+
+      {/* Read-only tool filtering scopes panel (only when filtering enabled) */}
+      {!isExternalMcpProxy && filteringEnabled && toolFilters && (
+        <MCPToolFilterScopesPanel
+          filters={toolFilters}
+          activeTag={effectiveActiveTag}
+          onSelectTag={setActiveTag}
+        />
       )}
 
       {/* Group filter */}
@@ -1276,7 +1298,8 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
         <ToolList
           tools={toolsToDisplay}
           toolset={fullToolset}
-          onToolUpdate={canWrite ? handleToolUpdate : undefined}
+          onToolUpdate={canWrite ? updateTool : undefined}
+          isToolUpdating={isUpdating}
           onToolsRemove={canWrite ? handleToolsRemove : undefined}
           onTestInPlayground={handleTestInPlayground}
           readOnly={!canWrite}
@@ -1294,23 +1317,25 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
           open={addToolsDialogOpen}
           onOpenChange={setAddToolsDialogOpen}
           toolset={fullToolset}
-          onAddTools={async (toolUrns) => {
-            const currentUrns = fullToolset.toolUrns || [];
-            const newUrns = [...new Set([...currentUrns, ...toolUrns])];
+          onAddTools={(toolUrns) => {
+            void (async (toolUrns) => {
+              const currentUrns = fullToolset.toolUrns || [];
+              const newUrns = [...new Set([...currentUrns, ...toolUrns])];
 
-            await client.toolsets.updateBySlug({
-              slug: toolset.slug,
-              updateToolsetRequestBody: {
-                toolUrns: newUrns,
-              },
-            });
+              await client.toolsets.updateBySlug({
+                slug: toolset.slug,
+                updateToolsetRequestBody: {
+                  toolUrns: newUrns,
+                },
+              });
 
-            toast.success(
-              `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""} to ${toolset.name}`,
-            );
+              toast.success(
+                `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""} to ${toolset.name}`,
+              );
 
-            await refetch();
-            invalidateAllToolset(queryClient);
+              await refetch();
+              void invalidateAllToolset(queryClient);
+            })(toolUrns);
           }}
         />
       )}
@@ -1329,7 +1354,7 @@ function MCPResourcesTab({ toolset }: { toolset: Toolset }) {
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
       telemetry.capture("toolset_event", { action: "toolset_updated" });
-      invalidateAllToolset(queryClient);
+      void invalidateAllToolset(queryClient);
     },
   });
 
@@ -1354,7 +1379,7 @@ function MCPPromptsTab({ toolset }: { toolset: Toolset }) {
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
       telemetry.capture("toolset_event", { action: "toolset_updated" });
-      invalidateAllToolset(queryClient);
+      void invalidateAllToolset(queryClient);
     },
   });
 
@@ -1471,9 +1496,9 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         slug: toolset.slug,
       });
 
-      invalidateAllToolset(queryClient, { refetchType: "none" });
-      invalidateAllGetPeriodUsage(queryClient);
-      refetchDeployment();
+      void invalidateAllToolset(queryClient, { refetchType: "none" });
+      void invalidateAllGetPeriodUsage(queryClient);
+      void refetchDeployment();
       // Wait for the toolset list to refresh before navigating so the
       // listing page never renders a card for the deleted toolset (which
       // would trigger a per-card getBySlug refetch that 404s).
@@ -1492,7 +1517,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
-      invalidateAllToolset(queryClient);
+      void invalidateAllToolset(queryClient);
       toast.success("MCP settings saved successfully");
       telemetry.capture("mcp_event", {
         action: "mcp_settings_saved",
@@ -1689,6 +1714,15 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
 
       <MCPPublishingSection toolset={toolset} />
 
+      <MCPToolFilteringSection
+        className="mb-8"
+        target={{
+          kind: "toolset",
+          slug: toolset.slug,
+          currentGroupId: toolset.toolVariationsGroupId,
+        }}
+      />
+
       <PageSection
         heading="Actions"
         description="Export your MCP server configuration."
@@ -1699,7 +1733,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
               <Button
                 variant="secondary"
                 size="md"
-                onClick={handleExportJson}
+                onClick={() => void handleExportJson()}
                 disabled={!toolset?.mcpEnabled || !toolset?.mcpSlug}
               >
                 <Button.LeftIcon>
@@ -1769,7 +1803,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
               </Button>
               <Button
                 variant="destructive-primary"
-                onClick={handleDeleteMcpServer}
+                onClick={() => void handleDeleteMcpServer()}
                 disabled={isDeletingMcpServer}
               >
                 Delete MCP Server
@@ -1793,189 +1827,21 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   );
 }
 
+// MCPPublishingSection wraps the shared publishing section for toolset-backed
+// MCP servers. The mcp_server-backed variant lives on the Remote MCP server
+// settings page; both share MCPPublishingSection.
 function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
-  const client = useSdkClient();
-  const { data: collections, isLoading: collectionsLoading } = useCollections();
-  const attachServer = useAttachServer();
-  const detachServer = useDetachServer();
-  const [selectedIds, setSelectedIds] = useState<Set<string> | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-
-  const serveQueries = useQueries({
-    queries: collections.map((collection) => ({
-      ...buildCollectionsListServersQuery(client, {
-        collectionSlug: collection.slug!,
-      }),
-      enabled: !!collection.slug,
-    })),
-  });
-
-  const publishedCollectionIds = useMemo(() => {
-    const ids = new Set<string>();
-
-    for (let i = 0; i < collections.length; i++) {
-      const servers = serveQueries[i]?.data?.servers ?? [];
-      for (const server of servers) {
-        if (server.toolsetId === toolset.id) {
-          ids.add(collections[i].id);
-          break;
-        }
-
-        const parts = server.registrySpecifier?.split("/") ?? [];
-        const slug = parts[parts.length - 1];
-        if (slug === toolset.mcpSlug) {
-          ids.add(collections[i].id);
-          break;
-        }
-      }
-    }
-
-    return ids;
-  }, [collections, serveQueries, toolset.id, toolset.mcpSlug]);
-
-  const effectiveSelected = selectedIds ?? publishedCollectionIds;
-
-  const hasChanges = useMemo(() => {
-    if (!selectedIds) return false;
-    if (selectedIds.size !== publishedCollectionIds.size) return true;
-    for (const id of selectedIds) {
-      if (!publishedCollectionIds.has(id)) return true;
-    }
-    return false;
-  }, [selectedIds, publishedCollectionIds]);
-
-  const toggleCollection = (collectionId: string) => {
-    setSelectedIds((prev) => {
-      const current = prev ?? new Set(publishedCollectionIds);
-      const next = new Set(current);
-      if (next.has(collectionId)) {
-        next.delete(collectionId);
-      } else {
-        next.add(collectionId);
-      }
-      return next;
-    });
-  };
-
-  const handleSave = async () => {
-    if (!selectedIds) return;
-
-    setIsSaving(true);
-    try {
-      const toAttach = [...selectedIds].filter(
-        (id) => !publishedCollectionIds.has(id),
-      );
-      const toDetach = [...publishedCollectionIds].filter(
-        (id) => !selectedIds.has(id),
-      );
-
-      await Promise.all([
-        ...toAttach.map((collectionId) =>
-          attachServer.mutateAsync({
-            request: {
-              attachServerRequestBody: {
-                collectionId,
-                toolsetId: toolset.id,
-              },
-            },
-          }),
-        ),
-        ...toDetach.map((collectionId) =>
-          detachServer.mutateAsync({
-            request: {
-              attachServerRequestBody: {
-                collectionId,
-                toolsetId: toolset.id,
-              },
-            },
-          }),
-        ),
-      ]);
-
-      setSelectedIds(null);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleDiscard = () => {
-    setSelectedIds(null);
-  };
-
-  const isLoading =
-    collectionsLoading || serveQueries.some((query) => query.isLoading);
-
   return (
-    <PageSection
-      heading="Publishing"
-      description="Publish this server to collections so it can be discovered and installed by others in your organization."
-    >
-      <Block label="Collections" className="p-0">
-        <BlockInner>
-          {!toolset.mcpEnabled || !toolset.mcpSlug ? (
-            <Type muted small>
-              Enable this MCP server before publishing it to a collection.
-            </Type>
-          ) : isLoading ? (
-            <Type muted small>
-              Loading collections...
-            </Type>
-          ) : collections.length === 0 ? (
-            <Type muted small>
-              No collections available.
-            </Type>
-          ) : (
-            <Stack direction="vertical" gap={2}>
-              {collections.map((collection) => (
-                <label
-                  key={collection.id}
-                  className="flex cursor-pointer items-center gap-3"
-                >
-                  <Checkbox
-                    checked={effectiveSelected.has(collection.id)}
-                    disabled={isSaving}
-                    onCheckedChange={() => toggleCollection(collection.id)}
-                  />
-                  <Stack direction="vertical" gap={0}>
-                    <Type small className="font-medium">
-                      {collection.name}
-                    </Type>
-                    {collection.description && (
-                      <Type muted small>
-                        {collection.description}
-                      </Type>
-                    )}
-                  </Stack>
-                </label>
-              ))}
-            </Stack>
-          )}
-        </BlockInner>
-        {hasChanges && (
-          <BlockInner>
-            <Stack direction="horizontal" gap={2}>
-              <Button size="sm" disabled={isSaving} onClick={handleSave}>
-                <Button.Text>{isSaving ? "Saving..." : "Save"}</Button.Text>
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={isSaving}
-                onClick={handleDiscard}
-              >
-                <Button.Text>Discard</Button.Text>
-              </Button>
-            </Stack>
-          </BlockInner>
-        )}
-      </Block>
-    </PageSection>
+    <SharedMCPPublishingSection
+      target={{
+        kind: "toolset",
+        toolsetId: toolset.id,
+        mcpSlug: toolset.mcpSlug ?? undefined,
+      }}
+      canPublish={Boolean(toolset.mcpEnabled && toolset.mcpSlug)}
+      disabledMessage="Enable this MCP server before publishing it to a collection."
+    />
   );
-}
-
-// Keep the old MCPDetails for backward compatibility (can be removed later)
-export function MCPDetails({ toolset }: { toolset: Toolset }) {
-  return <MCPSettingsTab toolset={toolset} />;
 }
 
 export function PageSection({
@@ -1995,7 +1861,7 @@ export function PageSection({
   headingExtra?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
-}) {
+}): React.JSX.Element {
   return (
     <Stack gap={2} className={cn("mb-8", className)}>
       <div className="flex items-center justify-between">
@@ -2018,82 +1884,6 @@ export function PageSection({
   );
 }
 
-export function MCPJson({
-  toolset,
-  fullWidth = false,
-  className,
-}: {
-  toolset: Toolset;
-  fullWidth?: boolean; // If true, the code block will take up the full width of the page even when there's only one
-  className?: string;
-}) {
-  const telemetry = useTelemetry();
-
-  const {
-    public: mcpJsonPublic,
-    internal: mcpJsonInternal,
-    requiresGramKey,
-    hasOAuth,
-  } = useMcpConfigs(toolset);
-
-  const onCopy = () => {
-    telemetry.capture("mcp_event", {
-      action: "mcp_json_copied",
-      slug: toolset.slug,
-    });
-  };
-
-  const showManagedAuth = !hasOAuth;
-
-  return (
-    <Grid
-      gap={4}
-      className={cn("my-4!", className)}
-      columns={
-        !fullWidth && showManagedAuth
-          ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 }
-          : 1
-      }
-    >
-      {[
-        <Grid.Item key="passthrough">
-          <Type className="font-medium">Pass-through Authentication</Type>
-          <Type muted small className="mb-2! max-w-3xl">
-            Pass API credentials directly to the MCP server.
-            <br />
-            <span
-              className={
-                requiresGramKey
-                  ? "text-warning-foreground font-medium"
-                  : "italic"
-              }
-            >
-              {requiresGramKey
-                ? "Requires a Gram API key."
-                : "No Gram API key required."}
-            </span>
-          </Type>
-          <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
-        </Grid.Item>,
-        ...(showManagedAuth
-          ? [
-              <Grid.Item key="managed">
-                <Type className="font-medium">Managed Authentication</Type>
-                <Type muted small className="mb-2! max-w-3xl">
-                  Manage API authentication with Gram environments.
-                  <br />
-                  Users need a single Gram API Key rather than bringing their
-                  own keys.
-                </Type>
-                <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
-              </Grid.Item>,
-            ]
-          : []),
-      ]}
-    </Grid>
-  );
-}
-
 export function OAuthDetailsModal({
   isOpen,
   onClose,
@@ -2104,13 +1894,13 @@ export function OAuthDetailsModal({
   onClose: () => void;
   toolset: Toolset;
   onEditRequest: () => void;
-}) {
+}): React.JSX.Element {
   const { url: mcpUrl } = useMcpUrl(toolset);
   const queryClient = useQueryClient();
 
   const removeOAuthMutation = useRemoveOAuthServerMutation({
     onSuccess: () => {
-      invalidateAllToolset(queryClient);
+      void invalidateAllToolset(queryClient);
       onClose();
     },
   });
@@ -2126,7 +1916,7 @@ export function OAuthDetailsModal({
             {toolset.externalOauthServer
               ? "External OAuth Configuration"
               : isGramOAuth
-                ? "Gram OAuth Configuration"
+                ? "Platform OAuth Configuration"
                 : "OAuth Proxy Configuration"}
           </Dialog.Title>
         </Dialog.Header>
@@ -2135,12 +1925,12 @@ export function OAuthDetailsModal({
             {toolset.oauthProxyServer && isGramOAuth && (
               <>
                 <div>
-                  <Type className="font-medium">Gram OAuth is Active</Type>
+                  <Type className="font-medium">Platform OAuth is Active</Type>
                 </div>
                 <Stack gap={2} className="">
                   <Type className="mb-2">
-                    Gram users with access to your organization can use this MCP
-                    server.
+                    Platform users with access to your organization can use this
+                    MCP server.
                   </Type>
                   {toolset.oauthProxyServer.oauthProxyProviders?.[0]
                     ?.environmentSlug && (
@@ -2378,14 +2168,14 @@ export function GramOAuthProxyModal({
   isOpen: boolean;
   onClose: () => void;
   toolset: Toolset;
-}) {
+}): React.JSX.Element {
   const telemetry = useTelemetry();
   const queryClient = useQueryClient();
 
   const addOAuthProxyMutation = useAddOAuthProxyServerMutation({
     onSuccess: () => {
-      invalidateAllToolset(queryClient);
-      toast.success("Gram OAuth configured successfully");
+      void invalidateAllToolset(queryClient);
+      toast.success("Platform OAuth configured successfully");
       telemetry.capture("mcp_event", {
         action: "gram_oauth_proxy_configured",
         slug: toolset.slug,
@@ -2393,11 +2183,11 @@ export function GramOAuthProxyModal({
       onClose();
     },
     onError: (error) => {
-      console.error("Failed to configure Gram OAuth:", error);
+      console.error("Failed to configure Platform OAuth:", error);
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to configure Gram OAuth",
+          : "Failed to configure Platform OAuth",
       );
     },
   });
@@ -2420,16 +2210,18 @@ export function GramOAuthProxyModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <Dialog.Content className="max-h-[90vh] max-w-2xl overflow-hidden">
         <Dialog.Header>
-          <Dialog.Title>Gram OAuth</Dialog.Title>
+          <Dialog.Title>Platform OAuth</Dialog.Title>
         </Dialog.Header>
 
         <div className="max-h-[60vh] space-y-4 overflow-auto">
           <div>
-            <Type className="mb-2 font-medium">Gram OAuth Configuration</Type>
+            <Type className="mb-2 font-medium">
+              Platform OAuth Configuration
+            </Type>
             <Type small className="mb-4">
-              Configure Gram OAuth to let users with access to your organization
-              use this MCP server. Users will authenticate using their Gram
-              credentials.
+              Configure Platform OAuth to let users with access to your
+              organization use this MCP server. Users will authenticate using
+              their platform credentials.
             </Type>
           </div>
         </div>
@@ -2441,7 +2233,7 @@ export function GramOAuthProxyModal({
           >
             {addOAuthProxyMutation.isPending
               ? "Enabling..."
-              : "Enable Gram OAuth"}
+              : "Enable Platform OAuth"}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>

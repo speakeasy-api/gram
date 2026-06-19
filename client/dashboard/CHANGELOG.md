@@ -1,5 +1,370 @@
 # dashboard
 
+## 0.75.0
+
+### Minor Changes
+
+- 1cd0ff9: Add an organization administrator "Refresh now" action for remote sessions. The
+  `organizationRemoteSessionIssuers` management service gains a `refreshSession`
+  method that forces an upstream `grant_type=refresh_token` exchange on a single
+  session regardless of its current access-token expiry, persists the rotated
+  tokens, and returns the updated session. The shared refresh code path is now
+  used by both the lazy MCP token-resolution path and this explicit admin action;
+  the upstream token POST runs outside any database transaction. The
+  `RemoteSession` type exposes a `has_refresh_token` flag (the encrypted token
+  itself stays unexposed) so the dashboard Sessions tab can offer "Refresh now"
+  only for sessions that can actually be refreshed. Operator-actionable refresh
+  failures (an upstream rejection of the refresh token, an unreadable stored
+  token, a missing token endpoint) surface as a bad-request with a clear "Unable
+  to refresh: ..." reason and each refresh is recorded as a
+  `remote-session:refresh` audit event.
+
+### Patch Changes
+
+- 0b4e42b: Unify the search, filters, sort, and view-as controls on every list page into a single `Page.Toolbar` component, replacing the per-page mix of bespoke search boxes, filter sidebars, sort dropdowns, and view toggles.
+
+  - One contained control bar per page (search + filters on the left, sort + count + view on the right), with uniform control heights.
+  - Filter chips and sheet share a typed schema (`defineFilters`/`useFilterState`); adds Status + Source filters to the MCP page.
+  - Folds in fixes: "Reset to default" now clears every filter atomically, the date picker opens inside the filter sheet, and empty filter labels are pluralized ("All servers").
+
+## 0.74.0
+
+### Minor Changes
+
+- bf94bd2: Add a full-page Project Assistant chat as a second way into the assistant, alongside the docked composer.
+
+  - New **Project Assistant** entry in the project sidebar (under Home) opening a `/chat` landing: a personalized "Ask your Project Assistant about your AI usage" composer with a cycling, crossfading placeholder, a `/` slash menu of starter prompts, your recent conversations grouped by time period ("Show all" to expand), and a set of enterprise-focused starter prompts.
+  - A `/chat/:id` conversation view with a back/new-chat bar and the conversation's title in the header, which updates live as the backend generates it.
+  - The project home page now embeds the same "Ask anything" widget.
+  - The dock and the full-page chat share **one** assistant runtime, so an in-flight conversation continues seamlessly when you expand the dock into the page (no lost response). The docked pill offers "Continue chat" to reopen a recent conversation, and pages that host their own chat runtime (Playground, Elements, assistant onboarding) hide the dock to avoid duplicate composers.
+  - A decorative rainbow "powder burst" header on the chat landing.
+
+- 4b2f64c: Allow defining audiences when configuring policies.
+- ec6d14c: Add an organization administrator UI for managing Remote Identity Providers
+  (remote session issuers), their clients, and sessions across the organization.
+  The `organizationRemoteSessionIssuers` management service gains an org-scoped
+  admin surface: a combined listing of organizational and project-specific issuers
+  with client counts and project names, drill-downs into each issuer's clients
+  (with MCP server attachment counts), each client's attached MCP servers and
+  sessions, authoritative delete pre-flight summaries, and write operations to
+  update or delete issuers and clients, detach a client from an MCP server, revoke
+  a single session, and revoke all of a client's sessions. Reads require `org:read`
+  and writes require `org:admin`; destructive actions are audited, with a bulk
+  revoke-all recorded as a single audit event.
+
+### Patch Changes
+
+- 94f624d: Add Beta badges to the Project Assistant (sidebar nav item, footer resume button, and `/chat` landing page) and promote the Assistants surface from Preview to Beta. Both use the shared `ReleaseStageBadge` so the label stays consistent across every surface.
+- 672d9bc: Add optional onboarding for configuring Cursor and Anthropic Compliance API integrations, and show Codex instrumentation plus OpenAI Compliance API configuration as coming soon.
+- bcda11d: Upgrade the default assistant model to Claude Opus 4.7. The platform-managed Project Assistant, the assistant onboarding flow, and the onboarding system prompt's default recommendation now use `anthropic/claude-opus-4.7` instead of `anthropic/claude-sonnet-4.6`. Existing assistants are unaffected; only newly created assistants pick up the new default.
+- 2adba2f: Add employee detail metric drilldowns for tool logs, agent sessions, and risk events.
+- 94c551b: Fix the Project Assistant chat getting stuck "loading" after a tool-using turn, where the assistant had already replied but the composer stayed disabled.
+- bd4261a: Use the Speakeasy marketing site favicon for the dashboard
+- dfd4834: The MCP servers screen no longer crashes when a non-critical request fails to load. It now keeps showing the most recently loaded servers with a subtle "couldn't refresh" indicator instead of replacing the whole page with an error.
+- e594e20: Add a step to user session migrations that port existing client registrations from oauth proxy to user sessions
+- 04ddbd0: Rename and reorder project sidebar navigation groups.
+- 88669aa: Update moonshine - design system dependency to latest
+- 32c4165: Unify Tool Logs across hosted MCP servers, shadow MCP servers, local tools, and skills.
+- Updated dependencies [bf94bd2]
+  - @gram-ai/elements@1.37.1
+
+## 0.73.1
+
+### Patch Changes
+
+- 2630d11: Fix the Cmd+K command palette's "Recently Visited" list showing an assistant's opaque id (e.g. "Assistant · 0190abcd") instead of its name. Visits are recorded centrally from the URL, which for the id-keyed assistant detail route fell back to the id. The assistant detail page now registers its name as the recents label, and `App` consults that override (re-recording when the name resolves asynchronously), so the palette shows the assistant name.
+- 1e1e9b7: Pin the assistant ⌘/ shortcut hint to the nav bar's right edge on wide screens, and show it in the assistant dock.
+
+## 0.73.0
+
+### Minor Changes
+
+- e81a134: feat(assistants): surface Triggers as a tab on the Assistants page and a filtered Triggers tab per assistant, and rename the Assistants "Audit log" tab to "Activity"
+- 4f65d12: Make the Project Assistant dock a continuous experience across the dashboard. The dock stays expanded across page navigation and swaps in the new page's suggestions; every suggestion set is colocated in one route-keyed object with question-phrased titles and per-subject icons, and chips animate in on route change. The expanded composer gets a Granola-style grey tray with a bordered inner input, the Cmd+/ hint moves to the breadcrumb bar, and the chat panel opens as an extension of the pill — including a matching slim composer.
+
+  Elements: add `theme.customCss` to `ElementsConfig` — extra CSS injected into the Elements shadow root after the built-in stylesheet, the supported escape hatch for embedders restyling the stable `aui-*` class hooks (host-page CSS cannot reach into the shadow DOM).
+
+### Patch Changes
+
+- 4f65d12: Fix the Project Assistant dock losing or duplicating the first message sent after a cold page load.
+
+  Elements: the history-enabled runtime now mounts immediately instead of waiting for auth — the previous auth gate swapped the without-history runtime for the history one when the session resolved, replacing the runtime and wiping any message sent into the first. The thread-list adapter resolves request headers through an async `getHeaders` that awaits the session fetch, so its bind-time `chat.list` waits for auth instead of failing. The custom transport is also resolved in its own memo so churn in the default transport's dependencies (MCP tool discovery settling, auth, connection status) no longer changes the transport identity mid-turn, which rebuilt the per-thread runtimes and discarded in-flight optimistic messages.
+
+  Dashboard: the dock's queued-prompt bridge appends exactly once — a throw from the placeholder thread core (before the real core binds) leaves the prompt queued for retry, while a successful append never re-fires, fixing both the dropped first message and the duplicate sends that minted a fresh chat per attempt. The server-assistant transport keeps at most one chat.load poll loop alive per dock: each send aborts the previous turn's poller, so a turn that never reaches a terminal row no longer leaves zombie polling loops behind.
+
+- Updated dependencies [4f65d12]
+- Updated dependencies [4f65d12]
+  - @gram-ai/elements@1.37.0
+
+## 0.72.0
+
+### Minor Changes
+
+- 0d51b12: Assistants UX: the detail panel is wider and split into Overview and Sessions tabs, system instructions open in an editable modal, the active/paused status toggle is available on the detail panel (shared with the index cards), and index cards show a mini activity sparkline derived from chat session activity.
+- 0d51b12: Assistant tool-call audit events no longer appear in the platform audit logs feed or its facets. They are surfaced instead on a new "Audit log" tab on the Assistants page, filterable by assistant, backed by new `subject_type` / `subject_id` filters on `auditlogs.list`.
+
+## 0.71.0
+
+### Minor Changes
+
+- 87cb734: The Project Assistant now cycles a set of whimsical "thinking" verbs while it works and types replies onto the screen token-by-token, emulating an SSE stream over the poll-based transport.
+- 430deac: Add tokens under management (TUM) billing for enterprise organizations. The billing page now shows enterprise orgs their TUM consumption for the active billing cycle against the contracted monthly allowance, replacing the self-serve usage meters. TUM counts token usage only from agent sessions Gram has stored non-metrics data for (chats, tool calls), excluding OTEL-forwarded token metrics from uninstalled users. Platform admins get an admin-only section on the billing page to set the contracted monthly token limit, an alert email (alerting to follow), and the billing cycle anchor day, backed by the new `usage.getTokensUnderManagement` and `usage.setBillingMetadata` endpoints and a `billing_metadata` table. Contract changes emit `audit_log.billing_metadata_event_v1` audit events.
+- 430deac: The tokens under management endpoint now returns usage history: the trailing 12 billing cycles, each with a per-UTC-day breakdown. Chat qualification is evaluated per cycle, so daily points sum exactly to each cycle's TUM. The enterprise billing page renders this as a bar chart with day and billing-cycle granularity toggles, including a contracted-limit line in the cycle view.
+
+### Patch Changes
+
+- 8759477: Auto-configure remote identity providers for custom remote MCP servers when OAuth
+  metadata can be discovered, including reusing existing issuers and deriving a
+  display name from the issuer URL.
+- 2e738a7: Attribute message type + destructured tool name to LLM-judge evaluation.
+
+  The judge now receives structured context — the message type (as an actor/role
+  label), and for tool calls the destructured MCP server + function — instead of
+  one ambiguous text field, so prompt-based policies can target message types,
+  actors, and specific MCP servers/functions. Also: the chat-session risk view
+  renders the judge rationale (instead of "llm_judge · llm_judge"), shows a
+  tooltip when the annotation truncates, and drops the no-op "Create exclusion"
+  action for judge findings.
+
+  Hardens the judge against adversarial input: the policy and message are now sent
+  as a single structured JSON payload framed as untrusted data, so a hostile body
+  can't spoof prompt headings or steer the verdict via embedded instructions;
+  oversized bodies are head+tail truncated before the call so a padded payload
+  can't blow the model's context window into a fail-open allow; and multi-tool-call
+  messages render each call with its own MCP attribution instead of an opaque blob.
+
+- 850b430: Add a Distribute MCP servers step to onboarding. Teams can search the MCP catalog and distribute selected servers to their organization during setup, running the deploy → bundle → publish flow inline. Servers that require OAuth are auto-configured with Speakeasy OAuth, matching the catalog add-server flow. The onboarding list shows only servers Gram can fully auto-configure (OAuth with dynamic client registration); servers needing manual setup (OAuth without DCR, API keys) remain available in the catalog.
+- 657f61c: Add a "Platform Status" link to the profile menu, pointing to the Speakeasy status page.
+- 46374b8: Show which tool the Project Assistant is calling while it works. Tool calls
+  and their results now render in the side panel as they happen, instead of the
+  conversation sitting silent until the final reply lands.
+- b5fc99c: Promoted Agent Sessions to top-level Observe navigation.
+- b4e32a6: Promoted Employees and Costs to top-level navigation.
+- d857151: Open prompt-based ("LLM-judge") risk policies to all message types.
+
+  Previously the judge was hard-scoped to `tool_request` in both the realtime
+  scanner and the batch analyzer, regardless of the policy's `message_types`. The
+  judge now runs on whatever types a policy declares (`user_message`,
+  `tool_request`, `tool_response`, `assistant_message`), and the policy form lets
+  you choose them instead of locking to tool requests.
+
+- 4207390: Moved Risk Events into the Secure section.
+- 30cefe6: Add a "Source" filter to the Tools logs/insights pages so tool traces can be narrowed by originating agent (Claude Code, Cursor, Codex, …).
+- 0c7373d: Added unified Tools insights for hosted MCP servers, shadow MCP servers, local tools, and skills.
+- Updated dependencies [87cb734]
+- Updated dependencies [9bc9a1d]
+  - @gram-ai/elements@1.36.0
+
+## 0.70.1
+
+### Patch Changes
+
+- ba8bdd4: Direct assistant MCP authentication prompts to the assistant's owner instead
+  of whoever happened to trigger the assistant. Slack onboarding now records the
+  owner's Slack identity in the assistant's instructions, runtime guidance
+  delivers OAuth links to the owner (ephemeral or DM) and tells anyone else that
+  the owner has to complete the connection, and prompts shown when the owner is
+  unknown now say explicitly that authentication is for the owner — so an
+  unexpected auth message is no longer mistaken for a failed setup.
+- 2a7fbec: Fix a request storm of `GET /rpc/auth.info` 401s introduced by the command
+  palette's Recently Visited feature. The user-id lookup issued an unconditional
+  `auth.info` request from the always-mounted palette (including on the
+  unauthenticated login page). The session lookup is now gated on the palette's
+  open state, and the page-visit recorder reuses the session already fetched by
+  the auth provider instead of issuing its own request.
+- f18938f: Fix dark mode visibility in the enterprise onboarding flow. The onboarding stepper and the instrument-agents step now use theme-aware colors so text and controls remain legible in dark mode.
+- 15bb129: Add a Configure policies step to onboarding. Teams can enable the Shadow MCP guardrail and per-category detection policies (secrets, PII, prompt injection) directly during setup, with state persisted via the risk policy API.
+- cc9d8ee: Add optional `name` (display name) and `logo_asset_id` to remote session issuers across both the project-scoped (`remoteSessionIssuers`) and organization-scoped (`organizationRemoteSessionIssuers`) services. On create, `name` is trimmed and stored as NULL when empty; on update it follows the same three-state semantics as the nullable endpoint fields (omitted keeps, empty string clears). `logo_asset_id` is set-only for now (no clear path, no upload UI yet). The dashboard renders the display name as the primary label with the issuer URL as the secondary line, exposes an optional Display name input on the attach and modify sheets, and renders a logo when one is present. On the attach sheet the Display name auto-derives from the Issuer URL hostname until the operator edits it, matching the existing Slug behavior.
+
+## 0.70.0
+
+### Minor Changes
+
+- 84240ec: `Cmd+K` — and a new magnifying-glass trigger beside the logo — now searches
+  across resources (MCP servers, sources, deployments, environments, assistants,
+  plugins, and admin-only risk policies, detection rules and approval requests),
+  all app pages (auto-enumerated from the route map), and offers a free-form
+  "Ask AI" hand-off to the Project Assistant.
+- 489f7fe: Support publishing Remote MCP-backed `mcp_servers` to collections alongside toolset-backed servers. `collections.attachServer` / `collections.detachServer` accept either `toolset_id` or `mcp_server_id` (exactly one), `collections.create` accepts `mcp_server_ids` in addition to `toolset_ids`, `collections.listServers` returns both backends merged by publish time, and `ExternalMCPServer` exposes `mcp_server_id`. In the dashboard, the Publishing section, the create-collection form, and the collection detail edit-servers picker all offer Remote MCP-backed servers, and the Remote MCP server settings page gains a Publishing section.
+
+### Patch Changes
+
+- e99b6fc: Change the Project Assistant keyboard shortcut from Option+Shift+W to Cmd+/ (Ctrl+/ on PC), updating the trigger's hover hint and tooltip to match, and add a hover tooltip to the sidebar collapse button showing its Cmd+B shortcut.
+- 327fc15: Fix "Server not found" on the catalog detail page for servers whose `registrySpecifier` was not in the first page of the unfiltered catalog list (e.g. `com.pulsemcp.mirror/datadog`). The backend `ListCatalog` aggregates across registries and caps results at 100, and only emits a `nextCursor` for single-registry queries, so the detail page could never reach deep entries. The lookup now passes the specifier's last path segment as a `search` filter so the upstream registry narrows the result set and the target server lands in the first page.
+- de92585: Order and filter agent sessions by their latest persisted chat message instead of original session creation time, and show that activity time in the dashboard sessions list.
+- 30a5bb6: Dim inactive access rules when no blocking Shadow MCP policy exists while keeping rule actions available
+- a1038ec: Fix feature-flag gated UI (e.g. the Device Agent nav link) staying hidden even when the flag is on. PostHog loads feature flags asynchronously, but `useTelemetry()` consumers never re-rendered once flags resolved, so `isFeatureEnabled(...)` reads were stuck on their pre-load value. `useTelemetry` now subscribes to PostHog's `onFeatureFlags` event and re-renders consumers when flags resolve or change, making every `isFeatureEnabled` call site reactive.
+- a0a0ebe: Align Risk Policies page title with design system
+- ee1c922: Remove the `value_hash` field from environment entries. It was documented as a way to identify matching values across environments, but every code path computed it from the already-redacted display value (`val[:3] + "*****"`), so it collided for any two values sharing a 3-character prefix and never reliably identified matching values. The only dashboard consumer grouped by it, and because colliding values also render identical redacted strings, the grouping was never observable. Replaced the dashboard's value-hash grouping with direct per-environment value tracking and dropped the field from the API surface.
+- cfd120a: Removed the deprecated standalone Slack app feature. The dedicated Slack app pages, their backend endpoints, and the associated event-handling workflow have been retired. Slack continues to work through assistants and triggers, which is the supported path.
+
+## 0.69.0
+
+### Minor Changes
+
+- 5d59ae9: Support adding Remote MCP-backed `mcp_servers` to plugins alongside toolset-backed servers. `plugins.addPluginServer` accepts either `toolset_id` or `mcp_server_id` (exactly one), `PluginServer` exposes `mcp_server_id`, and `display_name` is now optional (defaulting to the backing toolset or mcp_server name). Plugin bundle generation resolves the preferred endpoint for mcp_server-backed servers (custom-domain over platform, then oldest) and emits them as OAuth HTTP servers with no static auth header. In the dashboard, the plugin add-server picker and server cards offer and render Remote MCP-backed servers (gated on the `gram-remote-mcp` feature flag).
+
+### Patch Changes
+
+- fb3f0ca: Two Project Assistant sidebar fixes:
+
+  - Make the server-assistant transport poll adaptively for replies: poll quickly for the first few iterations (so short turns surface within a few hundred milliseconds instead of waiting a full fixed interval), then back off geometrically to the steady-state interval for long, tool-heavy turns. Reduces the perceived latency of the project assistant relative to the old streaming AI assistant.
+  - Strip the backend's `<message-context>` framing (and drop framing-only turns) from the rendered transcript via Elements' new `history.transformChatMessage` hook, so reopening a historical thread no longer shows a raw block exposing internal event/MCP-auth metadata.
+
+- fbd0398: Add right-click (context-menu) support to dashboard cards. Right-clicking a card opens a menu of the same actions shown by the card's visible `⋯` button, driven by one shared `Action[]` so the two never drift. Applied to every card that already exposes an action menu — Plugin, Source, Environment, Assistant, Custom Tool, Prompt, and Resource cards — via a reusable `CardContextMenu` primitive. The right-click menu honors the same RBAC gating as the `⋯` menu (e.g. the Environment "Clone" action stays hidden without `environment:write`).
+- b23c7f3: Fix the catalog Add Server dialog rendering duplicate-looking endpoint checkboxes when a registry entry exposes the same streamable-http URL twice (e.g. Datadog publishes an OAuth variant and an API-key variant under one URL). Same-URL remotes are now collapsed in the UI, matching the backend's deploy-time behavior of picking the first URL match.
+- 3fd496d: Redesign the app shell as a sidebar-only vertical split. The full-width top nav bar is removed and all of its functionality moves into the sidebar: a combined org/project workspace switcher and the logo in the header, and the account menu in the footer (inline theme toggle, Docs/Changelog/Get Support, and a new **Roadmap** link replacing the old bug/feature link). Light mode is now the default, the brand gradient line sits beneath the main-panel header, and pages gain a `Page.Header.Actions` toolbar slot. Switching projects now shows a nav skeleton instead of flashing empty while permissions reload.
+- c6517cb: Redesign the Overview tab of the experimental MCP server details page (`/x/mcp` route) into status-driven cards. Server Address, Authentication, and Source/Tools each render as a consistent card with a Ready / Needs Setup signal: the Server Address card shows the connect URL plus the shareable `/install` page URL, and the Authentication card derives an explicit posture (Gram-only, Gram + remote, remote-only, or open to anyone) so a public server with no remote identity is correctly flagged as unsecured. Adds an early-access banner and an "Enhance your server" section, and wires the install-page Customize action to the Settings tab.
+- 989d905: Gate the Device Agent pages and sidebar nav item behind the `gram-device-agent` feature flag (defaults off). The nav link is hidden entirely when the flag is off, and the page redirects away so it can't be reached by direct URL.
+- Updated dependencies [fb3f0ca]
+- Updated dependencies [7acfbee]
+  - @gram-ai/elements@1.35.0
+
+## 0.68.0
+
+### Minor Changes
+
+- 69d8cdb: Add read-only tool filtering visibility on the MCP details page Tools tab. New `mcp:read`-scoped `listToolFilters` methods on the `toolsets` and `mcpServers` services resolve the effective tool variations group (`mcp_servers` then `toolsets`) and return the available filter scopes (tags) with their member tools plus the tools excluded from all filters, mirroring the runtime `?tags=` behavior. The dashboard Tools tab renders a scopes panel above the tool list when filtering is enabled, with per-tag tool membership and a tag chip that filters the list below.
+- 4feb400: Add the enterprise onboarding wizard at `/<org>/setup` that walks new orgs through five steps end-to-end: SSO setup via WorkOS, directory sync, publishing a private plugin marketplace to GitHub, instrumenting each agent platform (Claude Code, Claude Cowork, OpenAI Codex, Cursor) with the org's marketplace and observability plugin, and confirming traffic is flowing.
+
+  Includes:
+
+  - New `Create Plugin Marketplace` step that wraps the same GitHub publish flow as the Plugins page, with a typeahead-driven GitHub-user picker for collaborator access (replaces the old comma-separated input).
+  - `Instrument Agents` step that surfaces per-platform setup instructions with auto-generated API keys, marketplace URL / repo URL / plugin slug substitution, eligibility gating (Claude Teams/Enterprise check), and platform-specific screenshots. Coming-soon entries for GitHub Copilot, Gemini, Glean, and AWS Bedrock are rendered as a half-width muted grid and excluded from the configured/total count.
+  - Wizard resume logic backed by `organizations.getOnboardingStatus` and `plugins.getPublishStatus` — reloading lands on the deepest known-incomplete step instead of step 0.
+  - `organizations.sendEnterpriseAdminOnboardingEmail` endpoint and a super-admin "Onboarding" tab for dispatching the enterprise-admin invite email (Loops template `cmpqyxnzl00hj0jwtkibhyjdz`), which deep-links recipients into the active org's wizard.
+  - `organizations.verifyOnboardingHooksSetup` polling endpoint that surfaces recent hook events from ClickHouse for the `Confirm Traffic` step.
+  - Wizard chrome: header with Docs / Get Support (Pylon) / Go to Dashboard buttons, footer with the moonshine ThemeSwitcher, and a project-slug query-string override on the SDK provider so the wizard can hit project-scoped endpoints from org-level routes (falls back to the `default` project when unset).
+
+- 51fadba: Make the generated marketplace name configurable per-project. Adds `plugins.getMarketplaceSettings` and `plugins.updateMarketplaceSettings` on the management API plus a Marketplace settings dialog in the Plugins tab. The default is now `<org-slug>-speakeasy` (previously `<org-slug>-gram`); the org-slug prefix keeps defaults unique across customers so end users installing from two Gram marketplaces don't collide. Saving an override on a project that already has a published marketplace auto-republishes the new manifest to GitHub. References to "Gram" in the generated README, plugin descriptions, and hook scripts are rebranded to "Speakeasy"; URLs, env-var names, and HTTP header names are unchanged.
+
+### Patch Changes
+
+- f0b17a8: Auto-create a default MCP endpoint when importing a remote MCP server as a source. Previously the import created the server but required the user to add an endpoint by hand before it could serve traffic. The import flow and the detail-page re-link flow now pre-stage a default platform endpoint with slug `{orgSlug}-{random}`. Endpoint creation is best-effort: a failure leaves the source intact and surfaces a warning toast, and the server stays disabled so the endpoint begins serving once the user enables it.
+- 9bdb3cd: Fix inconsistent results in the filter dropdowns on the Insights and Logs pages (e.g. "Filter by user email"). `MultiSelect` filtered its own option list while cmdk's built-in filter was also enabled, so the two raced as the user typed: valid matches could fall into the "No results found" empty state and it could stay stuck when characters were deleted. The component's own filter is now the single source of truth.
+- d33c557: Fix dashboard release-stage badges so preview/beta labels render consistently in side nav and tab navigation.
+- 1b2edcd: Insights now only counts workspace members across the Employees and Role views, excluding activity from impersonating superadmins that previously showed up as a raw UUID.
+- f2072b1: Improve confirmation dialog for deleting Shadow MCP access rules
+- Updated dependencies [e39ea7e]
+  - @gram-ai/elements@1.34.0
+
+## 0.67.0
+
+### Minor Changes
+
+- 55a25ac: Add management APIs and dashboard UI for enabling and configuring MCP server tool filtering via tool variation groups.
+- 254158e: Add an org-level Device Agent page (`/<org>/device-agent`) under the Secure nav group: per-OS install instructions for the Speakeasy device agent, `managed.json` MDM configuration reference (schema, paths, example), and self-service `org_token` generation via the new `agent` API-key scope (mint/rotate from the page, with a ready-to-paste `managed.json` copied to the clipboard).
+
+  Also patches the CLI loopback callback (`CliCallback.tsx`) to append `&email=<userEmail>` to the redirect, which the device agent's one-shot OAuth-loopback enrollment requires.
+
+### Patch Changes
+
+- 1078e46: Add an optional `user_id` filter to the risk events list. The Risk Events page now exposes a "User contains..." search box that filters findings by the chat's external user id (case-insensitive substring match), alongside the existing policy and rule filters.
+- 1cb069e: Fix the audit logs page AI Insights setup so it no longer calls `toolsets.list` without a project slug from org-level routes.
+- a86651b: Fix the shared `Link` component so external links render inline with surrounding text. The external-link icon was wrapped in a block-level flex container, which stretched inline links to full width and pushed trailing punctuation to a new line; the icon now sits inline on the text baseline.
+
+## 0.66.0
+
+### Minor Changes
+
+- 0653bf4: Add `agent.getPlugins` management API method consumed by the Speakeasy device agent. The endpoint accepts an `email` query parameter, resolves plugin assignments for that email plus the `*` wildcard within the caller's org, and returns the published plugins as Claude Code marketplace + plugin references (drops directly into Claude Code's `extraKnownMarketplaces` and `enabledPlugins` settings). Authenticates with an org-scoped API key carrying the new `agent` scope.
+
+  Adds `agent` as a selectable scope on the existing API Keys page so admins can mint these tokens from the same place every other scope is minted.
+
+  Adds `email` as a first-class principal URN type (`urn.PrincipalTypeEmail`) so admins can assign plugins by email address. Existing `user:` and `role:` URNs are unchanged; the wildcard `*` is now exported as `urn.PrincipalWildcard`.
+
+- 598d0d8: Re-target AI Insights sidebar at project toolsets instead of hardcoded Speakeasy MCP. The sidebar now connects to all toolsets configured in the current project.
+
+### Patch Changes
+
+- 91e166d: Add an employee data-flow graph endpoint and dashboard visualization for workforce observability.
+- 9fde650: External MCP proxy servers (whose tools cannot be enumerated until a user authenticates) now appear in the "Specific MCP Servers" picker when creating an access role, and no longer display a misleading "No Tools" badge on the MCP list and table views.
+
+## 0.65.1
+
+### Patch Changes
+
+- 3d2afcf: Added a risk-only toggle to trace panels and deep-linked Risk Events to open with risk filtering enabled
+
+## 0.65.0
+
+### Minor Changes
+
+- d7c9904: Assistant onboarding: new Slack setup card lets you pick capabilities (send, read, react, etc.) and which events wake the assistant up, then provisions a dedicated per-assistant Slack toolset instead of reusing a shared one. The card warns about "always-on" event firehoses, and the onboarding agent now offers plain-English filter narrowing after Slack install.
+
+## 0.64.0
+
+### Minor Changes
+
+- 67be909: add tool variations menu to source detail Tools tab
+- 6039fe5: Add `risk.customRules.suggest` endpoint that calls OpenRouter to turn a one-line description ("what do you want to detect?") into a prefilled custom detection rule. The dashboard's New Custom Detection Rule sheet now opens on a single textarea, calls the new endpoint, and lands the operator in the editable review form with the suggested rule_id, title, description, regex, and severity.
+- 6f176bb: Add dashboard UI for reviewing Shadow MCP requests and managing project-scoped access rules.
+- 6039fe5: Add a rule playground: from the Detection Rules detail sheet, the operator pastes a sample into a textarea and the dashboard calls the new `risk.rules.test` endpoint which dispatches to the same scanner code (gitleaks, Presidio, prompt-injection, regex) the worker uses. The response is a list of `TestDetectionRuleMatch`es mirroring the runtime risk_result shape.
+
+  Drop the severity-override UI from the rule detail sheet. The override edit / reset affordances will return in a follow-up PR; default severity continues to render as a row badge for context.
+
+### Patch Changes
+
+- e4c2bfb: Logs filter search bars can now be cleared with the Escape key or by emptying the box, not just the × button. This applies to the MCP Server Logs filter bar and the shared SearchBar (Agent Sessions, etc.). Escape only clears when there is text to clear, so an empty box lets the key bubble to close a surrounding popover.
+- 649a7cb: Fixed sidebar nav hover highlight snapping back to active route when moving between items.
+- 72ccf7b: Fixes login journey for allowed orgs
+- Updated dependencies [faaab73]
+  - @gram-ai/elements@1.33.2
+
+## 0.63.0
+
+### Minor Changes
+
+- 37158f0: ingest tags declared on Gram Function tools (top-level `tags` on the manifest and `tags?: string[]` on the TS framework `ToolDefinition`) and expose them through the management API; the playground tool editor now opens for function tools the same way it does for HTTP tools
+- 7e4501e: Metric cards now display abbreviated numbers (1.5K, 2.3M) instead of raw comma-separated values.
+- 5875739: Added remote-based MCP server authentication UI
+- 50ab453: Add SSO and SCIM feature flags with WorkOS event sync. Admin settings now includes product feature toggles for SSO and SCIM. The Identity page shows connection status and gates configure buttons on these flags. Team page invite button is disabled when SSO is active. WorkOS event processing now handles all SSO connection and SCIM directory sync lifecycle events.
+
+### Patch Changes
+
+- 1871808: Fix the triggers page failing to load whenever a wake trigger has fired or been cancelled. The triggers list response advertised a status enum of `active | paused`, but wake triggers transition through `fired` and `cancelled` too, so the dashboard's response validation rejected the payload and surfaced a generic "Response validation failed" error. The status enum now includes all four states, and the triggers page renders distinct badges for fired and cancelled triggers instead of mislabelling them as "Paused".
+
+## 0.62.0
+
+### Minor Changes
+
+- 5b5dc6d: Replace Vaul drawers with Radix sheets for chat detail panels, restoring text selection in trace/log views and removing the unused drawer dependency.
+
+### Patch Changes
+
+- 5a9c1f4: expose the Destructive CLI Commands category in the risk policy form so customers can opt into `cli_destructive` scanning, and stop silently stripping the source when editing policies that had it set via the API
+- 217b173: Fix the empty "Logs" panel on a source's Deployments tab. The embedded panel was comparing a kind string (e.g. `"function"`) against log events' `attachmentId` (a UUID) and was also sending the wrong type token (`"function"` instead of the backend's `"functions"`). Now filters on `event.attachmentType` with the correct backend constants (`functions`, `openapi`, `external_mcp`), so per-source deployment logs render as expected.
+
+## 0.61.0
+
+### Minor Changes
+
+- 23d2150: expose tags on tool variations and add a tags row to the playground tool editor for HTTP tools, with chip input, base-source quick-add, override indicator, and reset-to-source affordance
+- 46e00ac: Migrate dashboard tables to Moonshine Table with sortable insights columns and remove the legacy table wrapper.
+
+### Patch Changes
+
+- 821f4a2: Redesign the org home page with a two-column layout. Left rail shows compressed Recent challenges (color-coded deny pills, sidebar-friendly width) and Recent activity (sharing the audit-log action color scheme). Right column shows projects as a thin rectangular stack (list view) or a 1/2/3-column card grid (grid view, toggle persisted in localStorage). Each project row/card shows the most recent audit-log action with a hover tooltip for full UTC + local timestamps, a facepile of active contributors (up to 10, sourced from audit-log actors with a deterministic earliest-by-joinedAt fallback), a star to favorite/unfavorite (stored client-side per org), and a kebab menu (favorite toggle, project settings, view audit logs, copy slug). New "Add New" dropdown next to the search bar offers Project / Team member / Role, gated by `org:admin`. Favorites surface in their own section above an "All projects" divider when present.
+- 5ded32c: Preserve theme and saved project favorites when logging out.
+
+## 0.60.0
+
+### Minor Changes
+
+- b58bf0f: Adds an org-level AI Integrations product surface with Cursor as the first provider. Organization admins can connect a Cursor Admin API key from org settings, and an hourly Temporal workflow polls Cursor for token and cost usage events and writes them into ClickHouse `telemetry_logs` so the dashboard shows Cursor usage and cost alongside Claude Code data. The dashboard cost copy is updated to reflect Cursor and Claude Code coverage, and the employee detail page now shows cost beside total tokens.
+- ed12a35: Add multiple role support to the RBAC system. Users can now be assigned multiple roles simultaneously, replacing the previous single-role assignment model.
+- 3b8bfb4: Adds `risk.results.listForAgent` — a redacted variant of `risk.results.list` for AI assistant / MCP consumption. The new endpoint returns the same fields as `listRiskResults` but replaces the `match` field with `match_redacted`, an opaque token of the form `<redacted len=N sha=XXXXXXXX>` where `N` is the byte length and `XXXXXXXX` is the first 8 hex characters of `sha256(match)`. Identical secrets produce identical fingerprints so agents can dedupe leak counts without ever seeing secret content.
+
+  `shadow_mcp` findings pass `match` through verbatim because the value is a server URL or stdio command identifier (already shown unmasked in the dashboard), and exact byte positions are coarsened to a single `position_known` boolean to remove reconstruction signals.
+
+  The dashboard's AI Insights sidebar gains risk-aware suggestions on the Security Overview and Policy Center pages, plus a system-prompt rule that bars the assistant from echoing `match_redacted` values verbatim.
+
+### Patch Changes
+
+- 9d6ba7b: The Source Activity panel on the Remote MCP source overview now shows real telemetry for the last 7 days, scoped to that remote server via the new `remote_mcp_server_id` filter. `TelemetrySummaryRow` and `ToolBarList` are extracted into a shared `SourceActivityPanel` component consumed by both the OpenAPI and Remote MCP source overview tabs.
+- 4b49beb: Expand the assistant onboarding personality picker with Brad and Walker, rebalance Quinn against Nolan and Daniel, and group team voices into a compact chip row above the generic preset cards (Friendly / Professional / Playful / Analytical / Teacher).
+- 8e247f9: Chat loading is now paginated by generation, returning one generation per request. The chat detail panel fetches older generations in parallel until the full transcript is assembled, so long-running sessions no longer stall on the initial fetch.
+
 ## 0.59.0
 
 ### Minor Changes

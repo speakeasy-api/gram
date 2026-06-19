@@ -60,7 +60,7 @@ func callListChannelMembers(ctx context.Context, client *apiClient, env toolconf
 	setOptionalString(request, "cursor", input.Cursor)
 	setOptionalInt(request, "limit", input.Limit)
 
-	body, err := client.call(ctx, "conversations.members", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.members", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

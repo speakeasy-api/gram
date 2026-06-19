@@ -50,6 +50,19 @@ if [ -f "mise.worktree.local.toml" ]; then
     export MISE_ENV=worktree
 fi
 
+# Detect git worktree (a working tree distinct from the main one). When in a
+# worktree, sync port mappings against mise.toml so newly-added _PORT vars
+# and dependents land in mise.local.toml. Migrations are skipped here because
+# ./zero applies them later.
+if command -v git &> /dev/null && git rev-parse --is-inside-work-tree &> /dev/null; then
+    git_main_worktree=$(cd "$(git rev-parse --git-common-dir)/.." && pwd 2>/dev/null || true)
+    git_current_worktree=$(git rev-parse --show-toplevel 2>/dev/null || true)
+    if [ -n "$git_main_worktree" ] && [ -n "$git_current_worktree" ] && [ "$git_main_worktree" != "$git_current_worktree" ]; then
+        echo -e "\n⏳ Syncing worktree port mappings"
+        mise run git:worksync --no-migrate
+    fi
+fi
+
 check_command() {
     local cmd=$1
     local instructions=$2
@@ -84,15 +97,6 @@ if ! $agent_mode; then
     "
 fi
 
-if ! $agent_mode && [[ "$(uname -s)" == "Darwin" ]]; then
-    if ! command -v limactl &> /dev/null; then
-        echo "⚠️  limactl not found. Assistant runtime (Lima + Firecracker) won't work locally."
-        echo "   Install from https://lima-vm.io/ or via Homebrew: brew install lima"
-        echo "   Skip this if you don't need to run the assistant runtime locally."
-        echo
-    fi
-fi
-
 if [ $onboarding_pass = "false" ]; then
     echo "❌ Onboarding checks failed. Please fix the issues above and rerun this script."
     exit 1
@@ -114,26 +118,6 @@ interactive_only mise run zero:melange
 interactive_only mise run zero:fly
 mise run zero:encryption
 mise run zero:tls
-assistant_runtime_provider="$(mise env GRAM_ASSISTANT_RUNTIME_PROVIDER 2>/dev/null | sed -n 's/^export GRAM_ASSISTANT_RUNTIME_PROVIDER=//p')"
-assistant_runtime_provider="${assistant_runtime_provider:-local}"
-if [[ "$assistant_runtime_provider" == "local" ]]; then
-    interactive_only mise run zero:assistants-runtime
-    if ! $agent_mode && [[ "$(uname -s)" == "Darwin" ]] && command -v limactl &> /dev/null; then
-        mise run zero:assistants-lima
-
-        assistant_arch="$(uname -m)"
-        assistant_arch="${assistant_arch/aarch64/aarch64}"
-        assistant_arch="${assistant_arch/arm64/aarch64}"
-        assistant_arch="${assistant_arch/x86_64/x86_64}"
-        assistant_artifact_dir="agents/runtime-artifacts/${assistant_arch}"
-        if [ ! -f "${assistant_artifact_dir}/firecracker" ] || [ ! -f "${assistant_artifact_dir}/vmlinux.bin" ] || [ ! -f "${assistant_artifact_dir}/assistant-rootfs.ext4" ]; then
-            echo -e "\n⏳ Building assistant runtime artifacts"
-            mise run build:assistants-local
-        fi
-    fi
-else
-    echo "ℹ️  Skipping local assistant runtime setup: GRAM_ASSISTANT_RUNTIME_PROVIDER=${assistant_runtime_provider}"
-fi
 
 echo -e "\n⏳ Building internal SDK"
 mise run build:internal-sdk
@@ -163,14 +147,20 @@ interactive_only mise zero:summary
 
 echo -e "\n✅ All set up!"
 
+# Use local:start if it's defined, otherwise fall back to the default start task.
+start_task="start"
+if mise tasks info local:start &>/dev/null; then
+    start_task="local:start"
+fi
+
 if $auto_yes; then
-    exec mise run start
+    exec mise run "$start_task"
 elif ! $agent_mode; then
-    echo "Want me to start the server and dashboard (\`mise run start\`)?"
+    echo "Want me to start the server and dashboard (\`mise run $start_task\`)?"
     echo -n "[y/N] "
     read -r answer
     answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
     if [ "$answer" = "y" ]; then
-    exec mise run start
+    exec mise run "$start_task"
     fi
 fi

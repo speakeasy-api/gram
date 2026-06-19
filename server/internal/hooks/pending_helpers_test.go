@@ -264,9 +264,35 @@ func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing
 		SessionID:     &metadata.SessionID,
 	}, metadata)
 
-	assert.Equal(t, userEmail, attrs[attr.UserEmailKey])
-	assert.Equal(t, userID, attrs[attr.UserIDKey])
+	// User identity travels on LogParams.UserInfo, not the attributes map;
+	// the build call's job is to resolve the user ID onto the metadata.
+	assert.NotContains(t, attrs, attr.UserEmailKey)
+	assert.NotContains(t, attrs, attr.UserIDKey)
 	assert.Equal(t, userID, metadata.UserID)
+}
+
+func TestBuildTelemetryAttributesWithMetadata_SetsHookHostname(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	metadata := &SessionMetadata{
+		SessionID: uuid.NewString(),
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+	hostname := " subomi-mbp "
+	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &metadata.SessionID,
+		HookHostname:  &hostname,
+	}, metadata)
+
+	assert.Equal(t, "subomi-mbp", attrs[attr.HookHostnameKey])
 }
 
 var (

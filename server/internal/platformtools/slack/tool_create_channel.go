@@ -58,7 +58,7 @@ func callCreateChannel(ctx context.Context, client *apiClient, env toolconfig.To
 	setOptionalBool(request, "is_private", input.IsPrivate)
 	setOptionalString(request, "team_id", input.TeamID)
 
-	body, err := client.call(ctx, "conversations.create", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.create", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

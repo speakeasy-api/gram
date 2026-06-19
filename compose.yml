@@ -108,6 +108,21 @@ services:
         soft: 262144
         hard: 262144
 
+  pubsub-emulator:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:570.0.0-emulators@sha256:55ff6adfca42dae15d8d58034167e87e822e1a9816780820ed60d8b3ec343b11
+    restart: unless-stopped
+    ports:
+      - "${PUBSUB_EMULATOR_PORT}:8085"
+    command:
+      [
+        "gcloud",
+        "beta",
+        "emulators",
+        "pubsub",
+        "start",
+        "--host-port=0.0.0.0:8085",
+      ]
+
   gram-presidio:
     image: mcr.microsoft.com/presidio-analyzer:2.2.362
     restart: unless-stopped
@@ -124,32 +139,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  gram-pi-classifier:
-    build: ./services/pi-classifier
-    restart: unless-stopped
-    ports:
-      - "${PI_CLASSIFIER_PORT}:8000"
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 256
-    tmpfs:
-      - /tmp:size=64m,mode=1777
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
 
   mcp-registry-db:
     profiles: [local-registry]

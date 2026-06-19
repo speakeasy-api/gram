@@ -40,6 +40,8 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 			projectSlug  *string
 			actorID      *string
 			action       *string
+			subjectType  *string
+			subjectID    *string
 			apikeyToken  *string
 			sessionToken *string
 		)
@@ -60,6 +62,14 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if actionRaw != "" {
 			action = &actionRaw
 		}
+		subjectTypeRaw := qp.Get("subject_type")
+		if subjectTypeRaw != "" {
+			subjectType = &subjectTypeRaw
+		}
+		subjectIDRaw := qp.Get("subject_id")
+		if subjectIDRaw != "" {
+			subjectID = &subjectIDRaw
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -68,7 +78,7 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewListPayload(cursor, projectSlug, actorID, action, apikeyToken, sessionToken)
+		payload = NewListPayload(cursor, projectSlug, actorID, action, subjectType, subjectID, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

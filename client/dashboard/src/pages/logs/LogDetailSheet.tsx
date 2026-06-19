@@ -27,7 +27,7 @@ export function LogDetailSheet({
   open,
   onOpenChange,
   onAddFilter,
-}: LogDetailSheetProps) {
+}: LogDetailSheetProps): JSX.Element {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -93,12 +93,12 @@ function removeNestedKey(
   const parts = path.split(".");
   let current: Record<string, unknown> = clone;
   for (let i = 0; i < parts.length - 1; i++) {
-    const next = current[parts[i]];
+    const next = current[parts[i]!];
     if (next === null || next === undefined || typeof next !== "object")
       return clone;
     current = next as Record<string, unknown>;
   }
-  delete current[parts[parts.length - 1]];
+  delete current[parts[parts.length - 1]!];
   return clone;
 }
 
@@ -127,6 +127,11 @@ function LogDetailContent({
     ? getNestedValue(attrs, HOOK_BLOCK_REASON_KEY)
     : undefined;
   const toolError = attrs ? getNestedValue(attrs, HOOK_ERROR_KEY) : undefined;
+  const toolCallID = attrs ? getNestedValue(attrs, "gen_ai.tool.call.id") : "";
+  const toolName = attrs ? getNestedValue(attrs, "gram.tool.name") : "";
+  const showToolIOHiddenMessage = Boolean(
+    (toolCallID || toolName) && !toolInput,
+  );
   const highlights = attrs
     ? HIGHLIGHT_ATTR_KEYS.map(({ path, label }) => ({
         path,
@@ -202,7 +207,7 @@ function LogDetailContent({
           />
           {gramUrn && (
             <MetadataBadge
-              label="Gram URN"
+              label="Platform URN"
               value={gramUrn}
               mono
               copyValue={gramUrn}
@@ -281,6 +286,11 @@ function LogDetailContent({
           {/* Tool Input */}
           {toolInput && (
             <CollapsibleBodySection title="Tool Input" content={toolInput} />
+          )}
+          {showToolIOHiddenMessage && (
+            <div className="text-muted-foreground bg-muted/30 border-border rounded-lg border px-3 py-2 text-sm">
+              Tool arguments are not shown when tool_io_logs are disabled.
+            </div>
           )}
 
           {/* Tool Output */}
@@ -491,6 +501,10 @@ function flattenObject(
           filterValue: String(value),
         });
         break;
+      case "bigint":
+      case "function":
+      case "symbol":
+      case "undefined":
       default:
         result.push({
           key: fullKey,

@@ -68,7 +68,7 @@ func callSearchMessagesAndFiles(ctx context.Context, client *apiClient, env tool
 	setOptionalString(request, "sort", input.Sort)
 	setOptionalString(request, "sort_dir", input.SortDir)
 
-	body, err := client.call(ctx, "search.all", request, tokenRequireUser, env)
+	body, err := client.Call(ctx, "search.all", request, tokenRequireUser, env)
 	if err != nil {
 		return err
 	}

@@ -2281,6 +2281,947 @@ func DecodeCreatePortalSessionResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildGetOnboardingStatusRequest instantiates a HTTP request object with
+// method and path set to call the "organizations" service
+// "getOnboardingStatus" endpoint
+func (c *Client) BuildGetOnboardingStatusRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetOnboardingStatusOrganizationsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "getOnboardingStatus", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetOnboardingStatusRequest returns an encoder for requests sent to the
+// organizations getOnboardingStatus server.
+func EncodeGetOnboardingStatusRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.GetOnboardingStatusPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "getOnboardingStatus", "*organizations.GetOnboardingStatusPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetOnboardingStatusResponse returns a decoder for responses returned
+// by the organizations getOnboardingStatus endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetOnboardingStatusResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetOnboardingStatusResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetOnboardingStatusResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "getOnboardingStatus", err)
+			}
+			err = ValidateGetOnboardingStatusResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "getOnboardingStatus", err)
+			}
+			res := NewGetOnboardingStatusOnboardingStatusResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetOnboardingStatusUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "getOnboardingStatus", err)
+			}
+			err = ValidateGetOnboardingStatusUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "getOnboardingStatus", err)
+			}
+			return nil, NewGetOnboardingStatusUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetOnboardingStatusForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "getOnboardingStatus", err)
+			}
+			err = ValidateGetOnboardingStatusForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "getOnboardingStatus", err)
+			}
+			return nil, NewGetOnboardingStatusForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetOnboardingStatusBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "getOnboardingStatus", err)
+			}
+			err = ValidateGetOnboardingStatusBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "getOnboardingStatus", err)
+			}
+			return nil, NewGetOnboardingStatusBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetOnboardingStatusNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "getOnboardingStatus", err)
+			}
+			err = ValidateGetOnboardingStatusNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "getOnboardingStatus", err)
+			}
+			return nil, NewGetOnboardingStatusNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetOnboardingStatusConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "getOnboardingStatus", err)
+			}
+			err = ValidateGetOnboardingStatusConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "getOnboardingStatus", err)
+			}
+			return nil, NewGetOnboardingStatusConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetOnboardingStatusUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "getOnboardingStatus", err)
+			}
+			err = ValidateGetOnboardingStatusUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "getOnboardingStatus", err)
+			}
+			return nil, NewGetOnboardingStatusUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetOnboardingStatusInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "getOnboardingStatus", err)
+			}
+			err = ValidateGetOnboardingStatusInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "getOnboardingStatus", err)
+			}
+			return nil, NewGetOnboardingStatusInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetOnboardingStatusInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "getOnboardingStatus", err)
+				}
+				err = ValidateGetOnboardingStatusInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "getOnboardingStatus", err)
+				}
+				return nil, NewGetOnboardingStatusInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetOnboardingStatusUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "getOnboardingStatus", err)
+				}
+				err = ValidateGetOnboardingStatusUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "getOnboardingStatus", err)
+				}
+				return nil, NewGetOnboardingStatusUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "getOnboardingStatus", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetOnboardingStatusGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "getOnboardingStatus", err)
+			}
+			err = ValidateGetOnboardingStatusGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "getOnboardingStatus", err)
+			}
+			return nil, NewGetOnboardingStatusGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "getOnboardingStatus", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildVerifyOnboardingHooksSetupRequest instantiates a HTTP request object
+// with method and path set to call the "organizations" service
+// "verifyOnboardingHooksSetup" endpoint
+func (c *Client) BuildVerifyOnboardingHooksSetupRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: VerifyOnboardingHooksSetupOrganizationsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "verifyOnboardingHooksSetup", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeVerifyOnboardingHooksSetupRequest returns an encoder for requests sent
+// to the organizations verifyOnboardingHooksSetup server.
+func EncodeVerifyOnboardingHooksSetupRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.VerifyOnboardingHooksSetupPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "verifyOnboardingHooksSetup", "*organizations.VerifyOnboardingHooksSetupPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		if p.SinceUnixNano != nil {
+			values.Add("since_unix_nano", *p.SinceUnixNano)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeVerifyOnboardingHooksSetupResponse returns a decoder for responses
+// returned by the organizations verifyOnboardingHooksSetup endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeVerifyOnboardingHooksSetupResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeVerifyOnboardingHooksSetupResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body VerifyOnboardingHooksSetupResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			err = ValidateVerifyOnboardingHooksSetupResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			res := NewVerifyOnboardingHooksSetupResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body VerifyOnboardingHooksSetupUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			err = ValidateVerifyOnboardingHooksSetupUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			return nil, NewVerifyOnboardingHooksSetupUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body VerifyOnboardingHooksSetupForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			err = ValidateVerifyOnboardingHooksSetupForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			return nil, NewVerifyOnboardingHooksSetupForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body VerifyOnboardingHooksSetupBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			err = ValidateVerifyOnboardingHooksSetupBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			return nil, NewVerifyOnboardingHooksSetupBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body VerifyOnboardingHooksSetupNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			err = ValidateVerifyOnboardingHooksSetupNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			return nil, NewVerifyOnboardingHooksSetupNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body VerifyOnboardingHooksSetupConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			err = ValidateVerifyOnboardingHooksSetupConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			return nil, NewVerifyOnboardingHooksSetupConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body VerifyOnboardingHooksSetupUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			err = ValidateVerifyOnboardingHooksSetupUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			return nil, NewVerifyOnboardingHooksSetupUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body VerifyOnboardingHooksSetupInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			err = ValidateVerifyOnboardingHooksSetupInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			return nil, NewVerifyOnboardingHooksSetupInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body VerifyOnboardingHooksSetupInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "verifyOnboardingHooksSetup", err)
+				}
+				err = ValidateVerifyOnboardingHooksSetupInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "verifyOnboardingHooksSetup", err)
+				}
+				return nil, NewVerifyOnboardingHooksSetupInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body VerifyOnboardingHooksSetupUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "verifyOnboardingHooksSetup", err)
+				}
+				err = ValidateVerifyOnboardingHooksSetupUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "verifyOnboardingHooksSetup", err)
+				}
+				return nil, NewVerifyOnboardingHooksSetupUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "verifyOnboardingHooksSetup", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body VerifyOnboardingHooksSetupGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			err = ValidateVerifyOnboardingHooksSetupGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "verifyOnboardingHooksSetup", err)
+			}
+			return nil, NewVerifyOnboardingHooksSetupGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "verifyOnboardingHooksSetup", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSendEnterpriseAdminOnboardingEmailRequest instantiates a HTTP request
+// object with method and path set to call the "organizations" service
+// "sendEnterpriseAdminOnboardingEmail" endpoint
+func (c *Client) BuildSendEnterpriseAdminOnboardingEmailRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SendEnterpriseAdminOnboardingEmailOrganizationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "sendEnterpriseAdminOnboardingEmail", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSendEnterpriseAdminOnboardingEmailRequest returns an encoder for
+// requests sent to the organizations sendEnterpriseAdminOnboardingEmail server.
+func EncodeSendEnterpriseAdminOnboardingEmailRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.SendEnterpriseAdminOnboardingEmailPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "sendEnterpriseAdminOnboardingEmail", "*organizations.SendEnterpriseAdminOnboardingEmailPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSendEnterpriseAdminOnboardingEmailRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSendEnterpriseAdminOnboardingEmailResponse returns a decoder for
+// responses returned by the organizations sendEnterpriseAdminOnboardingEmail
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeSendEnterpriseAdminOnboardingEmailResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSendEnterpriseAdminOnboardingEmailResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SendEnterpriseAdminOnboardingEmailResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			err = ValidateSendEnterpriseAdminOnboardingEmailResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			res := NewSendEnterpriseAdminOnboardingEmailResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SendEnterpriseAdminOnboardingEmailUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			err = ValidateSendEnterpriseAdminOnboardingEmailUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			return nil, NewSendEnterpriseAdminOnboardingEmailUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SendEnterpriseAdminOnboardingEmailForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			err = ValidateSendEnterpriseAdminOnboardingEmailForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			return nil, NewSendEnterpriseAdminOnboardingEmailForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SendEnterpriseAdminOnboardingEmailBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			err = ValidateSendEnterpriseAdminOnboardingEmailBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			return nil, NewSendEnterpriseAdminOnboardingEmailBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SendEnterpriseAdminOnboardingEmailNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			err = ValidateSendEnterpriseAdminOnboardingEmailNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			return nil, NewSendEnterpriseAdminOnboardingEmailNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SendEnterpriseAdminOnboardingEmailConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			err = ValidateSendEnterpriseAdminOnboardingEmailConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			return nil, NewSendEnterpriseAdminOnboardingEmailConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SendEnterpriseAdminOnboardingEmailUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			err = ValidateSendEnterpriseAdminOnboardingEmailUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			return nil, NewSendEnterpriseAdminOnboardingEmailUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SendEnterpriseAdminOnboardingEmailInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			err = ValidateSendEnterpriseAdminOnboardingEmailInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			return nil, NewSendEnterpriseAdminOnboardingEmailInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SendEnterpriseAdminOnboardingEmailInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+				}
+				err = ValidateSendEnterpriseAdminOnboardingEmailInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+				}
+				return nil, NewSendEnterpriseAdminOnboardingEmailInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SendEnterpriseAdminOnboardingEmailUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+				}
+				err = ValidateSendEnterpriseAdminOnboardingEmailUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+				}
+				return nil, NewSendEnterpriseAdminOnboardingEmailUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "sendEnterpriseAdminOnboardingEmail", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SendEnterpriseAdminOnboardingEmailGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			err = ValidateSendEnterpriseAdminOnboardingEmailGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "sendEnterpriseAdminOnboardingEmail", err)
+			}
+			return nil, NewSendEnterpriseAdminOnboardingEmailGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "sendEnterpriseAdminOnboardingEmail", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGenerateWorkOSAdminPortalLinkRequest instantiates a HTTP request object
+// with method and path set to call the "organizations" service
+// "generateWorkOSAdminPortalLink" endpoint
+func (c *Client) BuildGenerateWorkOSAdminPortalLinkRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GenerateWorkOSAdminPortalLinkOrganizationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "generateWorkOSAdminPortalLink", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGenerateWorkOSAdminPortalLinkRequest returns an encoder for requests
+// sent to the organizations generateWorkOSAdminPortalLink server.
+func EncodeGenerateWorkOSAdminPortalLinkRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.GenerateWorkOSAdminPortalLinkPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "generateWorkOSAdminPortalLink", "*organizations.GenerateWorkOSAdminPortalLinkPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewGenerateWorkOSAdminPortalLinkRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizations", "generateWorkOSAdminPortalLink", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGenerateWorkOSAdminPortalLinkResponse returns a decoder for responses
+// returned by the organizations generateWorkOSAdminPortalLink endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeGenerateWorkOSAdminPortalLinkResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGenerateWorkOSAdminPortalLinkResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GenerateWorkOSAdminPortalLinkResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			res := NewGenerateWorkOSAdminPortalLinkResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GenerateWorkOSAdminPortalLinkUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GenerateWorkOSAdminPortalLinkForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GenerateWorkOSAdminPortalLinkBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GenerateWorkOSAdminPortalLinkNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GenerateWorkOSAdminPortalLinkConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GenerateWorkOSAdminPortalLinkUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GenerateWorkOSAdminPortalLinkInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GenerateWorkOSAdminPortalLinkInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+				}
+				err = ValidateGenerateWorkOSAdminPortalLinkInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+				}
+				return nil, NewGenerateWorkOSAdminPortalLinkInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GenerateWorkOSAdminPortalLinkUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+				}
+				err = ValidateGenerateWorkOSAdminPortalLinkUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+				}
+				return nil, NewGenerateWorkOSAdminPortalLinkUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "generateWorkOSAdminPortalLink", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GenerateWorkOSAdminPortalLinkGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			err = ValidateGenerateWorkOSAdminPortalLinkGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "generateWorkOSAdminPortalLink", err)
+			}
+			return nil, NewGenerateWorkOSAdminPortalLinkGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "generateWorkOSAdminPortalLink", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalOrganizationInvitationResponseBodyToOrganizationsOrganizationInvitation
 // builds a value of type *organizations.OrganizationInvitation from a value of
 // type *OrganizationInvitationResponseBody.
@@ -2316,6 +3257,118 @@ func unmarshalOrganizationUserResponseBodyToOrganizationsOrganizationUser(v *Org
 		CreatedAt:          *v.CreatedAt,
 		UpdatedAt:          *v.UpdatedAt,
 		LastLogin:          v.LastLogin,
+	}
+
+	return res
+}
+
+// unmarshalOnboardingHookEventResponseBodyToOrganizationsOnboardingHookEvent
+// builds a value of type *organizations.OnboardingHookEvent from a value of
+// type *OnboardingHookEventResponseBody.
+func unmarshalOnboardingHookEventResponseBodyToOrganizationsOnboardingHookEvent(v *OnboardingHookEventResponseBody) *organizations.OnboardingHookEvent {
+	res := &organizations.OnboardingHookEvent{
+		TimeUnixNano: *v.TimeUnixNano,
+		Source:       *v.Source,
+		ToolName:     v.ToolName,
+		EventName:    v.EventName,
+		ProjectSlug:  *v.ProjectSlug,
+		Status:       v.Status,
+		UserEmail:    v.UserEmail,
+		ChatID:       v.ChatID,
+	}
+
+	return res
+}
+
+// marshalOrganizationsWorkOSIntentOptionsToWorkOSIntentOptionsRequestBody
+// builds a value of type *WorkOSIntentOptionsRequestBody from a value of type
+// *organizations.WorkOSIntentOptions.
+func marshalOrganizationsWorkOSIntentOptionsToWorkOSIntentOptionsRequestBody(v *organizations.WorkOSIntentOptions) *WorkOSIntentOptionsRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &WorkOSIntentOptionsRequestBody{}
+	if v.Sso != nil {
+		res.Sso = marshalOrganizationsWorkOSSSOIntentOptionsToWorkOSSSOIntentOptionsRequestBody(v.Sso)
+	}
+	if v.DomainVerification != nil {
+		res.DomainVerification = marshalOrganizationsWorkOSDomainVerificationIntentOptionsToWorkOSDomainVerificationIntentOptionsRequestBody(v.DomainVerification)
+	}
+
+	return res
+}
+
+// marshalOrganizationsWorkOSSSOIntentOptionsToWorkOSSSOIntentOptionsRequestBody
+// builds a value of type *WorkOSSSOIntentOptionsRequestBody from a value of
+// type *organizations.WorkOSSSOIntentOptions.
+func marshalOrganizationsWorkOSSSOIntentOptionsToWorkOSSSOIntentOptionsRequestBody(v *organizations.WorkOSSSOIntentOptions) *WorkOSSSOIntentOptionsRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &WorkOSSSOIntentOptionsRequestBody{
+		BookmarkSlug: v.BookmarkSlug,
+		ProviderType: v.ProviderType,
+	}
+
+	return res
+}
+
+// marshalOrganizationsWorkOSDomainVerificationIntentOptionsToWorkOSDomainVerificationIntentOptionsRequestBody
+// builds a value of type *WorkOSDomainVerificationIntentOptionsRequestBody
+// from a value of type *organizations.WorkOSDomainVerificationIntentOptions.
+func marshalOrganizationsWorkOSDomainVerificationIntentOptionsToWorkOSDomainVerificationIntentOptionsRequestBody(v *organizations.WorkOSDomainVerificationIntentOptions) *WorkOSDomainVerificationIntentOptionsRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &WorkOSDomainVerificationIntentOptionsRequestBody{
+		DomainName: v.DomainName,
+	}
+
+	return res
+}
+
+// marshalWorkOSIntentOptionsRequestBodyToOrganizationsWorkOSIntentOptions
+// builds a value of type *organizations.WorkOSIntentOptions from a value of
+// type *WorkOSIntentOptionsRequestBody.
+func marshalWorkOSIntentOptionsRequestBodyToOrganizationsWorkOSIntentOptions(v *WorkOSIntentOptionsRequestBody) *organizations.WorkOSIntentOptions {
+	if v == nil {
+		return nil
+	}
+	res := &organizations.WorkOSIntentOptions{}
+	if v.Sso != nil {
+		res.Sso = marshalWorkOSSSOIntentOptionsRequestBodyToOrganizationsWorkOSSSOIntentOptions(v.Sso)
+	}
+	if v.DomainVerification != nil {
+		res.DomainVerification = marshalWorkOSDomainVerificationIntentOptionsRequestBodyToOrganizationsWorkOSDomainVerificationIntentOptions(v.DomainVerification)
+	}
+
+	return res
+}
+
+// marshalWorkOSSSOIntentOptionsRequestBodyToOrganizationsWorkOSSSOIntentOptions
+// builds a value of type *organizations.WorkOSSSOIntentOptions from a value of
+// type *WorkOSSSOIntentOptionsRequestBody.
+func marshalWorkOSSSOIntentOptionsRequestBodyToOrganizationsWorkOSSSOIntentOptions(v *WorkOSSSOIntentOptionsRequestBody) *organizations.WorkOSSSOIntentOptions {
+	if v == nil {
+		return nil
+	}
+	res := &organizations.WorkOSSSOIntentOptions{
+		BookmarkSlug: v.BookmarkSlug,
+		ProviderType: v.ProviderType,
+	}
+
+	return res
+}
+
+// marshalWorkOSDomainVerificationIntentOptionsRequestBodyToOrganizationsWorkOSDomainVerificationIntentOptions
+// builds a value of type *organizations.WorkOSDomainVerificationIntentOptions
+// from a value of type *WorkOSDomainVerificationIntentOptionsRequestBody.
+func marshalWorkOSDomainVerificationIntentOptionsRequestBodyToOrganizationsWorkOSDomainVerificationIntentOptions(v *WorkOSDomainVerificationIntentOptionsRequestBody) *organizations.WorkOSDomainVerificationIntentOptions {
+	if v == nil {
+		return nil
+	}
+	res := &organizations.WorkOSDomainVerificationIntentOptions{
+		DomainName: v.DomainName,
 	}
 
 	return res

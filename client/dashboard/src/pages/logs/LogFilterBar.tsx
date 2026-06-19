@@ -88,7 +88,7 @@ export function LogFilterBar({
   searchInput,
   onSearchInputChange,
   onSearchSubmit,
-}: LogFilterBarProps) {
+}: LogFilterBarProps): JSX.Element {
   const [step, setStep] = useState<Step>("key");
   const [selectedKey, setSelectedKey] = useState("");
   const [selectedOp, setSelectedOp] = useState<Op | null>(null);
@@ -192,8 +192,13 @@ export function LogFilterBar({
         }
       }
       onSearchInputChange(value);
+      // Emptying the box clears the applied search without needing the ×
+      // button, so results refresh as soon as the query is gone.
+      if (step === "key" && value === "") {
+        onSearchSubmit("");
+      }
     },
-    [step, onSearchInputChange, handleOpSelect],
+    [step, onSearchInputChange, handleOpSelect, onSearchSubmit],
   );
 
   const handleValueSubmit = () => {
@@ -264,15 +269,28 @@ export function LogFilterBar({
         }
         break;
       case "Escape":
-        if (popoverOpen) {
+        if (step === "operator") {
+          // Cancel an in-progress filter build without touching the applied
+          // search. Consume the key so it doesn't also close a surrounding
+          // popover.
           e.preventDefault();
+          e.stopPropagation();
+          resetFlow();
+        } else if (searchInput) {
+          // Key step: mirror the × button — clear the box and the applied
+          // search so results refresh without forcing a click. Consume the
+          // key so this first Escape only clears; once the box is empty the
+          // next Escape bubbles (e.g. to close a surrounding popover).
+          e.preventDefault();
+          e.stopPropagation();
           onSearchInputChange("");
           resetFlow();
+          onSearchSubmit("");
         }
         break;
       case "Backspace":
         if (searchInput === "" && step === "key" && filters.length > 0) {
-          removeFilter(filters[filters.length - 1].id);
+          removeFilter(filters[filters.length - 1]!.id!);
         }
         if (searchInput === "" && step === "operator") {
           resetFlow();

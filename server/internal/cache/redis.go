@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
@@ -12,6 +13,8 @@ import (
 )
 
 var _ Cache = (*RedisCacheAdapter)(nil)
+
+const mutateMaxRetries = 5
 
 // RedisCacheAdapter implements the Cache interface using Redis.
 type RedisCacheAdapter struct {
@@ -59,6 +62,62 @@ func (r *RedisCacheAdapter) Set(ctx context.Context, key string, value any, ttl 
 		Value: value,
 		TTL:   ttl,
 	})
+}
+
+func (r *RedisCacheAdapter) Mutate(ctx context.Context, key string, value any, ttl time.Duration, fn func(exists bool) error) error {
+	var lastErr error
+	for range mutateMaxRetries {
+		err := r.client.Watch(ctx, func(tx *redis.Tx) error {
+			exists := true
+			raw, err := tx.Get(ctx, key).Bytes()
+			switch {
+			case errors.Is(err, redis.Nil):
+				exists = false
+				if err := resetMutateValue(value); err != nil {
+					return err
+				}
+			case err != nil:
+				return fmt.Errorf("get %s: %w", key, err)
+			default:
+				if err := r.cache.Unmarshal(raw, value); err != nil {
+					return fmt.Errorf("unmarshal %s: %w", key, err)
+				}
+			}
+
+			if err := fn(exists); err != nil {
+				return err
+			}
+			raw, err = r.cache.Marshal(value)
+			if err != nil {
+				return fmt.Errorf("marshal %s: %w", key, err)
+			}
+			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+				pipe.Set(ctx, key, raw, ttl)
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("set %s: %w", key, err)
+			}
+			return nil
+		}, key)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, redis.TxFailedErr) {
+			return fmt.Errorf("watch %s: %w", key, err)
+		}
+		lastErr = err
+	}
+	return fmt.Errorf("mutate %s: redis transaction failed after %d retries: %w", key, mutateMaxRetries, lastErr)
+}
+
+func resetMutateValue(value any) error {
+	valueOf := reflect.ValueOf(value)
+	if valueOf.Kind() != reflect.Pointer || valueOf.IsNil() {
+		return fmt.Errorf("mutate value must be a non-nil pointer")
+	}
+	valueOf.Elem().Set(reflect.Zero(valueOf.Elem().Type()))
+	return nil
 }
 
 func (r *RedisCacheAdapter) Update(ctx context.Context, key string, value any) error {
@@ -166,6 +225,27 @@ func (r *RedisCacheAdapter) ListRange(ctx context.Context, key string, start, st
 	}
 
 	return nil
+}
+
+// ScanKeys returns every key in the cache that starts with prefix. It walks
+// the keyspace with SCAN, so it is safe to run against a live instance, but
+// it is still a full-keyspace traversal — reserve it for operator-driven
+// flows, not request hot paths.
+func (r *RedisCacheAdapter) ScanKeys(ctx context.Context, prefix string) ([]string, error) {
+	var keys []string
+	var cursor uint64
+	for {
+		batch, next, err := r.client.Scan(ctx, cursor, prefix+"*", 100).Result()
+		if err != nil {
+			return nil, fmt.Errorf("scan keys with prefix %q: %w", prefix, err)
+		}
+		keys = append(keys, batch...)
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return keys, nil
 }
 
 func (r *RedisCacheAdapter) DeleteByPrefix(ctx context.Context, prefix string) error {
