@@ -153,6 +153,7 @@ const (
 	AssistantColdStartKey          = attribute.Key("gram.assistant.cold_start")
 	AssistantAppCreatedKey         = attribute.Key("gram.assistant.app_created")
 	AssistantSetupFailureClassKey  = attribute.Key("gram.assistant.setup_failure_class")
+	AssistantTurnOutcomeKey        = attribute.Key("gram.assistant.turn_outcome")
 	AssistantServerIPKey           = attribute.Key("gram.assistant.server_ip")
 	AssistantImageRecycleKey       = attribute.Key("gram.assistant.image_recycle")
 	AssistantImageDesiredKey       = attribute.Key("gram.assistant.image_desired")
@@ -1688,6 +1689,8 @@ func AssistantAppCreated(v bool) attribute.KeyValue { return AssistantAppCreated
 func AssistantSetupFailureClass(v string) attribute.KeyValue {
 	return AssistantSetupFailureClassKey.String(v)
 }
+
+func AssistantTurnOutcome(v string) attribute.KeyValue { return AssistantTurnOutcomeKey.String(v) }
 
 func AssistantImageRecycle(v bool) attribute.KeyValue { return AssistantImageRecycleKey.Bool(v) }
 

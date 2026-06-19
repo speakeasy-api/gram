@@ -1164,7 +1164,7 @@ func (f *FlyRuntimeBackend) runtimeRequest(ctx context.Context, target flyRuntim
 		return nil, fmt.Errorf("read assistant fly runtime response: %w", err)
 	}
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, &runtimeResponseError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
 	}
 	return body, nil
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -67,6 +68,20 @@ const (
 	// a broken upstream (LLM 502, bad tool, etc.) from burning the retry
 	// loop forever.
 	maxEventAttempts = 5
+
+	// maxRuntimeTeardowns caps how many times one event may tear down and
+	// re-admit its runtime (the ErrRuntimeUnhealthy path) before it is failed
+	// terminally. Higher than maxEventAttempts because a genuine infra blip
+	// deserves generous retries — but a deterministic error misclassified as
+	// unhealthy must not keep killing fresh VMs forever (the DNO-290 hazard).
+	// event.Attempts advances on every claim, so it doubles as the teardown
+	// counter on this path.
+	maxRuntimeTeardowns = 10
+
+	// meterAssistantTurnClassified counts turn failures by classifyTurnError
+	// outcome so a runaway teardown loop is visible (the DNO-290 incident ran
+	// ~13h silent).
+	meterAssistantTurnClassified = "assistant.turn.classified"
 
 	runtimeStartupReapGrace = 2 * time.Minute
 	// runtimeExpiringReapGrace is the cushion the reaper waits before
@@ -322,11 +337,13 @@ type ServiceCore struct {
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
 	dashboardIngestor DashboardIngestor
+	turnClassified    metric.Int64Counter
 }
 
 func NewServiceCore(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	guardianPolicy *guardian.Policy,
 	encryptionClient *encryption.Client,
@@ -337,6 +354,16 @@ func NewServiceCore(
 	telemetryLogger *telemetry.Logger,
 	contextWindow *openrouter.ContextWindowResolver,
 ) *ServiceCore {
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/assistants")
+	turnClassified, err := meter.Int64Counter(
+		meterAssistantTurnClassified,
+		metric.WithDescription("Assistant turn failures bucketed by classifyTurnError outcome"),
+		metric.WithUnit("{turn}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterAssistantTurnClassified), attr.SlogError(err))
+	}
+
 	return &ServiceCore{
 		logger:            logger,
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
@@ -352,6 +379,7 @@ func NewServiceCore(
 		wakeCanceller:     nil,
 		chatWriter:        nil,
 		dashboardIngestor: nil,
+		turnClassified:    turnClassified,
 	}
 }
 
@@ -1845,6 +1873,13 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			)
 			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_failed", "assistant turn failed", "ERROR", runErr)
 
+			teardownExhausted := errors.Is(runErr, ErrRuntimeUnhealthy) && event.Attempts >= maxRuntimeTeardowns
+			outcome := turnErrorBucket(runErr)
+			if teardownExhausted {
+				outcome = turnOutcomeRuntimeUnhealthyExhausted
+			}
+			s.recordTurnClassification(turnCtx, outcome)
+
 			// Runtime-level failure (dead VM, connection refused, missing
 			// state). Tear down the runtime row and leave the event in
 			// 'processing' — do NOT reset it to 'pending', or the outer
@@ -1852,6 +1887,27 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			// A reaper reclaims stuck 'processing' events after a grace
 			// window so they flow through cleanly under a fresh VM.
 			if errors.Is(runErr, ErrRuntimeUnhealthy) {
+				// An event that has torn down this many runtimes is almost
+				// certainly a deterministic failure misread as infra (the
+				// DNO-290 hazard), not a transient blip. Stop re-admitting it
+				// and fail it terminally instead of churning VMs forever.
+				if teardownExhausted {
+					s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event exceeded runtime teardown limit", "ERROR", runErr)
+					_ = s.runtime.Stop(ctx, runtimeRecord)
+					_ = s.stopRuntimeRecord(ctx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
+					if err := s.failEvent(ctx, thread.ProjectID, event.ID, fmt.Errorf("exceeded %d runtime teardowns: %w", maxRuntimeTeardowns, runErr)); err != nil {
+						return ProcessThreadEventsResult{}, err
+					}
+					return ProcessThreadEventsResult{
+						AssistantID:         assistant.ID,
+						WarmUntil:           time.Time{},
+						WarmTTLSeconds:      assistant.WarmTTLSeconds,
+						RuntimeActive:       false,
+						RetryAdmission:      false,
+						ProcessedAnyEvent:   processedAny,
+						BootstrappedRuntime: bootstrappedRuntime,
+					}, nil
+				}
 				_ = s.runtime.Stop(ctx, runtimeRecord)
 				_ = s.stopRuntimeRecord(ctx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
 				return ProcessThreadEventsResult{
@@ -2683,6 +2739,15 @@ func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid
 		return fmt.Errorf("complete assistant thread event: %w", err)
 	}
 	return nil
+}
+
+// recordTurnClassification counts a failed turn by its classifyTurnError
+// bucket so teardown loops are alertable.
+func (s *ServiceCore) recordTurnClassification(ctx context.Context, outcome turnOutcome) {
+	if s.turnClassified == nil {
+		return
+	}
+	s.turnClassified.Add(ctx, 1, metric.WithAttributes(attr.AssistantTurnOutcome(string(outcome))))
 }
 
 func (s *ServiceCore) failEvent(ctx context.Context, projectID, eventID uuid.UUID, runErr error) error {
