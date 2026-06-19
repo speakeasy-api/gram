@@ -240,6 +240,27 @@ function MixRowItem({
   );
 }
 
+// Shared loading state for the ranked-list cards (mix breakdowns + sessions):
+// descending label/bar widths so it mirrors a populated card.
+function RankedSkeleton(): JSX.Element {
+  return (
+    <>
+      {MIX_SKELETON_ROWS.map((r, i) => (
+        <div key={i} className="space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <Skeleton className="h-4" style={{ width: `${r.label}%` }} />
+            <Skeleton className="h-4 w-8" />
+          </div>
+          <Skeleton
+            className="h-2.5 rounded-full"
+            style={{ width: `${r.bar}%` }}
+          />
+        </div>
+      ))}
+    </>
+  );
+}
+
 function MixCard({
   title,
   dim,
@@ -263,18 +284,7 @@ function MixCard({
     <Card title={title}>
       <div className="mt-3 space-y-0">
         {loading ? (
-          MIX_SKELETON_ROWS.map((r, i) => (
-            <div key={i} className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <Skeleton className="h-4" style={{ width: `${r.label}%` }} />
-                <Skeleton className="h-4 w-8" />
-              </div>
-              <Skeleton
-                className="h-2.5 rounded-full"
-                style={{ width: `${r.bar}%` }}
-              />
-            </div>
-          ))
+          <RankedSkeleton />
         ) : top.length === 0 ? (
           <div className="text-muted-foreground/60 text-sm">No data</div>
         ) : (
@@ -293,6 +303,50 @@ function MixCard({
                 barPct={(r.cost / max) * 100}
                 barColor={gradeColor(t)}
                 onSelect={selectable ? () => onDrill!(dim, r.label) : undefined}
+              />
+            );
+          })
+        )}
+      </div>
+    </Card>
+  );
+}
+
+// The "Most costly sessions" widget: top sessions in this slice ranked by cost,
+// each row a button that opens the session detail. Same ranked-bar layout as
+// MixCard, but rows key on the chat id (a leaf) rather than a drill dimension.
+function SessionsCard({
+  title,
+  rows,
+  loading,
+  onOpenSession,
+}: {
+  title: string;
+  rows: SessionRow[];
+  loading: boolean;
+  onOpenSession?: (id: string) => void;
+}): JSX.Element {
+  const top = rows.slice(0, 5);
+  const max = Math.max(...top.map((r) => r.cost), 0) || 1;
+  return (
+    <Card title={title}>
+      <div className="mt-3 space-y-0">
+        {loading ? (
+          <RankedSkeleton />
+        ) : top.length === 0 ? (
+          <div className="text-muted-foreground/60 text-sm">No sessions</div>
+        ) : (
+          top.map((r, i) => {
+            // Colour by rank (top → rose, last → emerald), matching MixCard.
+            const t = top.length > 1 ? 1 - i / (top.length - 1) : 1;
+            return (
+              <MixRowItem
+                key={r.id}
+                label={r.label}
+                cost={r.cost}
+                barPct={(r.cost / max) * 100}
+                barColor={gradeColor(t)}
+                onSelect={onOpenSession ? () => onOpenSession(r.id) : undefined}
               />
             );
           })
@@ -395,7 +449,58 @@ type StatCardSpec = {
   caption?: string;
   loading: boolean;
 };
-export type CardSpec = MixCardSpec | StatCardSpec;
+type SessionRow = { id: string; label: string; cost: number };
+type SessionsCardSpec = {
+  kind: "sessions";
+  title: string;
+  rows: SessionRow[];
+  loading: boolean;
+};
+export type CardSpec = MixCardSpec | StatCardSpec | SessionsCardSpec;
+
+// Render one secondary card by kind. A dispatcher (not an inline ternary) keeps
+// the grid map flat as the kinds grow.
+function CardItem({
+  card,
+  onDrill,
+  onOpenSession,
+}: {
+  card: CardSpec;
+  onDrill?: (dim: Dimension, value: string) => void;
+  onOpenSession?: (id: string) => void;
+}): JSX.Element {
+  switch (card.kind) {
+    case "mix":
+      return (
+        <MixCard
+          title={card.title}
+          dim={card.dim}
+          drillable={card.drillable}
+          rows={card.rows}
+          loading={card.loading}
+          onDrill={onDrill}
+        />
+      );
+    case "sessions":
+      return (
+        <SessionsCard
+          title={card.title}
+          rows={card.rows}
+          loading={card.loading}
+          onOpenSession={onOpenSession}
+        />
+      );
+    case "stat":
+      return (
+        <StatCard
+          title={card.title}
+          value={card.value}
+          caption={card.caption}
+          loading={card.loading}
+        />
+      );
+  }
+}
 
 export function CostWidgets({
   series,
@@ -404,17 +509,20 @@ export function CostWidgets({
   cards,
   rangeLabel,
   onDrill,
+  onOpenSession,
   loading,
 }: {
   series: WidgetSeries;
   totals: Measures;
   prevTotals: Measures;
-  // Per-level secondary cards (mix breakdowns + stats); varies by the axis.
+  // Per-level secondary cards (mix breakdowns, stats, sessions); varies by axis.
   cards: CardSpec[];
   // Human date-range label shown beside the headline metric titles.
   rangeLabel: string;
   // Drill into a mix-card row by its (dimension, value).
   onDrill?: (dim: Dimension, value: string) => void;
+  // Open a session's detail from the "Most costly sessions" widget.
+  onOpenSession?: (id: string) => void;
   // True while the main slice is still loading (trend + KPI skeletons).
   loading: boolean;
 }): JSX.Element {
@@ -428,27 +536,14 @@ export function CostWidgets({
           range={rangeLabel}
           loading={loading}
         />
-        {cards.map((c) =>
-          c.kind === "mix" ? (
-            <MixCard
-              key={c.title}
-              title={c.title}
-              dim={c.dim}
-              drillable={c.drillable}
-              rows={c.rows}
-              loading={c.loading}
-              onDrill={onDrill}
-            />
-          ) : (
-            <StatCard
-              key={c.title}
-              title={c.title}
-              value={c.value}
-              caption={c.caption}
-              loading={c.loading}
-            />
-          ),
-        )}
+        {cards.map((c) => (
+          <CardItem
+            key={c.title}
+            card={c}
+            onDrill={onDrill}
+            onOpenSession={onOpenSession}
+          />
+        ))}
       </div>
       <div className="grid grid-cols-3 gap-4">
         <KpiTile

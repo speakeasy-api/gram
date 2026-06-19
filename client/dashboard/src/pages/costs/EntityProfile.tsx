@@ -28,7 +28,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { CostTable } from "./CostTable";
-import { type Crumb, type DimMeta, LABELS, type Measures } from "./taxonomy";
+import { type Crumb, LABELS, type Measures } from "./taxonomy";
 
 // ── Formatting helpers ──────────────────────────────────────────────────────
 
@@ -124,19 +124,6 @@ function prettyName(value: string, dim: Dimension): string {
   return displayValue(value);
 }
 
-function entitySubtitle(
-  entity: Crumb | null,
-  parentValue: string | null,
-): string {
-  // The type already shows in the badge, so the subtitle carries context only:
-  // the email for users, otherwise the parent it belongs to.
-  if (!entity) return "Across all projects";
-  if (entity.dim === Dimension.Email && entity.value.includes("@")) {
-    return entity.value;
-  }
-  return parentValue ? `in ${displayValue(parentValue)}` : "";
-}
-
 // A unique, deterministic colour identity for an entity, derived from its name
 // (FNV-1a → related hues), rendered as a faint blurred mesh wash behind the hero.
 function entityPalette(name: string): { mesh: string } {
@@ -193,16 +180,32 @@ function entityIcon(entity: Crumb | null): LucideIcon {
 function HeaderStat({
   label,
   value,
+  onClick,
 }: {
   label: string;
   value: string;
+  // When set, the stat becomes a button — used to turn "Agent sessions" into the
+  // header entry point for the per-session list.
+  onClick?: () => void;
 }): JSX.Element {
-  return (
-    <div className="flex flex-col">
+  const inner = (
+    <>
       <span className="text-2xl font-semibold tabular-nums">{value}</span>
       <span className="text-muted-foreground text-xs">{label}</span>
-    </div>
+    </>
   );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="hover:bg-muted -mx-2 -my-1 flex flex-col rounded-md px-2 py-1 text-left transition-colors"
+      >
+        {inner}
+      </button>
+    );
+  }
+  return <div className="flex flex-col">{inner}</div>;
 }
 
 // ── EntityProfile ───────────────────────────────────────────────────────────
@@ -214,19 +217,31 @@ export type EntityProfileProps = {
   onBack: () => void;
   // Jump straight back to the org root.
   onHome: () => void;
-  // The immediate parent's value, for the subtitle (e.g. Team · Engineering).
+  // The immediate parent's value, for the "Back to …" control.
   parentValue: string | null;
+  // The ancestor chain above this entity (root → immediate parent), rendered as
+  // the typed breadcrumb trail under the title so deep nesting stays legible.
+  ancestors: Crumb[];
   // Headline measures summed over this entity's children.
   stats: Measures;
-  // The axis the child table is grouped by, and the re-pivot options.
+  // The dimension the child table is grouped by (drives labels + CostTable).
   groupBy: Dimension;
   // Whether rows can be drilled — false when no populated level exists below.
   canDrill: boolean;
-  pivotOptions: DimMeta[];
-  onGroupByChange: (dim: Dimension) => void;
+  // The current breakdown axis value (a Dimension or the sessions sentinel) and
+  // its selectable options, plus the change handler.
+  axisValue: string;
+  axisOptions: { value: string; label: string }[];
+  onAxisChange: (value: string) => void;
   // The child rows + drill handler.
   rows: QueryRow[];
   onDrill: (row: QueryRow) => void;
+  // When set, replaces the dimension CostTable (the per-session list in sessions
+  // mode). The override owns its own loading/empty/error states.
+  tableOverride?: ReactNode;
+  // Switch the breakdown to the per-session list — wired to the clickable
+  // "Agent sessions" header stat. Omitted when already in sessions mode.
+  onViewSessions?: () => void;
   // Per-group daily cost series for the row sparklines.
   seriesByGroup: Map<string, number[]>;
   // The date-range picker control, rendered in the header above the stats.
@@ -250,13 +265,17 @@ export function EntityProfile({
   onBack,
   onHome,
   parentValue,
+  ancestors,
   stats,
   groupBy,
   canDrill,
-  pivotOptions,
-  onGroupByChange,
+  axisValue,
+  axisOptions,
+  onAxisChange,
   rows,
   onDrill,
+  tableOverride,
+  onViewSessions,
   seriesByGroup,
   rangePicker,
   rangeLabel,
@@ -268,7 +287,11 @@ export function EntityProfile({
 
   const title = entity ? prettyName(entity.value, entity.dim) : "All costs";
   const typeLabel = entity ? (LABELS[entity.dim] ?? "Group") : "Organization";
-  const subtitle = entitySubtitle(entity, parentValue);
+  // Raw ancestor values joined by chevrons (e.g. "R&D › Engineering › elena@…").
+  // Values stay raw — the title already shows the entity's pretty name.
+  const ancestryTrail = ancestors
+    .map((c) => displayValue(c.value))
+    .join("  ›  ");
   const palette = entityPalette(title);
   const Icon = entityIcon(entity);
 
@@ -277,6 +300,22 @@ export function EntityProfile({
       `${slugify(title)}-by-${slugify(groupLabel)}-${slugify(rangeLabel)}.csv`,
       buildCostCsv(rows, groupLabel),
     );
+
+  // The default dimension table; replaced by `tableOverride` (the session list)
+  // when one is supplied.
+  const dimensionTable = isError ? (
+    <Type className="text-muted-foreground">Failed to load cost data.</Type>
+  ) : (
+    <CostTable
+      rows={rows}
+      groupLabel={groupLabel}
+      groupBy={groupBy}
+      canDrill={canDrill}
+      onDrill={onDrill}
+      seriesByGroup={seriesByGroup}
+      isLoading={isLoading}
+    />
+  );
 
   return (
     <div className="flex w-full flex-col">
@@ -343,16 +382,18 @@ export function EntityProfile({
                 <Icon className="text-foreground size-7" strokeWidth={1.5} />
               </div>
               <div className="min-w-0">
-                <h1 className="truncate text-2xl font-semibold tracking-tight">
-                  {title}
-                </h1>
-                <div className="mt-1.5 flex items-center gap-2">
-                  <Badge variant="secondary">{typeLabel}</Badge>
-                  {subtitle && (
-                    <span className="text-muted-foreground truncate text-sm">
-                      {subtitle}
-                    </span>
-                  )}
+                {ancestryTrail && (
+                  <div className="text-muted-foreground mb-1.5 truncate text-sm">
+                    {ancestryTrail}
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <h1 className="truncate text-2xl font-semibold tracking-tight">
+                    {title}
+                  </h1>
+                  <Badge variant="secondary" className="shrink-0">
+                    {typeLabel}
+                  </Badge>
                 </div>
               </div>
             </div>
@@ -361,6 +402,7 @@ export function EntityProfile({
               <HeaderStat
                 label="Agent sessions"
                 value={stats.sessions.toLocaleString()}
+                onClick={onViewSessions}
               />
               <HeaderStat
                 label="Tool calls"
@@ -381,47 +423,34 @@ export function EntityProfile({
           <div className="mb-3 flex items-center gap-3">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               Breakdown by
-              <Select
-                value={groupBy}
-                onValueChange={(value) => onGroupByChange(value as Dimension)}
-              >
+              <Select value={axisValue} onValueChange={onAxisChange}>
                 <SelectTrigger className="border-border hover:bg-muted data-[state=open]:bg-muted !h-auto w-auto -my-1 cursor-pointer gap-1.5 rounded-md border bg-transparent py-1.5 pr-2.5 pl-3 text-sm font-semibold shadow-none transition-colors focus-visible:ring-0">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {pivotOptions.map((p) => (
-                    <SelectItem key={p.dim} value={p.dim}>
-                      {p.label}
+                  {axisOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </h2>
-            <button
-              type="button"
-              onClick={handleExportCsv}
-              disabled={rows.length === 0}
-              className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1.5 rounded-md border bg-transparent px-2.5 py-1.5 text-sm transition-colors disabled:pointer-events-none disabled:opacity-40"
-            >
-              <Download className="size-3.5 shrink-0" />
-              Export CSV
-            </button>
+            {/* CSV export covers the dimension table only; the session list owns
+                its own affordances. */}
+            {!tableOverride && (
+              <button
+                type="button"
+                onClick={handleExportCsv}
+                disabled={rows.length === 0}
+                className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1.5 rounded-md border bg-transparent px-2.5 py-1.5 text-sm transition-colors disabled:pointer-events-none disabled:opacity-40"
+              >
+                <Download className="size-3.5 shrink-0" />
+                Export CSV
+              </button>
+            )}
           </div>
-          {isError ? (
-            <Type className="text-muted-foreground">
-              Failed to load cost data.
-            </Type>
-          ) : (
-            <CostTable
-              rows={rows}
-              groupLabel={groupLabel}
-              groupBy={groupBy}
-              canDrill={canDrill}
-              onDrill={onDrill}
-              seriesByGroup={seriesByGroup}
-              isLoading={isLoading}
-            />
-          )}
+          {tableOverride ?? dimensionTable}
         </div>
       </div>
     </div>

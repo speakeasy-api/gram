@@ -1,4 +1,5 @@
 import { telemetryListAttributeKeys } from "@gram/client/funcs/telemetryListAttributeKeys";
+import { telemetryListSessions } from "@gram/client/funcs/telemetryListSessions";
 import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
 import {
   Dimension,
@@ -6,16 +7,21 @@ import {
   type QueryFilter,
   type QueryRow,
 } from "@gram/client/models/components";
-import { useGramContext } from "@gram/client/react-query";
+import {
+  invalidateAllListChats,
+  useChatDeleteMutation,
+  useGramContext,
+} from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { InsightsConfig } from "@/components/insights-dock";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
+import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import {
@@ -23,9 +29,12 @@ import {
   costExplorerSuggestions,
 } from "@/lib/insights-suggestions";
 import { useRoutes } from "@/routes";
+import { ChatDetailSheet } from "../chatLogs/ChatDetailPanel";
 import { type CardSpec, CostWidgets } from "./CostWidgets";
 import { EntityProfile } from "./EntityProfile";
+import { SessionTable } from "./SessionTable";
 import {
+  type Axis,
   availableDimensions,
   BREAKDOWN_PARAM,
   type Crumb,
@@ -33,11 +42,15 @@ import {
   displayName,
   encodeCrumb,
   isDimension,
+  isSessionLeaf,
+  isSessionsAxis,
   LABELS,
   type Measures,
   nextAvailableDimension,
   parseDrillPath,
   PIVOTS,
+  SESSIONS_AXIS,
+  showsTopSessionsWidget,
 } from "./taxonomy";
 
 const EMPTY_MEASURES: Measures = { cost: 0, sessions: 0, tools: 0, tokens: 0 };
@@ -97,10 +110,16 @@ function formatDateRange(from: Date, to: Date): string {
  */
 export function CostsExplorer(): JSX.Element {
   const { projectSlug } = useSlugs();
+  const project = useProject();
   const routes = useRoutes();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const queryClient = useQueryClient();
+  const deleteChat = useChatDeleteMutation();
+  // Which session's detail overlay is open (ephemeral UI, not drill state — so
+  // it lives in component state rather than the URL).
+  const [openChatId, setOpenChatId] = useState<string | null>(null);
 
   // Drill state is the URL. The filter `path` is encoded as pathname segments
   // (so the breadcrumb tracks it and the view is shareable/refresh-safe); the
@@ -115,11 +134,23 @@ export function CostsExplorer(): JSX.Element {
   }, [location.pathname, costsBase]);
 
   const byParam = searchParams.get(BREAKDOWN_PARAM);
+  // The deepest filter crumb is the entity in view. Agent/Model are leaves —
+  // once you're on one, individual sessions are the only meaningful view, so we
+  // lock to them: force sessions mode and offer no further dimension breakdown.
+  // This stops nonsensical deep drills (e.g. model → role → user → agent).
+  const deepestCrumb = path.length ? path[path.length - 1]! : null;
+  const atSessionLeaf = deepestCrumb != null && isSessionLeaf(deepestCrumb.dim);
+  // The sessions sentinel swaps the table for the per-session list; the rest of
+  // the page (filters, widgets, header stats) is unchanged.
+  const sessionsMode = isSessionsAxis(byParam) || atSessionLeaf;
+  // The "Most costly sessions" widget shows on org/division/department/team/user
+  // (not Agent/Model, which already render the full session table).
+  const showSessionsWidget = showsTopSessionsWidget(deepestCrumb);
 
   // Navigate to a node: encode its filter path into the URL and pin the
   // breakdown axis in `?by=`. `replace` for view-only changes (re-pivoting)
   // that shouldn't add a back-button step.
-  const goToNode = (nextPath: Crumb[], by: Dimension, replace = false) => {
+  const goToNode = (nextPath: Crumb[], by: Axis, replace = false) => {
     const tail = nextPath.map(encodeCrumb).join("/");
     // Preserve the rest of the query (the date-range filter lives here too) and
     // only override the breakdown axis.
@@ -140,10 +171,15 @@ export function CostsExplorer(): JSX.Element {
     clearCustomRange,
   } = useDateRangeFilter("30d");
 
-  const filters: QueryFilter[] = useMemo(
-    () => path.map((c) => ({ dimension: c.dim, values: [c.value] })),
-    [path],
-  );
+  // Every cost query is scoped to the current project via a project_id filter
+  // (the endpoints are org-scoped, but project_id is an allowlisted dimension),
+  // then narrowed further by the drill path. This keeps the dashboard to the
+  // project in the URL and guarantees session detail (project-scoped) loads.
+  const filters: QueryFilter[] = useMemo(() => {
+    const drill = path.map((c) => ({ dimension: c.dim, values: [c.value] }));
+    if (!project.id) return drill;
+    return [{ dimension: Dimension.ProjectId, values: [project.id] }, ...drill];
+  }, [path, project.id]);
 
   // The generated useTelemetryQuery hook keys its cache on gramSession only — it
   // ignores the request body — so every drill would return the first cached
@@ -258,6 +294,64 @@ export function CostsExplorer(): JSX.Element {
             groupBy: groupBy as GroupBy,
             sortBy: "total_cost",
             topN: 100,
+            filters: filters.length ? filters : undefined,
+          },
+        }),
+      ),
+  });
+
+  // Per-session list for the current slice — only when the breakdown axis is the
+  // sessions sentinel. Org-scoped endpoint; reuses the same drill `filters` and
+  // is ranked server-side by cost. The generated useListSessions hook keys its
+  // cache on gramSession only (ignores the body), so drive useQuery directly.
+  const {
+    data: sessionsData,
+    isFetching: sessionsFetching,
+    isError: sessionsError,
+  } = useQuery({
+    queryKey: [
+      "costs-explorer-sessions",
+      from.toISOString(),
+      to.toISOString(),
+      filters,
+      "total_cost",
+    ],
+    enabled: sessionsMode,
+    throwOnError: false,
+    queryFn: () =>
+      unwrapAsync(
+        telemetryListSessions(client, {
+          listSessionsPayload: {
+            from,
+            to,
+            sortBy: "total_cost",
+            limit: 100,
+            filters: filters.length ? filters : undefined,
+          },
+        }),
+      ),
+  });
+
+  // Top 5 sessions by cost for the "Most costly sessions" widget — shown on the
+  // org/structure levels (not Agent/Model). Independent of sessionsMode so the
+  // widget renders alongside the dimension breakdown.
+  const { data: topSessionsData, isFetching: topSessionsFetching } = useQuery({
+    queryKey: [
+      "costs-explorer-top-sessions",
+      from.toISOString(),
+      to.toISOString(),
+      filters,
+    ],
+    enabled: showSessionsWidget,
+    throwOnError: false,
+    queryFn: () =>
+      unwrapAsync(
+        telemetryListSessions(client, {
+          listSessionsPayload: {
+            from,
+            to,
+            sortBy: "total_cost",
+            limit: 5,
             filters: filters.length ? filters : undefined,
           },
         }),
@@ -399,7 +493,7 @@ export function CostsExplorer(): JSX.Element {
     // below it (e.g. Department → Team); leaf dims (Agent) or levels with no data
     // beneath them are shown but not clickable.
     const drillableDim = (dim: Dimension) =>
-      nextAvailableDimension(dim, availableDims) !== null;
+      isSessionLeaf(dim) || nextAvailableDimension(dim, availableDims) !== null;
     // Team view groups by user, so its table already ranks people — surface the
     // top spenders as a compact card too (reuses the main rows, no extra query).
     if (groupBy === Dimension.Email) {
@@ -497,16 +591,26 @@ export function CostsExplorer(): JSX.Element {
   // Used by both the main table (current axis) and the mix-card rows (their own
   // cross-cut axis, e.g. drilling a department straight from the Division view).
   const drillIntoDim = (dim: Dimension, value: string) => {
-    // Land on the next chain axis that actually has data, skipping empty links
-    // (e.g. divisions → users when the org has no departments). Null means
-    // nothing populated below — don't drill into an empty level. (While
+    // "" (the "(unset)" bucket) is drillable — it filters to the entities
+    // missing this attribute. Only "Other" (the synthetic top-N rollup) isn't.
+    if (value === "Other") return;
+    // Never re-add a dimension already in the path — that produces nonsensical
+    // chains (e.g. the same user/agent twice). The pivot list already hides
+    // filtered dims; this guards the mix-card + fallback-chain paths too.
+    if (path.some((c) => c.dim === dim)) return;
+    // Agent/Model are leaves: drilling a row shows that slice's individual
+    // sessions instead of pivoting to another dimension.
+    if (isSessionLeaf(dim)) {
+      goToNode([...path, { dim, value }], SESSIONS_AXIS);
+      return;
+    }
+    // Otherwise land on the next chain axis that actually has data, skipping
+    // empty links (e.g. divisions → users when the org has no departments). Null
+    // means nothing populated below — don't drill into an empty level. (While
     // availability is still loading this returns the static next dimension, so
     // drilling stays enabled and never blocks prematurely.)
     const next = nextAvailableDimension(dim, availableDims);
     if (next === null) return;
-    // "" (the "(unset)" bucket) is drillable — it filters to the entities
-    // missing this attribute. Only "Other" (the synthetic top-N rollup) isn't.
-    if (value === "Other") return;
     goToNode([...path, { dim, value }], next);
   };
 
@@ -516,7 +620,9 @@ export function CostsExplorer(): JSX.Element {
   // Rows are drillable only when there's a *populated* level below the current
   // axis — so you can't drill into an empty breakdown. (Availability-unknown
   // during load falls back to the static chain, keeping rows drillable.)
-  const canDrill = nextAvailableDimension(groupBy, availableDims) !== null;
+  const canDrill =
+    isSessionLeaf(groupBy) ||
+    nextAvailableDimension(groupBy, availableDims) !== null;
 
   // Go up one ancestor: drop the deepest filter and regroup by the axis that
   // produced it (the removed crumb's dimension) — i.e. show the parent's profile.
@@ -530,7 +636,7 @@ export function CostsExplorer(): JSX.Element {
   const goHome = () => goToNode([], defaultGroupBy([], availableDims));
 
   // Re-pivot the current node's breakdown axis without drilling (view-only).
-  const changeGroupBy = (dim: Dimension) => goToNode(path, dim, true);
+  const changeGroupBy = (axis: Axis) => goToNode(path, axis, true);
 
   // Offer a breakdown axis only if it can actually partition the current slice
   // into >1 row. `attributes` (the entity's distinct dimension values) tells us:
@@ -547,7 +653,24 @@ export function CostsExplorer(): JSX.Element {
     return (attributes[p.dim]?.length ?? 0) > 1;
   });
 
-  const currentEntity = path.length ? path[path.length - 1]! : null;
+  // The breakdown <Select> options: dimension pivots plus the always-available
+  // sessions sentinel. At a session leaf (Agent/Model) the only option is
+  // Sessions — no further dimension breakdown. `axisValue` is the current
+  // selection; `onViewSessions` is the header entry point, omitted while already
+  // viewing the list.
+  const dimensionAxisOptions = atSessionLeaf
+    ? []
+    : pivotOptions.map((p) => ({ value: p.dim as string, label: p.label }));
+  const axisOptions: { value: string; label: string }[] = [
+    ...dimensionAxisOptions,
+    { value: SESSIONS_AXIS, label: LABELS[SESSIONS_AXIS]! },
+  ];
+  const axisValue: string = sessionsMode ? SESSIONS_AXIS : groupBy;
+  const onViewSessions = sessionsMode
+    ? undefined
+    : () => changeGroupBy(SESSIONS_AXIS);
+
+  const currentEntity = deepestCrumb;
   const parentValue = path.length >= 2 ? path[path.length - 2]!.value : null;
 
   // Project Assistant dock config — recomputed per render, so drilling into a
@@ -600,14 +723,31 @@ export function CostsExplorer(): JSX.Element {
     />
   );
 
+  // The "Most costly sessions" widget (top 5 by cost), prepended on the eligible
+  // levels. Cap the other cards to one so the top row stays Trend + 2.
+  const sessionsCard: CardSpec = {
+    kind: "sessions",
+    title: "Most costly sessions",
+    rows: (topSessionsData?.sessions ?? []).map((s) => ({
+      id: s.gramChatId,
+      label: s.userEmail?.length ? s.userEmail : s.gramChatId.slice(0, 8),
+      cost: s.totalCost,
+    })),
+    loading: topSessionsFetching && !topSessionsData,
+  };
+  const widgetCards = showSessionsWidget
+    ? [sessionsCard, ...cards.slice(0, 1)]
+    : cards;
+
   const widgets = (
     <CostWidgets
       series={widgetSeries}
       totals={stats}
       prevTotals={prevTotals}
-      cards={cards}
+      cards={widgetCards}
       rangeLabel={formatDateRange(from, to)}
       onDrill={drillIntoDim}
+      onOpenSession={setOpenChatId}
       loading={isFetching && !data}
     />
   );
@@ -655,18 +795,48 @@ export function CostsExplorer(): JSX.Element {
         onBack={goUp}
         onHome={goHome}
         parentValue={parentValue}
+        ancestors={path.slice(0, -1)}
         stats={stats}
         groupBy={groupBy}
         canDrill={canDrill}
-        pivotOptions={pivotOptions}
-        onGroupByChange={changeGroupBy}
+        axisValue={axisValue}
+        axisOptions={axisOptions}
+        onAxisChange={(value) => changeGroupBy(value as Axis)}
         rows={rows}
         onDrill={drillInto}
+        tableOverride={
+          sessionsMode ? (
+            <SessionTable
+              sessions={sessionsData?.sessions ?? []}
+              isLoading={sessionsFetching && !sessionsData}
+              isError={sessionsError}
+              onOpen={setOpenChatId}
+            />
+          ) : undefined
+        }
+        onViewSessions={onViewSessions}
         seriesByGroup={seriesByGroup}
         rangePicker={rangePicker}
         rangeLabel={formatDateRange(from, to)}
         isLoading={isFetching && !data}
         isError={isError}
+      />
+      {/* Interim session drilldown: the existing project-scoped chat trace
+          overlay. A dedicated org-aware session page is designed separately. */}
+      <ChatDetailSheet
+        chatId={openChatId}
+        onClose={() => setOpenChatId(null)}
+        onDelete={(chatId) => {
+          deleteChat.mutate(
+            { request: { id: chatId } },
+            {
+              onSuccess: () => {
+                void invalidateAllListChats(queryClient);
+                setOpenChatId(null);
+              },
+            },
+          );
+        }}
       />
     </>
   );

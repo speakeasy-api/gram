@@ -4,6 +4,20 @@ import { Dimension } from "@gram/client/models/components";
 // controller and the EntityProfile view. Kept in a non-component module so the
 // view file can satisfy the react-refresh "only export components" rule.
 
+// Individual chat sessions aren't a taxonomy dimension (a chat id isn't a
+// filterable attribute), so they ride as a sentinel breakdown axis: selecting
+// it swaps the table to a per-session list (telemetry.listSessions) without
+// deepening the drill path. Lives alongside the real Dimension values in `?by=`.
+export const SESSIONS_AXIS = "sessions" as const;
+// The breakdown axis stored in `?by=`: a real Dimension or the sessions sentinel.
+export type Axis = Dimension | typeof SESSIONS_AXIS;
+
+export function isSessionsAxis(
+  value: string | null | undefined,
+): value is typeof SESSIONS_AXIS {
+  return value === SESSIONS_AXIS;
+}
+
 // A single drill axis: API dimension key + human label.
 export type DimMeta = { dim: Dimension; label: string };
 // One ancestor selection in the drill path; becomes an ANDed query filter.
@@ -36,9 +50,35 @@ export const PIVOTS: DimMeta[] = [
   { dim: Dimension.Role, label: "Role" },
 ];
 
-export const LABELS: Record<string, string> = Object.fromEntries(
-  PIVOTS.map((p) => [p.dim, p.label]),
-);
+export const LABELS: Record<string, string> = {
+  ...Object.fromEntries(PIVOTS.map((p) => [p.dim, p.label])),
+  [SESSIONS_AXIS]: "Sessions",
+};
+
+// The most granular grouping axes — an Agent or a Model is an endpoint, not
+// something you break down further. Drilling a row here jumps straight to that
+// slice's individual sessions (the SESSIONS_AXIS list) instead of another
+// dimension breakdown.
+export const SESSION_LEAF_DIMS = new Set<Dimension>([
+  Dimension.HookSource,
+  Dimension.Model,
+]);
+export function isSessionLeaf(dim: Dimension): boolean {
+  return SESSION_LEAF_DIMS.has(dim);
+}
+
+// Levels that surface the "Most costly sessions" widget: the org root and the
+// org-structure rollups down to the individual user. Agent/Model already render
+// the full session table, so they don't repeat it as a widget.
+const SESSION_WIDGET_DIMS = new Set<Dimension>([
+  Dimension.DivisionName,
+  Dimension.DepartmentName,
+  Dimension.Group,
+  Dimension.Email,
+]);
+export function showsTopSessionsWidget(entity: Crumb | null): boolean {
+  return entity == null || SESSION_WIDGET_DIMS.has(entity.dim);
+}
 
 // The next axis to drill into after `dim`, following the suggested chain and
 // falling back to User → Agent for off-chain pivots. null = leaf.

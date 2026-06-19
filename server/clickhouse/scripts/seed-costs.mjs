@@ -475,9 +475,27 @@ function attrJSON(obj) {
   return sql(JSON.stringify(obj));
 }
 
+// Fake chat titles so the seeded Postgres chats (and the agent-sessions list)
+// read like real sessions rather than blank rows.
+const TITLES = [
+  "Debugging a failing test",
+  "Refactor request",
+  "Feature scaffolding",
+  "Code review",
+  "Data analysis",
+  "API integration",
+  "Test generation",
+  "Writing docs",
+  "Incident triage",
+  "Schema migration",
+];
+
 let chatSeq = 0;
 let totalChats = 0;
 const rows = [];
+// Postgres chat records mirroring the telemetry gram_chat_id values, so the
+// per-session detail view (chat.load, project-scoped) resolves a real chat.
+const chatRecords = [];
 
 for (const p of people) {
   // Real directory syncs are incomplete: a slice of people are missing one or
@@ -514,7 +532,15 @@ for (const p of people) {
     const projectId = weightedPick(projectIds, projectWeights);
     const hookSource = weightedPick(p.agents, p.agentW);
     const daysAgo = rnd() * DAYS_BACK;
-    const t = BigInt(Math.floor(NOW - daysAgo * MS_PER_DAY)) * 1000000n;
+    const tsMs = Math.floor(NOW - daysAgo * MS_PER_DAY);
+    const t = BigInt(tsMs) * 1000000n;
+    chatRecords.push({
+      id: chatId,
+      projectId,
+      userId: p.userId,
+      title: pick(TITLES),
+      tsMs,
+    });
     const traceId = crypto.randomBytes(16).toString("hex");
     const baseAttrs = {
       ...ua,
@@ -624,6 +650,15 @@ try {
   process.exit(1);
 }
 
+// Mirror the telemetry sessions into Postgres `chats` so clicking a session in
+// the cost dashboard resolves a real chat (the detail view is project-scoped).
+try {
+  seedChats();
+} catch (e) {
+  console.error("Postgres chats seed failed:", e.message);
+  process.exit(1);
+}
+
 // ---- helpers that shell out ------------------------------------------------
 function discoverProjectIds() {
   const q =
@@ -647,6 +682,79 @@ function discoverProjectIds() {
     process.exit(1);
   }
   return ids;
+}
+
+// The organization_id of the same top org discoverProjectIds() targets — needed
+// for the (NOT NULL) chats.organization_id column.
+function discoverOrgId() {
+  const q =
+    "SELECT organization_id FROM projects GROUP BY organization_id " +
+    "ORDER BY count(*) DESC LIMIT 1;";
+  const out = execFileSync(
+    "docker",
+    ["exec", PG_CONTAINER, "psql", "-U", "gram", "-d", "gram", "-tA", "-c", q],
+    { encoding: "utf8" },
+  );
+  const id = out.trim().split("\n")[0]?.trim();
+  if (!id) {
+    console.error("No organization found in local Postgres.");
+    process.exit(1);
+  }
+  return id;
+}
+
+// Insert a chats row per seeded session (id == telemetry gram_chat_id) so the
+// dashboard's project-scoped chat.load resolves. Deterministic ids → ON CONFLICT
+// keeps re-runs idempotent. Messages aren't seeded; the detail view still shows
+// the session's telemetry logs (searchLogs keys on gram_chat_id).
+function seedChats() {
+  const orgId = discoverOrgId();
+  const values = chatRecords.map((c) => {
+    const iso = new Date(c.tsMs).toISOString();
+    return `('${c.id}', '${c.projectId}', '${sql(orgId)}', '${sql(c.userId)}', '${sql(c.title)}', '${iso}', '${iso}')`;
+  });
+
+  const stmts = [];
+  const CHUNK_CHATS = 1000;
+  for (let i = 0; i < values.length; i += CHUNK_CHATS) {
+    stmts.push(
+      `INSERT INTO chats (id, project_id, organization_id, user_id, title, created_at, updated_at) VALUES\n` +
+        `${values.slice(i, i + CHUNK_CHATS).join(",\n")}\n` +
+        `ON CONFLICT (id) DO UPDATE SET project_id = EXCLUDED.project_id, ` +
+        `organization_id = EXCLUDED.organization_id, user_id = EXCLUDED.user_id, ` +
+        `title = EXCLUDED.title, created_at = EXCLUDED.created_at, ` +
+        `updated_at = EXCLUDED.updated_at;`,
+    );
+  }
+
+  const tmp2 = `${os.tmpdir()}/seed_costs_chats_${process.pid}.sql`;
+  fs.writeFileSync(tmp2, stmts.join("\n"));
+  execFileSync(
+    "docker",
+    ["cp", tmp2, `${PG_CONTAINER}:/tmp/seed_costs_chats.sql`],
+    { stdio: "inherit" },
+  );
+  execFileSync(
+    "docker",
+    [
+      "exec",
+      PG_CONTAINER,
+      "psql",
+      "-U",
+      "gram",
+      "-d",
+      "gram",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-f",
+      "/tmp/seed_costs_chats.sql",
+    ],
+    { stdio: "inherit" },
+  );
+  fs.unlinkSync(tmp2);
+  console.log(
+    `Inserted ${chatRecords.length} chats into Postgres (org ${orgId}).`,
+  );
 }
 
 function verify() {
