@@ -332,6 +332,31 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQuery", "type": "query"}`)
 	})
 
+	Method("listSessions", func() {
+		Description("Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.")
+
+		// Org-scoped: the query spans every project in the caller's
+		// organization. project_id is an optional filter, not the auth scope.
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(ListSessionsPayload)
+			security.SessionPayload()
+		})
+
+		Result(ListSessionsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.listSessions")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listSessions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSessions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListSessions", "type": "query"}`)
+	})
+
 	Method("listFilterOptions", func() {
 		Description("List available filter options (API keys or users) for the observability overview")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -804,6 +829,78 @@ var ChatSummaryType = Type("ChatSummary", func() {
 	)
 })
 
+var ListSessionsPayload = Type("ListSessionsPayload", func() {
+	Description("Payload for listing org-scoped chat sessions")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-26T10:00:00Z")
+	})
+	Attribute("filters", ArrayOf(QueryFilter), "Optional filters; all filters are ANDed together.")
+	Attribute("sort_by", String, "Measure used to rank sessions. Defaults to total_cost.", func() {
+		Enum("total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "tool_call_count", "message_count", "duration_seconds")
+		Default("total_cost")
+	})
+	Attribute("limit", Int, "Number of sessions to return (1-1000)", func() {
+		Minimum(1)
+		Maximum(1000)
+		Default(50)
+	})
+	Attribute("cursor", String, "Opaque cursor for pagination")
+
+	Required("from", "to")
+})
+
+var ListSessionsResult = Type("ListSessionsResult", func() {
+	Description("Result of listing org-scoped chat sessions")
+
+	Attribute("sessions", ArrayOf(SessionSummaryType), "List of chat session summaries")
+	Attribute("next_cursor", String, "Cursor for next page")
+
+	Required("sessions")
+})
+
+var SessionSummaryType = Type("SessionSummary", func() {
+	Description("Org-scoped summary information for a chat session")
+
+	Attribute("gram_chat_id", String, "Chat session ID")
+	Attribute("project_id", String, "Project ID that emitted this chat session")
+	Attribute("user_email", String, "User email associated with this chat session")
+	Attribute("hook_source", String, "Client or agent surface associated with this chat session")
+	Attribute("model", String, "LLM model used in this chat session")
+	Attribute("start_time_unix_nano", String, "Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)")
+	Attribute("end_time_unix_nano", String, "Latest log timestamp in Unix nanoseconds (string for JS int64 precision)")
+	Attribute("duration_seconds", Float64, "Chat session duration in seconds")
+	Attribute("message_count", Int64, "Number of LLM completion messages in this chat session")
+	Attribute("tool_call_count", Int64, "Number of tool calls in this chat session")
+	Attribute("total_input_tokens", Int64, "Total input tokens used")
+	Attribute("total_output_tokens", Int64, "Total output tokens used")
+	Attribute("total_tokens", Int64, "Total tokens used")
+	Attribute("total_cost", Float64, "Total cost in USD")
+	Attribute("status", String, "Chat session status", func() {
+		Enum("success", "error")
+	})
+
+	Required(
+		"gram_chat_id",
+		"project_id",
+		"start_time_unix_nano",
+		"end_time_unix_nano",
+		"duration_seconds",
+		"message_count",
+		"tool_call_count",
+		"total_input_tokens",
+		"total_output_tokens",
+		"total_tokens",
+		"total_cost",
+		"status",
+	)
+})
+
 var SearchUsersFilter = Type("SearchUsersFilter", func() {
 	Description("Filter criteria for searching user usage summaries")
 
@@ -1255,7 +1352,9 @@ var QueryFilter = Type("QueryFilter", func() {
 	Attribute("dimension", String, "Dimension to filter on", func() {
 		Enum(queryDimensions...)
 	})
-	Attribute("values", ArrayOf(String), "Match if the dimension equals any of these values (IN semantics; for multi-valued dimensions like role/group, matches if any element is present).")
+	Attribute("values", ArrayOf(String), "Match if the dimension equals any of these values (IN semantics; for multi-valued dimensions like role/group, matches if any element is present).", func() {
+		MinLength(1)
+	})
 
 	Required("dimension", "values")
 })
@@ -1702,6 +1801,7 @@ var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
 	Attribute("hosted_toolset_slugs", ArrayOf(String), "Hosted MCP toolset slugs to include")
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
+	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
 
 	Required("from", "to")
 })

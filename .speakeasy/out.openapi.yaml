@@ -4686,6 +4686,94 @@ paths:
       tags:
         - assistants
       x-speakeasy-name-override: get
+  /rpc/assistants.getManagedAssistant:
+    get:
+      description: Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.
+      operationId: getManagedAssistant
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assistant'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getManagedAssistant assistants
+      tags:
+        - assistants
+      x-speakeasy-name-override: getManaged
   /rpc/assistants.list:
     get:
       description: List assistants for the current project.
@@ -14406,6 +14494,102 @@ paths:
       x-speakeasy-name-override: moveIssuer
       x-speakeasy-react-hook:
         name: MoveOrganizationRemoteSessionIssuer
+  /rpc/organizationRemoteSessionIssuers.refreshSession:
+    post:
+      description: Force an upstream token refresh on a single remote_session in the caller's organization, regardless of current access-token expiry. Returns the updated remote_session so callers can reflect the new expiry without a refetch. Fails with a bad-request error when the session holds no refresh token. Requires org:admin.
+      operationId: refreshOrganizationRemoteSession
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSession'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: refreshSession organizationRemoteSessionIssuers
+      tags:
+        - organizationRemoteSessionIssuers
+      x-speakeasy-name-override: refreshSession
+      x-speakeasy-react-hook:
+        name: RefreshOrganizationRemoteSession
   /rpc/organizationRemoteSessionIssuers.removeClientFromMcpServer:
     post:
       description: Detach a remote_session_client from an MCP server (clears the MCP server's user_session_issuer link) in the caller's organization. Requires org:admin.
@@ -21871,106 +22055,6 @@ paths:
       x-speakeasy-react-hook:
         name: RiskApprovePolicyBypassRequest
         type: mutation
-  /rpc/risk.capabilities.get:
-    get:
-      description: Get server-side risk analysis capabilities for the current project.
-      operationId: getRiskCapabilities
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RiskCapabilitiesResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: getRiskCapabilities risk
-      tags:
-        - risk
-      x-speakeasy-group: risk.capabilities
-      x-speakeasy-name-override: get
-      x-speakeasy-react-hook:
-        name: RiskCapabilities
   /rpc/risk.categories:
     get:
       description: 'Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.'
@@ -26505,6 +26589,95 @@ paths:
       x-speakeasy-name-override: listHooksTraces
       x-speakeasy-react-hook:
         name: ListHooksTraces
+        type: query
+  /rpc/telemetry.listSessions:
+    post:
+      description: Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.
+      operationId: listSessions
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListSessionsPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSessionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listSessions telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: listSessions
+      x-speakeasy-react-hook:
+        name: ListSessions
         type: query
   /rpc/telemetry.listToolUsageTraces:
     post:
@@ -32017,6 +32190,111 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: UserSessionIssuers
+  /rpc/userSessionIssuers.migrateLegacyGramRegistrations:
+    post:
+      description: 'One-off migration: lift the legacy Redis dynamic-client registrations from a gram-type oauth_proxy_provider into user_session_clients on the given user_session_issuer, so migrated MCP clients skip re-registration and re-auth. Removed once the OAuth proxy is retired.'
+      operationId: migrateLegacyGramRegistrations
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrateLegacyGramRegistrationsForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrateLegacyGramRegistrationsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: migrateLegacyGramRegistrations userSessionIssuers
+      tags:
+        - userSessionIssuers
+      x-speakeasy-name-override: migrateLegacyGramRegistrations
+      x-speakeasy-react-hook:
+        name: MigrateLegacyGramRegistrations
   /rpc/userSessionIssuers.update:
     post:
       description: Update fields on an existing user_session_issuer.
@@ -32143,6 +32421,26 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
+          description: Filter by session status.
+          in: query
+          name: status
+          schema:
+            description: Filter by session status.
+            enum:
+              - active
+              - expired
+              - revoked
+              - all
+            type: string
+        - allowEmptyValue: true
+          description: Filter by the connecting client id.
+          in: query
+          name: client_id
+          schema:
+            description: Filter by the connecting client id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
           description: 'Pagination cursor: id of the last item from the previous page.'
           in: query
           name: cursor
@@ -32260,6 +32558,105 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: UserSessions
+  /rpc/userSessions.listFacets:
+    get:
+      description: List available user session facet values (clients, users, servers) in the caller's project.
+      operationId: listUserSessionFacets
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListUserSessionFacetsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listFacets userSessions
+      tags:
+        - userSessions
+      x-speakeasy-name-override: listFacets
+      x-speakeasy-react-hook:
+        name: UserSessionFacets
   /rpc/userSessions.mint:
     post:
       description: Mint a user_session for an issuer-gated toolset on behalf of the authenticated dashboard user. The minted JWT matches the shape of the one /mcp/{slug}/token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.
@@ -34803,6 +35200,10 @@ components:
     CodexHookPayload:
       type: object
       properties:
+        additional_data:
+          type: object
+          description: Additional hook-specific data
+          additionalProperties: true
         cwd:
           type: string
           description: The working directory when the event fired
@@ -35631,7 +36032,7 @@ components:
           type: array
           items:
             type: string
-          description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').
+          description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
         sources:
           type: array
           items:
@@ -37931,6 +38332,11 @@ components:
           description: Start time in ISO 8601 format
           example: "2025-12-19T10:00:00Z"
           format: date-time
+        hook_sources:
+          type: array
+          items:
+            type: string
+          description: Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.
         hosted_toolset_slugs:
           type: array
           items:
@@ -39314,6 +39720,64 @@ components:
       description: Result type for listing remote MCP servers
       required:
         - remote_mcp_servers
+    ListSessionsPayload:
+      type: object
+      properties:
+        cursor:
+          type: string
+          description: Opaque cursor for pagination
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryFilter'
+          description: Optional filters; all filters are ANDed together.
+        from:
+          type: string
+          description: Start time in ISO 8601 format
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        limit:
+          type: integer
+          description: Number of sessions to return (1-1000)
+          default: 50
+          format: int64
+          minimum: 1
+          maximum: 1000
+        sort_by:
+          type: string
+          description: Measure used to rank sessions. Defaults to total_cost.
+          default: total_cost
+          enum:
+            - total_cost
+            - total_tokens
+            - total_input_tokens
+            - total_output_tokens
+            - tool_call_count
+            - message_count
+            - duration_seconds
+        to:
+          type: string
+          description: End time in ISO 8601 format
+          example: "2025-12-26T10:00:00Z"
+          format: date-time
+      description: Payload for listing org-scoped chat sessions
+      required:
+        - from
+        - to
+    ListSessionsResult:
+      type: object
+      properties:
+        next_cursor:
+          type: string
+          description: Cursor for next page
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionSummary'
+          description: List of chat session summaries
+      description: Result of listing org-scoped chat sessions
+      required:
+        - sessions
     ListShadowMCPAccessRulesResult:
       type: object
       properties:
@@ -39551,6 +40015,28 @@ components:
       description: Result type for listing user_session_consents.
       required:
         - items
+    ListUserSessionFacetsResult:
+      type: object
+      properties:
+        clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSessionFacetOption'
+          description: Connecting client facets.
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSessionFacetOption'
+          description: Issuer/server facets.
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSessionFacetOption'
+          description: Subject (user) facets.
+      required:
+        - clients
+        - users
+        - servers
     ListUserSessionIssuersResult:
       type: object
       properties:
@@ -39991,6 +40477,31 @@ components:
         - visibility
         - created_at
         - updated_at
+    MigrateLegacyGramRegistrationsForm:
+      type: object
+      properties:
+        oauth_proxy_provider_id:
+          type: string
+          description: The gram-type oauth_proxy_provider whose Redis registrations are migrated.
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          description: The target user_session_issuer the migrated user_session_clients attach to.
+          format: uuid
+      description: Form for migrating legacy gram OAuth-proxy client registrations onto a user_session_issuer.
+      required:
+        - oauth_proxy_provider_id
+        - user_session_issuer_id
+    MigrateLegacyGramRegistrationsResult:
+      type: object
+      properties:
+        migrated_count:
+          type: integer
+          description: Number of user_session_clients newly inserted; already-migrated registrations count as zero.
+          format: int64
+      description: Result of a legacy gram registration migration.
+      required:
+        - migrated_count
     MintUserSessionRequestBody:
       type: object
       properties:
@@ -41738,6 +42249,7 @@ components:
           items:
             type: string
           description: Match if the dimension equals any of these values (IN semantics; for multi-valued dimensions like role/group, matches if any element is present).
+          minItems: 1
       description: A single filter predicate on an allowlisted dimension
       required:
         - dimension
@@ -42047,6 +42559,9 @@ components:
         created_at:
           type: string
           format: date-time
+        has_refresh_token:
+          type: boolean
+          description: Whether the session holds an upstream refresh token. Gates the 'Refresh now' action; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token. The token itself is never returned.
         id:
           type: string
           description: The remote_session id.
@@ -42087,6 +42602,7 @@ components:
         - user_session_issuer_id
         - remote_session_client_id
         - access_expires_at
+        - has_refresh_token
         - scopes
         - created_at
         - updated_at
@@ -42450,14 +42966,6 @@ components:
       description: Result type for revoking all of a client's remote_sessions.
       required:
         - revoked_count
-    RiskCapabilitiesResult:
-      type: object
-      properties:
-        pi_classifier_enabled:
-          type: boolean
-          description: Whether the prompt-injection ML classifier is configured on this server.
-      required:
-        - pi_classifier_enabled
     RiskCategoriesResult:
       type: object
       properties:
@@ -42826,7 +43334,7 @@ components:
           type: array
           items:
             type: string
-          description: Prompt-injection detection rule ids enabled in addition to the heuristic baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+          description: Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.
         sources:
           type: array
           items:
@@ -44068,6 +44576,78 @@ components:
       description: Service information
       required:
         - name
+    SessionSummary:
+      type: object
+      properties:
+        duration_seconds:
+          type: number
+          description: Chat session duration in seconds
+          format: double
+        end_time_unix_nano:
+          type: string
+          description: Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
+        gram_chat_id:
+          type: string
+          description: Chat session ID
+        hook_source:
+          type: string
+          description: Client or agent surface associated with this chat session
+        message_count:
+          type: integer
+          description: Number of LLM completion messages in this chat session
+          format: int64
+        model:
+          type: string
+          description: LLM model used in this chat session
+        project_id:
+          type: string
+          description: Project ID that emitted this chat session
+        start_time_unix_nano:
+          type: string
+          description: Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+        status:
+          type: string
+          description: Chat session status
+          enum:
+            - success
+            - error
+        tool_call_count:
+          type: integer
+          description: Number of tool calls in this chat session
+          format: int64
+        total_cost:
+          type: number
+          description: Total cost in USD
+          format: double
+        total_input_tokens:
+          type: integer
+          description: Total input tokens used
+          format: int64
+        total_output_tokens:
+          type: integer
+          description: Total output tokens used
+          format: int64
+        total_tokens:
+          type: integer
+          description: Total tokens used
+          format: int64
+        user_email:
+          type: string
+          description: User email associated with this chat session
+      description: Org-scoped summary information for a chat session
+      required:
+        - gram_chat_id
+        - project_id
+        - start_time_unix_nano
+        - end_time_unix_nano
+        - duration_seconds
+        - message_count
+        - tool_call_count
+        - total_input_tokens
+        - total_output_tokens
+        - total_tokens
+        - total_cost
+        - status
     SetBillingMetadataRequestBody:
       type: object
       properties:
@@ -46941,7 +47521,7 @@ components:
           type: array
           items:
             type: string
-          description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').
+          description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
         sources:
           type: array
           items:
@@ -47484,6 +48064,9 @@ components:
     UserSession:
       type: object
       properties:
+        client_name:
+          type: string
+          description: Name of the MCP client that established the session, if known.
         created_at:
           type: string
           format: date-time
@@ -47495,6 +48078,9 @@ components:
           type: string
           description: The user_session id.
           format: uuid
+        issuer_slug:
+          type: string
+          description: Slug of the user_session_issuer that gated this session.
         jti:
           type: string
           description: Current access-token JTI; used by the revocation path.
@@ -47502,6 +48088,16 @@ components:
           type: string
           description: Next refresh deadline.
           format: date-time
+        revoked_at:
+          type: string
+          description: When the session was revoked, if it has been.
+          format: date-time
+        subject_display_name:
+          type: string
+          description: Resolved human-readable name of the subject, if known.
+        subject_type:
+          type: string
+          description: 'Subject kind: ''user'', ''apikey'', or ''anonymous''.'
         subject_urn:
           type: string
           description: The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
@@ -47522,6 +48118,8 @@ components:
         - expires_at
         - created_at
         - updated_at
+        - issuer_slug
+        - subject_type
     UserSessionClient:
       type: object
       properties:
@@ -47602,6 +48200,23 @@ components:
         - consented_at
         - created_at
         - updated_at
+    UserSessionFacetOption:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Number of sessions for this facet value.
+          format: int64
+        display_name:
+          type: string
+          description: The label shown for the facet value.
+        value:
+          type: string
+          description: The facet value used for filtering.
+      required:
+        - value
+        - display_name
+        - count
     UserSessionIssuer:
       type: object
       properties:

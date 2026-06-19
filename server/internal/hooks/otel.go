@@ -139,10 +139,18 @@ func extractSessionMetadata(payload *gen.LogsPayload) claudeLogMetadata {
 					continue
 				}
 
-				// Store session metadata in Redis
+				// Store session metadata in Redis. Claude Code batches many log
+				// records per session, but user.email / organization.id only ride
+				// on some event types (e.g. api_request, not tool events). Assign
+				// only non-empty values so a later emailless record in the batch
+				// does not clobber an email already extracted from an earlier one.
 				metadata.SessionID = data.SessionID
-				metadata.UserEmail = data.UserEmail
-				metadata.ClaudeOrgID = data.ClaudeOrgID
+				if data.UserEmail != "" {
+					metadata.UserEmail = data.UserEmail
+				}
+				if data.ClaudeOrgID != "" {
+					metadata.ClaudeOrgID = data.ClaudeOrgID
+				}
 			}
 		}
 	}
@@ -220,6 +228,7 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				params = append(params, telemetry.WithOTELMetadata(telemetry.LogParams{
 					Timestamp:  timestamp,
 					ToolInfo:   claudeOTELLogToolInfo(orgID, parsedProjectID.String()),
+					UserInfo:   telemetry.UserInfo{},
 					Attributes: logAttrs,
 				}, observedTimestamp, resourceAttrs))
 			}

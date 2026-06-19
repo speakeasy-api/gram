@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformslack "github.com/speakeasy-api/gram/server/internal/platformtools/slack"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
+	platformusersessions "github.com/speakeasy-api/gram/server/internal/platformtools/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -18,6 +19,12 @@ type toolFactory func(deps Dependencies) core.PlatformToolExecutor
 var registry = []toolFactory{
 	func(deps Dependencies) PlatformToolExecutor {
 		return logs.NewSearchLogsTool(deps.TelemetryService)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformusersessions.NewListUserSessionsTool(deps.DB)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformusersessions.NewGetUserSessionTool(deps.DB)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
 		return platformtriggers.NewListTriggersTool(deps.DB, deps.TriggerApp)

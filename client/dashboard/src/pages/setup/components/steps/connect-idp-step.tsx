@@ -91,11 +91,12 @@ export function ConnectIdpStep({
             intent: "sso",
             successUrl: `${getServerURL()}/v1/setup/callback?intent=sso`,
             returnUrl: window.location.href,
-            intentOptions: {
-              sso: {
-                providerType: provider.providerType,
-              },
-            },
+            // NOTE: intent_options.sso.provider_type is intentionally omitted.
+            // WorkOS currently only accepts "GoogleSAML" here and 422s on every
+            // other provider, breaking non-Google onboarding. Omitting it lets
+            // WorkOS open its own provider picker so all providers work. Restore
+            // provider.providerType once WorkOS supports the full set:
+            // https://speakeasyapi.slack.com/archives/C079KDQDY9X/p1781722173272439
           },
         },
       },

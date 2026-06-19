@@ -413,6 +413,12 @@ CREATE TABLE IF NOT EXISTS deployments_functions (
   memory_mib INT,
   scale INT,
 
+  -- Durable operator overrides for Fly infrastructure settings. When set, these
+  -- take precedence over the customer-supplied memory_mib/scale (sourced from
+  -- gram.config.ts) and survive later customer deploys.
+  memory_mib_override INT,
+  scale_override INT,
+
   CONSTRAINT deployments_functions_pkey PRIMARY KEY (id),
   CONSTRAINT deployments_functions_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
   CONSTRAINT deployments_functions_asset_id_fkey FOREIGN KEY (asset_id) REFERENCES assets (id) ON DELETE CASCADE
@@ -907,7 +913,7 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid,
   remote_session_issuer_id uuid NOT NULL,
-  user_session_issuer_id uuid NOT NULL,
+  user_session_issuer_id uuid,
 
   client_id TEXT NOT NULL,
   client_secret_encrypted TEXT,
@@ -950,9 +956,6 @@ CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (
 
 CREATE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_issuer_idx
 ON remote_session_client_user_session_issuers (user_session_issuer_id, remote_session_client_id);
-
-CREATE UNIQUE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_one_per_issuer
-ON remote_session_client_user_session_issuers (user_session_issuer_id);
 
 -- Remote sessions represent credentials for an external resource that have
 -- been granted to a single Gram subject

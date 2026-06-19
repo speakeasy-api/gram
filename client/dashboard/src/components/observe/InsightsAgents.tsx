@@ -1,6 +1,8 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ChartCard } from "@/components/chart/ChartCard";
-import { formatChartLabel, smoothData } from "@/components/chart/chartUtils";
+import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
+import { useChartZoom } from "@/components/chart/useChartZoom";
+import { buildAgentTokenTimeSeriesChartData } from "@/components/observe/agentTokenTimeSeriesChartData";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { formatCompact } from "@/lib/format";
 import { MetricCard } from "@/components/chart/MetricCard";
@@ -11,9 +13,12 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { Dialog } from "@/components/ui/dialog";
 import { ErrorAlert } from "@/components/ui/alert";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
+import { slugify } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryGetProjectMetricsSummary } from "@gram/client/funcs/telemetryGetProjectMetricsSummary";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
@@ -28,7 +33,13 @@ import type {
 import { useGramContext, useMembers } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
-import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import {
+  defineFilters,
+  useFilterState,
+  type FilterValue,
+  type OptionsById,
+} from "@/components/filters";
+import { Page } from "@/components/page-layout";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   BarElement,
@@ -40,18 +51,20 @@ import {
   LinearScale,
   PointElement,
   Tooltip,
-  type ChartDataset,
   type ChartOptions,
 } from "chart.js";
+import ZoomPlugin from "chartjs-plugin-zoom";
 import {
   Button,
   type Column,
+  Icon,
   type SortDescriptor,
   Table,
   sortTableData,
 } from "@speakeasy-api/moonshine";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bar, Chart } from "react-chartjs-2";
+import { Link } from "react-router";
 import { toast } from "sonner";
 
 ChartJS.register(
@@ -63,6 +76,7 @@ ChartJS.register(
   Filler,
   Tooltip,
   Legend,
+  ZoomPlugin,
 );
 
 type ValueMode = "tokens" | "cost";
@@ -119,12 +133,6 @@ function initials(name: string): string {
   return (name[0] ?? "?").toUpperCase();
 }
 
-function unixNanoToDate(value: string): Date {
-  const nanos = BigInt(value);
-  const millis = Number(nanos / 1_000_000n);
-  return new Date(millis);
-}
-
 function ValueModeToggle({
   mode,
   onChange,
@@ -133,24 +141,38 @@ function ValueModeToggle({
   onChange: (mode: ValueMode) => void;
 }) {
   return (
-    <div className="border-border flex h-[34px] items-center rounded-md border p-0.5">
-      {(["tokens", "cost"] as const).map((option) => (
-        <button
-          key={option}
-          onClick={() => onChange(option)}
-          className={cn(
-            "h-7 rounded px-3 text-xs font-medium transition-all duration-150",
-            mode === option
-              ? "text-foreground bg-white shadow-sm dark:bg-gray-900"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {option === "tokens" ? "Tokens" : "Cost ($)"}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      value={mode}
+      onChange={onChange}
+      options={[
+        {
+          value: "tokens",
+          label: "Tokens",
+          tooltip: "Show usage measured in tokens",
+        },
+        {
+          value: "cost",
+          label: "Cost ($)",
+          tooltip: "Show usage measured in US dollars",
+        },
+      ]}
+    />
   );
 }
+
+// Cost filters in the unified system. The date range is pinned (always-visible
+// pill); the client/agent filter lives behind "More filters" and surfaces as a
+// pill once set. `client` options are supplied at render from the usage data.
+const COST_FILTERS = defineFilters([
+  {
+    id: "date",
+    label: "Date range",
+    kind: "daterange",
+    pinned: true,
+    defaultPreset: "30d",
+  },
+  { id: "client", label: "Agent", kind: "select" },
+]);
 
 export function InsightsAgentsContent(): JSX.Element {
   const client = useGramContext();
@@ -159,15 +181,19 @@ export function InsightsAgentsContent(): JSX.Element {
     toolsToInclude: ["gram_search_users", "gram_list_organization_users"],
   });
 
-  const [dateRange, setDateRange] = useState<DateRangePreset>("30d");
-  const [customRange, setCustomRange] = useState<{
-    from: Date;
-    to: Date;
-  } | null>(null);
-  const [customRangeLabel, setCustomRangeLabel] = useState<string | null>(null);
+  // Filters now run through the unified system (URL-persisted). The existing
+  // query/derivation code reads dateRange/customRange/customRangeLabel/
+  // clientFilter, so we bridge the filter values back to those shapes rather
+  // than rewiring every consumer.
+  const costFilters = useFilterState(COST_FILTERS);
+  const dateValue = costFilters.values.date;
+  const dateRange: DateRangePreset = dateValue.preset ?? "30d";
+  const customRange = dateValue.customRange;
+  const customRangeLabel = dateValue.customLabel;
+  const clientFilter = costFilters.values.client ?? "all";
+
   const [valueMode, setValueMode] = useState<ValueMode>("tokens");
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
-  const [clientFilter, setClientFilter] = useState<string>("all");
   const [groupByDimension, setGroupByDimension] = useState<"employee" | "role">(
     "employee",
   );
@@ -429,23 +455,19 @@ export function InsightsAgentsContent(): JSX.Element {
     membersLoading || usersQuery.isLoading || projectQuery.isLoading;
   const error = membersError ?? usersQuery.error ?? projectQuery.error;
 
-  const handlePresetChange = (preset: DateRangePreset) => {
-    setDateRange(preset);
-    setCustomRange(null);
-    setCustomRangeLabel(null);
-  };
-  const handleCustomRangeChange = (
-    rangeFrom: Date,
-    rangeTo: Date,
-    label?: string,
-  ) => {
-    setCustomRange({ from: rangeFrom, to: rangeTo });
-    setCustomRangeLabel(label ?? null);
-  };
-  const handleClearCustomRange = () => {
-    setCustomRange(null);
-    setCustomRangeLabel(null);
-  };
+  const handleClearCustomRange = useCallback(() => {
+    costFilters.clearValue("date");
+  }, [costFilters]);
+  const handleChartRangeSelect = useCallback(
+    (rangeFrom: Date, rangeTo: Date) => {
+      costFilters.setValue("date", {
+        preset: null,
+        customRange: { from: rangeFrom, to: rangeTo },
+        customLabel: formatChartZoomRangeLabel(rangeFrom, rangeTo),
+      });
+    },
+    [costFilters],
+  );
 
   return (
     <>
@@ -458,14 +480,8 @@ export function InsightsAgentsContent(): JSX.Element {
       />
       <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
-          <div
-            className={cn(
-              "flex gap-4 transition-all duration-300",
-              isInsightsOpen
-                ? "flex-col items-stretch"
-                : "flex-row items-center justify-between",
-            )}
-          >
+          {/* Page title, then the filter bar on its own row below it. */}
+          <div className="flex flex-col gap-4">
             <div className="flex min-w-0 flex-col gap-1">
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-semibold">AI Agent Costs</h1>
@@ -476,35 +492,24 @@ export function InsightsAgentsContent(): JSX.Element {
                 models over {rangeLabel}.
               </p>
             </div>
-            <div
-              className={cn(
-                "flex flex-wrap items-center gap-3",
-                isInsightsOpen ? "justify-start" : "shrink-0",
-              )}
-            >
-              <ValueModeToggle mode={valueMode} onChange={setValueMode} />
-              <select
-                value={clientFilter}
-                onChange={(e) => setClientFilter(e.target.value)}
-                className="border-border bg-background text-foreground h-[34px] rounded-md border px-2.5 text-xs"
-              >
-                <option value="all">All Agents</option>
-                {availableClients.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-              <TimeRangePicker
-                preset={customRange ? null : dateRange}
-                customRange={customRange}
-                customRangeLabel={customRangeLabel}
-                onPresetChange={handlePresetChange}
-                onCustomRangeChange={handleCustomRangeChange}
-                onClearCustomRange={handleClearCustomRange}
-                disabled={isLoading}
+            <Page.Toolbar>
+              <Page.Toolbar.Filters
+                schema={COST_FILTERS}
+                values={costFilters.values}
+                optionsById={{ client: availableClients } satisfies OptionsById}
+                onChange={
+                  costFilters.setValue as (
+                    id: string,
+                    value: FilterValue,
+                  ) => void
+                }
+                onClear={costFilters.clearValue as (id: string) => void}
+                onClearAll={costFilters.clearAll}
               />
-            </div>
+              <Page.Toolbar.Actions>
+                <ValueModeToggle mode={valueMode} onChange={setValueMode} />
+              </Page.Toolbar.Actions>
+            </Page.Toolbar>
           </div>
 
           {error ? (
@@ -578,6 +583,9 @@ export function InsightsAgentsContent(): JSX.Element {
                   valueMode={valueMode}
                   expandedChart={expandedChart}
                   onExpand={setExpandedChart}
+                  onRangeSelect={handleChartRangeSelect}
+                  isZoomed={customRange !== null}
+                  onResetZoom={handleClearCustomRange}
                 />
                 <ClientBreakdownChart
                   title="Usage by Client"
@@ -626,6 +634,9 @@ function TokenTimeSeriesChart({
   valueMode,
   expandedChart,
   onExpand,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: {
   title: string;
   subtitle?: string;
@@ -635,6 +646,9 @@ function TokenTimeSeriesChart({
   valueMode: ValueMode;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  onRangeSelect?: (from: Date, to: Date) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
 }) {
   const isExpanded = expandedChart === chartId;
   const height = isExpanded ? 420 : 260;
@@ -645,82 +659,35 @@ function TokenTimeSeriesChart({
         : b.totalInputTokens + b.totalOutputTokens) > 0,
   );
 
-  // Mixed bar+line chart. Each dataset can override its `type` (chart.js
-  // supports per-dataset type overrides on a bar chart), so the dataset
-  // array is a union of bar and line dataset shapes.
-  const chartData = useMemo<{
-    labels: string[];
-    datasets: Array<
-      ChartDataset<"bar", number[]> | ChartDataset<"line", number[]>
-    >;
-  }>(() => {
-    const labels = timeSeries.map((b) =>
-      formatChartLabel(unixNanoToDate(b.bucketTimeUnixNano), timeRangeMs),
-    );
+  const { timestamps, chartData } = useMemo(
+    () =>
+      buildAgentTokenTimeSeriesChartData(timeSeries, timeRangeMs, valueMode),
+    [timeSeries, timeRangeMs, valueMode],
+  );
+  const resolveZoomRange = useCallback(
+    (min: number, max: number) => {
+      if (timestamps.length === 0) return null;
+      const fromIndex = Math.max(0, Math.floor(min));
+      const toIndex = Math.min(timestamps.length - 1, Math.ceil(max));
+      const from = timestamps[fromIndex];
+      const to = timestamps[toIndex];
+      if (from == null || to == null) return null;
+      return { from: new Date(from), to: new Date(to) };
+    },
+    [timestamps],
+  );
+  const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom<
+    "bar" | "line",
+    number[],
+    string
+  >({
+    onRangeSelect,
+    resolveRange: resolveZoomRange,
+  });
 
-    // Raw bar datasets
-    const barDatasets =
-      valueMode === "cost"
-        ? [
-            {
-              label: "Cost",
-              data: timeSeries.map((b) => b.totalCost),
-              backgroundColor: "rgba(96, 165, 250, 0.35)",
-              stack: "stack",
-              order: 2,
-            },
-          ]
-        : [
-            {
-              label: "Input Tokens",
-              data: timeSeries.map((b) => b.totalInputTokens),
-              backgroundColor: "rgba(96, 165, 250, 0.35)",
-              stack: "stack",
-              order: 2,
-            },
-            {
-              label: "Output Tokens",
-              data: timeSeries.map((b) => b.totalOutputTokens),
-              backgroundColor: "rgba(52, 211, 153, 0.35)",
-              stack: "stack",
-              order: 2,
-            },
-            {
-              label: "Cache Read",
-              data: timeSeries.map((b) => b.cacheReadInputTokens),
-              backgroundColor: "rgba(167, 139, 250, 0.35)",
-              stack: "stack",
-              order: 2,
-            },
-          ];
-
-    // Smoothed trend line (total across all stacked values)
-    const rawTotal = timeSeries.map((b) =>
-      valueMode === "cost"
-        ? b.totalCost
-        : b.totalInputTokens + b.totalOutputTokens + b.cacheReadInputTokens,
-    );
-    const trendData = smoothData(rawTotal);
-
-    const trendDataset: ChartDataset<"line", number[]> = {
-      label: valueMode === "cost" ? "Cost Trend" : "Token Trend",
-      data: trendData,
-      type: "line",
-      borderColor: valueMode === "cost" ? "#818cf8" : "#3b82f6",
-      backgroundColor: "transparent",
-      pointRadius: 0,
-      pointHoverRadius: 4,
-      borderWidth: 2,
-      tension: 0.4,
-      fill: false,
-      order: 1,
-    };
-
-    return {
-      labels,
-      datasets: [...barDatasets, trendDataset],
-    };
-  }, [timeSeries, timeRangeMs, valueMode]);
+  useEffect(() => {
+    resetZoom();
+  }, [chartData, resetZoom]);
 
   const options = useMemo<ChartOptions<"bar">>(
     () => ({
@@ -753,6 +720,7 @@ function TokenTimeSeriesChart({
             },
           },
         },
+        zoom: zoomPluginOptions,
       },
       scales: {
         x: {
@@ -770,7 +738,7 @@ function TokenTimeSeriesChart({
         },
       },
     }),
-    [valueMode],
+    [valueMode, zoomPluginOptions],
   );
 
   return (
@@ -780,6 +748,8 @@ function TokenTimeSeriesChart({
       expandedChart={expandedChart}
       onExpand={onExpand}
       hasData={hasData}
+      isZoomed={isZoomed}
+      onResetZoom={onResetZoom}
     >
       {subtitle && (
         <p className="text-muted-foreground -mt-3 mb-2 text-xs">{subtitle}</p>
@@ -796,6 +766,7 @@ function TokenTimeSeriesChart({
               `"bar" | "line"` generic explicitly widens `<Chart>` to accept
               the union dataset shape. */}
           <Chart<"bar" | "line", number[], string>
+            ref={chartRef}
             type="bar"
             data={chartData}
             options={options}
@@ -952,6 +923,16 @@ type EmployeeRow = UserSummary & {
   tokenShare: number;
 };
 
+function employeeDetailSegment(user: EmployeeRow): string {
+  if (user.email) {
+    return slugify(user.displayName);
+  }
+  if (user.userId.includes("@")) {
+    return encodeURIComponent(user.userId);
+  }
+  return slugify(user.userId);
+}
+
 function EmployeeCostTable({
   users,
   roleUsage,
@@ -970,6 +951,7 @@ function EmployeeCostTable({
   roleUsageLoading: boolean;
 }) {
   const PAGE_SIZE = 10;
+  const routes = useRoutes();
   const [page, setPage] = useState(0);
   const isCost = valueMode === "cost";
   const isRoleView = groupByDimension === "role";
@@ -1242,8 +1224,24 @@ function EmployeeCostTable({
           </div>
         ),
       },
+      {
+        key: "userId",
+        id: "employeeDetail",
+        header: "",
+        width: "0.6fr",
+        render: (user) => (
+          <Link
+            to={routes.employees.detail.href(employeeDetailSegment(user))}
+            className="flex items-center gap-1"
+            aria-label={`View ${user.displayName}`}
+          >
+            View
+            <Icon name="arrow-right" />
+          </Link>
+        ),
+      },
     ],
-    [clientFilter, isCost],
+    [clientFilter, isCost, routes.employees.detail],
   );
 
   const sortedUsers = useMemo(
@@ -1285,22 +1283,22 @@ function EmployeeCostTable({
             {items.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <div className="border-border flex h-[34px] items-center rounded-md border p-0.5">
-          {(["employee", "role"] as const).map((option) => (
-            <button
-              key={option}
-              onClick={() => handleGroupByChange(option)}
-              className={cn(
-                "h-7 rounded px-3 text-xs font-medium transition-all duration-150",
-                groupByDimension === option
-                  ? "text-foreground bg-white shadow-sm dark:bg-gray-900"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {option === "employee" ? "Employee" : "Role"}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          value={groupByDimension}
+          onChange={handleGroupByChange}
+          options={[
+            {
+              value: "employee",
+              label: "Employee",
+              tooltip: "Break usage down per individual employee",
+            },
+            {
+              value: "role",
+              label: "Role",
+              tooltip: "Break usage down per role",
+            },
+          ]}
+        />
       </div>
       {isRoleView ? (
         roleUsageLoading ? (

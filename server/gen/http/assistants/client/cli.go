@@ -273,6 +273,28 @@ func BuildSendMessagePayload(assistantsSendMessageBody string, assistantsSendMes
 	return v, nil
 }
 
+// BuildGetManagedAssistantPayload builds the payload for the assistants
+// getManagedAssistant endpoint from CLI flags.
+func BuildGetManagedAssistantPayload(assistantsGetManagedAssistantSessionToken string, assistantsGetManagedAssistantProjectSlugInput string) (*assistants.GetManagedAssistantPayload, error) {
+	var sessionToken *string
+	{
+		if assistantsGetManagedAssistantSessionToken != "" {
+			sessionToken = &assistantsGetManagedAssistantSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assistantsGetManagedAssistantProjectSlugInput != "" {
+			projectSlugInput = &assistantsGetManagedAssistantProjectSlugInput
+		}
+	}
+	v := &assistants.GetManagedAssistantPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildEnsureManagedAssistantPayload builds the payload for the assistants
 // ensureManagedAssistant endpoint from CLI flags.
 func BuildEnsureManagedAssistantPayload(assistantsEnsureManagedAssistantSessionToken string, assistantsEnsureManagedAssistantProjectSlugInput string) (*assistants.EnsureManagedAssistantPayload, error) {

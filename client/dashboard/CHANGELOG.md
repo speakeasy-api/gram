@@ -1,5 +1,73 @@
 # dashboard
 
+## 0.75.0
+
+### Minor Changes
+
+- 1cd0ff9: Add an organization administrator "Refresh now" action for remote sessions. The
+  `organizationRemoteSessionIssuers` management service gains a `refreshSession`
+  method that forces an upstream `grant_type=refresh_token` exchange on a single
+  session regardless of its current access-token expiry, persists the rotated
+  tokens, and returns the updated session. The shared refresh code path is now
+  used by both the lazy MCP token-resolution path and this explicit admin action;
+  the upstream token POST runs outside any database transaction. The
+  `RemoteSession` type exposes a `has_refresh_token` flag (the encrypted token
+  itself stays unexposed) so the dashboard Sessions tab can offer "Refresh now"
+  only for sessions that can actually be refreshed. Operator-actionable refresh
+  failures (an upstream rejection of the refresh token, an unreadable stored
+  token, a missing token endpoint) surface as a bad-request with a clear "Unable
+  to refresh: ..." reason and each refresh is recorded as a
+  `remote-session:refresh` audit event.
+
+### Patch Changes
+
+- 0b4e42b: Unify the search, filters, sort, and view-as controls on every list page into a single `Page.Toolbar` component, replacing the per-page mix of bespoke search boxes, filter sidebars, sort dropdowns, and view toggles.
+
+  - One contained control bar per page (search + filters on the left, sort + count + view on the right), with uniform control heights.
+  - Filter chips and sheet share a typed schema (`defineFilters`/`useFilterState`); adds Status + Source filters to the MCP page.
+  - Folds in fixes: "Reset to default" now clears every filter atomically, the date picker opens inside the filter sheet, and empty filter labels are pluralized ("All servers").
+
+## 0.74.0
+
+### Minor Changes
+
+- bf94bd2: Add a full-page Project Assistant chat as a second way into the assistant, alongside the docked composer.
+
+  - New **Project Assistant** entry in the project sidebar (under Home) opening a `/chat` landing: a personalized "Ask your Project Assistant about your AI usage" composer with a cycling, crossfading placeholder, a `/` slash menu of starter prompts, your recent conversations grouped by time period ("Show all" to expand), and a set of enterprise-focused starter prompts.
+  - A `/chat/:id` conversation view with a back/new-chat bar and the conversation's title in the header, which updates live as the backend generates it.
+  - The project home page now embeds the same "Ask anything" widget.
+  - The dock and the full-page chat share **one** assistant runtime, so an in-flight conversation continues seamlessly when you expand the dock into the page (no lost response). The docked pill offers "Continue chat" to reopen a recent conversation, and pages that host their own chat runtime (Playground, Elements, assistant onboarding) hide the dock to avoid duplicate composers.
+  - A decorative rainbow "powder burst" header on the chat landing.
+
+- 4b2f64c: Allow defining audiences when configuring policies.
+- ec6d14c: Add an organization administrator UI for managing Remote Identity Providers
+  (remote session issuers), their clients, and sessions across the organization.
+  The `organizationRemoteSessionIssuers` management service gains an org-scoped
+  admin surface: a combined listing of organizational and project-specific issuers
+  with client counts and project names, drill-downs into each issuer's clients
+  (with MCP server attachment counts), each client's attached MCP servers and
+  sessions, authoritative delete pre-flight summaries, and write operations to
+  update or delete issuers and clients, detach a client from an MCP server, revoke
+  a single session, and revoke all of a client's sessions. Reads require `org:read`
+  and writes require `org:admin`; destructive actions are audited, with a bulk
+  revoke-all recorded as a single audit event.
+
+### Patch Changes
+
+- 94f624d: Add Beta badges to the Project Assistant (sidebar nav item, footer resume button, and `/chat` landing page) and promote the Assistants surface from Preview to Beta. Both use the shared `ReleaseStageBadge` so the label stays consistent across every surface.
+- 672d9bc: Add optional onboarding for configuring Cursor and Anthropic Compliance API integrations, and show Codex instrumentation plus OpenAI Compliance API configuration as coming soon.
+- bcda11d: Upgrade the default assistant model to Claude Opus 4.7. The platform-managed Project Assistant, the assistant onboarding flow, and the onboarding system prompt's default recommendation now use `anthropic/claude-opus-4.7` instead of `anthropic/claude-sonnet-4.6`. Existing assistants are unaffected; only newly created assistants pick up the new default.
+- 2adba2f: Add employee detail metric drilldowns for tool logs, agent sessions, and risk events.
+- 94c551b: Fix the Project Assistant chat getting stuck "loading" after a tool-using turn, where the assistant had already replied but the composer stayed disabled.
+- bd4261a: Use the Speakeasy marketing site favicon for the dashboard
+- dfd4834: The MCP servers screen no longer crashes when a non-critical request fails to load. It now keeps showing the most recently loaded servers with a subtle "couldn't refresh" indicator instead of replacing the whole page with an error.
+- e594e20: Add a step to user session migrations that port existing client registrations from oauth proxy to user sessions
+- 04ddbd0: Rename and reorder project sidebar navigation groups.
+- 88669aa: Update moonshine - design system dependency to latest
+- 32c4165: Unify Tool Logs across hosted MCP servers, shadow MCP servers, local tools, and skills.
+- Updated dependencies [bf94bd2]
+  - @gram-ai/elements@1.37.1
+
 ## 0.73.1
 
 ### Patch Changes

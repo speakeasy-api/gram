@@ -3804,6 +3804,245 @@ func DecodeRevokeSessionResponse(decoder func(*http.Response) goahttp.Decoder, r
 	}
 }
 
+// BuildRefreshSessionRequest instantiates a HTTP request object with method
+// and path set to call the "organizationRemoteSessionIssuers" service
+// "refreshSession" endpoint
+func (c *Client) BuildRefreshSessionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RefreshSessionOrganizationRemoteSessionIssuersPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationRemoteSessionIssuers", "refreshSession", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRefreshSessionRequest returns an encoder for requests sent to the
+// organizationRemoteSessionIssuers refreshSession server.
+func EncodeRefreshSessionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationremotesessionissuers.RefreshSessionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationRemoteSessionIssuers", "refreshSession", "*organizationremotesessionissuers.RefreshSessionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		body := NewRefreshSessionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizationRemoteSessionIssuers", "refreshSession", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRefreshSessionResponse returns a decoder for responses returned by the
+// organizationRemoteSessionIssuers refreshSession endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeRefreshSessionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRefreshSessionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RefreshSessionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			res := NewRefreshSessionRemoteSessionOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RefreshSessionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RefreshSessionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RefreshSessionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RefreshSessionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RefreshSessionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RefreshSessionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RefreshSessionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RefreshSessionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshSession", err)
+				}
+				err = ValidateRefreshSessionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshSession", err)
+				}
+				return nil, NewRefreshSessionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RefreshSessionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshSession", err)
+				}
+				err = ValidateRefreshSessionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshSession", err)
+				}
+				return nil, NewRefreshSessionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionIssuers", "refreshSession", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RefreshSessionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			err = ValidateRefreshSessionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "refreshSession", err)
+			}
+			return nil, NewRefreshSessionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionIssuers", "refreshSession", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRevokeAllClientSessionsRequest instantiates a HTTP request object with
 // method and path set to call the "organizationRemoteSessionIssuers" service
 // "revokeAllClientSessions" endpoint
@@ -4177,6 +4416,7 @@ func unmarshalRemoteSessionResponseBodyToTypesRemoteSession(v *RemoteSessionResp
 		RemoteSessionClientID: *v.RemoteSessionClientID,
 		AccessExpiresAt:       *v.AccessExpiresAt,
 		RefreshExpiresAt:      v.RefreshExpiresAt,
+		HasRefreshToken:       *v.HasRefreshToken,
 		CreatedAt:             *v.CreatedAt,
 		UpdatedAt:             *v.UpdatedAt,
 	}

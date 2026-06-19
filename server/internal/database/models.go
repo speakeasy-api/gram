@@ -405,15 +405,17 @@ type DeploymentTagHistory struct {
 }
 
 type DeploymentsFunction struct {
-	ID            uuid.UUID
-	DeploymentID  uuid.UUID
-	AssetID       uuid.UUID
-	Name          string
-	Slug          string
-	Runtime       string
-	RunnerVersion pgtype.Text
-	MemoryMib     pgtype.Int4
-	Scale         pgtype.Int4
+	ID                uuid.UUID
+	DeploymentID      uuid.UUID
+	AssetID           uuid.UUID
+	Name              string
+	Slug              string
+	Runtime           string
+	RunnerVersion     pgtype.Text
+	MemoryMib         pgtype.Int4
+	Scale             pgtype.Int4
+	MemoryMibOverride pgtype.Int4
+	ScaleOverride     pgtype.Int4
 }
 
 type DeploymentsOpenapiv3Asset struct {
@@ -1237,7 +1239,7 @@ type RemoteSessionClient struct {
 	ID                      uuid.UUID
 	ProjectID               uuid.NullUUID
 	RemoteSessionIssuerID   uuid.UUID
-	UserSessionIssuerID     uuid.UUID
+	UserSessionIssuerID     uuid.NullUUID
 	ClientID                string
 	ClientSecretEncrypted   pgtype.Text
 	ClientIDIssuedAt        pgtype.Timestamptz

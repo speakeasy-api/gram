@@ -1,10 +1,9 @@
+import { forwardRef } from "react";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router";
 
-interface DotRowProps {
-  children: React.ReactNode;
+interface DotRowProps extends React.ComponentPropsWithoutRef<"tr"> {
   icon?: React.ReactNode;
-  className?: string;
   /**
    * When set, the whole row becomes a real navigation link. A stretched anchor
    * covers the row so browser semantics (open-in-new-tab, copy link, the
@@ -16,7 +15,6 @@ interface DotRowProps {
   href?: string;
   /** Accessible label for the row link. Set this whenever `href` is set. */
   ariaLabel?: string;
-  onClick?: (e: React.MouseEvent<HTMLTableRowElement>) => void;
 }
 
 /**
@@ -24,55 +22,55 @@ interface DotRowProps {
  * with an icon overlay, matching the card sidebar aesthetic. Remaining content
  * is rendered as additional cells via `children`.
  *
- * Must be used inside a table body.
+ * Forwards its ref and any extra `<tr>` props (e.g. `onContextMenu`) so it can
+ * back a Radix `ContextMenuTrigger asChild`. Must be used inside a table body.
  */
-export function DotRow({
-  children,
-  icon,
-  className,
-  href,
-  ariaLabel,
-  onClick,
-}: DotRowProps): JSX.Element {
-  return (
-    <tr
-      onClick={onClick}
-      className={cn(
-        "dot-card group border-foreground/10 border-b transition-all",
-        "hover:bg-muted/30",
-        (onClick || href) && "cursor-pointer",
-        href && "relative",
-        className,
-      )}
-    >
-      {/* Dot pattern cell */}
-      <td className="size-17 overflow-hidden p-0">
-        {href && (
-          <Link
-            to={href}
-            aria-label={ariaLabel}
-            className="absolute inset-0 z-10"
-          />
+export const DotRow = forwardRef<HTMLTableRowElement, DotRowProps>(
+  function DotRow(
+    { children, icon, className, href, ariaLabel, ...rest },
+    ref,
+  ): JSX.Element {
+    return (
+      <tr
+        ref={ref}
+        className={cn(
+          "dot-card group border-foreground/10 border-b transition-all",
+          "hover:bg-muted/30",
+          (rest.onClick || href) && "cursor-pointer",
+          href && "relative",
+          className,
         )}
-        <div className="bg-muted/30 text-muted-foreground/20 relative size-17 overflow-hidden">
-          <div
-            className="scroll-dots-target absolute inset-0"
-            style={{
-              backgroundImage:
-                "radial-gradient(circle, currentColor 1px, transparent 1px)",
-              backgroundSize: "16px 16px",
-            }}
-          />
-          {icon && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="bg-background/90 rounded-md p-1.5 shadow-sm backdrop-blur-sm dark:bg-neutral-800 dark:backdrop-blur-none">
-                {icon}
-              </div>
-            </div>
+        {...rest}
+      >
+        {/* Dot pattern cell */}
+        <td className="size-17 overflow-hidden p-0">
+          {href && (
+            <Link
+              to={href}
+              aria-label={ariaLabel}
+              className="absolute inset-0 z-10"
+            />
           )}
-        </div>
-      </td>
-      {children}
-    </tr>
-  );
-}
+          <div className="bg-muted/30 text-muted-foreground/20 relative size-17 overflow-hidden">
+            <div
+              className="scroll-dots-target absolute inset-0"
+              style={{
+                backgroundImage:
+                  "radial-gradient(circle, currentColor 1px, transparent 1px)",
+                backgroundSize: "16px 16px",
+              }}
+            />
+            {icon && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="bg-background/90 rounded-md p-1.5 shadow-sm backdrop-blur-sm dark:bg-neutral-800 dark:backdrop-blur-none">
+                  {icon}
+                </div>
+              </div>
+            )}
+          </div>
+        </td>
+        {children}
+      </tr>
+    );
+  },
+);

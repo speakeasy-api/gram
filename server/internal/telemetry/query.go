@@ -2,6 +2,9 @@ package telemetry
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 
@@ -18,9 +21,15 @@ import (
 // anything finer would just return sparse hourly data.
 const minIntervalSeconds int64 = 3600
 
-// otherGroupLabel is the synthetic group value that holds the rolled-up
-// remainder beyond top_n.
+// otherGroupLabel is the default synthetic group value that holds the rolled-up
+// remainder beyond top_n. If a real group already uses this value, the response
+// picks a suffixed label so the synthetic rollup cannot collide with user data.
 const otherGroupLabel = "Other"
+
+type listSessionsCursor struct {
+	SortValue  float64 `json:"sort_value"`
+	GramChatID string  `json:"gram_chat_id"`
+}
 
 // Query is a generic, org-scoped analytics query over the pre-aggregated
 // attribute_metrics_summaries view. It returns both a grouped table and a
@@ -98,6 +107,147 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	return buildQueryResult(groupBy, interval, timeStart, timeEnd, payload.TopN, tableRows, tsRows), nil
 }
 
+// ListSessions returns org-scoped chat sessions for a filtered analytics slice.
+func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessionsPayload) (*telem_gen.ListSessionsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	limit := payload.Limit
+	if limit == 0 {
+		limit = 50
+	}
+	if limit < 1 || limit > 1000 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be between 1 and 1000")
+	}
+
+	sortBy := payload.SortBy
+	if sortBy == "" {
+		sortBy = "total_cost"
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	projects, err := s.projectsRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list organization projects")
+	}
+	projectIDs := make([]string, 0, len(projects))
+	for _, p := range projects {
+		projectIDs = append(projectIDs, p.ID.String())
+	}
+
+	var cursorSortValue *float64
+	var cursorGramChatID string
+	if payload.Cursor != nil && *payload.Cursor != "" {
+		cursor, err := decodeListSessionsCursor(*payload.Cursor)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor")
+		}
+		cursorSortValue = &cursor.SortValue
+		cursorGramChatID = cursor.GramChatID
+	}
+
+	filters := make([]repo.AttributeMetricsFilter, 0, len(payload.Filters))
+	for _, f := range payload.Filters {
+		if f == nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "filters must not contain null entries")
+		}
+		filters = append(filters, repo.AttributeMetricsFilter{Dimension: f.Dimension, Values: f.Values})
+	}
+
+	items, err := s.chRepo.ListSessions(ctx, repo.ListSessionsParams{
+		ProjectIDs:       projectIDs,
+		TimeStart:        timeStart,
+		TimeEnd:          timeEnd,
+		Filters:          filters,
+		SortBy:           sortBy,
+		CursorSortValue:  cursorSortValue,
+		CursorGramChatID: cursorGramChatID,
+		Limit:            limit + 1,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing sessions")
+	}
+
+	var nextCursor *string
+	if len(items) > limit {
+		next := encodeListSessionsCursor(items[limit-1].SortValue, items[limit-1].GramChatID)
+		nextCursor = &next
+		items = items[:limit]
+	}
+
+	sessions := make([]*telem_gen.SessionSummary, len(items))
+	for i, item := range items {
+		sessions[i] = &telem_gen.SessionSummary{
+			GramChatID:        item.GramChatID,
+			ProjectID:         item.ProjectID,
+			UserEmail:         item.UserEmail,
+			HookSource:        item.HookSource,
+			Model:             item.Model,
+			StartTimeUnixNano: strconv.FormatInt(item.StartTimeUnixNano, 10),
+			EndTimeUnixNano:   strconv.FormatInt(item.EndTimeUnixNano, 10),
+			DurationSeconds:   sanitizeFloat64(item.DurationSeconds),
+			MessageCount:      item.MessageCount,
+			ToolCallCount:     item.ToolCallCount,
+			TotalInputTokens:  item.TotalInputTokens,
+			TotalOutputTokens: item.TotalOutputTokens,
+			TotalTokens:       item.TotalTokens,
+			TotalCost:         sanitizeFloat64(item.TotalCost),
+			Status:            item.Status,
+		}
+	}
+
+	return &telem_gen.ListSessionsResult{
+		Sessions:   sessions,
+		NextCursor: nextCursor,
+	}, nil
+}
+
+func encodeListSessionsCursor(sortValue float64, gramChatID string) string {
+	payload, err := json.Marshal(listSessionsCursor{
+		SortValue:  sortValue,
+		GramChatID: gramChatID,
+	})
+	if err != nil {
+		// The cursor payload is made from primitive values and should always marshal.
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString(payload)
+}
+
+func decodeListSessionsCursor(cursor string) (listSessionsCursor, error) {
+	decoded, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return listSessionsCursor{}, fmt.Errorf("decode list sessions cursor: %w", err)
+	}
+
+	var payload listSessionsCursor
+	if err := json.Unmarshal(decoded, &payload); err != nil {
+		return listSessionsCursor{}, fmt.Errorf("unmarshal list sessions cursor: %w", err)
+	}
+	if payload.GramChatID == "" {
+		return listSessionsCursor{}, fmt.Errorf("missing gram_chat_id")
+	}
+	return payload, nil
+}
+
 // buildQueryResult assembles the grouped table and matching per-group timeseries
 // from the raw repo rows. It applies the top_n + "Other" rollup to both so they
 // agree on group membership, and zero-fills the timeseries buckets in Go so the
@@ -112,9 +262,10 @@ func buildQueryResult(
 ) *telem_gen.QueryResult {
 	buckets := bucketStarts(timeStart, timeEnd, intervalSeconds)
 
-	// Decide which group values are kept and which fold into "Other". The table
-	// rows arrive ordered by sort_by descending from ClickHouse.
+	// Decide which group values are kept and which fold into the synthetic
+	// rollup. The table rows arrive ordered by sort_by descending from ClickHouse.
 	kept, hasOther := selectGroups(groupBy, topN, tableRows)
+	otherLabel := uniqueOtherGroupLabel(tableRows)
 
 	// keptIndex preserves chart series ordering and lets the timeseries pass map
 	// each group value to its slot. "Other" (when present) is the final slot.
@@ -141,7 +292,7 @@ func buildQueryResult(
 	}
 	if hasOther {
 		table = append(table, &telem_gen.QueryRow{
-			GroupValue:      otherGroupLabel,
+			GroupValue:      otherLabel,
 			Measures:        toGenMeasures(otherTable),
 			DimensionValues: flattenDimensionValues(otherDimValues),
 		})
@@ -151,7 +302,7 @@ func buildQueryResult(
 	// seriesBuckets[seriesValue][bucketTime] = accumulated measures
 	seriesValues := append([]string{}, kept...)
 	if hasOther {
-		seriesValues = append(seriesValues, otherGroupLabel)
+		seriesValues = append(seriesValues, otherLabel)
 	}
 	if groupBy == "" && len(seriesValues) == 0 {
 		// No group_by: always emit a single empty-keyed series.
@@ -171,7 +322,7 @@ func buildQueryResult(
 			if !hasOther {
 				continue
 			}
-			seriesValue = otherGroupLabel
+			seriesValue = otherLabel
 		}
 		byBucket := seriesBuckets[seriesValue]
 		if byBucket == nil {
@@ -234,6 +385,22 @@ func selectGroups(groupBy string, topN int, tableRows []repo.AttributeMetricsRow
 		hasOther = true
 	}
 	return kept, hasOther
+}
+
+func uniqueOtherGroupLabel(tableRows []repo.AttributeMetricsRow) string {
+	seen := make(map[string]struct{}, len(tableRows))
+	for _, row := range tableRows {
+		seen[row.GroupValue] = struct{}{}
+	}
+	if _, ok := seen[otherGroupLabel]; !ok {
+		return otherGroupLabel
+	}
+	for i := 1; ; i++ {
+		label := otherGroupLabel + " (" + strconv.Itoa(i) + ")"
+		if _, ok := seen[label]; !ok {
+			return label
+		}
+	}
 }
 
 // bucketStarts returns the aligned bucket start times (unix nanoseconds) that

@@ -113,9 +113,10 @@ func DefaultRetryConfig() *RetryConfig {
 }
 
 type htttpClientOptions struct {
-	otelHTTPOptions []otelhttp.Option
-	retryConfig     *RetryConfig
-	resolver        *net.Resolver
+	otelHTTPOptions   []otelhttp.Option
+	retryConfig       *RetryConfig
+	resolver          *net.Resolver
+	allowedCIDRBlocks []*net.IPNet
 }
 
 // WithOTelHTTPOptions appends additional [otelhttp.Option] values to the
@@ -132,6 +133,26 @@ func WithOTelHTTPOptions(options ...otelhttp.Option) func(*htttpClientOptions) {
 func WithDefaultRetryConfig() func(*htttpClientOptions) {
 	return func(o *htttpClientOptions) {
 		o.retryConfig = DefaultRetryConfig()
+	}
+}
+
+// WithAllowedCIDRBlocks permits this client to dial IPs inside the given CIDR
+// blocks even when the policy's blocklist would otherwise reject them. Use it
+// only for clients whose destinations are trusted and not user-controlled —
+// e.g. the assistant runtime client dialing GKE runner pods by the (RFC1918)
+// pod IP it resolved from the Kubernetes API. The relaxation is scoped to this
+// client; the policy's global enforcement is unchanged. Invalid CIDRs are
+// ignored, so validate them at the configuration boundary.
+func WithAllowedCIDRBlocks(cidrs ...string) func(*htttpClientOptions) {
+	return func(o *htttpClientOptions) {
+		for _, cidr := range cidrs {
+			if cidr == "" {
+				continue
+			}
+			if block, err := parseCIDR(cidr); err == nil {
+				o.allowedCIDRBlocks = append(o.allowedCIDRBlocks, block)
+			}
+		}
 	}
 }
 
@@ -227,6 +248,9 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	if opts.resolver != nil {
 		dialOpts = append(dialOpts, WithDialerResolver(opts.resolver))
 	}
+	if len(opts.allowedCIDRBlocks) > 0 {
+		dialOpts = append(dialOpts, WithDialerAllowedCIDRBlocks(opts.allowedCIDRBlocks))
+	}
 	transport.DialContext = p.Dialer(dialOpts...).DialContext
 
 	otelOpts := []otelhttp.Option{otelhttp.WithTracerProvider(p.tracerProvider)}
@@ -255,12 +279,22 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 }
 
 type dialerOptions struct {
-	resolver *net.Resolver
+	resolver          *net.Resolver
+	allowedCIDRBlocks []*net.IPNet
 }
 
 func WithDialerResolver(resolver *net.Resolver) func(*dialerOptions) {
 	return func(o *dialerOptions) {
 		o.resolver = resolver
+	}
+}
+
+// WithDialerAllowedCIDRBlocks permits the dialer to connect to IPs inside the
+// given blocks even when the policy blocklist covers them. See
+// [WithAllowedCIDRBlocks] for when this is appropriate.
+func WithDialerAllowedCIDRBlocks(blocks []*net.IPNet) func(*dialerOptions) {
+	return func(o *dialerOptions) {
+		o.allowedCIDRBlocks = blocks
 	}
 }
 
@@ -297,6 +331,14 @@ func (p *Policy) Dialer(options ...func(*dialerOptions)) *net.Dialer {
 			ip := net.ParseIP(host)
 			if ip == nil {
 				return fmt.Errorf("%s: %w: bad ip", address, ErrBadHost)
+			}
+
+			// A client-scoped allowlist overrides the blocklist for trusted,
+			// non-user-controlled destinations (e.g. GKE runner pod IPs).
+			for _, block := range opts.allowedCIDRBlocks {
+				if block.Contains(ip) {
+					return nil
+				}
 			}
 
 			return p.checkIP(ip)

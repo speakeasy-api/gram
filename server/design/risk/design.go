@@ -28,7 +28,7 @@ var _ = Service("risk", func() {
 			})
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
-			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').")
+			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
@@ -89,31 +89,6 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPolicies"}`)
 	})
 
-	Method("getRiskCapabilities", func() {
-		Description("Get server-side risk analysis capabilities for the current project.")
-
-		Payload(func() {
-			security.ByKeyPayload()
-			security.SessionPayload()
-			security.ProjectPayload()
-		})
-
-		Result(RiskCapabilitiesResult)
-
-		HTTP(func() {
-			GET("/rpc/risk.capabilities.get")
-			security.ByKeyHeader()
-			security.SessionHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "getRiskCapabilities")
-		Meta("openapi:extension:x-speakeasy-group", "risk.capabilities")
-		Meta("openapi:extension:x-speakeasy-name-override", "get")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCapabilities"}`)
-	})
-
 	Method("getRiskPolicy", func() {
 		Description("Get a risk analysis policy by ID.")
 
@@ -156,7 +131,7 @@ var _ = Service("risk", func() {
 			Attribute("name", String, "The policy name.")
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
-			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').")
+			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy. Omit to preserve the current selection.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
@@ -1104,11 +1079,6 @@ var ListRiskExclusionsResult = Type("ListRiskExclusionsResult", func() {
 var ListCustomDetectionRulesResult = Type("ListCustomDetectionRulesResult", func() {
 	Attribute("rules", ArrayOf(shared.RiskCustomDetectionRule), "The list of custom detection rules.")
 	Required("rules")
-})
-
-var RiskCapabilitiesResult = Type("RiskCapabilitiesResult", func() {
-	Attribute("pi_classifier_enabled", Boolean, "Whether the prompt-injection ML classifier is configured on this server.")
-	Required("pi_classifier_enabled")
 })
 
 var ListRiskResultsResult = Type("ListRiskResultsResult", func() {

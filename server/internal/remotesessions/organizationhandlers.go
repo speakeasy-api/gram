@@ -1119,6 +1119,84 @@ func (s *Service) RevokeSession(ctx context.Context, payload *orgissuersgen.Revo
 	return nil
 }
 
+// RefreshSession forces an upstream token refresh on a single session in the
+// caller's organization, regardless of current access-token expiry, and returns
+// the updated session view.
+//
+// The upstream token POST is an external call, so the refresh (load client →
+// POST → upsert) runs on the pool, never inside a transaction; only the audit
+// log is wrapped in a short transaction afterwards.
+func (s *Service) RefreshSession(ctx context.Context, payload *orgissuersgen.RefreshSessionPayload) (*types.RemoteSession, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+
+	sessionID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session id").LogError(ctx, logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	row, err := repo.New(s.db).GetOrganizationRemoteSessionByID(ctx, repo.GetOrganizationRemoteSessionByIDParams{
+		ID:             sessionID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "remote session not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session").LogError(ctx, logger)
+	}
+
+	// Defense in depth: the UI hides the action for sessions without a refresh
+	// token, but the gate is not authoritative.
+	if !row.RemoteSession.RefreshTokenEncrypted.Valid || row.RemoteSession.RefreshTokenEncrypted.String == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "remote session has no refresh token").LogError(ctx, logger)
+	}
+
+	// Refresh on the pool — the upstream token POST must not run inside a tx.
+	updated, _, err := refreshSessionTokens(ctx, repo.New(s.db), s.enc, s.policy, row.RemoteSession)
+	if err != nil {
+		// Operator-actionable failures carry a public-safe reason; surface it so
+		// the admin sees why the refresh failed instead of a generic error.
+		var refreshErr *TokenRefreshError
+		if errors.As(err, &refreshErr) {
+			return nil, oops.E(oops.CodeBadRequest, err, "Unable to refresh: %s", refreshErr.Reason).LogWarn(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "refresh organization admin remote session").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	if err := s.auditLogger.LogRemoteSessionRefresh(ctx, dbtx, audit.LogRemoteSessionRefreshEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        orgProjectID(row.ClientProjectID),
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		RemoteSessionURN: urn.NewRemoteSession(updated.ID),
+		SubjectURN:       updated.SubjectUrn,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log organization admin remote session refresh").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return mv.BuildRemoteSessionView(updated, conv.FromPGText[string](row.SubjectDisplayName), conv.FromPGText[string](row.SubjectEmail)), nil
+}
+
 // RevokeAllClientSessions soft-deletes all sessions minted against a client
 // in the caller's organization, recording a single bulk audit event.
 func (s *Service) RevokeAllClientSessions(ctx context.Context, payload *orgissuersgen.RevokeAllClientSessionsPayload) (*orgissuersgen.RevokeAllRemoteSessionsResult, error) {

@@ -146,6 +146,24 @@ func TestPolicy_DialerControlContext_CustomPolicy(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestPolicy_DialerAllowedCIDRBlocksOverridesBlock(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+
+	_, allowed, err := net.ParseCIDR("10.52.0.0/16")
+	require.NoError(t, err)
+	dialer := policy.Dialer(guardian.WithDialerAllowedCIDRBlocks([]*net.IPNet{allowed}))
+	ctx := t.Context()
+
+	// An IP inside the allowlisted block is permitted even though it is RFC1918
+	// (the GKE runner pod case).
+	require.NoError(t, dialer.ControlContext(ctx, "tcp", "10.52.1.2:8081", nil))
+
+	// A private IP outside the allowlist is still blocked — the relaxation is
+	// scoped to the configured blocks only.
+	require.ErrorIs(t, dialer.ControlContext(ctx, "tcp", "10.1.0.5:80", nil), guardian.ErrBlockedIP)
+}
+
 func TestPolicy_ClientWrapsTransportWithOtel(t *testing.T) {
 	t.Parallel()
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))

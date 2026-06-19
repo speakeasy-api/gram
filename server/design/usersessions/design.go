@@ -23,6 +23,12 @@ var _ = Service("userSessions", func() {
 			Attribute("user_session_issuer_id", String, "Filter by user_session_issuer id.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("status", String, "Filter by session status.", func() {
+				Enum("active", "expired", "revoked", "all")
+			})
+			Attribute("client_id", String, "Filter by the connecting client id.", func() {
+				Format(FormatUUID)
+			})
 			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page.", func() {
 				Format(FormatUUID)
 			})
@@ -38,6 +44,8 @@ var _ = Service("userSessions", func() {
 			GET("/rpc/userSessions.list")
 			Param("subject_urn")
 			Param("user_session_issuer_id")
+			Param("status")
+			Param("client_id")
 			Param("cursor")
 			Param("limit")
 			security.SessionHeader()
@@ -50,6 +58,26 @@ var _ = Service("userSessions", func() {
 		Meta("openapi:operationId", "listUserSessions")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UserSessions"}`)
+	})
+
+	Method("listFacets", func() {
+		Description("List available user session facet values (clients, users, servers) in the caller's project.")
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+		Result(ListUserSessionFacetsResult)
+		HTTP(func() {
+			GET("/rpc/userSessions.listFacets")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "listUserSessionFacets")
+		Meta("openapi:extension:x-speakeasy-name-override", "listFacets")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UserSessionFacets"}`)
 	})
 
 	Method("mintUserSession", func() {
@@ -137,8 +165,15 @@ var UserSession = Type("UserSession", func() {
 	Attribute("updated_at", String, func() {
 		Format(FormatDateTime)
 	})
+	Attribute("issuer_slug", String, "Slug of the user_session_issuer that gated this session.")
+	Attribute("client_name", String, "Name of the MCP client that established the session, if known.")
+	Attribute("subject_type", String, "Subject kind: 'user', 'apikey', or 'anonymous'.")
+	Attribute("subject_display_name", String, "Resolved human-readable name of the subject, if known.")
+	Attribute("revoked_at", String, "When the session was revoked, if it has been.", func() {
+		Format(FormatDateTime)
+	})
 
-	Required("id", "user_session_issuer_id", "subject_urn", "jti", "refresh_expires_at", "expires_at", "created_at", "updated_at")
+	Required("id", "user_session_issuer_id", "subject_urn", "jti", "refresh_expires_at", "expires_at", "created_at", "updated_at", "issuer_slug", "subject_type")
 })
 
 var ListUserSessionsResult = Type("ListUserSessionsResult", func() {
@@ -148,4 +183,18 @@ var ListUserSessionsResult = Type("ListUserSessionsResult", func() {
 	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
 
 	Required("items")
+})
+
+var UserSessionFacetOption = Type("UserSessionFacetOption", func() {
+	Attribute("value", String, "The facet value used for filtering.")
+	Attribute("display_name", String, "The label shown for the facet value.")
+	Attribute("count", Int64, "Number of sessions for this facet value.")
+	Required("value", "display_name", "count")
+})
+
+var ListUserSessionFacetsResult = Type("ListUserSessionFacetsResult", func() {
+	Attribute("clients", ArrayOf(UserSessionFacetOption), "Connecting client facets.")
+	Attribute("users", ArrayOf(UserSessionFacetOption), "Subject (user) facets.")
+	Attribute("servers", ArrayOf(UserSessionFacetOption), "Issuer/server facets.")
+	Required("clients", "users", "servers")
 })

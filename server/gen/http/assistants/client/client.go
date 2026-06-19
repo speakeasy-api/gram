@@ -41,6 +41,10 @@ type Client struct {
 	// endpoint.
 	SendMessageDoer goahttp.Doer
 
+	// GetManagedAssistant Doer is the HTTP client used to make requests to the
+	// getManagedAssistant endpoint.
+	GetManagedAssistantDoer goahttp.Doer
+
 	// EnsureManagedAssistant Doer is the HTTP client used to make requests to the
 	// ensureManagedAssistant endpoint.
 	EnsureManagedAssistantDoer goahttp.Doer
@@ -71,6 +75,7 @@ func NewClient(
 		UpdateAssistantDoer:        doer,
 		DeleteAssistantDoer:        doer,
 		SendMessageDoer:            doer,
+		GetManagedAssistantDoer:    doer,
 		EnsureManagedAssistantDoer: doer,
 		RestoreResponseBody:        restoreBody,
 		scheme:                     scheme,
@@ -219,6 +224,30 @@ func (c *Client) SendMessage() goa.Endpoint {
 		resp, err := c.SendMessageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("assistants", "sendMessage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetManagedAssistant returns an endpoint that makes HTTP requests to the
+// assistants service getManagedAssistant server.
+func (c *Client) GetManagedAssistant() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetManagedAssistantRequest(c.encoder)
+		decodeResponse = DecodeGetManagedAssistantResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetManagedAssistantRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetManagedAssistantDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assistants", "getManagedAssistant", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -376,11 +376,10 @@ SELECT
     toString(attributes.gen_ai.response.model) AS model,
     hook_source,
 
-    -- Multi-valued dimensions cast from the JSON (Dynamic) arrays into typed
-    -- arrays. CAST handles the JSON->Array(String) conversion; toString would
-    -- yield a ClickHouse array literal ['a','b'] that is not valid JSON.
-    CAST(attributes.user.roles AS Array(String)) AS roles,
-    CAST(attributes.user.groups AS Array(String)) AS groups,
+    -- Multi-valued dimensions extracted tolerantly from JSON/Dynamic values.
+    -- Bad or non-array payloads resolve to [] instead of failing MV ingestion.
+    arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)')) AS roles,
+    arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)')) AS groups,
 
     -- Cardinality
     uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats,

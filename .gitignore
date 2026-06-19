@@ -23,6 +23,7 @@ report.md
 /server/goa*
 /dev-idp/goa*
 /server/gram
+/risk-pi-report
 /server/risk_accuracy_metrics.json
 # Goa generates OpenAPI specs with non-deterministic examples. Nothing consumes them.
 /server/gen/http/openapi.yaml

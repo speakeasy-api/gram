@@ -4,6 +4,7 @@ import (
 	. "goa.design/goa/v3/dsl"
 
 	rsclients "github.com/speakeasy-api/gram/server/design/remotesessionclients"
+	rsessions "github.com/speakeasy-api/gram/server/design/remotesessions"
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
 )
@@ -624,6 +625,32 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Meta("openapi:operationId", "revokeOrganizationRemoteSession")
 		Meta("openapi:extension:x-speakeasy-name-override", "revokeSession")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeOrganizationRemoteSession"}`)
+	})
+
+	Method("refreshSession", func() {
+		Description("Force an upstream token refresh on a single remote_session in the caller's organization, regardless of current access-token expiry. Returns the updated remote_session so callers can reflect the new expiry without a refetch. Fails with a bad-request error when the session holds no refresh token. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(rsessions.RemoteSession)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.refreshSession")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "refreshOrganizationRemoteSession")
+		Meta("openapi:extension:x-speakeasy-name-override", "refreshSession")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RefreshOrganizationRemoteSession"}`)
 	})
 
 	Method("revokeAllClientSessions", func() {

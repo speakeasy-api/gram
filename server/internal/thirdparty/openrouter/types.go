@@ -172,11 +172,16 @@ type TraceConfig struct {
 
 // OpenAIChatRequest represents the request structure for OpenAI chat completions
 type OpenAIChatRequest struct {
-	Model          string                             `json:"model"`
-	Messages       []or.ChatMessages                  `json:"messages"`
-	Stream         bool                               `json:"stream"`
-	Tools          []Tool                             `json:"tools,omitempty"`
-	Temperature    float32                            `json:"temperature,omitempty"`
+	Model    string            `json:"model"`
+	Messages []or.ChatMessages `json:"messages"`
+	Stream   bool              `json:"stream"`
+	Tools    []Tool            `json:"tools,omitempty"`
+	// No omitempty: temperature 0 is a meaningful value (deterministic
+	// sampling), not "unset". With omitempty a caller-requested 0 would be
+	// dropped from the wire and the provider would silently fall back to its
+	// non-zero default. initializeRequest always assigns a concrete value
+	// (defaulting to 1.0), so this field is always intentionally set.
+	Temperature    float32                            `json:"temperature"`
 	ResponseFormat *or.ResponseFormat                 `json:"response_format,omitempty"`
 	Reasoning      *Reasoning                         `json:"reasoning,omitempty"`
 	CacheControl   *or.AnthropicCacheControlDirective `json:"cache_control,omitempty"`

@@ -119,16 +119,24 @@ linters:
         linters:
           - glint
         text: enforceo11yconventions
+      # slog.go is the sanctioned logger: it constructs slog.NewJSONHandler(os.Stderr, ...)
+      # by design, which is the one place os.Stderr is allowed.
+      - path: internal/o11y/slog\.go
+        linters:
+          - forbidigo
+        text: GG012
       # Not interesting to enforce this in tests
       - path: _test\.go|internal/testenv/
         linters:
           - glint
         text: enforceo11yconventions
-      # Not interesting to enforce this in tests
+      # Not interesting to enforce this in tests. Tests and testenv legitimately
+      # use the stdlib log package (setup_test.go) and occasionally os.Std* for
+      # diagnostics, so they are also exempt from GG011/GG012.
       - path: _test\.go|internal/testenv/|internal/testinfra/
         linters:
           - forbidigo
-        text: GG001|GG002
+        text: GG001|GG002|GG011|GG012
       # The testenv package is the canonical provider of the helpers that
       # GG006/GG008/GG009 redirect tests to. It necessarily constructs the
       # underlying primitives directly.
@@ -221,6 +229,23 @@ linters:
           msg: "GG009: Use testenv.NewMeterProvider(t) in tests instead of constructing a noop meter provider inline."
         - pattern: '\.InsertAuditLog\('
           msg: "GG010: Call (*audit.Logger).log() instead of (*repo.Queries).InsertAuditLog directly."
+        - pattern: ^(print|println)$
+          msg: "GG011: The print/println builtins write to stderr and bypass structured logging (they surface as untagged status:error logs in production). Use a *slog.Logger instead."
+        - pattern: ^fmt\.Print(f|ln)?$
+          pkg: ^fmt$
+          msg: "GG011: fmt.Print/Printf/Println write to stdout and bypass structured logging. Use a *slog.Logger instead."
+        - pattern: ^log\.(Print(f|ln)?|Fatal(f|ln)?|Panic(f|ln)?|New|Default|SetOutput|SetFlags|SetPrefix)$
+          pkg: ^log$
+          msg: "GG011: The standard library log package bypasses structured logging. Use a *slog.Logger (log/slog) instead."
+        - pattern: ^debug\.PrintStack$
+          pkg: ^runtime/debug$
+          msg: "GG011: debug.PrintStack writes to stderr. Capture debug.Stack() and log it via a *slog.Logger instead."
+        - pattern: ^os\.Stdout$
+          pkg: ^os$
+          msg: "GG012: Writing to os.Stdout bypasses structured logging. Use a *slog.Logger instead."
+        - pattern: ^os\.Stderr$
+          pkg: ^os$
+          msg: "GG012: Writing to os.Stderr bypasses structured logging. Use a *slog.Logger instead. The sanctioned slog handler setup in internal/o11y/slog.go is exempt."
     sloglint:
       no-mixed-args: true
       attr-only: true
@@ -281,6 +306,8 @@ linters:
         - '^k8s.io/apimachinery/pkg/apis/meta/v1\..+$'
         - '^k8s.io/api/networking/v1\..+$'
         - '^sigs.k8s.io/gateway-api/apis/v1\..+$'
+        - '^k8s.io/client-go/rest\.Config$'
+        - '^k8s.io/client-go/rest\.TLSClientConfig$'
         - '^github.com/posthog/posthog-go\..+$'
         - '^github\.com/speakeasy-api/openapi/.*'
         - '^github\.com/polarsource/polar-go/.*'
@@ -325,6 +352,15 @@ linters:
               desc: V3 is not ready yet use github.com/urfave/cli/v2
             - pkg: "github.com/pkg/errors"
               desc: Should be replaced by standard lib errors package
+            # GG011: debug value dumpers write to stdout/stderr and bypass
+            # structured logging. Forbidden at the import level (forbidigo only
+            # matches call sites). Use a *slog.Logger instead.
+            - pkg: "github.com/davecgh/go-spew/spew"
+              desc: "GG011: spew bypasses structured logging; use a *slog.Logger."
+            - pkg: "github.com/sanity-io/litter"
+              desc: "GG011: litter bypasses structured logging; use a *slog.Logger."
+            - pkg: "github.com/k0kubun/pp"
+              desc: "GG011: pp bypasses structured logging; use a *slog.Logger."
         # testenv exposes cross-cutting test primitives (loggers, OTel
         # providers, encryption clients, infra launchers). It must not import
         # domain packages, otherwise internal tests in those packages can no

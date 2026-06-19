@@ -42,7 +42,7 @@ var DurationMissingKey = attribute.Key("gram.telemetry.duration_missing")
 // tool-call tail latency.
 type ToolsCallClickHouseLogInterceptor struct {
 	telemLogger *tm.Logger
-	serverID    string
+	identity    proxy.ServerIdentity
 	logger      *slog.Logger
 
 	// start is set by the request interceptor and consumed by the
@@ -57,13 +57,13 @@ var (
 )
 
 // NewToolsCallClickHouseLogInterceptor constructs an interceptor bound to the
-// given telemetry logger and Remote MCP Server id. Construct one per request
-// (or per buildProxy call) so the server-id attribute is closed over without
-// re-deriving it per emission.
-func NewToolsCallClickHouseLogInterceptor(telemLogger *tm.Logger, serverID string, logger *slog.Logger) *ToolsCallClickHouseLogInterceptor {
+// given telemetry logger and server correlation ids. Construct one per request
+// (or per buildProxy call) so the id attributes are closed over without
+// re-deriving them per emission.
+func NewToolsCallClickHouseLogInterceptor(telemLogger *tm.Logger, identity proxy.ServerIdentity, logger *slog.Logger) *ToolsCallClickHouseLogInterceptor {
 	return &ToolsCallClickHouseLogInterceptor{
 		telemLogger: telemLogger,
-		serverID:    serverID,
+		identity:    identity,
 		logger:      logger,
 		start:       nil,
 	}
@@ -125,11 +125,14 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	// column may be empty for those tool names — acceptable; gram_urn
 	// (used for grouping) and tool_name (separate materialized column from
 	// gram.tool.name attribute) are still populated correctly.
-	toolURN := "tools:externalmcp:" + i.serverID + ":" + toolName
+	toolURN := "tools:externalmcp:" + i.identity.RemoteMCPServerID + ":" + toolName
 
 	logAttrs := tm.HTTPLogAttributes{
 		attr.EventSourceKey:       string(tm.EventSourceToolCall),
-		attr.RemoteMCPServerIDKey: i.serverID,
+		attr.RemoteMCPServerIDKey: i.identity.RemoteMCPServerID,
+	}
+	if i.identity.McpServerID != "" {
+		logAttrs[attr.McpServerIDKey] = i.identity.McpServerID
 	}
 	logAttrs.RecordDuration(durationSec)
 	logAttrs.RecordStatusCode(statusCode)
@@ -139,17 +142,11 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	if durationMissing {
 		logAttrs[DurationMissingKey] = true
 	}
-	if authCtx.UserID != "" {
-		logAttrs[attr.UserIDKey] = authCtx.UserID
-	}
-	if authCtx.ExternalUserID != "" {
-		logAttrs[attr.ExternalUserIDKey] = authCtx.ExternalUserID
-	}
 	if authCtx.APIKeyID != "" {
 		logAttrs[attr.APIKeyIDKey] = authCtx.APIKeyID
 	}
-	if authCtx.Email != nil && *authCtx.Email != "" {
-		logAttrs[attr.UserEmailKey] = *authCtx.Email
+	if authCtx.ExternalUserID != "" {
+		logAttrs[attr.ExternalUserIDKey] = authCtx.ExternalUserID
 	}
 
 	params := tm.LogParams{
@@ -163,6 +160,7 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 			OrganizationID: authCtx.ActiveOrganizationID,
 			FunctionID:     nil,
 		},
+		UserInfo:   tm.UserInfoByID(authCtx.UserID),
 		Attributes: logAttrs,
 	}
 

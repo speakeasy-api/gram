@@ -36,6 +36,7 @@ import {
   type InsightsSuggestion,
 } from "@/lib/insights-suggestions";
 import { cn } from "@/lib/utils";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useRoutes } from "@/routes";
 
 // Shared pill-style icon button used by the page chrome (back affordances).
@@ -236,9 +237,12 @@ export function ChatLanding({
   return (
     <div className="flex w-full flex-col gap-6">
       <div className="flex flex-col gap-4">
-        <h1 className="text-foreground text-3xl font-semibold tracking-tight">
-          {greeting}
-        </h1>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 className="text-foreground text-3xl font-semibold tracking-tight">
+            {greeting}
+          </h1>
+          <ReleaseStageBadge stage="beta" />
+        </div>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -623,7 +627,8 @@ export function ChatConversation(): ReactElement {
   const { chatId } = useParams();
   const routes = useRoutes();
   const navigate = useNavigate();
-  const { assistantReady, newConversation } = useInsightsState();
+  const { assistantReady, assistantNeedsAdmin, newConversation } =
+    useInsightsState();
 
   const startNewChat = () => {
     newConversation();
@@ -653,7 +658,11 @@ export function ChatConversation(): ReactElement {
         </button>
       </header>
       <div className="min-h-0 flex-1">
-        <ConversationBody chatId={chatId} ready={assistantReady} />
+        <ConversationBody
+          chatId={chatId}
+          ready={assistantReady}
+          needsAdmin={assistantNeedsAdmin}
+        />
       </div>
     </div>
   );
@@ -673,13 +682,22 @@ function ChatConversationTitle(): ReactElement {
 function ConversationBody({
   chatId,
   ready,
+  needsAdmin,
 }: {
   chatId: string | undefined;
   ready: boolean;
+  needsAdmin: boolean;
 }): ReactElement {
   // The shared runtime (mounted in InsightsProvider) is the ancestor here, so
   // gate on it rather than mounting a second provider — that's what lets an
   // in-flight turn started in the dock keep streaming after maximize.
+  if (needsAdmin) {
+    return (
+      <div className="text-muted-foreground flex h-full items-center justify-center px-6 text-center text-sm">
+        Ask an admin to enable the Project Assistant for this project.
+      </div>
+    );
+  }
   if (!ready) {
     return (
       <div className="flex h-full items-center justify-center">

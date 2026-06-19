@@ -202,6 +202,41 @@ func TestExtractSessionMetadataSkipsNilOTELAttributeElements(t *testing.T) {
 	}, "session.id"))
 }
 
+func TestExtractSessionMetadataKeepsEmailFromEarlierRecordInBatch(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "claude-session-batch"
+
+	// Claude Code batches many log records per session, but user.email and
+	// organization.id only ride on some event types. The trailing record here
+	// carries the session id but no email/org, which must not wipe the values
+	// extracted from the earlier api_request record.
+	payload := claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		&gen.OTELScope{Name: new("claude-code"), Version: new("1.0.0")},
+		&gen.OTELLogRecord{
+			Body: &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", sessionID),
+				strAttr("user.email", "dev@example.com"),
+				strAttr("organization.id", "claude-org-1"),
+			},
+		},
+		&gen.OTELLogRecord{
+			Body: &gen.OTELLogBody{StringValue: new("tool event")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", sessionID),
+				strAttr("event.name", "tool_call"),
+			},
+		},
+	)
+
+	metadata := extractSessionMetadata(payload)
+	require.Equal(t, sessionID, metadata.SessionID)
+	require.Equal(t, "dev@example.com", metadata.UserEmail)
+	require.Equal(t, "claude-org-1", metadata.ClaudeOrgID)
+}
+
 func enableHookTelemetryLogger(t *testing.T, ctx context.Context, ti *testInstance) *telemetryrepo.Queries {
 	t.Helper()
 
@@ -209,7 +244,7 @@ func enableHookTelemetryLogger(t *testing.T, ctx context.Context, ti *testInstan
 	require.NoError(t, err)
 
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
-	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), chConn, enabled, enabled)
+	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), chConn, enabled, enabled, nil)
 	return telemetryrepo.New(chConn)
 }
 

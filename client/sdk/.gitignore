@@ -28,3 +28,6 @@
 **/.speakeasy/logs/
 .DS_Store
 /.speakeasy/reports
+# Per-run manifest written only by degraded (offline/no-API-key) speakeasy
+# generation; a full CI generation does not produce it.
+/.speakeasy/generated-files-*.lock

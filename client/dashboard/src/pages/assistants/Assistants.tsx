@@ -8,6 +8,7 @@ import { CardContextMenu } from "@/components/card-context-menu";
 import { Badge } from "@/components/ui/badge";
 import { DotCard } from "@/components/ui/dot-card";
 import { Action, MoreActions } from "@/components/ui/more-actions";
+import { SearchBar } from "@/components/ui/search-bar";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   PageTabsTrigger,
@@ -31,7 +32,7 @@ import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bot, Boxes, Cpu, Info, Plus } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
-import { MouseEvent } from "react";
+import { MouseEvent, useMemo, useState } from "react";
 import { Outlet } from "react-router";
 
 import { AssistantsAuditLog } from "./AssistantAuditLog";
@@ -95,7 +96,24 @@ export default function AssistantsIndex(): JSX.Element {
     throwOnError: false,
   });
 
-  const assistants = data?.assistants ?? [];
+  const assistants = useMemo(() => data?.assistants ?? [], [data]);
+
+  const [search, setSearch] = useState("");
+
+  const filteredAssistants = useMemo(() => {
+    const query = search.toLowerCase();
+    return assistants.filter((assistant) => {
+      if (!query) return true;
+      return (
+        assistant.name.toLowerCase().includes(query) ||
+        assistant.model.toLowerCase().includes(query)
+      );
+    });
+  }, [assistants, search]);
+
+  const showSearch = !isLoading;
+  const showNoMatches =
+    !isLoading && search !== "" && filteredAssistants.length === 0;
 
   const content =
     !isLoading && assistants.length === 0 ? (
@@ -104,7 +122,7 @@ export default function AssistantsIndex(): JSX.Element {
       />
     ) : (
       <Page.Section>
-        <Page.Section.Title stage="preview">Assistants</Page.Section.Title>
+        <Page.Section.Title stage="beta">Assistants</Page.Section.Title>
         <Page.Section.Description className="max-w-xl">
           Openclaw-inspired secure Assistants. Every assistant connects through
           the MCPs and Skills your org already uses, with identity, guardrails,
@@ -126,20 +144,20 @@ export default function AssistantsIndex(): JSX.Element {
           </RequireScope>
         </Page.Section.CTA>
         <Page.Section.Body>
-          {isLoading ? (
-            <Stack align="center" justify="center" className="py-16">
-              <Icon
-                name="loader-circle"
-                className="text-muted-foreground h-6 w-6 animate-spin"
-              />
-            </Stack>
-          ) : (
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              {assistants.map((assistant) => (
-                <AssistantCard key={assistant.id} assistant={assistant} />
-              ))}
-            </div>
+          {showSearch && (
+            <SearchBar
+              value={search}
+              onChange={setSearch}
+              placeholder="Search assistants..."
+              className="mb-4"
+            />
           )}
+          <AssistantsBody
+            isLoading={isLoading}
+            showNoMatches={showNoMatches}
+            search={search}
+            assistants={filteredAssistants}
+          />
         </Page.Section.Body>
       </Page.Section>
     );
@@ -180,6 +198,45 @@ export default function AssistantsIndex(): JSX.Element {
         </Tabs>
       </Page.Body>
     </Page>
+  );
+}
+
+function AssistantsBody({
+  isLoading,
+  showNoMatches,
+  search,
+  assistants,
+}: {
+  isLoading: boolean;
+  showNoMatches: boolean;
+  search: string;
+  assistants: Assistant[];
+}): JSX.Element {
+  if (isLoading) {
+    return (
+      <Stack align="center" justify="center" className="py-16">
+        <Icon
+          name="loader-circle"
+          className="text-muted-foreground h-6 w-6 animate-spin"
+        />
+      </Stack>
+    );
+  }
+
+  if (showNoMatches) {
+    return (
+      <Type muted className="py-8 text-center">
+        No assistants matching &ldquo;{search}&rdquo;
+      </Type>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      {assistants.map((assistant) => (
+        <AssistantCard key={assistant.id} assistant={assistant} />
+      ))}
+    </div>
   );
 }
 

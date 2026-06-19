@@ -10,8 +10,8 @@ endpoint. It groups pre-aggregated usage metrics by an allowlisted **dimension**
 and filters on those same dimensions. This skill explains how to add a **new
 dimension** (a new attribute value to group/filter by).
 
-> **Dimensions vs. measures.** A *dimension* is a breakdown/filter axis
-> (`department_name`, `model`, `role`). A *measure* is a number being aggregated
+> **Dimensions vs. measures.** A _dimension_ is a breakdown/filter axis
+> (`department_name`, `model`, `role`). A _measure_ is a number being aggregated
 > (`total_cost`, `total_tokens`). This skill is about **dimensions only**. Adding
 > a new measure is a different (parallel) path through the same files —
 > `queryMeasures`, `attributeMeasureSelects`, `AttributeMetricsMeasures`,
@@ -31,12 +31,12 @@ Activate the **`clickhouse`** skill (schema/MV work) and **`golang`** skill
 A dimension key like `department_name` must appear in all four places. Adding a
 new one means touching each:
 
-| Layer | File | What to add |
-| --- | --- | --- |
-| 1. ClickHouse schema | `server/clickhouse/schema.sql` | a column on `attribute_metrics_summaries`, the matching SELECT + `GROUP BY` in `attribute_metrics_summaries_mv`, and the column in the table's `ORDER BY` sorting key |
-| 2. Goa design allowlist | `server/design/telemetry/design.go` | the public key string in `queryDimensions` |
-| 3. Repo registry | `server/internal/telemetry/repo/attribute_metrics.go` | an `attributeDimensionRegistry` entry mapping the public key → column + kind |
-| 4. Generated code | (run gen tasks) | regenerate Goa server + SDK |
+| Layer                   | File                                                  | What to add                                                                                                                                                           |
+| ----------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. ClickHouse schema    | `server/clickhouse/schema.sql`                        | a column on `attribute_metrics_summaries`, the matching SELECT + `GROUP BY` in `attribute_metrics_summaries_mv`, and the column in the table's `ORDER BY` sorting key |
+| 2. Goa design allowlist | `server/design/telemetry/design.go`                   | the public key string in `queryDimensions`                                                                                                                            |
+| 3. Repo registry        | `server/internal/telemetry/repo/attribute_metrics.go` | an `attributeDimensionRegistry` entry mapping the public key → column + kind                                                                                          |
+| 4. Generated code       | (run gen tasks)                                       | regenerate Goa server + SDK                                                                                                                                           |
 
 `dimension_values` (the per-group distinct-value lists on each `QueryRow`) is
 **automatic** — it iterates `attributeDimensionRegistry`, so a new dimension
@@ -105,7 +105,7 @@ or `atlas.sum`.
 
 > **MV recreation + backfill.** Changing the MV's SELECT/`GROUP BY` and the
 > table sorting key makes Atlas **drop and recreate** the MV. The MV only
-> transforms rows ingested *after* it exists — historic rows are **not**
+> transforms rows ingested _after_ it exists — historic rows are **not**
 > re-aggregated, so the new column reads empty (`''`) for old buckets. That is
 > acceptable (data ages out at the 30-day TTL); call it out in the PR. Run
 > migrations against **local DBs only**.

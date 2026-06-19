@@ -10,43 +10,6 @@ import (
 	"github.com/Masterminds/squirrel"
 )
 
-// attributeDimensionKind classifies how a dimension is grouped/filtered in the
-// attribute_metrics_summaries aggregate.
-type attributeDimensionKind int
-
-const (
-	// attributeDimScalar is a plain string column (one value per row).
-	attributeDimScalar attributeDimensionKind = iota
-	// attributeDimArray is a multi-valued column stored as Array(String);
-	// grouping arrayJoin()s it (attributing spend to each element) and
-	// filtering uses hasAny().
-	attributeDimArray
-	// attributeDimProject is the gram_project_id UUID key column.
-	attributeDimProject
-)
-
-type attributeDimension struct {
-	column string
-	kind   attributeDimensionKind
-}
-
-// attributeDimensionRegistry is the allowlist mapping public dimension keys
-// (validated by the Goa Enum on the telemetry.query payload) to safe column
-// expressions. Clients can never inject arbitrary columns or JSON paths.
-var attributeDimensionRegistry = map[string]attributeDimension{
-	"department_name":  {column: "department_name", kind: attributeDimScalar},
-	"job_title":        {column: "job_title", kind: attributeDimScalar},
-	"employee_type":    {column: "employee_type", kind: attributeDimScalar},
-	"division_name":    {column: "division_name", kind: attributeDimScalar},
-	"cost_center_name": {column: "cost_center_name", kind: attributeDimScalar},
-	"email":            {column: "user_email", kind: attributeDimScalar},
-	"model":            {column: "model", kind: attributeDimScalar},
-	"hook_source":      {column: "hook_source", kind: attributeDimScalar},
-	"role":             {column: "roles", kind: attributeDimArray},
-	"group":            {column: "groups", kind: attributeDimArray},
-	"project_id":       {column: "gram_project_id", kind: attributeDimProject},
-}
-
 // maxDimensionValues caps the per-dimension distinct-value lists collected for
 // each grouped table row, bounding the response payload when a group contains a
 // large number of distinct emails, models, etc.

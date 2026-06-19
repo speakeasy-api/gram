@@ -37,6 +37,10 @@ type Client struct {
 	// deleteUserSessionIssuer endpoint.
 	DeleteUserSessionIssuerDoer goahttp.Doer
 
+	// MigrateLegacyGramRegistrations Doer is the HTTP client used to make requests
+	// to the migrateLegacyGramRegistrations endpoint.
+	MigrateLegacyGramRegistrationsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -58,16 +62,17 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateUserSessionIssuerDoer: doer,
-		UpdateUserSessionIssuerDoer: doer,
-		ListUserSessionIssuersDoer:  doer,
-		GetUserSessionIssuerDoer:    doer,
-		DeleteUserSessionIssuerDoer: doer,
-		RestoreResponseBody:         restoreBody,
-		scheme:                      scheme,
-		host:                        host,
-		decoder:                     dec,
-		encoder:                     enc,
+		CreateUserSessionIssuerDoer:        doer,
+		UpdateUserSessionIssuerDoer:        doer,
+		ListUserSessionIssuersDoer:         doer,
+		GetUserSessionIssuerDoer:           doer,
+		DeleteUserSessionIssuerDoer:        doer,
+		MigrateLegacyGramRegistrationsDoer: doer,
+		RestoreResponseBody:                restoreBody,
+		scheme:                             scheme,
+		host:                               host,
+		decoder:                            dec,
+		encoder:                            enc,
 	}
 }
 
@@ -186,6 +191,30 @@ func (c *Client) DeleteUserSessionIssuer() goa.Endpoint {
 		resp, err := c.DeleteUserSessionIssuerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("userSessionIssuers", "deleteUserSessionIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MigrateLegacyGramRegistrations returns an endpoint that makes HTTP requests
+// to the userSessionIssuers service migrateLegacyGramRegistrations server.
+func (c *Client) MigrateLegacyGramRegistrations() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMigrateLegacyGramRegistrationsRequest(c.encoder)
+		decodeResponse = DecodeMigrateLegacyGramRegistrationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMigrateLegacyGramRegistrationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MigrateLegacyGramRegistrationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("userSessionIssuers", "migrateLegacyGramRegistrations", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -1070,8 +1071,6 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 		return make(map[string]ChatMetricsRow), nil
 	}
 
-	println("\n\n\n", strings.Join(arg.ChatIDs, ", "), "\n\n\n")
-
 	sb := sq.Select(
 		"gram_chat_id",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
@@ -1940,6 +1939,7 @@ type GetToolUsageSummaryParams struct {
 	HostedToolsetSlugs []string
 	ShadowServerNames  []string
 	UserFilters        []ToolUsageUserFilter
+	HookSources        []string
 	TargetLimit        uint64
 	UserLimit          uint64
 	UsersByTargetLimit uint64
@@ -2168,6 +2168,7 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		HostedToolsetSlugs: nil,
 		ShadowServerNames:  nil,
 		UserFilters:        nil,
+		HookSources:        nil,
 		TargetLimit:        0,
 		UserLimit:          0,
 		UsersByTargetLimit: 0,
@@ -2798,6 +2799,12 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 		sb = sb.Where(userFilters)
 	}
 
+	// Direct hosted MCP calls have no hook source (empty string), so requiring a
+	// specific hook source naturally excludes them — matching the Tool Logs page.
+	if len(arg.HookSources) > 0 {
+		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSources})
+	}
+
 	return sb, nil
 }
 
@@ -3087,6 +3094,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		userKind+" AS user_kind",
 		"toUInt8("+httpStatus+" >= 200 AND "+httpStatus+" < 400) AS success",
 		"toUInt8("+httpStatus+" >= 400) AS failure",
+		"'' AS hook_source",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -3107,6 +3115,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"any("+chAttr("gram.mcp.server_url")+") AS mcp_server_url",
 		"max(if("+chAttr("gen_ai.tool.call.result")+" != '', 1, 0)) AS has_result",
 		"max(if("+chAttr("gram.hook.error")+" != '', 1, 0)) AS has_error",
+		"any("+chAttr("gram.hook.source")+") AS hook_source",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -3197,7 +3206,8 @@ SELECT
 	%s AS user_label,
 	%s AS user_kind,
 	toUInt8(has_result = 1 AND has_error = 0) AS success,
-	toUInt8(has_error = 1) AS failure
+	toUInt8(has_error = 1) AS failure,
+	hook_source
 FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userKey, userKind, hookSourceSQL)
 
 	hookArgs := make([]any, 0, 2+len(hookSourceArgs))
@@ -4282,7 +4292,7 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 		"gram_project_id":               arg.GramProjectID,
 		"gram_chat_id":                  arg.GramChatID,
 		"session_id":                    arg.SessionID,
-		"message_prompt":                arg.MessagePrompt,
+		"message_prompt_b64":            base64.StdEncoding.EncodeToString([]byte(arg.MessagePrompt)),
 		"message_time_unix_nano":        strconv.FormatInt(arg.MessageTimeUnixNano, 10),
 		"after_event_sequence":          strconv.FormatInt(arg.AfterEventSequence, 10),
 		"after_event_time_unix_nano":    strconv.FormatInt(arg.AfterEventTimeUnixNano, 10),
@@ -4341,7 +4351,7 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 		"is_exact",
 	).
 		Prefix(`WITH
-			{message_prompt:String} AS message_prompt,
+			replaceRegexpAll(trimBoth(base64Decode({message_prompt_b64:String})), '\\s+', ' ') AS message_prompt,
 			lengthUTF8(message_prompt) AS message_len,
 			{message_time_unix_nano:Int64} AS message_time_unix_nano,
 			{max_time_delta_nanos:Int64} AS max_time_delta_nanos`).

@@ -3,6 +3,7 @@
  */
 
 import { userSessionsList } from "../funcs/userSessionsList.js";
+import { userSessionsListFacets } from "../funcs/userSessionsListFacets.js";
 import { userSessionsMint } from "../funcs/userSessionsMint.js";
 import { userSessionsRevoke } from "../funcs/userSessionsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -26,6 +27,25 @@ export class UserSessions extends ClientSDK {
     PageIterator<operations.ListUserSessionsResponse, { cursor: string }>
   > {
     return unwrapResultIterator(userSessionsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listFacets userSessions
+   *
+   * @remarks
+   * List available user session facet values (clients, users, servers) in the caller's project.
+   */
+  async listFacets(
+    request?: operations.ListUserSessionFacetsRequest | undefined,
+    security?: operations.ListUserSessionFacetsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListUserSessionFacetsResult> {
+    return unwrapAsync(userSessionsListFacets(
       this,
       request,
       security,

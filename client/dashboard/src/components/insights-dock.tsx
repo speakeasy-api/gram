@@ -708,6 +708,7 @@ export function InsightsProvider({
     assistantId: managedAssistantId,
     ready: assistantReady,
     error: assistantError,
+    needsAdmin: assistantNeedsAdmin,
   } = useServerAssistantTransport(mcpConfig.projectSlug, true);
 
   // Derive "Continue chat" from the server: if the assistant's most recent
@@ -1006,6 +1007,7 @@ export function InsightsProvider({
       // `assistantReady`: chat pages render runtime hooks (useAssistantRuntime)
       // only once the provider actually exists.
       assistantReady: runtimeMounted,
+      assistantNeedsAdmin,
       newConversation: handleStartFresh,
       registerDockHide,
     }),
@@ -1015,6 +1017,7 @@ export function InsightsProvider({
       handleSetOverride,
       handleSendPrompt,
       runtimeMounted,
+      assistantNeedsAdmin,
       handleStartFresh,
       registerDockHide,
     ],
@@ -1052,6 +1055,15 @@ export function InsightsProvider({
         <div className="border-destructive/40 bg-destructive/10 text-destructive mx-4 mt-1 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
           <Terminal className="mt-0.5 size-3.5 shrink-0" />
           <span>{assistantError}</span>
+        </div>
+      )}
+
+      {assistantNeedsAdmin && (
+        <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-1 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+          <Terminal className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            Ask an admin to enable the Project Assistant for this project.
+          </span>
         </div>
       )}
 
@@ -1155,7 +1167,7 @@ export function InsightsProvider({
             {panelCloseButton}
           </div>
           {panelNotices}
-          {!assistantError && (
+          {!assistantError && !assistantNeedsAdmin && (
             <div className="text-muted-foreground flex flex-1 items-center justify-center gap-2 text-sm">
               <Loader2 className="size-4 animate-spin" />
               <span>Connecting to the Project Assistant…</span>

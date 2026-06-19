@@ -112,7 +112,7 @@ RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, clie
 type CreateRemoteSessionClientParams struct {
 	ProjectID               uuid.NullUUID
 	RemoteSessionIssuerID   uuid.UUID
-	UserSessionIssuerID     uuid.UUID
+	UserSessionIssuerID     uuid.NullUUID
 	ClientID                string
 	ClientSecretEncrypted   pgtype.Text
 	ClientIDIssuedAt        pgtype.Timestamptz
@@ -513,7 +513,7 @@ func (q *Queries) GetActiveRemoteSession(ctx context.Context, arg GetActiveRemot
 
 const getOAuthProxyProviderForClone = `-- name: GetOAuthProxyProviderForClone :one
 
-SELECT id, project_id, provider_type, secrets
+SELECT id, project_id, provider_type, secrets, oauth_proxy_server_id
 FROM oauth_proxy_providers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -524,18 +524,21 @@ type GetOAuthProxyProviderForCloneParams struct {
 }
 
 type GetOAuthProxyProviderForCloneRow struct {
-	ID           uuid.UUID
-	ProjectID    uuid.UUID
-	ProviderType string
-	Secrets      []byte
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	ProviderType       string
+	Secrets            []byte
+	OauthProxyServerID uuid.UUID
 }
 
 // Remote session clients — credentials Gram uses when acting as an OAuth
 // client of a remote_session_issuer. client_secret_encrypted is stored
 // encrypted via the project encryption key.
 // Read just the fields cloneOAuthProxyProvider needs: project scoping for
-// isolation, provider_type to refuse non-custom providers, and the secrets
-// JSONB so the handler can extract client_id / client_secret server-side.
+// isolation, provider_type to refuse non-custom providers, the secrets
+// JSONB so the handler can extract client_id / client_secret server-side,
+// and oauth_proxy_server_id so the handler can find the MCP servers whose
+// legacy client registrations need migrating.
 func (q *Queries) GetOAuthProxyProviderForClone(ctx context.Context, arg GetOAuthProxyProviderForCloneParams) (GetOAuthProxyProviderForCloneRow, error) {
 	row := q.db.QueryRow(ctx, getOAuthProxyProviderForClone, arg.ID, arg.ProjectID)
 	var i GetOAuthProxyProviderForCloneRow
@@ -544,6 +547,64 @@ func (q *Queries) GetOAuthProxyProviderForClone(ctx context.Context, arg GetOAut
 		&i.ProjectID,
 		&i.ProviderType,
 		&i.Secrets,
+		&i.OauthProxyServerID,
+	)
+	return i, err
+}
+
+const getOrganizationRemoteSessionByID = `-- name: GetOrganizationRemoteSessionByID :one
+SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted,
+  c.project_id AS client_project_id,
+  u.display_name AS subject_display_name,
+  u.email AS subject_email
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
+WHERE s.id = $1
+  AND i.organization_id = $2
+  AND s.deleted IS FALSE
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+`
+
+type GetOrganizationRemoteSessionByIDParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+type GetOrganizationRemoteSessionByIDRow struct {
+	RemoteSession      RemoteSession
+	ClientProjectID    uuid.NullUUID
+	SubjectDisplayName pgtype.Text
+	SubjectEmail       pgtype.Text
+}
+
+// Load a single active session by id, scoped through the client's issuer's
+// organization_id. Returns the full embedded session row (including the
+// encrypted refresh token, which the org-admin refresh handler needs but the
+// API view never exposes), the owning client's project_id for audit
+// attribution, and the resolved subject identity for the returned view.
+func (q *Queries) GetOrganizationRemoteSessionByID(ctx context.Context, arg GetOrganizationRemoteSessionByIDParams) (GetOrganizationRemoteSessionByIDRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationRemoteSessionByID, arg.ID, arg.OrganizationID)
+	var i GetOrganizationRemoteSessionByIDRow
+	err := row.Scan(
+		&i.RemoteSession.ID,
+		&i.RemoteSession.SubjectUrn,
+		&i.RemoteSession.UserSessionIssuerID,
+		&i.RemoteSession.RemoteSessionClientID,
+		&i.RemoteSession.AccessTokenEncrypted,
+		&i.RemoteSession.AccessExpiresAt,
+		&i.RemoteSession.RefreshTokenEncrypted,
+		&i.RemoteSession.RefreshExpiresAt,
+		&i.RemoteSession.Scopes,
+		&i.RemoteSession.CreatedAt,
+		&i.RemoteSession.UpdatedAt,
+		&i.RemoteSession.DeletedAt,
+		&i.RemoteSession.Deleted,
+		&i.ClientProjectID,
+		&i.SubjectDisplayName,
+		&i.SubjectEmail,
 	)
 	return i, err
 }
@@ -749,7 +810,7 @@ type GetRemoteSessionClientWithIssuerByIDRow struct {
 	ClientAudience          pgtype.Text
 	LegacyCallbackUrl       bool
 	RemoteSessionIssuerID   uuid.UUID
-	UserSessionIssuerID     uuid.UUID
+	UserSessionIssuerID     uuid.NullUUID
 	IssuerSlug              string
 	IssuerUrl               string
 	AuthorizationEndpoint   pgtype.Text
@@ -1516,7 +1577,7 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	ClientAudience          pgtype.Text
 	LegacyCallbackUrl       bool
 	RemoteSessionIssuerID   uuid.UUID
-	UserSessionIssuerID     uuid.UUID
+	UserSessionIssuerID     uuid.NullUUID
 	IssuerSlug              string
 	IssuerUrl               string
 	AuthorizationEndpoint   pgtype.Text
@@ -1765,6 +1826,98 @@ func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRem
 		return nil, err
 	}
 	return items, nil
+}
+
+const listToolsetMCPEndpointsForOAuthProxyServer = `-- name: ListToolsetMCPEndpointsForOAuthProxyServer :many
+SELECT t.mcp_slug, cd.domain AS custom_domain
+FROM toolsets AS t
+LEFT JOIN custom_domains AS cd ON cd.id = t.custom_domain_id AND cd.deleted IS FALSE
+WHERE t.oauth_proxy_server_id = $1
+  AND t.project_id = $2
+  AND t.mcp_slug IS NOT NULL
+  AND t.deleted IS FALSE
+`
+
+type ListToolsetMCPEndpointsForOAuthProxyServerParams struct {
+	OauthProxyServerID uuid.NullUUID
+	ProjectID          uuid.UUID
+}
+
+type ListToolsetMCPEndpointsForOAuthProxyServerRow struct {
+	McpSlug      pgtype.Text
+	CustomDomain pgtype.Text
+}
+
+// Finds every MCP server attached to an oauth_proxy_server so the clone
+// handler can derive the public URLs legacy client registrations were keyed
+// under. A toolset with a custom domain is reachable on both the default
+// domain and the custom domain, so the handler scans both variants.
+func (q *Queries) ListToolsetMCPEndpointsForOAuthProxyServer(ctx context.Context, arg ListToolsetMCPEndpointsForOAuthProxyServerParams) ([]ListToolsetMCPEndpointsForOAuthProxyServerRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetMCPEndpointsForOAuthProxyServer, arg.OauthProxyServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetMCPEndpointsForOAuthProxyServerRow
+	for rows.Next() {
+		var i ListToolsetMCPEndpointsForOAuthProxyServerRow
+		if err := rows.Scan(&i.McpSlug, &i.CustomDomain); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const migrateLegacyUserSessionClient = `-- name: MigrateLegacyUserSessionClient :execrows
+INSERT INTO user_session_clients (
+    project_id,
+    user_session_issuer_id,
+    client_id,
+    client_secret_hash,
+    client_name,
+    redirect_uris,
+    client_secret_expires_at
+)
+SELECT usi.project_id, usi.id, $1, $2, $3, $4::text[], NULL
+FROM user_session_issuers AS usi
+WHERE usi.id = $5
+  AND usi.project_id = $6
+  AND usi.deleted IS FALSE
+ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE DO NOTHING
+`
+
+type MigrateLegacyUserSessionClientParams struct {
+	ClientID            string
+	ClientSecretHash    pgtype.Text
+	ClientName          string
+	RedirectUris        []string
+	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+// Lifts one legacy OAuth proxy client registration (Redis) into
+// user_session_clients, preserving the original client_id so already-known
+// MCP clients skip re-registration after cutover. The conflict target
+// matches the partial unique index on (user_session_issuer_id, client_id)
+// WHERE deleted IS FALSE, so re-running a clone neither duplicates nor
+// clobbers an existing active row.
+func (q *Queries) MigrateLegacyUserSessionClient(ctx context.Context, arg MigrateLegacyUserSessionClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, migrateLegacyUserSessionClient,
+		arg.ClientID,
+		arg.ClientSecretHash,
+		arg.ClientName,
+		arg.RedirectUris,
+		arg.UserSessionIssuerID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeOrganizationRemoteSession = `-- name: RevokeOrganizationRemoteSession :one

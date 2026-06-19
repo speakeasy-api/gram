@@ -211,6 +211,72 @@ func TestGetToolUsageSummary_ClassifiesHookObservedHostedMCP(t *testing.T) {
 	require.Nil(t, targets["shadow_mcp_server:server:hosted.example.com"])
 }
 
+func TestGetToolUsageSummary_FiltersByHookSource(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	// A hook event from the "cowork" agent.
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-15 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "alice@example.com",
+		hookSource:     "cowork",
+		toolSource:     "shadow-db",
+		toolName:       "query",
+		result:         `"ok"`,
+		conversationID: "conv-cowork",
+	})
+	// A hook event from a different agent.
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-10 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "bob@example.com",
+		hookSource:     "cursor",
+		toolName:       "Read",
+		result:         `"ok"`,
+		conversationID: "conv-cursor",
+	})
+	// A direct hosted MCP call has no hook source and must be excluded when a
+	// hook source filter is set.
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-5 * time.Minute),
+		toolsetSlug: "payments",
+		toolName:    "charge",
+		userEmail:   "carol@example.com",
+		statusCode:  200,
+	})
+
+	payload := &gen.GetToolUsageSummaryPayload{
+		From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:          now.Add(1 * time.Hour).Format(time.RFC3339),
+		HookSources: []string{"cowork"},
+	}
+
+	// Poll until ClickHouse reflects the inserts (eventual consistency). Only the
+	// cowork event matches the filter, so the count settles at exactly 1.
+	var result *gen.GetToolUsageSummaryResult
+	require.Eventually(t, func() bool {
+		var err error
+		result, err = ti.service.GetToolUsageSummary(ctx, payload)
+		return err == nil && result != nil && result.Totals.EventCount == 1
+	}, 2*time.Second, 50*time.Millisecond, "expected only the cowork hook event in the filtered summary")
+
+	targets := toolUsageTargetsByKey(result.Targets)
+	require.NotNil(t, targets["shadow_mcp_server:server:shadow-db"])
+	require.Nil(t, targets["local_tool:local_tools:local"])
+	require.Nil(t, targets["hosted_mcp_server:server:payments"])
+}
+
 func TestGetToolUsageFilterOptions_ReturnsUncappedShadowServersAndUsers(t *testing.T) {
 	t.Parallel()
 

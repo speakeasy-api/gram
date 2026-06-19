@@ -112,28 +112,29 @@ Activate a skill when your task falls within its scope.
 
 </important>
 
-| Skill                         | When to activate                                                           |
-| ----------------------------- | -------------------------------------------------------------------------- |
-| `golang`                      | Writing or editing Go code                                                 |
-| `postgresql`                  | Creating migrations, writing SQLc queries, or changing the database schema |
-| `clickhouse`                  | Working with ClickHouse queries in the `server/` package                   |
-| `frontend`                    | Working on the React frontends in `client/` or `elements/`                 |
-| `vercel-react-best-practices` | Optimizing React performance, reviewing components for best practices      |
-| `gram-functions`              | Understanding or modifying the Gram Functions serverless execution feature |
-| `gram-management-api`         | Designing or modifying management API endpoints (Goa design, impl)         |
-| `gram-audit-logging`          | Recording or exposing audit events via the auditlogs management API        |
-| `gram-rbac`                   | Adding or enforcing authorization scopes, grants, or roles                 |
-| `gram-pubsub`                 | Declaring Pub/Sub topics/subscriptions via proto, or publishing/consuming  |
-| `gram-telemetry-query-dimensions` | Adding a new attribute value to group/filter by in the `telemetry.query` analytics endpoint |
-| `feature-flag`                | Deciding between `productfeatures` vs PostHog flags, or adding either      |
-| `glint`                       | Authoring or editing analyzers in the `glint/` go/analysis package         |
-| `mise-tasks`                  | Creating or editing mise task scripts in `.mise-tasks/`                    |
-| `jaeger`                      | Testing backend endpoints locally and inspecting traces via Jaeger API     |
-| `datadog`                     | Investigating errors, performance, incidents, or telemetry via Datadog     |
-| `datadog-insights`            | Running the full Gram production health digest and posting it to Slack     |
-| `madprocs`                    | Controlling local dev processes via mprocs (start, stop, restart, logs)    |
-| `pr`                          | Creating a Pull Request for current changes                                |
-| `spec`                        | Interviewing user in-depth to produce a detailed spec before building      |
+| Skill                             | When to activate                                                           |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| `golang`                          | Writing or editing Go code                                                 |
+| `postgresql`                      | Creating migrations, writing SQLc queries, or changing the database schema |
+| `clickhouse`                      | Working with ClickHouse queries in the `server/` package                   |
+| `frontend`                        | Working on the React frontends in `client/` or `elements/`                 |
+| `vercel-react-best-practices`     | Optimizing React performance, reviewing components for best practices      |
+| `gram-functions`                  | Understanding or modifying the Gram Functions serverless execution feature |
+| `gram-management-api`             | Designing or modifying management API endpoints (Goa design, impl)         |
+| `gram-audit-logging`              | Recording or exposing audit events via the auditlogs management API        |
+| `gram-rbac`                       | Adding or enforcing authorization scopes, grants, or roles                 |
+| `gram-pubsub`                     | Declaring Pub/Sub topics/subscriptions via proto, or publishing/consuming  |
+| `gram-telemetry-query-dimensions` | Adding telemetry query group/filter attributes                             |
+| `feature-flag`                    | Deciding between `productfeatures` vs PostHog flags, or adding either      |
+| `glint`                           | Authoring or editing analyzers in the `glint/` go/analysis package         |
+| `mise-tasks`                      | Creating or editing mise task scripts in `.mise-tasks/`                    |
+| `jaeger`                          | Testing backend endpoints locally and inspecting traces via Jaeger API     |
+| `datadog`                         | Investigating errors, performance, incidents, or telemetry via Datadog     |
+| `datadog-insights`                | Running the full Gram production health digest and posting it to Slack     |
+| `madprocs`                        | Controlling local dev processes via mprocs (start, stop, restart, logs)    |
+| `pr`                              | Creating a Pull Request for current changes                                |
+| `spec`                            | Interviewing user in-depth to produce a detailed spec before building      |
+| `page-toolbar`                    | Dashboard list page search, filters, sort, or view controls                |
 
 # Plan Mode
 

@@ -11,11 +11,3 @@ export interface FilterValues {
   updatedRange: UpdatedRange;
   minTools: ToolCountThreshold;
 }
-
-export const defaultFilterValues: FilterValues = {
-  authTypes: [],
-  toolBehaviors: [],
-  minUsers: 0,
-  updatedRange: "any",
-  minTools: 0,
-};
