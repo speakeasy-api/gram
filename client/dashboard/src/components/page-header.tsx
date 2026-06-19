@@ -80,6 +80,47 @@ const breadcrumbSubstitutions = {
   clis: "Skills",
 };
 
+// One rendered crumb. Pending crumbs (substitution key present, value not yet
+// resolved) show a placeholder so the raw id/slug never flashes before its
+// human label arrives.
+function BreadcrumbCrumb({
+  elem,
+}: {
+  elem: {
+    url: string;
+    display: string;
+    isCurrentPage: boolean;
+    disableLink?: boolean;
+    pending?: boolean;
+  };
+}) {
+  if (elem.pending) {
+    return (
+      <span
+        aria-hidden="true"
+        className="bg-muted inline-block h-3.5 w-20 animate-pulse rounded align-middle"
+      />
+    );
+  }
+  if (elem.isCurrentPage || elem.disableLink) {
+    return (
+      <span
+        className={elem.isCurrentPage ? undefined : "text-muted-foreground"}
+      >
+        {elem.display}
+      </span>
+    );
+  }
+  return (
+    <Link
+      to={elem.url}
+      className="text-muted-foreground hover:text-foreground trans"
+    >
+      {elem.display}
+    </Link>
+  );
+}
+
 function PageHeaderBreadcrumbs({
   fullWidth,
   className,
@@ -136,13 +177,22 @@ function PageHeaderBreadcrumbs({
       }
 
       let display = decoded;
-      const subSegment = allSubstitutions[segment];
-      const subDecoded = allSubstitutions[decoded];
-      if (subSegment !== undefined) {
-        display = subSegment;
-      } else if (subDecoded !== undefined) {
-        display = subDecoded;
-      } else if (!toPreserve.includes(decoded) && !decoded.includes("@")) {
+      // A substitution whose KEY is present but VALUE is still undefined means
+      // the caller intends to replace this segment but the replacement isn't
+      // ready yet (e.g. a name loaded from a query). Treat it as pending and
+      // render a placeholder rather than flashing the raw id/slug first and the
+      // real text a moment later.
+      const subValue = allSubstitutions[segment] ?? allSubstitutions[decoded];
+      const pending =
+        subValue === undefined &&
+        (segment in allSubstitutions || decoded in allSubstitutions);
+      if (subValue !== undefined) {
+        display = subValue;
+      } else if (
+        !pending &&
+        !toPreserve.includes(decoded) &&
+        !decoded.includes("@")
+      ) {
         // Only synthesize a Title-Case display for the static parts of the
         // path. Route params (in toPreserve) and email-like identifiers are
         // dynamic slugs and keep their original casing.
@@ -152,6 +202,7 @@ function PageHeaderBreadcrumbs({
       return {
         url: baseUrl + relativeUrl,
         display,
+        pending,
         isCurrentPage: location.pathname.endsWith(relativeUrl),
         skip: skipSegments.includes(segment),
       };
@@ -165,6 +216,7 @@ function PageHeaderBreadcrumbs({
     display: string;
     isCurrentPage: boolean;
     disableLink?: boolean;
+    pending?: boolean;
   }[] = [];
 
   // 1. Org name (always first; only clickable if user has org access)
@@ -206,22 +258,7 @@ function PageHeaderBreadcrumbs({
         <div className="ml-auto flex items-center gap-2 normal-case">
           {visibleElements.map((elem, index) => (
             <React.Fragment key={`${elem.url}-${index}`}>
-              {elem.isCurrentPage || elem.disableLink ? (
-                <span
-                  className={
-                    elem.isCurrentPage ? undefined : "text-muted-foreground"
-                  }
-                >
-                  {elem.display}
-                </span>
-              ) : (
-                <Link
-                  to={elem.url}
-                  className="text-muted-foreground hover:text-foreground trans"
-                >
-                  {elem.display}
-                </Link>
-              )}
+              <BreadcrumbCrumb elem={elem} />
               {index < visibleElements.length - 1 && (
                 <span className="text-muted-foreground"> / </span>
               )}

@@ -204,12 +204,8 @@ export function AppSidebar({
               <CollapsibleNavGroup
                 label="Observe"
                 Icon={(p) => <Icon {...p} name="eye" />}
-                defaultHref={routes.employees.href()}
+                defaultHref={routes.costs.href()}
               >
-                <ScopeGatedNavItem
-                  item={routes.employees}
-                  scope={scopeFor(routes.employees)}
-                />
                 <ScopeGatedNavItem
                   item={routes.costs}
                   scope={scopeFor(routes.costs)}
@@ -231,6 +227,10 @@ export function AppSidebar({
                 <ScopeGatedNavItem
                   item={routes.logs}
                   scope={scopeFor(routes.logs)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.employees}
+                  scope={scopeFor(routes.employees)}
                 />
               </CollapsibleNavGroup>
 

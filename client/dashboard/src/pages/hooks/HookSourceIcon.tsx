@@ -46,7 +46,7 @@ export function CodexIcon({ className }: { className?: string }): JSX.Element {
   return (
     <svg
       className={className}
-      viewBox="0 0 721 721"
+      viewBox="118.557 119.958 484.139 479.818"
       xmlns="http://www.w3.org/2000/svg"
     >
       <g clipPath="url(#clip0_codex_icon)">
