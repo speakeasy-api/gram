@@ -39,7 +39,7 @@ def _emulator_reachable() -> bool:
     try:
         with socket.create_connection((hostname or "localhost", int(port)), timeout=1):
             return True
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return False
 
 

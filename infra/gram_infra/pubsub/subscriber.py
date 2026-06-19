@@ -234,7 +234,7 @@ class _PortalScheduler(Scheduler):
             return
         try:
             self._send.send_nowait(message)  # unbounded buffer: never blocks
-        except (anyio.ClosedResourceError, anyio.BrokenResourceError):
+        except anyio.ClosedResourceError, anyio.BrokenResourceError:
             message.nack()
 
     def track_handler(self) -> None:
@@ -265,7 +265,7 @@ class _PortalScheduler(Scheduler):
         while True:
             try:
                 message = self._receive.receive_nowait()
-            except (anyio.EndOfStream, anyio.WouldBlock, anyio.ClosedResourceError):
+            except anyio.EndOfStream, anyio.WouldBlock, anyio.ClosedResourceError:
                 break
             message.nack()
 
