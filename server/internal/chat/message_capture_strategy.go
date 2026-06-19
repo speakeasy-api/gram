@@ -10,6 +10,8 @@ import (
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -23,13 +25,18 @@ import (
 // chat is treated as deliberately titled and never retitled.
 const DefaultChatTitle = "New Chat"
 
+// meterChatDroppedGenerations counts assistant generations dropped at capture
+// because the model produced malformed tool_call arguments.
+const meterChatDroppedGenerations = "chat.capture.dropped_generations"
+
 // ChatMessageCaptureStrategy captures completion messages to the database.
 // It implements the MessageCaptureStrategy interface.
 type ChatMessageCaptureStrategy struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	repo   *repo.Queries
-	writer *ChatMessageWriter
+	logger             *slog.Logger
+	db                 *pgxpool.Pool
+	repo               *repo.Queries
+	writer             *ChatMessageWriter
+	droppedGenerations metric.Int64Counter
 }
 
 var _ openrouter.MessageCaptureStrategy = (*ChatMessageCaptureStrategy)(nil)
@@ -48,14 +55,26 @@ type chatCaptureSession struct {
 // NewChatMessageCaptureStrategy creates a new ChatMessageCaptureStrategy.
 func NewChatMessageCaptureStrategy(
 	logger *slog.Logger,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	writer *ChatMessageWriter,
 ) *ChatMessageCaptureStrategy {
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/chat")
+	droppedGenerations, err := meter.Int64Counter(
+		meterChatDroppedGenerations,
+		metric.WithDescription("Assistant generations dropped at capture because the model produced malformed tool_call arguments"),
+		metric.WithUnit("{generation}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterChatDroppedGenerations), attr.SlogError(err))
+	}
+
 	return &ChatMessageCaptureStrategy{
-		logger: logger,
-		db:     db,
-		repo:   repo.New(db),
-		writer: writer,
+		logger:             logger,
+		db:                 db,
+		repo:               repo.New(db),
+		writer:             writer,
+		droppedGenerations: droppedGenerations,
 	}
 }
 
@@ -306,6 +325,33 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 		return err
 	}
 
+	// A truncated/aborted completion stream can leave a tool_call with
+	// unterminated JSON arguments. The runner's normalize_history rejects such
+	// a row on replay and the turn then retries without a cap, so the poison
+	// must never enter the transcript. Drop the assistant row but still flush
+	// the preceding user/tool input, keeping the transcript tail drivable.
+	if toolName, ok := firstInvalidToolCall(response.ToolCalls); ok {
+		s.logger.WarnContext(ctx, "dropping assistant generation with malformed tool_call arguments",
+			attr.SlogChatID(request.ChatID.String()),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogToolName(toolName),
+			attr.SlogChatModel(response.Model),
+		)
+		if s.droppedGenerations != nil {
+			s.droppedGenerations.Add(ctx, 1, metric.WithAttributes(
+				attr.ProjectID(projectID.String()),
+				attr.ToolName(toolName),
+			))
+		}
+		if len(session.pendingRows) > 0 {
+			if err := s.writer.WriteWithAssets(ctx, projectID, session.pendingRows); err != nil {
+				s.logger.ErrorContext(ctx, "failed to store chat input messages after dropping assistant generation", attr.SlogError(err))
+				return fmt.Errorf("store chat input messages: %w", err)
+			}
+		}
+		return nil
+	}
+
 	assistantRows := buildAssistantRows(request, response, projectID, toolCallsJSON, origin, userAgent, ipAddress, session.generation)
 
 	if len(session.pendingRows) == 0 {
@@ -383,6 +429,22 @@ func buildAssistantRows(
 	only.TotalTokens = totalTokens
 
 	return []repo.CreateChatMessageParams{only}
+}
+
+// firstInvalidToolCall mirrors the runner's normalize_history validation:
+// empty arguments are treated as an empty object; anything else must be valid
+// JSON. A truncated/aborted completion stream leaves unterminated JSON here.
+func firstInvalidToolCall(toolCalls []openrouter.ToolCall) (string, bool) {
+	for _, tc := range toolCalls {
+		args := tc.Function.Arguments
+		if args == "" {
+			continue
+		}
+		if !json.Valid([]byte(args)) {
+			return tc.Function.Name, true
+		}
+	}
+	return "", false
 }
 
 // resolveSession returns the session produced by StartOrResumeChat. If the
