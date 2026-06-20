@@ -46,6 +46,18 @@ type Service interface {
 	// rule_id prefix) used to bucket findings. Dashboards and CLIs should call
 	// this instead of maintaining their own copy of the mapping.
 	ListRiskCategories(context.Context, *ListRiskCategoriesPayload) (res *RiskCategoriesResult, err error)
+	// Return the CEL expression environment for the detection-rule and
+	// policy-scope editors: the variables an author may reference (content,
+	// prompt, tools, ...) and the matcher functions available (match, includes,
+	// get, ...). The dashboard uses this for autocomplete and signature help so
+	// the editor cannot drift from what the backend accepts. Compilation and
+	// validation remain server-authoritative on the rule/policy save path.
+	GetDetectionSchema(context.Context, *GetDetectionSchemaPayload) (res *DetectionSchemaResult, err error)
+	// Compile a single CEL expression (a detection predicate or a policy scope
+	// predicate) without evaluating it, so the editor can validate as the author
+	// types. Returns ok=true when it compiles, otherwise ok=false with the
+	// compiler error message. An empty expression is valid (ok=true).
+	CompileCel(context.Context, *CompileCelPayload) (res *CelCompileResult, err error)
 	// Per-user breakdowns of findings by category and by rule_id within a time
 	// window. Powers the user drill-down on /risk-overview.
 	GetRiskUserBreakdown(context.Context, *GetRiskUserBreakdownPayload) (res *RiskUserBreakdownResult, err error)
@@ -122,7 +134,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [30]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [32]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getDetectionSchema", "compileCel", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
 
 // ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
 // service approveRiskPolicyBypassRequest method.
@@ -135,6 +147,23 @@ type ApproveRiskPolicyBypassRequestPayload struct {
 	// Principal URNs to grant bypass access to. Defaults to the requester when
 	// omitted.
 	GrantedPrincipalUrns []string
+}
+
+// CelCompileResult is the result type of the risk service compileCel method.
+type CelCompileResult struct {
+	// True when the expression compiled successfully.
+	OK bool
+	// Compiler error message when ok is false; empty otherwise.
+	Error string
+}
+
+// CompileCelPayload is the payload type of the risk service compileCel method.
+type CompileCelPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The CEL expression to compile.
+	Cel string
 }
 
 // CreateCustomDetectionRulePayload is the payload type of the risk service
@@ -279,6 +308,36 @@ type DenyRiskPolicyBypassRequestPayload struct {
 	ID string
 }
 
+// One matcher/helper function available in a detection or scope CEL expression.
+type DetectionSchemaFunction struct {
+	// Function name (e.g. 'match', 'includes', 'get').
+	Name string
+	// Human-readable call signature (e.g. 'field.match(pattern: string) -> bool').
+	Signature string
+	// Plain-English description of the matcher's behaviour, including span
+	// granularity.
+	Description string
+}
+
+// DetectionSchemaResult is the result type of the risk service
+// getDetectionSchema method.
+type DetectionSchemaResult struct {
+	// Variables an author may reference.
+	Variables []*DetectionSchemaVariable
+	// Matcher and helper functions available.
+	Functions []*DetectionSchemaFunction
+}
+
+// One variable an author may reference in a detection or scope CEL expression.
+type DetectionSchemaVariable struct {
+	// Variable name as written in CEL (e.g. 'content', 'tools').
+	Name string
+	// Descriptive type tag for the editor (e.g. 'field', 'list(tool)', 'string').
+	Type string
+	// Plain-English description of what the variable holds.
+	Description string
+}
+
 // GetCustomDetectionRulePayload is the payload type of the risk service
 // getCustomDetectionRule method.
 type GetCustomDetectionRulePayload struct {
@@ -287,6 +346,14 @@ type GetCustomDetectionRulePayload struct {
 	ProjectSlugInput *string
 	// The custom detection rule ID.
 	ID string
+}
+
+// GetDetectionSchemaPayload is the payload type of the risk service
+// getDetectionSchema method.
+type GetDetectionSchemaPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // GetRiskOverviewPayload is the payload type of the risk service

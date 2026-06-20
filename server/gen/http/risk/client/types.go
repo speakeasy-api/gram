@@ -545,6 +545,24 @@ type ListRiskCategoriesResponseBody struct {
 	Categories []*RiskCategoryDefinitionResponseBody `form:"categories,omitempty" json:"categories,omitempty" xml:"categories,omitempty"`
 }
 
+// GetDetectionSchemaResponseBody is the type of the "risk" service
+// "getDetectionSchema" endpoint HTTP response body.
+type GetDetectionSchemaResponseBody struct {
+	// Variables an author may reference.
+	Variables []*DetectionSchemaVariableResponseBody `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
+	// Matcher and helper functions available.
+	Functions []*DetectionSchemaFunctionResponseBody `form:"functions,omitempty" json:"functions,omitempty" xml:"functions,omitempty"`
+}
+
+// CompileCelResponseBody is the type of the "risk" service "compileCel"
+// endpoint HTTP response body.
+type CompileCelResponseBody struct {
+	// True when the expression compiled successfully.
+	OK *bool `form:"ok,omitempty" json:"ok,omitempty" xml:"ok,omitempty"`
+	// Compiler error message when ok is false; empty otherwise.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+}
+
 // GetRiskUserBreakdownResponseBody is the type of the "risk" service
 // "getRiskUserBreakdown" endpoint HTTP response body.
 type GetRiskUserBreakdownResponseBody struct {
@@ -2743,6 +2761,370 @@ type ListRiskCategoriesUnexpectedResponseBody struct {
 // "listRiskCategories" endpoint HTTP response body for the "gateway_error"
 // error.
 type ListRiskCategoriesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionSchemaUnauthorizedResponseBody is the type of the "risk" service
+// "getDetectionSchema" endpoint HTTP response body for the "unauthorized"
+// error.
+type GetDetectionSchemaUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionSchemaForbiddenResponseBody is the type of the "risk" service
+// "getDetectionSchema" endpoint HTTP response body for the "forbidden" error.
+type GetDetectionSchemaForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionSchemaBadRequestResponseBody is the type of the "risk" service
+// "getDetectionSchema" endpoint HTTP response body for the "bad_request" error.
+type GetDetectionSchemaBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionSchemaNotFoundResponseBody is the type of the "risk" service
+// "getDetectionSchema" endpoint HTTP response body for the "not_found" error.
+type GetDetectionSchemaNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionSchemaConflictResponseBody is the type of the "risk" service
+// "getDetectionSchema" endpoint HTTP response body for the "conflict" error.
+type GetDetectionSchemaConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionSchemaUnsupportedMediaResponseBody is the type of the "risk"
+// service "getDetectionSchema" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetDetectionSchemaUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionSchemaInvalidResponseBody is the type of the "risk" service
+// "getDetectionSchema" endpoint HTTP response body for the "invalid" error.
+type GetDetectionSchemaInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionSchemaInvariantViolationResponseBody is the type of the "risk"
+// service "getDetectionSchema" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetDetectionSchemaInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionSchemaUnexpectedResponseBody is the type of the "risk" service
+// "getDetectionSchema" endpoint HTTP response body for the "unexpected" error.
+type GetDetectionSchemaUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionSchemaGatewayErrorResponseBody is the type of the "risk" service
+// "getDetectionSchema" endpoint HTTP response body for the "gateway_error"
+// error.
+type GetDetectionSchemaGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileCelUnauthorizedResponseBody is the type of the "risk" service
+// "compileCel" endpoint HTTP response body for the "unauthorized" error.
+type CompileCelUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileCelForbiddenResponseBody is the type of the "risk" service
+// "compileCel" endpoint HTTP response body for the "forbidden" error.
+type CompileCelForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileCelBadRequestResponseBody is the type of the "risk" service
+// "compileCel" endpoint HTTP response body for the "bad_request" error.
+type CompileCelBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileCelNotFoundResponseBody is the type of the "risk" service
+// "compileCel" endpoint HTTP response body for the "not_found" error.
+type CompileCelNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileCelConflictResponseBody is the type of the "risk" service
+// "compileCel" endpoint HTTP response body for the "conflict" error.
+type CompileCelConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileCelUnsupportedMediaResponseBody is the type of the "risk" service
+// "compileCel" endpoint HTTP response body for the "unsupported_media" error.
+type CompileCelUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileCelInvalidResponseBody is the type of the "risk" service "compileCel"
+// endpoint HTTP response body for the "invalid" error.
+type CompileCelInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileCelInvariantViolationResponseBody is the type of the "risk" service
+// "compileCel" endpoint HTTP response body for the "invariant_violation" error.
+type CompileCelInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileCelUnexpectedResponseBody is the type of the "risk" service
+// "compileCel" endpoint HTTP response body for the "unexpected" error.
+type CompileCelUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileCelGatewayErrorResponseBody is the type of the "risk" service
+// "compileCel" endpoint HTTP response body for the "gateway_error" error.
+type CompileCelGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -6642,8 +7024,30 @@ type RiskResultResponseBody struct {
 	Confidence *float64 `form:"confidence,omitempty" json:"confidence,omitempty" xml:"confidence,omitempty"`
 	// Tags from the detection rule.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	// All matched spans attributed to this finding. A finding may carry several
+	// correlated spans (e.g. a custom rule matching a tool's function name and its
+	// arguments on the same call). The top-level match/start_pos/end_pos mirror
+	// the primary (first) span.
+	Spans []*RiskSpanResponseBody `form:"spans,omitempty" json:"spans,omitempty" xml:"spans,omitempty"`
 	// When this result was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+}
+
+// RiskSpanResponseBody is used to define fields on response body types.
+type RiskSpanResponseBody struct {
+	// The matched secret or sensitive data for this span.
+	Match *string `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`
+	// The message field this span matched, in author-facing form (content, prompt,
+	// assistant, output, or tool.name/tool.server/tool.function/tool.args). Empty
+	// for detectors that don't attribute a field (e.g. gitleaks, presidio).
+	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	// The JSON sub-path within the field for a `.get(...)` match (e.g. 'command',
+	// 'payload.sql'). Empty when the whole field value matched.
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// Start byte position within the message content.
+	StartPos *int `form:"start_pos,omitempty" json:"start_pos,omitempty" xml:"start_pos,omitempty"`
+	// End byte position within the message content.
+	EndPos *int `form:"end_pos,omitempty" json:"end_pos,omitempty" xml:"end_pos,omitempty"`
 }
 
 // RiskResultRedactedResponseBody is used to define fields on response body
@@ -6683,8 +7087,25 @@ type RiskResultRedactedResponseBody struct {
 	Confidence *float64 `form:"confidence,omitempty" json:"confidence,omitempty" xml:"confidence,omitempty"`
 	// Tags from the detection rule.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	// All matched spans attributed to this finding, each with its match replaced
+	// by an opaque fingerprint.
+	SpansRedacted []*RiskSpanRedactedResponseBody `form:"spans_redacted,omitempty" json:"spans_redacted,omitempty" xml:"spans_redacted,omitempty"`
 	// When this result was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+}
+
+// RiskSpanRedactedResponseBody is used to define fields on response body types.
+type RiskSpanRedactedResponseBody struct {
+	// Opaque fingerprint of this span's match, in the same form as
+	// RiskResultRedacted.match_redacted.
+	MatchRedacted *string `form:"match_redacted,omitempty" json:"match_redacted,omitempty" xml:"match_redacted,omitempty"`
+	// The message field this span matched (see RiskSpan.field).
+	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	// The JSON sub-path within the field for a `.get(...)` match (see
+	// RiskSpan.path).
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// Whether this span carried byte-position information.
+	PositionKnown *bool `form:"position_known,omitempty" json:"position_known,omitempty" xml:"position_known,omitempty"`
 }
 
 // RiskChatSummaryResponseBody is used to define fields on response body types.
@@ -6765,6 +7186,29 @@ type RiskCategoryDefinitionResponseBody struct {
 	// When non-empty, findings whose rule_id starts with this prefix belong to
 	// this category. The catch-all for a family (e.g. 'pii.').
 	RuleIDPrefix *string `form:"rule_id_prefix,omitempty" json:"rule_id_prefix,omitempty" xml:"rule_id_prefix,omitempty"`
+}
+
+// DetectionSchemaVariableResponseBody is used to define fields on response
+// body types.
+type DetectionSchemaVariableResponseBody struct {
+	// Variable name as written in CEL (e.g. 'content', 'tools').
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Descriptive type tag for the editor (e.g. 'field', 'list(tool)', 'string').
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// Plain-English description of what the variable holds.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+}
+
+// DetectionSchemaFunctionResponseBody is used to define fields on response
+// body types.
+type DetectionSchemaFunctionResponseBody struct {
+	// Function name (e.g. 'match', 'includes', 'get').
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Human-readable call signature (e.g. 'field.match(pattern: string) -> bool').
+	Signature *string `form:"signature,omitempty" json:"signature,omitempty" xml:"signature,omitempty"`
+	// Plain-English description of the matcher's behaviour, including span
+	// granularity.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 }
 
 // RiskPolicyBypassRequestResponseBody is used to define fields on response
@@ -9039,6 +9483,340 @@ func NewListRiskCategoriesUnexpected(body *ListRiskCategoriesUnexpectedResponseB
 // NewListRiskCategoriesGatewayError builds a risk service listRiskCategories
 // endpoint gateway_error error.
 func NewListRiskCategoriesGatewayError(body *ListRiskCategoriesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionSchemaDetectionSchemaResultOK builds a "risk" service
+// "getDetectionSchema" endpoint result from a HTTP "OK" response.
+func NewGetDetectionSchemaDetectionSchemaResultOK(body *GetDetectionSchemaResponseBody) *risk.DetectionSchemaResult {
+	v := &risk.DetectionSchemaResult{}
+	v.Variables = make([]*risk.DetectionSchemaVariable, len(body.Variables))
+	for i, val := range body.Variables {
+		if val == nil {
+			v.Variables[i] = nil
+			continue
+		}
+		v.Variables[i] = unmarshalDetectionSchemaVariableResponseBodyToRiskDetectionSchemaVariable(val)
+	}
+	v.Functions = make([]*risk.DetectionSchemaFunction, len(body.Functions))
+	for i, val := range body.Functions {
+		if val == nil {
+			v.Functions[i] = nil
+			continue
+		}
+		v.Functions[i] = unmarshalDetectionSchemaFunctionResponseBodyToRiskDetectionSchemaFunction(val)
+	}
+
+	return v
+}
+
+// NewGetDetectionSchemaUnauthorized builds a risk service getDetectionSchema
+// endpoint unauthorized error.
+func NewGetDetectionSchemaUnauthorized(body *GetDetectionSchemaUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionSchemaForbidden builds a risk service getDetectionSchema
+// endpoint forbidden error.
+func NewGetDetectionSchemaForbidden(body *GetDetectionSchemaForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionSchemaBadRequest builds a risk service getDetectionSchema
+// endpoint bad_request error.
+func NewGetDetectionSchemaBadRequest(body *GetDetectionSchemaBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionSchemaNotFound builds a risk service getDetectionSchema
+// endpoint not_found error.
+func NewGetDetectionSchemaNotFound(body *GetDetectionSchemaNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionSchemaConflict builds a risk service getDetectionSchema
+// endpoint conflict error.
+func NewGetDetectionSchemaConflict(body *GetDetectionSchemaConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionSchemaUnsupportedMedia builds a risk service
+// getDetectionSchema endpoint unsupported_media error.
+func NewGetDetectionSchemaUnsupportedMedia(body *GetDetectionSchemaUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionSchemaInvalid builds a risk service getDetectionSchema
+// endpoint invalid error.
+func NewGetDetectionSchemaInvalid(body *GetDetectionSchemaInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionSchemaInvariantViolation builds a risk service
+// getDetectionSchema endpoint invariant_violation error.
+func NewGetDetectionSchemaInvariantViolation(body *GetDetectionSchemaInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionSchemaUnexpected builds a risk service getDetectionSchema
+// endpoint unexpected error.
+func NewGetDetectionSchemaUnexpected(body *GetDetectionSchemaUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionSchemaGatewayError builds a risk service getDetectionSchema
+// endpoint gateway_error error.
+func NewGetDetectionSchemaGatewayError(body *GetDetectionSchemaGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileCelCelCompileResultOK builds a "risk" service "compileCel"
+// endpoint result from a HTTP "OK" response.
+func NewCompileCelCelCompileResultOK(body *CompileCelResponseBody) *risk.CelCompileResult {
+	v := &risk.CelCompileResult{
+		OK:    *body.OK,
+		Error: *body.Error,
+	}
+
+	return v
+}
+
+// NewCompileCelUnauthorized builds a risk service compileCel endpoint
+// unauthorized error.
+func NewCompileCelUnauthorized(body *CompileCelUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileCelForbidden builds a risk service compileCel endpoint forbidden
+// error.
+func NewCompileCelForbidden(body *CompileCelForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileCelBadRequest builds a risk service compileCel endpoint
+// bad_request error.
+func NewCompileCelBadRequest(body *CompileCelBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileCelNotFound builds a risk service compileCel endpoint not_found
+// error.
+func NewCompileCelNotFound(body *CompileCelNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileCelConflict builds a risk service compileCel endpoint conflict
+// error.
+func NewCompileCelConflict(body *CompileCelConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileCelUnsupportedMedia builds a risk service compileCel endpoint
+// unsupported_media error.
+func NewCompileCelUnsupportedMedia(body *CompileCelUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileCelInvalid builds a risk service compileCel endpoint invalid error.
+func NewCompileCelInvalid(body *CompileCelInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileCelInvariantViolation builds a risk service compileCel endpoint
+// invariant_violation error.
+func NewCompileCelInvariantViolation(body *CompileCelInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileCelUnexpected builds a risk service compileCel endpoint unexpected
+// error.
+func NewCompileCelUnexpected(body *CompileCelUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileCelGatewayError builds a risk service compileCel endpoint
+// gateway_error error.
+func NewCompileCelGatewayError(body *CompileCelGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -12814,6 +13592,44 @@ func ValidateListRiskCategoriesResponseBody(body *ListRiskCategoriesResponseBody
 	return
 }
 
+// ValidateGetDetectionSchemaResponseBody runs the validations defined on
+// GetDetectionSchemaResponseBody
+func ValidateGetDetectionSchemaResponseBody(body *GetDetectionSchemaResponseBody) (err error) {
+	if body.Variables == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("variables", "body"))
+	}
+	if body.Functions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("functions", "body"))
+	}
+	for _, e := range body.Variables {
+		if e != nil {
+			if err2 := ValidateDetectionSchemaVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Functions {
+		if e != nil {
+			if err2 := ValidateDetectionSchemaFunctionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateCompileCelResponseBody runs the validations defined on
+// CompileCelResponseBody
+func ValidateCompileCelResponseBody(body *CompileCelResponseBody) (err error) {
+	if body.OK == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ok", "body"))
+	}
+	if body.Error == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("error", "body"))
+	}
+	return
+}
+
 // ValidateGetRiskUserBreakdownResponseBody runs the validations defined on
 // GetRiskUserBreakdownResponseBody
 func ValidateGetRiskUserBreakdownResponseBody(body *GetRiskUserBreakdownResponseBody) (err error) {
@@ -15837,6 +16653,486 @@ func ValidateListRiskCategoriesUnexpectedResponseBody(body *ListRiskCategoriesUn
 // ValidateListRiskCategoriesGatewayErrorResponseBody runs the validations
 // defined on listRiskCategories_gateway_error_response_body
 func ValidateListRiskCategoriesGatewayErrorResponseBody(body *ListRiskCategoriesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionSchemaUnauthorizedResponseBody runs the validations
+// defined on getDetectionSchema_unauthorized_response_body
+func ValidateGetDetectionSchemaUnauthorizedResponseBody(body *GetDetectionSchemaUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionSchemaForbiddenResponseBody runs the validations defined
+// on getDetectionSchema_forbidden_response_body
+func ValidateGetDetectionSchemaForbiddenResponseBody(body *GetDetectionSchemaForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionSchemaBadRequestResponseBody runs the validations
+// defined on getDetectionSchema_bad_request_response_body
+func ValidateGetDetectionSchemaBadRequestResponseBody(body *GetDetectionSchemaBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionSchemaNotFoundResponseBody runs the validations defined
+// on getDetectionSchema_not_found_response_body
+func ValidateGetDetectionSchemaNotFoundResponseBody(body *GetDetectionSchemaNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionSchemaConflictResponseBody runs the validations defined
+// on getDetectionSchema_conflict_response_body
+func ValidateGetDetectionSchemaConflictResponseBody(body *GetDetectionSchemaConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionSchemaUnsupportedMediaResponseBody runs the validations
+// defined on getDetectionSchema_unsupported_media_response_body
+func ValidateGetDetectionSchemaUnsupportedMediaResponseBody(body *GetDetectionSchemaUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionSchemaInvalidResponseBody runs the validations defined
+// on getDetectionSchema_invalid_response_body
+func ValidateGetDetectionSchemaInvalidResponseBody(body *GetDetectionSchemaInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionSchemaInvariantViolationResponseBody runs the
+// validations defined on getDetectionSchema_invariant_violation_response_body
+func ValidateGetDetectionSchemaInvariantViolationResponseBody(body *GetDetectionSchemaInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionSchemaUnexpectedResponseBody runs the validations
+// defined on getDetectionSchema_unexpected_response_body
+func ValidateGetDetectionSchemaUnexpectedResponseBody(body *GetDetectionSchemaUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionSchemaGatewayErrorResponseBody runs the validations
+// defined on getDetectionSchema_gateway_error_response_body
+func ValidateGetDetectionSchemaGatewayErrorResponseBody(body *GetDetectionSchemaGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileCelUnauthorizedResponseBody runs the validations defined on
+// compileCel_unauthorized_response_body
+func ValidateCompileCelUnauthorizedResponseBody(body *CompileCelUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileCelForbiddenResponseBody runs the validations defined on
+// compileCel_forbidden_response_body
+func ValidateCompileCelForbiddenResponseBody(body *CompileCelForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileCelBadRequestResponseBody runs the validations defined on
+// compileCel_bad_request_response_body
+func ValidateCompileCelBadRequestResponseBody(body *CompileCelBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileCelNotFoundResponseBody runs the validations defined on
+// compileCel_not_found_response_body
+func ValidateCompileCelNotFoundResponseBody(body *CompileCelNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileCelConflictResponseBody runs the validations defined on
+// compileCel_conflict_response_body
+func ValidateCompileCelConflictResponseBody(body *CompileCelConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileCelUnsupportedMediaResponseBody runs the validations defined
+// on compileCel_unsupported_media_response_body
+func ValidateCompileCelUnsupportedMediaResponseBody(body *CompileCelUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileCelInvalidResponseBody runs the validations defined on
+// compileCel_invalid_response_body
+func ValidateCompileCelInvalidResponseBody(body *CompileCelInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileCelInvariantViolationResponseBody runs the validations
+// defined on compileCel_invariant_violation_response_body
+func ValidateCompileCelInvariantViolationResponseBody(body *CompileCelInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileCelUnexpectedResponseBody runs the validations defined on
+// compileCel_unexpected_response_body
+func ValidateCompileCelUnexpectedResponseBody(body *CompileCelUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileCelGatewayErrorResponseBody runs the validations defined on
+// compileCel_gateway_error_response_body
+func ValidateCompileCelGatewayErrorResponseBody(body *CompileCelGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -20803,8 +22099,24 @@ func ValidateRiskResultResponseBody(body *RiskResultResponseBody) (err error) {
 	if body.ChatID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
 	}
+	for _, e := range body.Spans {
+		if e != nil {
+			if err2 := ValidateRiskSpanResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRiskSpanResponseBody runs the validations defined on
+// RiskSpanResponseBody
+func ValidateRiskSpanResponseBody(body *RiskSpanResponseBody) (err error) {
+	if body.Match == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match", "body"))
 	}
 	return
 }
@@ -20848,8 +22160,27 @@ func ValidateRiskResultRedactedResponseBody(body *RiskResultRedactedResponseBody
 	if body.ChatID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
 	}
+	for _, e := range body.SpansRedacted {
+		if e != nil {
+			if err2 := ValidateRiskSpanRedactedResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRiskSpanRedactedResponseBody runs the validations defined on
+// RiskSpanRedactedResponseBody
+func ValidateRiskSpanRedactedResponseBody(body *RiskSpanRedactedResponseBody) (err error) {
+	if body.MatchRedacted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_redacted", "body"))
+	}
+	if body.PositionKnown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("position_known", "body"))
 	}
 	return
 }
@@ -20958,6 +22289,36 @@ func ValidateRiskCategoryDefinitionResponseBody(body *RiskCategoryDefinitionResp
 	}
 	if body.RuleIDPrefix == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("rule_id_prefix", "body"))
+	}
+	return
+}
+
+// ValidateDetectionSchemaVariableResponseBody runs the validations defined on
+// DetectionSchemaVariableResponseBody
+func ValidateDetectionSchemaVariableResponseBody(body *DetectionSchemaVariableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	return
+}
+
+// ValidateDetectionSchemaFunctionResponseBody runs the validations defined on
+// DetectionSchemaFunctionResponseBody
+func ValidateDetectionSchemaFunctionResponseBody(body *DetectionSchemaFunctionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Signature == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signature", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
 	return
 }

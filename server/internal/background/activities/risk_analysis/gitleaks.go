@@ -36,6 +36,11 @@ type Finding struct {
 	// telemetry CH lookup. Not persisted — converters that map Finding
 	// into repo.InsertRiskResultParams ignore it.
 	toolCallID string
+	// field/path attribute a CEL-detector span to the message field (and JSON
+	// sub-path) it matched, for display. Empty for non-CEL detectors. Set by
+	// ScanCELRules; flows into the persisted FindingSpan.
+	field string
+	path  string
 }
 
 // detectorInitMu serializes gitleaks detector creation process-wide.
@@ -175,6 +180,8 @@ func ConvertFindings(content string, raw []report.Finding) []Finding {
 			Confidence:       1.0,
 			DeadLetterReason: "",
 			toolCallID:       "",
+			field:            "",
+			path:             "",
 		})
 	}
 	return out

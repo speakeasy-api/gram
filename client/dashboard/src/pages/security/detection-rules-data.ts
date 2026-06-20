@@ -1,8 +1,4 @@
 import {
-  type RiskMatchCondition,
-  type RiskMatchConfig,
-} from "@gram/client/models/components";
-import {
   invalidateAllRiskListCustomDetectionRules,
   useRiskCreateCustomDetectionRuleMutation,
   useRiskDeleteCustomDetectionRuleMutation,
@@ -10,13 +6,7 @@ import {
   useRiskUpdateCustomDetectionRuleMutation,
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  DETECTION_RULES,
-  type PolicyMessageType,
-  type RuleCategory,
-} from "./policy-data";
-
-export type { RiskMatchCondition, RiskMatchConfig };
+import { DETECTION_RULES, type RuleCategory } from "./policy-data";
 
 /** Severity levels assigned to a detection rule. Drives how findings show
  *  up in dashboards and (eventually) which actions a policy is allowed to
@@ -161,19 +151,17 @@ const BUILTIN_RULE_IDS = new Set<string>([
   ...Object.values(DETECTION_RULES).flatMap((rules) => rules.map((r) => r.id)),
 ]);
 
-/** How a rule's conditions reduce to a verdict. The backend stores a single,
- *  flat combine (no nested grouping). */
-export type MatchCombine = "and" | "or";
-
 export type CustomDetectionRule = {
   id: string;
   dbId: string;
   title: string;
   description: string;
-  /** Legacy single pattern. Surfaced as a content/regex condition by
-   *  ruleConditions when matchConfig is absent. */
+  /** Legacy single regex pattern (read-only). Pre-CEL rules surface it via
+   *  effectiveDetectionCel() as content.match("<regex>") so editing migrates
+   *  them forward to CEL on save. */
   regex: string;
-  matchConfig: RiskMatchConfig | null;
+  /** CEL detection predicate. Empty for legacy regex-only rules. */
+  detectionCel: string;
   severity: SeverityLevel;
   createdAt: string;
   updatedAt: string;
@@ -184,8 +172,7 @@ export type CustomRuleDraft = {
   id: string;
   title: string;
   description: string;
-  conditions: RiskMatchCondition[];
-  combine: MatchCombine;
+  detectionCel: string;
   severity: SeverityLevel;
 };
 
@@ -195,7 +182,7 @@ function mapCustomDetectionRule(rule: {
   title: string;
   description: string;
   regex: string;
-  matchConfig?: RiskMatchConfig | null;
+  detectionCel?: string | null;
   severity: string;
   createdAt: Date;
   updatedAt: Date;
@@ -206,11 +193,20 @@ function mapCustomDetectionRule(rule: {
     title: rule.title,
     description: rule.description,
     regex: rule.regex,
-    matchConfig: rule.matchConfig ?? null,
+    detectionCel: rule.detectionCel ?? "",
     severity: rule.severity as SeverityLevel,
     createdAt: rule.createdAt.toISOString(),
     updatedAt: rule.updatedAt.toISOString(),
   };
+}
+
+/** The CEL expression to seed the editor with: the rule's detection_cel when
+ *  set, otherwise a content.match("<regex>") translation of a legacy regex rule
+ *  (so editing migrates it forward to CEL on save), otherwise empty. */
+export function effectiveDetectionCel(rule: CustomDetectionRule): string {
+  if (rule.detectionCel.trim()) return rule.detectionCel;
+  if (rule.regex.trim()) return `content.match(${JSON.stringify(rule.regex)})`;
+  return "";
 }
 
 function useDetectionRulesStoreImpl() {
@@ -245,7 +241,7 @@ function useDetectionRulesStoreImpl() {
             ruleId: rule.id,
             title: rule.title,
             description: rule.description,
-            matchConfig: buildMatchConfig(rule.conditions, rule.combine),
+            detectionCel: rule.detectionCel,
             severity: rule.severity,
           },
         },
@@ -258,8 +254,6 @@ function useDetectionRulesStoreImpl() {
       if (!rule) {
         return Promise.reject(new Error("Custom detection rule not found"));
       }
-      const conditions = patch.conditions ?? ruleConditions(rule);
-      const combine = patch.combine ?? ruleCombine(rule);
       return updateMutation
         .mutateAsync({
           request: {
@@ -267,7 +261,7 @@ function useDetectionRulesStoreImpl() {
               id: rule.dbId,
               title: patch.title ?? rule.title,
               description: patch.description ?? rule.description,
-              matchConfig: buildMatchConfig(conditions, combine),
+              detectionCel: patch.detectionCel ?? effectiveDetectionCel(rule),
               severity: patch.severity ?? rule.severity,
             },
           },
@@ -314,234 +308,25 @@ export function validateCustomRuleId(
   return null;
 }
 
-/** Validate a proposed regex pattern. Tries to compile and surface a human
- *  message if the engine rejects it. */
-export function validateRegex(pattern: string): string | null {
-  const trimmed = pattern.trim();
-  if (!trimmed) return "Regex is required";
-  try {
-    new RegExp(trimmed);
-    return null;
-  } catch (err) {
-    return err instanceof Error ? err.message : "Invalid regex";
-  }
-}
+/** Example detection CEL snippets offered beneath the rule editor field. */
+export const DETECTION_CEL_EXAMPLES: { label: string; expr: string }[] = [
+  { label: "Secret in content", expr: 'content.match("sk-[A-Za-z0-9]{32}")' },
+  {
+    label: "Password in prompt",
+    expr: 'prompt.includes("password")',
+  },
+  {
+    label: "Destructive shell",
+    expr: 'tools.exists(t, t.function.match("bash") && t.args.get("command").match("rm -rf"))',
+  },
+  {
+    label: "Tool error output",
+    expr: 'output.get("error").present()',
+  },
+];
 
-/* -------------------------------------------------------------------------- */
-/*  Condition (match_config) helpers — shared by the query-builder UI         */
-/* -------------------------------------------------------------------------- */
-
-type MatchTarget = RiskMatchCondition["target"];
-type MatchOp = RiskMatchCondition["op"];
-
-export const MATCH_TARGETS = [
-  "content",
-  "user_prompt",
-  "assistant_text",
-  "tool_result",
-  "tool_name",
-  "tool_server",
-  "tool_function",
-  "tool_args",
-] as const satisfies readonly MatchTarget[];
-
-export const MATCH_OPS = [
-  "regex",
-  "equals",
-  "not_equals",
-  "glob",
-  "keyword",
-  "exists",
-] as const satisfies readonly MatchOp[];
-
-export const TARGET_LABELS: Record<MatchTarget, string> = {
-  content: "Message content",
-  user_prompt: "User prompt",
-  assistant_text: "Assistant text",
-  tool_result: "Tool result",
-  tool_name: "Tool name",
-  tool_server: "Tool server",
-  tool_function: "Tool function",
-  tool_args: "Tool argument",
-};
-
-export const OP_LABELS: Record<MatchOp, string> = {
-  equals: "equals",
-  not_equals: "does not equal",
-  contains: "contains",
-  not_contains: "does not contain",
-  in: "is one of",
-  starts_with: "starts with",
-  ends_with: "ends with",
-  regex: "matches regex",
-  glob: "matches glob",
-  keyword: "contains keyword",
-  exists: "is present",
-};
-
-/** Affordance copy for each target, shown in the query-bar suggestions so the
- *  distinctions (esp. tool_name vs tool_server vs tool_function) are clear. */
-export const TARGET_DESCRIPTIONS: Record<MatchTarget, string> = {
-  content: "Whole message text (any message type)",
-  user_prompt: "The user's prompt text",
-  assistant_text: "The assistant's reply text",
-  tool_result: "A tool call's result output",
-  tool_name: "Raw tool-call name, e.g. mcp__mise__run_task",
-  tool_server: "MCP server name; empty for native tools (Bash, Read, …)",
-  tool_function: "Bare function name, harness-agnostic, e.g. run_task",
-  tool_args: "A value inside the tool arguments (JSON path)",
-};
-
-export const OP_DESCRIPTIONS: Record<MatchOp, string> = {
-  equals: "exact value (empty matches native tools)",
-  not_equals: "any value except this",
-  contains: "substring; union: (a OR b) matches any",
-  not_contains: "matches none of the substrings",
-  in: "exactly one of (a OR b)",
-  starts_with: "value is a prefix",
-  ends_with: "value is a suffix",
-  regex: "/RE2 regular expression/",
-  glob: "wildcard pattern, e.g. *secret*",
-  keyword: "contains any of these comma-separated terms",
-  exists: "the field is present (no value)",
-};
-
-/** Message type each target is scoped to (a tool_server condition only matches
- *  tool-request messages, etc). `null` means the target applies to any type.
- *  Drives the PolicyCenter coverage warning. */
-export const TARGET_MESSAGE_TYPE: Record<
-  MatchTarget,
-  PolicyMessageType | null
-> = {
-  content: null,
-  user_prompt: "user_message",
-  assistant_text: "assistant_message",
-  tool_result: "tool_response",
-  tool_name: "tool_request",
-  tool_server: "tool_request",
-  tool_function: "tool_request",
-  tool_args: "tool_request",
-};
-
-export function defaultCondition(): RiskMatchCondition {
-  return { target: "content", op: "regex", value: "" };
-}
-
-export function buildMatchConfig(
-  conditions: RiskMatchCondition[],
-  combine: MatchCombine,
-): RiskMatchConfig {
-  return { combine, conditions };
-}
-
-/** Effective conditions for a rule — its match_config, or the legacy regex
- *  surfaced as a single content/regex condition. */
-export function ruleConditions(
-  rule: CustomDetectionRule,
-): RiskMatchCondition[] {
-  if (rule.matchConfig && rule.matchConfig.conditions.length > 0) {
-    return rule.matchConfig.conditions;
-  }
-  if (rule.regex) {
-    return [{ target: "content", op: "regex", value: rule.regex }];
-  }
-  return [];
-}
-
-export function ruleCombine(rule: CustomDetectionRule): MatchCombine {
-  return (rule.matchConfig?.combine as MatchCombine) ?? "and";
-}
-
-/** Message types a rule can ever match, inferred from its condition targets.
- *  Empty means "any" (a content-only rule). */
-export function ruleRequiredMessageTypes(
-  conditions: RiskMatchCondition[],
-): PolicyMessageType[] {
-  const types = new Set<PolicyMessageType>();
-  for (const c of conditions) {
-    const t = TARGET_MESSAGE_TYPE[c.target];
-    if (t) types.add(t);
-  }
-  return [...types];
-}
-
-export function validateCondition(c: RiskMatchCondition): string | null {
-  const hasValue = (c.value ?? "").trim() !== "";
-  const hasValues = (c.values ?? []).some((v) => v.trim());
-  switch (c.op) {
-    case "regex":
-      return validateRegex(c.value ?? "");
-    case "glob":
-      return hasValue ? null : "Pattern is required";
-    case "keyword":
-    case "contains":
-    case "not_contains":
-    case "in":
-      return hasValue || hasValues ? null : "Add at least one value";
-    case "starts_with":
-    case "ends_with":
-      return hasValue ? null : "Value is required";
-    // equals / not_equals / exists — empty value is allowed.
-    case "equals":
-    case "not_equals":
-    case "exists":
-      return null;
-  }
-}
-
-export function validateConditions(
-  conditions: RiskMatchCondition[],
-): string | null {
-  if (conditions.length === 0) return "Add at least one condition";
-  for (const c of conditions) {
-    const err = validateCondition(c);
-    if (err) return err;
-  }
-  return null;
-}
-
-/** A compact value-syntax summary of a condition, matching the query bar. */
-function summarizeCondition(c: RiskMatchCondition): string {
-  const field =
-    c.target === "tool_args" && c.path ? `tool_args.${c.path}` : c.target;
-  const list = (c.values ?? []).filter((v) => v.trim());
-  const operands = list.length > 0 ? list : c.value ? [c.value] : [];
-  switch (c.op) {
-    case "exists":
-      return `${field}:*`;
-    case "regex":
-      return `${field}:/${c.value ?? ""}/`;
-    case "equals":
-      return `${field}:${c.value ?? ""}`;
-    case "not_equals":
-      return `-${field}:${c.value ?? ""}`;
-    case "starts_with":
-      return `${field}:${c.value ?? ""}*`;
-    case "ends_with":
-      return `${field}:*${c.value ?? ""}`;
-    case "contains":
-    case "not_contains":
-      return `${c.op === "not_contains" ? "-" : ""}${field}:*${operands[0] ?? ""}*`;
-    case "in":
-    case "keyword":
-      return `${field}:${operands[0] ?? ""}`;
-    case "glob":
-      return `${field}:${c.value ?? ""}`;
-  }
-}
-
-/** Human-readable one-liner summarizing a rule's conditions, for list rows. */
-export function summarizeConditions(
-  conditions: RiskMatchCondition[],
-  combine: MatchCombine = "and",
-): string {
-  if (conditions.length === 0) return "No matcher configured";
-  const joiner = combine === "or" ? " OR " : " AND ";
-  return conditions.map(summarizeCondition).join(joiner);
-}
-
-/** List-row summary of a rule's conditions. The allow/deny polarity is no
- *  longer a rule property — it is configured per policy. */
+/** List-row summary of a rule's matcher: its effective CEL expression. The
+ *  allow/deny polarity is not a rule property — it is configured per policy. */
 export function ruleSummary(rule: CustomDetectionRule): string {
-  return summarizeConditions(ruleConditions(rule), ruleCombine(rule));
+  return effectiveDetectionCel(rule) || "No matcher configured";
 }

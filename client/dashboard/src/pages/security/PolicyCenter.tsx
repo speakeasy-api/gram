@@ -102,20 +102,9 @@ import {
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
-import {
-  ruleConditions,
-  ruleRequiredMessageTypes,
-  useDetectionRulesStore,
-  validateConditions,
-  type MatchCombine,
-} from "./detection-rules-data";
-import { ConditionBuilder } from "./condition-builder";
-import type {
-  RiskPolicyApplication,
-  RiskMatchConfig,
-  RiskMatchCondition,
-} from "@gram/client/models/components";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useDetectionRulesStore } from "./detection-rules-data";
+import { CelExpressionField } from "./cel-field";
+import { useCelStatus } from "./use-cel-status";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { PROMPT_POLICY_TEMPLATES } from "./prompt-policy-templates";
 
@@ -859,46 +848,35 @@ function promptPolicyName(prompt: string): string {
   return prompt.trim().replace(/\s+/g, " ").slice(0, 60) || "Prompt Policy";
 }
 
-/** A single scope/exemption condition group, edited via ConditionBuilder. */
-type ScopePredicate = {
-  conditions: RiskMatchCondition[];
-  combine: MatchCombine;
-};
+/** Example scope CEL snippets offered beneath the include field — narrow a
+ *  policy to a subset of messages. */
+const SCOPE_INCLUDE_CEL_EXAMPLES: { label: string; expr: string }[] = [
+  {
+    label: "Only a GitHub server",
+    expr: 'tools.exists(t, t.server.eq("github"))',
+  },
+  {
+    label: "Production prompts",
+    expr: 'prompt.includes("production")',
+  },
+  {
+    label: "Delete-style tools",
+    expr: 'tools.exists(t, t.function.glob("*delete*"))',
+  },
+];
 
-const EMPTY_PREDICATE: ScopePredicate = { conditions: [], combine: "and" };
-
-/** A predicate as a one-element application_config list, or empty when it has
- *  no valid conditions. */
-function predicateToList(p: ScopePredicate): RiskMatchConfig[] {
-  return validateConditions(p.conditions) === null
-    ? [{ combine: p.combine, conditions: p.conditions }]
-    : [];
-}
-
-/** Load a stored application_config list — we edit only the first group. */
-function predicateFromList(
-  cfgs: RiskMatchConfig[] | undefined,
-): ScopePredicate {
-  const first = cfgs?.[0];
-  if (!first) return EMPTY_PREDICATE;
-  return {
-    conditions: first.conditions,
-    combine: first.combine === "or" ? "or" : "and",
-  };
-}
-
-/** Build application_config from the include/exempt groups; undefined when
- *  neither is set (policy relies on the coarse message_types +
- *  exempt_rule_ids). */
-function buildApplicationConfig(
-  include: ScopePredicate,
-  exempt: ScopePredicate,
-): RiskPolicyApplication | undefined {
-  const includes = predicateToList(include);
-  const exempts = predicateToList(exempt);
-  if (includes.length === 0 && exempts.length === 0) return undefined;
-  return { includes, exempts };
-}
+/** Example scope CEL snippets offered beneath the exempt field — take matching
+ *  messages out of the policy entirely (an allowlist). */
+const SCOPE_EXEMPT_CEL_EXAMPLES: { label: string; expr: string }[] = [
+  {
+    label: "Read-only tools",
+    expr: 'tools.exists(t, t.function.glob("*get*") || t.function.glob("*list*"))',
+  },
+  {
+    label: "A safelisted server",
+    expr: 'tools.exists(t, t.server.eq("internal-docs"))',
+  },
+];
 
 export default function PolicyCenter(): JSX.Element {
   return (
@@ -946,23 +924,15 @@ function PolicyCenterContent() {
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
   >(new Set<string>());
-  // Custom rules attached as exemptions (risk_policies.exempt_rule_ids): when one
-  // matches a message, the whole policy is skipped for that message. Disjoint
-  // from selectedCustomRuleIds (detectors) — a rule is one or the other here.
-  const [exemptRuleIds, setExemptRuleIds] = useState<Set<string>>(
-    new Set<string>(),
-  );
-  // Fine-grained application predicate (application_config): one condition group
-  // for scope, one for exemptions. Empty => rely on the coarse message_types +
-  // exempt_rule_ids knobs.
-  const [includePredicate, setIncludePredicate] =
-    useState<ScopePredicate>(EMPTY_PREDICATE);
-  const [exemptPredicate, setExemptPredicate] =
-    useState<ScopePredicate>(EMPTY_PREDICATE);
-  // Scope is defined EITHER by the coarse message-type cards OR by a custom
+  // Fine-grained applicability predicates (scope_include_cel / scope_exempt_cel):
+  // a CEL expression scoping the policy, and one taking matching messages out of
+  // it. Empty => rely on the coarse message_types knob.
+  const [scopeIncludeCel, setScopeIncludeCel] = useState("");
+  const [scopeExemptCel, setScopeExemptCel] = useState("");
+  // Scope is defined EITHER by the coarse message-type cards OR by a custom CEL
   // include predicate — a mutex. message_types is kept either way but only sent
   // (and only required) in "messageTypes" mode.
-  const [scopeMode, setScopeMode] = useState<"messageTypes" | "predicate">(
+  const [scopeMode, setScopeMode] = useState<"messageTypes" | "cel">(
     "messageTypes",
   );
   const [selectedMessageTypes, setSelectedMessageTypes] = useState<
@@ -1070,9 +1040,8 @@ function PolicyCenterContent() {
     setSelectedCategories(new Set<RuleCategory>());
     setDisabledRules(new Set());
     setSelectedCustomRuleIds(new Set<string>());
-    setExemptRuleIds(new Set<string>());
-    setIncludePredicate(EMPTY_PREDICATE);
-    setExemptPredicate(EMPTY_PREDICATE);
+    setScopeIncludeCel("");
+    setScopeExemptCel("");
     setScopeMode("messageTypes");
     setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
     setFormAction("flag");
@@ -1103,11 +1072,11 @@ function PolicyCenterContent() {
     setFormPolicyKind(kind);
     setFormName(policy.name);
     setFormEnabled(policy.enabled);
-    // application_config applies to both kinds; load it before the kind branch.
-    const loadedIncludes = policy.applicationConfig?.includes ?? [];
-    setIncludePredicate(predicateFromList(loadedIncludes));
-    setExemptPredicate(predicateFromList(policy.applicationConfig?.exempts));
-    setScopeMode(loadedIncludes.length > 0 ? "predicate" : "messageTypes");
+    // Scope CEL applies to both kinds; load it before the kind branch.
+    const loadedInclude = policy.scopeIncludeCel ?? "";
+    setScopeIncludeCel(loadedInclude);
+    setScopeExemptCel(policy.scopeExemptCel ?? "");
+    setScopeMode(loadedInclude.trim() !== "" ? "cel" : "messageTypes");
     if (isPrompt) {
       setFormPromptInstruction(policy.prompt ?? "");
       setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
@@ -1136,7 +1105,6 @@ function PolicyCenterContent() {
     setSelectedCategories(categories);
     setDisabledRules(new Set(policy.disabledRules ?? []));
     setSelectedCustomRuleIds(new Set<string>(customRuleIds));
-    setExemptRuleIds(new Set<string>(policy.exemptRuleIds ?? []));
     setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
@@ -1168,15 +1136,20 @@ function PolicyCenterContent() {
   }, [policyParam, isLoading, data, handleEdit]);
 
   const handleSave = () => {
-    // Fine-grained application predicates (both kinds). On update we always send
-    // a value (empty object clears) so the omit-to-preserve impl can replace it;
-    // on create we omit when empty.
-    const applicationConfig = buildApplicationConfig(
-      scopeMode === "predicate" ? includePredicate : EMPTY_PREDICATE,
-      exemptPredicate,
-    );
-    const applicationUpdate = { applicationConfig: applicationConfig ?? {} };
-    const applicationCreate = applicationConfig ? { applicationConfig } : {};
+    // Fine-grained scope predicates (both kinds). The include applies only in
+    // CEL scope mode; the exempt is additive and always sent. On update we
+    // always send a value (empty string clears) so the omit-to-preserve impl
+    // can replace it; on create we omit when empty.
+    const includeCel = scopeMode === "cel" ? scopeIncludeCel.trim() : "";
+    const exemptCel = scopeExemptCel.trim();
+    const applicationUpdate = {
+      scopeIncludeCel: includeCel,
+      scopeExemptCel: exemptCel,
+    };
+    const applicationCreate = {
+      ...(includeCel ? { scopeIncludeCel: includeCel } : {}),
+      ...(exemptCel ? { scopeExemptCel: exemptCel } : {}),
+    };
     if (formPolicyKind === "prompt") {
       const prompt = formPromptInstruction.trim();
       const name = formAutoName ? promptPolicyName(prompt) : formName;
@@ -1270,7 +1243,6 @@ function PolicyCenterContent() {
             promptInjectionRules,
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
-            exemptRuleIds: [...exemptRuleIds],
             messageTypes,
             ...applicationUpdate,
             action,
@@ -1292,7 +1264,6 @@ function PolicyCenterContent() {
             promptInjectionRules,
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
-            exemptRuleIds: [...exemptRuleIds],
             messageTypes,
             ...applicationCreate,
             action,
@@ -1604,27 +1575,27 @@ function PolicyCenterContent() {
   const isLastWizardStep = wizardStep === wizardSteps.length - 1;
   const showWizardContinue = isWizard && !isLastWizardStep;
   const mutationPending = createMutation.isPending || updateMutation.isPending;
-  // Scope is satisfied by either a message-type selection or — in predicate mode
-  // — a valid include group (the two are a mutex).
-  const hasValidInclude =
-    validateConditions(includePredicate.conditions) === null;
+  // Scope is satisfied by either a message-type selection or — in CEL mode — a
+  // non-empty include expression (the two are a mutex). Compile validity is
+  // surfaced inline and enforced by the backend on save.
+  const includeCelStatus = useCelStatus(
+    scopeMode === "cel" ? scopeIncludeCel : "",
+  );
+  const exemptCelStatus = useCelStatus(scopeExemptCel);
   const scopeMissing =
     scopeMode === "messageTypes"
       ? selectedMessageTypes.size === 0
-      : !hasValidInclude;
+      : scopeIncludeCel.trim() === "";
   const continueDisabled =
     (wizardStep === 0 &&
       (formPolicyKind === "prompt"
         ? !formPromptInstruction.trim()
         : selectedCategories.size === 0 && selectedCustomRuleIds.size === 0)) ||
     (wizardStep === 1 && scopeMissing);
-  // Block save while a group that will be sent has conditions but is invalid
-  // (e.g. a malformed regex). A fully-empty group is ignored.
-  const groupInvalid = (p: ScopePredicate) =>
-    p.conditions.length > 0 && validateConditions(p.conditions) !== null;
+  // Block save while a scope expression that will be sent fails to compile.
   const applicationInvalid =
-    (scopeMode === "predicate" && groupInvalid(includePredicate)) ||
-    groupInvalid(exemptPredicate);
+    (scopeMode === "cel" && includeCelStatus.kind === "error") ||
+    exemptCelStatus.kind === "error";
   const saveDisabled =
     (formPolicyKind === "prompt" && !formPromptInstruction.trim()) ||
     // A standard policy needs at least one detector or custom rule (the step-0
@@ -1795,12 +1766,10 @@ function PolicyCenterContent() {
                       customRules={customRules}
                       selectedCustomRuleIds={selectedCustomRuleIds}
                       setSelectedCustomRuleIds={setSelectedCustomRuleIds}
-                      exemptRuleIds={exemptRuleIds}
-                      setExemptRuleIds={setExemptRuleIds}
-                      includePredicate={includePredicate}
-                      setIncludePredicate={setIncludePredicate}
-                      exemptPredicate={exemptPredicate}
-                      setExemptPredicate={setExemptPredicate}
+                      scopeIncludeCel={scopeIncludeCel}
+                      setScopeIncludeCel={setScopeIncludeCel}
+                      scopeExemptCel={scopeExemptCel}
+                      setScopeExemptCel={setScopeExemptCel}
                       scopeMode={scopeMode}
                       setScopeMode={setScopeMode}
                       selectedMessageTypes={selectedMessageTypes}
@@ -2493,12 +2462,10 @@ function PolicySheetBody({
   customRules,
   selectedCustomRuleIds,
   setSelectedCustomRuleIds,
-  exemptRuleIds,
-  setExemptRuleIds,
-  includePredicate,
-  setIncludePredicate,
-  exemptPredicate,
-  setExemptPredicate,
+  scopeIncludeCel,
+  setScopeIncludeCel,
+  scopeExemptCel,
+  setScopeExemptCel,
   scopeMode,
   setScopeMode,
   selectedMessageTypes,
@@ -2527,14 +2494,12 @@ function PolicySheetBody({
   customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
   selectedCustomRuleIds: Set<string>;
   setSelectedCustomRuleIds: (v: Set<string>) => void;
-  exemptRuleIds: Set<string>;
-  setExemptRuleIds: (v: Set<string>) => void;
-  includePredicate: ScopePredicate;
-  setIncludePredicate: (v: ScopePredicate) => void;
-  exemptPredicate: ScopePredicate;
-  setExemptPredicate: (v: ScopePredicate) => void;
-  scopeMode: "messageTypes" | "predicate";
-  setScopeMode: (v: "messageTypes" | "predicate") => void;
+  scopeIncludeCel: string;
+  setScopeIncludeCel: (v: string) => void;
+  scopeExemptCel: string;
+  setScopeExemptCel: (v: string) => void;
+  scopeMode: "messageTypes" | "cel";
+  setScopeMode: (v: "messageTypes" | "cel") => void;
   selectedMessageTypes: Set<PolicyMessageType>;
   setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
   formAction: PolicyAction;
@@ -2551,11 +2516,6 @@ function PolicySheetBody({
   // The org's custom rules collapse into their own section; the Customize sheet
   // opens for one detector category at a time.
   const [detectionExpanded, setDetectionExpanded] = useState(true);
-  // Exemptions are an advanced scope concern; collapsed unless the policy
-  // already has some attached.
-  const [exemptionsExpanded, setExemptionsExpanded] = useState(
-    () => exemptRuleIds.size > 0,
-  );
   const [customizeCategory, setCustomizeCategory] =
     useState<RuleCategory | null>(null);
   const selectedBuiltinCount = ALL_CATEGORIES.filter((c) =>
@@ -2584,67 +2544,30 @@ function PolicySheetBody({
     selectedCategories.has(c),
   );
 
-  // A custom rule is either a detector or an exemption in a given policy, never
-  // both. Toggling one side removes the id from the other so the two sets stay
-  // disjoint, matching the backend's custom_rule_ids / exempt_rule_ids columns.
+  // Custom rules attach as detectors only; a match records a finding. Message
+  // exemptions are expressed via the policy's scope_exempt_cel, not by rule id.
   const toggleDetector = (ruleId: string, checked: boolean) => {
     const next = new Set(selectedCustomRuleIds);
     if (checked) {
       next.add(ruleId);
-      if (exemptRuleIds.has(ruleId)) {
-        const nextExempt = new Set(exemptRuleIds);
-        nextExempt.delete(ruleId);
-        setExemptRuleIds(nextExempt);
-      }
     } else {
       next.delete(ruleId);
     }
     setSelectedCustomRuleIds(next);
   };
-  const toggleExemption = (ruleId: string, checked: boolean) => {
-    const next = new Set(exemptRuleIds);
-    if (checked) {
-      next.add(ruleId);
-      if (selectedCustomRuleIds.has(ruleId)) {
-        const nextDetectors = new Set(selectedCustomRuleIds);
-        nextDetectors.delete(ruleId);
-        setSelectedCustomRuleIds(nextDetectors);
-      }
-    } else {
-      next.delete(ruleId);
-    }
-    setExemptRuleIds(next);
-  };
-
-  // Coverage gaps: attached custom rules whose targets imply message types the
-  // policy scope excludes — those rules silently never run. Built-in detectors
-  // are type-agnostic, so they never gap. Surfaced in the Scope step.
-  const coverageGaps = customRules
-    .filter((r) => selectedCustomRuleIds.has(r.id))
-    .map((r) => ({
-      title: r.title || r.id,
-      missing: ruleRequiredMessageTypes(ruleConditions(r)).filter(
-        (t) => !selectedMessageTypes.has(t),
-      ),
-    }))
-    .filter((gap) => gap.missing.length > 0);
-  const missingScopeTypes = [
-    ...new Set(coverageGaps.flatMap((gap) => gap.missing)),
-  ];
-  const missingScopeLabels = missingScopeTypes
-    .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
-    .join(", ");
 
   // Review-step summary chips.
   const summaryDetectors = ALL_CATEGORIES.filter((c) =>
     selectedCategories.has(c),
   ).map((c) => RULE_CATEGORY_META[c].label);
-  const summaryScopes =
+  const messageTypeScopeLabels =
     selectedMessageTypes.size === ALL_POLICY_MESSAGE_TYPES.length
       ? ["All session parts"]
       : ALL_POLICY_MESSAGE_TYPES.filter((t) =>
           selectedMessageTypes.has(t as PolicyMessageType),
         ).map((t) => POLICY_MESSAGE_TYPE_META[t as PolicyMessageType].label);
+  const summaryScopes =
+    scopeMode === "cel" ? ["CEL expression"] : messageTypeScopeLabels;
 
   return (
     <>
@@ -2711,14 +2634,14 @@ function PolicySheetBody({
               title="Where should it evaluate?"
               description="Apply everywhere, or narrow the scope to reduce noise and cost."
             />
-            {/* Scope is a mutex: message-type cards (coarse) XOR a custom
-                include predicate (fine). The segmented control conveys that. */}
+            {/* Scope is a mutex: message-type cards (coarse) XOR a CEL include
+                predicate (fine). The segmented control conveys that. */}
             <div className="space-y-3">
               <div className="border-border inline-flex rounded-md border p-0.5">
                 {(
                   [
                     { key: "messageTypes", label: "Message types" },
-                    { key: "predicate", label: "Specific conditions" },
+                    { key: "cel", label: "CEL expression" },
                   ] as const
                 ).map((opt) => (
                   <button
@@ -2738,8 +2661,8 @@ function PolicySheetBody({
               </div>
               <p className="text-muted-foreground text-xs">
                 {scopeMode === "messageTypes"
-                  ? "Apply to whole session parts. Switch to specific conditions to match on tool or content attributes instead."
-                  : "Apply only to messages matching the conditions below — this replaces the message-type selection."}
+                  ? "Apply to whole session parts. Switch to a CEL expression to match on tool or content attributes instead."
+                  : "Apply only to messages matching the expression below — this replaces the message-type selection."}
               </p>
             </div>
 
@@ -2770,38 +2693,6 @@ function PolicySheetBody({
                     Select at least one session part.
                   </p>
                 )}
-                {coverageGaps.length > 0 && (
-                  <Alert variant="warning">
-                    <AlertDescription>
-                      <p className="font-medium">
-                        {coverageGaps.length === 1
-                          ? "1 attached rule targets message types outside this scope and won't run:"
-                          : `${coverageGaps.length} attached rules target message types outside this scope and won't run:`}
-                      </p>
-                      <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                        {coverageGaps.map((gap) => (
-                          <li key={gap.title}>
-                            {gap.title} — needs{" "}
-                            {gap.missing
-                              .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
-                              .join(", ")}
-                          </li>
-                        ))}
-                      </ul>
-                      <Button
-                        variant="secondary"
-                        className="mt-2"
-                        onClick={() => {
-                          const next = new Set(selectedMessageTypes);
-                          for (const t of missingScopeTypes) next.add(t);
-                          setSelectedMessageTypes(next);
-                        }}
-                      >
-                        <Button.Text>Include {missingScopeLabels}</Button.Text>
-                      </Button>
-                    </AlertDescription>
-                  </Alert>
-                )}
               </>
             ) : (
               <div className="space-y-2">
@@ -2809,15 +2700,14 @@ function PolicySheetBody({
                   Evaluate messages matching
                 </Label>
                 <p className="text-muted-foreground text-xs">
-                  The policy evaluates a message only when it matches these
-                  conditions.
+                  The policy evaluates a message only when this expression is
+                  true.
                 </p>
-                <ConditionBuilder
-                  conditions={includePredicate.conditions}
-                  combine={includePredicate.combine}
-                  onChange={(conditions, combine) =>
-                    setIncludePredicate({ conditions, combine })
-                  }
+                <CelExpressionField
+                  value={scopeIncludeCel}
+                  onChange={setScopeIncludeCel}
+                  placeholder='e.g. tools.exists(t, t.server.eq("github"))'
+                  examples={SCOPE_INCLUDE_CEL_EXAMPLES}
                 />
               </div>
             )}
@@ -2828,35 +2718,15 @@ function PolicySheetBody({
               <div>
                 <Label className="text-sm font-medium">Exemptions</Label>
                 <p className="text-muted-foreground text-xs">
-                  Skip the whole policy for a message that matches a saved rule
-                  or the conditions below — an allowlist, regardless of the
-                  scope above.
+                  Skip the whole policy for any message matching this expression
+                  — an allowlist, regardless of the scope above.
                 </p>
               </div>
-              {customRules.length > 0 && (
-                <RuleSelectList
-                  title="Saved rules"
-                  description={
-                    <>
-                      Skip the policy for a message when one of these custom
-                      rules matches it. A rule used here can't also be a
-                      detector.
-                    </>
-                  }
-                  idPrefix="exempt"
-                  customRules={customRules}
-                  selectedRuleIds={exemptRuleIds}
-                  onToggleRule={toggleExemption}
-                  expanded={exemptionsExpanded}
-                  onToggle={() => setExemptionsExpanded((v) => !v)}
-                />
-              )}
-              <ConditionBuilder
-                conditions={exemptPredicate.conditions}
-                combine={exemptPredicate.combine}
-                onChange={(conditions, combine) =>
-                  setExemptPredicate({ conditions, combine })
-                }
+              <CelExpressionField
+                value={scopeExemptCel}
+                onChange={setScopeExemptCel}
+                placeholder='e.g. tools.exists(t, t.server.eq("internal-docs"))'
+                examples={SCOPE_EXEMPT_CEL_EXAMPLES}
               />
             </div>
           </div>
@@ -2956,11 +2826,8 @@ function PolicySheetBody({
                       : "None",
                   ]}
                 />
-                {exemptRuleIds.size > 0 && (
-                  <SummaryRow
-                    label="Exemptions"
-                    chips={[`${exemptRuleIds.size} attached`]}
-                  />
+                {scopeExemptCel.trim() !== "" && (
+                  <SummaryRow label="Exemptions" chips={["CEL expression"]} />
                 )}
                 <SummaryRow label="Scope" chips={summaryScopes} />
                 <SummaryRow

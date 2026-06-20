@@ -99,6 +99,8 @@ func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule)
 				Confidence:       1.0,
 				DeadLetterReason: "",
 				toolCallID:       s.ToolCallID,
+				field:            s.Target,
+				path:             s.Path,
 			})
 		}
 	}

@@ -187,6 +187,8 @@ func (s *PromptInjectionScanner) findingFromResult(text string, r PromptInjectio
 		Confidence:       r.Score,
 		DeadLetterReason: "",
 		toolCallID:       "",
+		field:            "",
+		path:             "",
 	}
 }
 

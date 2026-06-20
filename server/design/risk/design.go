@@ -398,6 +398,59 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCategories"}`)
 	})
 
+	Method("getDetectionSchema", func() {
+		Description("Return the CEL expression environment for the detection-rule and policy-scope editors: the variables an author may reference (content, prompt, tools, ...) and the matcher functions available (match, includes, get, ...). The dashboard uses this for autocomplete and signature help so the editor cannot drift from what the backend accepts. Compilation and validation remain server-authoritative on the rule/policy save path.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(DetectionSchemaResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.detectionSchema")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getDetectionSchema")
+		Meta("openapi:extension:x-speakeasy-group", "risk.detectionSchema")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskDetectionSchema"}`)
+	})
+
+	Method("compileCel", func() {
+		Description("Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("cel", String, "The CEL expression to compile.")
+			Required("cel")
+		})
+
+		Result(CelCompileResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.compileCel")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("cel")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "compileCel")
+		Meta("openapi:extension:x-speakeasy-group", "risk.cel")
+		Meta("openapi:extension:x-speakeasy-name-override", "compile")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCompileCel"}`)
+	})
+
 	Method("getRiskUserBreakdown", func() {
 		Description("Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.")
 
@@ -1151,6 +1204,44 @@ var RiskCategoriesResult = Type("RiskCategoriesResult", func() {
 	Attribute("categories", ArrayOf(RiskCategoryDefinition), "Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.")
 
 	Required("categories")
+})
+
+var DetectionSchemaVariable = Type("DetectionSchemaVariable", func() {
+	Description("One variable an author may reference in a detection or scope CEL expression.")
+
+	Attribute("name", String, "Variable name as written in CEL (e.g. 'content', 'tools').")
+	Attribute("type", String, "Descriptive type tag for the editor (e.g. 'field', 'list(tool)', 'string').")
+	Attribute("description", String, "Plain-English description of what the variable holds.")
+
+	Required("name", "type", "description")
+})
+
+var DetectionSchemaFunction = Type("DetectionSchemaFunction", func() {
+	Description("One matcher/helper function available in a detection or scope CEL expression.")
+
+	Attribute("name", String, "Function name (e.g. 'match', 'includes', 'get').")
+	Attribute("signature", String, "Human-readable call signature (e.g. 'field.match(pattern: string) -> bool').")
+	Attribute("description", String, "Plain-English description of the matcher's behaviour, including span granularity.")
+
+	Required("name", "signature", "description")
+})
+
+var DetectionSchemaResult = Type("DetectionSchemaResult", func() {
+	Description("The CEL expression environment for the detection-rule and policy-scope editors: author-visible variables and matcher functions.")
+
+	Attribute("variables", ArrayOf(DetectionSchemaVariable), "Variables an author may reference.")
+	Attribute("functions", ArrayOf(DetectionSchemaFunction), "Matcher and helper functions available.")
+
+	Required("variables", "functions")
+})
+
+var CelCompileResult = Type("CelCompileResult", func() {
+	Description("The result of compiling a single CEL expression for the editor.")
+
+	Attribute("ok", Boolean, "True when the expression compiled successfully.")
+	Attribute("error", String, "Compiler error message when ok is false; empty otherwise.")
+
+	Required("ok", "error")
 })
 
 var RiskRuleBreakdownEntry = Type("RiskRuleBreakdownEntry", func() {

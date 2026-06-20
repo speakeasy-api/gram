@@ -4,7 +4,9 @@
 
 import { ClientSDK } from "../lib/sdks.js";
 import { Categories } from "./categories.js";
+import { Cel } from "./cel.js";
 import { CustomRules } from "./customrules.js";
+import { DetectionSchema } from "./detectionschema.js";
 import { Exclusions } from "./exclusions.js";
 import { Overview } from "./overview.js";
 import { Policies } from "./policies.js";
@@ -25,6 +27,11 @@ export class Risk extends ClientSDK {
     return (this._categories ??= new Categories(this._options));
   }
 
+  private _cel?: Cel;
+  get cel(): Cel {
+    return (this._cel ??= new Cel(this._options));
+  }
+
   private _exclusions?: Exclusions;
   get exclusions(): Exclusions {
     return (this._exclusions ??= new Exclusions(this._options));
@@ -33,6 +40,11 @@ export class Risk extends ClientSDK {
   private _customRules?: CustomRules;
   get customRules(): CustomRules {
     return (this._customRules ??= new CustomRules(this._options));
+  }
+
+  private _detectionSchema?: DetectionSchema;
+  get detectionSchema(): DetectionSchema {
+    return (this._detectionSchema ??= new DetectionSchema(this._options));
   }
 
   private _overview?: Overview;

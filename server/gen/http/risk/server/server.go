@@ -29,6 +29,8 @@ type Server struct {
 	ListRiskResultsByChat          http.Handler
 	GetRiskOverview                http.Handler
 	ListRiskCategories             http.Handler
+	GetDetectionSchema             http.Handler
+	CompileCel                     http.Handler
 	GetRiskUserBreakdown           http.Handler
 	GetRiskRuleBreakdown           http.Handler
 	GetRiskPolicyStatus            http.Handler
@@ -88,6 +90,8 @@ func New(
 			{"ListRiskResultsByChat", "GET", "/rpc/risk.results.byChat"},
 			{"GetRiskOverview", "GET", "/rpc/risk.overview.get"},
 			{"ListRiskCategories", "GET", "/rpc/risk.categories"},
+			{"GetDetectionSchema", "GET", "/rpc/risk.detectionSchema"},
+			{"CompileCel", "GET", "/rpc/risk.compileCel"},
 			{"GetRiskUserBreakdown", "GET", "/rpc/risk.overview.userBreakdown"},
 			{"GetRiskRuleBreakdown", "GET", "/rpc/risk.overview.rules"},
 			{"GetRiskPolicyStatus", "GET", "/rpc/risk.policies.status"},
@@ -119,6 +123,8 @@ func New(
 		ListRiskResultsByChat:          NewListRiskResultsByChatHandler(e.ListRiskResultsByChat, mux, decoder, encoder, errhandler, formatter),
 		GetRiskOverview:                NewGetRiskOverviewHandler(e.GetRiskOverview, mux, decoder, encoder, errhandler, formatter),
 		ListRiskCategories:             NewListRiskCategoriesHandler(e.ListRiskCategories, mux, decoder, encoder, errhandler, formatter),
+		GetDetectionSchema:             NewGetDetectionSchemaHandler(e.GetDetectionSchema, mux, decoder, encoder, errhandler, formatter),
+		CompileCel:                     NewCompileCelHandler(e.CompileCel, mux, decoder, encoder, errhandler, formatter),
 		GetRiskUserBreakdown:           NewGetRiskUserBreakdownHandler(e.GetRiskUserBreakdown, mux, decoder, encoder, errhandler, formatter),
 		GetRiskRuleBreakdown:           NewGetRiskRuleBreakdownHandler(e.GetRiskRuleBreakdown, mux, decoder, encoder, errhandler, formatter),
 		GetRiskPolicyStatus:            NewGetRiskPolicyStatusHandler(e.GetRiskPolicyStatus, mux, decoder, encoder, errhandler, formatter),
@@ -157,6 +163,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListRiskResultsByChat = m(s.ListRiskResultsByChat)
 	s.GetRiskOverview = m(s.GetRiskOverview)
 	s.ListRiskCategories = m(s.ListRiskCategories)
+	s.GetDetectionSchema = m(s.GetDetectionSchema)
+	s.CompileCel = m(s.CompileCel)
 	s.GetRiskUserBreakdown = m(s.GetRiskUserBreakdown)
 	s.GetRiskRuleBreakdown = m(s.GetRiskRuleBreakdown)
 	s.GetRiskPolicyStatus = m(s.GetRiskPolicyStatus)
@@ -194,6 +202,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListRiskResultsByChatHandler(mux, h.ListRiskResultsByChat)
 	MountGetRiskOverviewHandler(mux, h.GetRiskOverview)
 	MountListRiskCategoriesHandler(mux, h.ListRiskCategories)
+	MountGetDetectionSchemaHandler(mux, h.GetDetectionSchema)
+	MountCompileCelHandler(mux, h.CompileCel)
 	MountGetRiskUserBreakdownHandler(mux, h.GetRiskUserBreakdown)
 	MountGetRiskRuleBreakdownHandler(mux, h.GetRiskRuleBreakdown)
 	MountGetRiskPolicyStatusHandler(mux, h.GetRiskPolicyStatus)
@@ -728,6 +738,112 @@ func NewListRiskCategoriesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listRiskCategories")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetDetectionSchemaHandler configures the mux to serve the "risk"
+// service "getDetectionSchema" endpoint.
+func MountGetDetectionSchemaHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.detectionSchema", f)
+}
+
+// NewGetDetectionSchemaHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "getDetectionSchema" endpoint.
+func NewGetDetectionSchemaHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetDetectionSchemaRequest(mux, decoder)
+		encodeResponse = EncodeGetDetectionSchemaResponse(encoder)
+		encodeError    = EncodeGetDetectionSchemaError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getDetectionSchema")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCompileCelHandler configures the mux to serve the "risk" service
+// "compileCel" endpoint.
+func MountCompileCelHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.compileCel", f)
+}
+
+// NewCompileCelHandler creates a HTTP handler which loads the HTTP request and
+// calls the "risk" service "compileCel" endpoint.
+func NewCompileCelHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCompileCelRequest(mux, decoder)
+		encodeResponse = EncodeCompileCelResponse(encoder)
+		encodeError    = EncodeCompileCelError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "compileCel")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

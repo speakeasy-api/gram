@@ -26,6 +26,8 @@ type Client struct {
 	ListRiskResultsByChatEndpoint          goa.Endpoint
 	GetRiskOverviewEndpoint                goa.Endpoint
 	ListRiskCategoriesEndpoint             goa.Endpoint
+	GetDetectionSchemaEndpoint             goa.Endpoint
+	CompileCelEndpoint                     goa.Endpoint
 	GetRiskUserBreakdownEndpoint           goa.Endpoint
 	GetRiskRuleBreakdownEndpoint           goa.Endpoint
 	GetRiskPolicyStatusEndpoint            goa.Endpoint
@@ -49,7 +51,7 @@ type Client struct {
 }
 
 // NewClient initializes a "risk" service client given the endpoints.
-func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, getRiskOverview, listRiskCategories, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, createRiskPolicyBypassRequest, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, testDetectionRule goa.Endpoint) *Client {
+func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, getRiskOverview, listRiskCategories, getDetectionSchema, compileCel, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, createRiskPolicyBypassRequest, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, testDetectionRule goa.Endpoint) *Client {
 	return &Client{
 		CreateRiskPolicyEndpoint:               createRiskPolicy,
 		ListRiskPoliciesEndpoint:               listRiskPolicies,
@@ -61,6 +63,8 @@ func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPoli
 		ListRiskResultsByChatEndpoint:          listRiskResultsByChat,
 		GetRiskOverviewEndpoint:                getRiskOverview,
 		ListRiskCategoriesEndpoint:             listRiskCategories,
+		GetDetectionSchemaEndpoint:             getDetectionSchema,
+		CompileCelEndpoint:                     compileCel,
 		GetRiskUserBreakdownEndpoint:           getRiskUserBreakdown,
 		GetRiskRuleBreakdownEndpoint:           getRiskRuleBreakdown,
 		GetRiskPolicyStatusEndpoint:            getRiskPolicyStatus,
@@ -301,6 +305,51 @@ func (c *Client) ListRiskCategories(ctx context.Context, p *ListRiskCategoriesPa
 		return
 	}
 	return ires.(*RiskCategoriesResult), nil
+}
+
+// GetDetectionSchema calls the "getDetectionSchema" endpoint of the "risk"
+// service.
+// GetDetectionSchema may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetDetectionSchema(ctx context.Context, p *GetDetectionSchemaPayload) (res *DetectionSchemaResult, err error) {
+	var ires any
+	ires, err = c.GetDetectionSchemaEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*DetectionSchemaResult), nil
+}
+
+// CompileCel calls the "compileCel" endpoint of the "risk" service.
+// CompileCel may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CompileCel(ctx context.Context, p *CompileCelPayload) (res *CelCompileResult, err error) {
+	var ires any
+	ires, err = c.CompileCelEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CelCompileResult), nil
 }
 
 // GetRiskUserBreakdown calls the "getRiskUserBreakdown" endpoint of the "risk"

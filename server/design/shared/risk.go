@@ -189,11 +189,39 @@ var RiskResult = Type("RiskResult", func() {
 	Attribute("end_pos", Int, "End byte position within the message content.")
 	Attribute("confidence", Float64, "Confidence score for this finding.")
 	Attribute("tags", ArrayOf(String), "Tags from the detection rule.")
+	Attribute("spans", ArrayOf(RiskSpan), "All matched spans attributed to this finding. A finding may carry several correlated spans (e.g. a custom rule matching a tool's function name and its arguments on the same call). The top-level match/start_pos/end_pos mirror the primary (first) span.")
 	Attribute("created_at", String, "When this result was created.", func() {
 		Format(FormatDateTime)
 	})
 
 	Required("id", "policy_id", "policy_version", "chat_message_id", "source", "created_at")
+})
+
+// RiskSpan is one matched span attributed to a finding.
+var RiskSpan = Type("RiskSpan", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("match", String, "The matched secret or sensitive data for this span.")
+	Attribute("field", String, "The message field this span matched, in author-facing form (content, prompt, assistant, output, or tool.name/tool.server/tool.function/tool.args). Empty for detectors that don't attribute a field (e.g. gitleaks, presidio).")
+	Attribute("path", String, "The JSON sub-path within the field for a `.get(...)` match (e.g. 'command', 'payload.sql'). Empty when the whole field value matched.")
+	Attribute("start_pos", Int, "Start byte position within the message content.")
+	Attribute("end_pos", Int, "End byte position within the message content.")
+
+	Required("match")
+})
+
+// RiskSpanRedacted mirrors RiskSpan with the raw match replaced by an opaque
+// fingerprint, for agent / MCP consumption. The field/path attribution is
+// structural (not secret content) so it passes through unredacted.
+var RiskSpanRedacted = Type("RiskSpanRedacted", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("match_redacted", String, "Opaque fingerprint of this span's match, in the same form as RiskResultRedacted.match_redacted.")
+	Attribute("field", String, "The message field this span matched (see RiskSpan.field).")
+	Attribute("path", String, "The JSON sub-path within the field for a `.get(...)` match (see RiskSpan.path).")
+	Attribute("position_known", Boolean, "Whether this span carried byte-position information.")
+
+	Required("match_redacted", "position_known")
 })
 
 // RiskResultRedacted mirrors RiskResult but replaces the raw `match` content
@@ -230,6 +258,7 @@ var RiskResultRedacted = Type("RiskResultRedacted", func() {
 	Attribute("position_known", Boolean, "Whether the original finding carried byte-position information within the source message. Exact positions are intentionally not exposed to avoid reconstruction attacks.")
 	Attribute("confidence", Float64, "Confidence score for this finding.")
 	Attribute("tags", ArrayOf(String), "Tags from the detection rule.")
+	Attribute("spans_redacted", ArrayOf(RiskSpanRedacted), "All matched spans attributed to this finding, each with its match replaced by an opaque fingerprint.")
 	Attribute("created_at", String, "When this result was created.", func() {
 		Format(FormatDateTime)
 	})

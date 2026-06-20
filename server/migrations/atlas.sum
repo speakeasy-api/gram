@@ -1,4 +1,4 @@
-h1:5WfuGrK4vHrzjQ3LeomsxrQB4/Xe94BmMSScl1yAaqg=
+h1:IbDf1wixZyx6tD/lUy2vZf2goA1m29wtv3fun0/8yY8=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -224,3 +224,4 @@ h1:5WfuGrK4vHrzjQ3LeomsxrQB4/Xe94BmMSScl1yAaqg=
 20260618160519_add-risk-policy-redesign-columns.sql h1:BmYmzJdfvu0j+fc4B41TO11RBIAaO9jdh3VyKsdvyHY=
 20260620025450_cel-rule-engine.sql h1:kQSOmpID2Ugl3XCzCwxb3PBZwyW/mWV8JVt5p8MTlzw=
 20260620032019_drop-exempt-rule-ids.sql h1:Fh6KWa+oOhhSDCxIig320LVfycrrsd7sCpbL0yCB1Sg=
+20260620045929_add-risk-result-spans.sql h1:3ZDz/0aALfEEhmZ1iLkEhh5SlEMG7jI3ZOCAv/bBEw0=

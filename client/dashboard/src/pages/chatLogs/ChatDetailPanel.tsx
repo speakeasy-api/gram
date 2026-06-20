@@ -1179,20 +1179,47 @@ function RiskFindingActions({
   );
 }
 
+type FindingSpan = { match: string; field?: string; path?: string };
+
+// spansOf returns a finding's matched spans: the spans array when the backend
+// attributed several (e.g. a custom rule matching a tool's function and its
+// arguments on the same call), else the single primary match for legacy rows.
+function spansOf(r: RiskResult): FindingSpan[] {
+  const fromSpans = (r.spans ?? [])
+    .filter((s) => s.match)
+    .map((s) => ({ match: s.match, field: s.field, path: s.path }));
+  if (fromSpans.length > 0) return fromSpans;
+  return r.match ? [{ match: r.match }] : [];
+}
+
+// spanFieldLabel renders a span's attribution — the message field it matched and
+// any JSON sub-path — so "Write" reads as "tool.function" and a drilled value as
+// "tool.args.command". Null when the detector didn't attribute a field.
+function spanFieldLabel(span: FindingSpan): string | null {
+  if (!span.field) return null;
+  return span.path ? `${span.field}.${span.path}` : span.field;
+}
+
 function RiskBadgePopover({ results }: { results: RiskResult[] }) {
-  // Long messages can repeat the same secret/email many times. Collapse to
-  // distinct (source, ruleId, match) so the popover lists each unique
-  // finding once with an occurrence count instead of an N-row scroll of
-  // identical rows.
-  const unique = useMemo(() => {
-    const grouped = new Map<string, { result: RiskResult; count: number }>();
+  // Each result row is one finding; the backend attributes its correlated spans
+  // to it. We still collapse rows that are genuinely identical — same rule and
+  // same span set — into one card with an occurrence count, so a repeated
+  // detection doesn't scroll the popover. Distinct findings stay separate.
+  const findings = useMemo(() => {
+    const grouped = new Map<
+      string,
+      { result: RiskResult; spans: FindingSpan[]; count: number }
+    >();
     for (const r of results) {
-      const key = `${r.source}\u0000${r.ruleId ?? ""}\u0000${r.match ?? ""}`;
+      const spans = spansOf(r);
+      const key = `${r.source}|${r.ruleId ?? ""}|${spans
+        .map((s) => `${s.field ?? ""}:${s.match}`)
+        .join("|")}`;
       const hit = grouped.get(key);
       if (hit) {
         hit.count++;
       } else {
-        grouped.set(key, { result: r, count: 1 });
+        grouped.set(key, { result: r, spans, count: 1 });
       }
     }
     return [...grouped.values()];
@@ -1208,7 +1235,7 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
         >
           <Badge variant="destructive" className="text-xs">
             <Icon name="shield-alert" className="mr-1 size-3" />
-            {unique.length} {unique.length === 1 ? "Risk" : "Risks"}
+            {findings.length} {findings.length === 1 ? "Risk" : "Risks"}
           </Badge>
         </button>
       </PopoverTrigger>
@@ -1220,7 +1247,7 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
         <div className="space-y-3">
           <div className="text-sm font-semibold">Risk Findings</div>
           <div className="divide-border divide-y">
-            {unique.map(({ result: r, count }) => (
+            {findings.map(({ result: r, spans, count }) => (
               <div key={r.id} className="py-2 first:pt-0 last:pb-0">
                 <div className="flex items-center gap-2">
                   <Badge variant="destructive" className="shrink-0 text-[10px]">
@@ -1245,7 +1272,26 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
                     {r.description}
                   </p>
                 )}
-                {r.match && <MaskedMatchInline value={r.match} />}
+                {spans.length > 0 && (
+                  <div className="mt-1 flex flex-col gap-1">
+                    {spans.map((span, i) => {
+                      const label = spanFieldLabel(span);
+                      return (
+                        <div
+                          key={`${label ?? ""}-${span.match}-${i}`}
+                          className="flex flex-wrap items-center gap-1 text-xs"
+                        >
+                          {label && (
+                            <code className="text-muted-foreground font-mono">
+                              {label}:
+                            </code>
+                          )}
+                          <MaskedMatchInline value={span.match} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 {r.tags && r.tags.length > 0 && (
                   <div className="mt-1 flex flex-wrap gap-1">
                     {r.tags.map((tag) => (

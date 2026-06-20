@@ -680,8 +680,6 @@ func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.
 			Description:  rule.Description,
 			DetectionCel: rule.DetectionCel.String,
 			Regex:        rule.Regex.String,
-			MatchConfig:  nil,
-			Action:       ActionDeny,
 		})
 	}
 
@@ -836,6 +834,8 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 			Confidence:       1.0,
 			DeadLetterReason: "",
 			toolCallID:       call.ID,
+			field:            "",
+			path:             "",
 		})
 		if call.ID != "" {
 			deniedCallIDs = append(deniedCallIDs, call.ID)
@@ -896,6 +896,8 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 			Confidence:       1.0,
 			DeadLetterReason: "",
 			toolCallID:       "",
+			field:            "",
+			path:             "",
 		})
 	}
 	return findings
@@ -954,6 +956,8 @@ func (a *AnalyzeBatch) scanMessageDestructiveCLICalls(ctx context.Context, raw [
 			Confidence:       1.0,
 			DeadLetterReason: "",
 			toolCallID:       "",
+			field:            "",
+			path:             "",
 		})
 	}
 	return findings
@@ -1013,10 +1017,17 @@ func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, mes
 			continue
 		}
 
-		for _, f := range realFindings {
+		for _, grp := range groupFindings(realFindings) {
+			f := grp.primary
 			findingsCount++
 			a.metrics.RecordFindingConfidence(ctx, args.OrganizationID, f.RuleID, f.Confidence)
 			resultID, _ := uuid.NewV7()
+			spansJSON, err := json.Marshal(grp.spans)
+			if err != nil {
+				// A span set that won't marshal is unexpected; fall back to no
+				// spans column rather than dropping the whole finding.
+				spansJSON = nil
+			}
 			rows = append(rows, repo.InsertRiskResultsParams{
 				ID:                resultID,
 				ProjectID:         args.ProjectID,
@@ -1033,11 +1044,57 @@ func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, mes
 				EndPos:            pgtype.Int4{Int32: conv.SafeInt32(f.EndPos), Valid: true},
 				Confidence:        pgtype.Float8{Float64: f.Confidence, Valid: true},
 				Tags:              f.Tags,
+				Spans:             spansJSON,
 				DeadLetterReason:  pgtype.Text{String: "", Valid: false},
 			})
 		}
 	}
 	return rows, findingsCount
+}
+
+// findingGroup is a single logical finding plus the spans attributed to it.
+type findingGroup struct {
+	primary Finding
+	spans   []FindingSpan
+}
+
+// groupFindings collapses findings that are spans of the same detection into one
+// group. Spans correlated to the same tool call (non-empty toolCallID) belong to
+// one finding — e.g. a custom rule matching both a tool's function name and its
+// arguments on the same call. Everything else (content/positional spans,
+// distinct detectors) stays its own finding, so genuinely distinct findings are
+// never merged. Order is preserved; the first span of a group is its primary.
+func groupFindings(findings []Finding) []findingGroup {
+	var order []string
+	groups := map[string]*findingGroup{}
+	uniq := 0
+	for _, f := range findings {
+		var key string
+		if f.toolCallID != "" {
+			key = f.Source + "\x00" + f.RuleID + "\x00" + f.toolCallID
+		} else {
+			key = fmt.Sprintf("u%d", uniq)
+			uniq++
+		}
+		g := groups[key]
+		if g == nil {
+			g = &findingGroup{primary: f, spans: nil}
+			groups[key] = g
+			order = append(order, key)
+		}
+		g.spans = append(g.spans, FindingSpan{
+			Match:    f.Match,
+			Field:    f.field,
+			Path:     f.path,
+			StartPos: f.StartPos,
+			EndPos:   f.EndPos,
+		})
+	}
+	out := make([]findingGroup, 0, len(order))
+	for _, k := range order {
+		out = append(out, *groups[k])
+	}
+	return out
 }
 
 func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, rows []repo.InsertRiskResultsParams) error {
@@ -1163,6 +1220,7 @@ func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) re
 		EndPos:            pgtype.Int4{Int32: 0, Valid: false},
 		Confidence:        pgtype.Float8{Float64: 0, Valid: false},
 		Tags:              nil,
+		Spans:             nil,
 		DeadLetterReason:  pgtype.Text{String: "", Valid: false},
 	}
 }
@@ -1188,6 +1246,7 @@ func deadLetterRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID, f F
 		EndPos:            pgtype.Int4{Int32: 0, Valid: false},
 		Confidence:        pgtype.Float8{Float64: 0, Valid: false},
 		Tags:              nil,
+		Spans:             nil,
 		DeadLetterReason:  pgtype.Text{String: f.DeadLetterReason, Valid: true},
 	}
 }

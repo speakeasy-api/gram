@@ -26,6 +26,8 @@ type Endpoints struct {
 	ListRiskResultsByChat          goa.Endpoint
 	GetRiskOverview                goa.Endpoint
 	ListRiskCategories             goa.Endpoint
+	GetDetectionSchema             goa.Endpoint
+	CompileCel                     goa.Endpoint
 	GetRiskUserBreakdown           goa.Endpoint
 	GetRiskRuleBreakdown           goa.Endpoint
 	GetRiskPolicyStatus            goa.Endpoint
@@ -63,6 +65,8 @@ func NewEndpoints(s Service) *Endpoints {
 		ListRiskResultsByChat:          NewListRiskResultsByChatEndpoint(s, a.APIKeyAuth),
 		GetRiskOverview:                NewGetRiskOverviewEndpoint(s, a.APIKeyAuth),
 		ListRiskCategories:             NewListRiskCategoriesEndpoint(s, a.APIKeyAuth),
+		GetDetectionSchema:             NewGetDetectionSchemaEndpoint(s, a.APIKeyAuth),
+		CompileCel:                     NewCompileCelEndpoint(s, a.APIKeyAuth),
 		GetRiskUserBreakdown:           NewGetRiskUserBreakdownEndpoint(s, a.APIKeyAuth),
 		GetRiskRuleBreakdown:           NewGetRiskRuleBreakdownEndpoint(s, a.APIKeyAuth),
 		GetRiskPolicyStatus:            NewGetRiskPolicyStatusEndpoint(s, a.APIKeyAuth),
@@ -98,6 +102,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListRiskResultsByChat = m(e.ListRiskResultsByChat)
 	e.GetRiskOverview = m(e.GetRiskOverview)
 	e.ListRiskCategories = m(e.ListRiskCategories)
+	e.GetDetectionSchema = m(e.GetDetectionSchema)
+	e.CompileCel = m(e.CompileCel)
 	e.GetRiskUserBreakdown = m(e.GetRiskUserBreakdown)
 	e.GetRiskRuleBreakdown = m(e.GetRiskRuleBreakdown)
 	e.GetRiskPolicyStatus = m(e.GetRiskPolicyStatus)
@@ -707,6 +713,124 @@ func NewListRiskCategoriesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.ListRiskCategories(ctx, p)
+	}
+}
+
+// NewGetDetectionSchemaEndpoint returns an endpoint function that calls the
+// method "getDetectionSchema" of service "risk".
+func NewGetDetectionSchemaEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetDetectionSchemaPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetDetectionSchema(ctx, p)
+	}
+}
+
+// NewCompileCelEndpoint returns an endpoint function that calls the method
+// "compileCel" of service "risk".
+func NewCompileCelEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CompileCelPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CompileCel(ctx, p)
 	}
 }
 

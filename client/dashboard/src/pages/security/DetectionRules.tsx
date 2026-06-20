@@ -42,26 +42,19 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   BUILTIN_RULES_BY_CATEGORY,
+  DETECTION_CEL_EXAMPLES,
   SEVERITY_LEVELS,
-  buildMatchConfig,
-  defaultCondition,
-  ruleCombine,
-  ruleConditions,
+  effectiveDetectionCel,
   ruleSummary,
   useDetectionRulesStore,
-  validateConditions,
   validateCustomRuleId,
   type BuiltinRule,
   type CustomDetectionRule,
   type CustomRuleDraft,
-  type MatchCombine,
   type SeverityLevel,
 } from "./detection-rules-data";
-import { ConditionBuilder } from "./condition-builder";
-import type {
-  RiskMatchConfig,
-  RiskMatchCondition,
-} from "@gram/client/models/components";
+import { CelExpressionField } from "./cel-field";
+import { useCelStatus } from "./use-cel-status";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 
 /** Presidio-backed categories: kept in the same order the policy form uses
@@ -466,7 +459,7 @@ function BuiltinRuleDetail({ rule }: { rule: BuiltinRule }) {
           <p className="text-sm leading-relaxed">{rule.description}</p>
         </DetailField>
 
-        <RulePlayground ruleId={rule.id} matchConfig={null} />
+        <RulePlayground ruleId={rule.id} detectionCel={null} />
       </div>
     </>
   );
@@ -483,10 +476,9 @@ function CustomRuleDetail({
 }) {
   const [title, setTitle] = useState(rule.title);
   const [description, setDescription] = useState(rule.description);
-  const [conditions, setConditions] = useState<RiskMatchCondition[]>(() =>
-    ruleConditions(rule),
+  const [detectionCel, setDetectionCel] = useState(() =>
+    effectiveDetectionCel(rule),
   );
-  const [combine, setCombine] = useState<MatchCombine>(() => ruleCombine(rule));
   const [saveState, setSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
@@ -494,17 +486,22 @@ function CustomRuleDetail({
   const savedRef = useRef({
     title: rule.title,
     description: rule.description,
-    matcher: JSON.stringify({
-      conditions: ruleConditions(rule),
-      combine: ruleCombine(rule),
-    }),
+    matcher: effectiveDetectionCel(rule),
   });
 
-  const conditionsError = validateConditions(conditions);
+  const celStatus = useCelStatus(detectionCel);
+  // Block save until the expression is non-empty and compiles (the backend is
+  // authoritative; this just mirrors its gate so we don't round-trip a failure).
+  const celError =
+    detectionCel.trim() === ""
+      ? "Add a detection expression"
+      : celStatus.kind === "error"
+        ? "Fix the detection expression"
+        : null;
   const dirty =
     title !== savedRef.current.title ||
     description !== savedRef.current.description ||
-    JSON.stringify({ conditions, combine }) !== savedRef.current.matcher;
+    detectionCel !== savedRef.current.matcher;
 
   useEffect(() => {
     if (dirty && saveState === "error") {
@@ -522,8 +519,8 @@ function CustomRuleDetail({
   );
 
   const handleSave = async () => {
-    if (conditionsError) {
-      toast.error(conditionsError);
+    if (celError) {
+      toast.error(celError);
       return;
     }
     setSaveState("saving");
@@ -531,13 +528,12 @@ function CustomRuleDetail({
       await onUpdate({
         title,
         description,
-        conditions,
-        combine,
+        detectionCel,
       });
       savedRef.current = {
         title,
         description,
-        matcher: JSON.stringify({ conditions, combine }),
+        matcher: detectionCel,
       };
       setSaveState("saved");
       if (savedTimerRef.current !== undefined) {
@@ -583,22 +579,18 @@ function CustomRuleDetail({
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Match conditions</Label>
-          <ConditionBuilder
-            conditions={conditions}
-            combine={combine}
-            onChange={(c, cb) => {
-              setConditions(c);
-              setCombine(cb);
-            }}
+          <Label className="text-sm font-medium">Detection expression</Label>
+          <CelExpressionField
+            value={detectionCel}
+            onChange={setDetectionCel}
+            placeholder='e.g. content.match("acme_[0-9a-f]{32}")'
+            examples={DETECTION_CEL_EXAMPLES}
           />
         </div>
 
         <RulePlayground
           ruleId={rule.id}
-          matchConfig={
-            conditionsError ? null : buildMatchConfig(conditions, combine)
-          }
+          detectionCel={celStatus.kind === "ok" ? detectionCel : null}
         />
       </div>
       <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
@@ -617,10 +609,7 @@ function CustomRuleDetail({
           )}
           <Button
             disabled={
-              !dirty ||
-              !!conditionsError ||
-              !title.trim() ||
-              saveState === "saving"
+              !dirty || !!celError || !title.trim() || saveState === "saving"
             }
             onClick={() => void handleSave()}
           >
@@ -642,10 +631,10 @@ function CustomRuleDetail({
 
 function RulePlayground({
   ruleId,
-  matchConfig,
+  detectionCel,
 }: {
   ruleId: string;
-  matchConfig: RiskMatchConfig | null;
+  detectionCel: string | null;
 }) {
   const [mode, setMode] = useState<"sample" | "chat">("sample");
 
@@ -677,9 +666,9 @@ function RulePlayground({
       </RadioGroup>
 
       {mode === "sample" ? (
-        <SamplePlayground ruleId={ruleId} matchConfig={matchConfig} />
+        <SamplePlayground ruleId={ruleId} detectionCel={detectionCel} />
       ) : (
-        <ChatPlayground ruleId={ruleId} matchConfig={matchConfig} />
+        <ChatPlayground ruleId={ruleId} detectionCel={detectionCel} />
       )}
     </DetailField>
   );
@@ -687,10 +676,10 @@ function RulePlayground({
 
 function SamplePlayground({
   ruleId,
-  matchConfig,
+  detectionCel,
 }: {
   ruleId: string;
-  matchConfig: RiskMatchConfig | null;
+  detectionCel: string | null;
 }) {
   const [sample, setSample] = useState("");
   const [matches, setMatches] = useState<TestDetectionRuleMatch[] | null>(null);
@@ -715,7 +704,7 @@ function SamplePlayground({
         testDetectionRuleRequestBody: {
           ruleId,
           text: sample,
-          ...(matchConfig ? { matchConfig } : {}),
+          ...(detectionCel ? { detectionCel } : {}),
         },
       },
     });
@@ -810,10 +799,10 @@ type ChatMessageResult = {
 
 function ChatPlayground({
   ruleId,
-  matchConfig,
+  detectionCel,
 }: {
   ruleId: string;
-  matchConfig: RiskMatchConfig | null;
+  detectionCel: string | null;
 }) {
   const client = useSdkClient();
   const chatsQuery = useListChats(undefined, undefined, {
@@ -909,7 +898,7 @@ function ChatPlayground({
             testDetectionRuleRequestBody: {
               ruleId,
               text: item.fullText,
-              ...(matchConfig ? { matchConfig } : {}),
+              ...(detectionCel ? { detectionCel } : {}),
             },
           });
           setResults((prev) =>
@@ -1217,10 +1206,7 @@ function CreateCustomRuleSheet({
   const [idSuffix, setIdSuffix] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [conditions, setConditions] = useState<RiskMatchCondition[]>(() => [
-    defaultCondition(),
-  ]);
-  const [combine, setCombine] = useState<MatchCombine>("and");
+  const [detectionCel, setDetectionCel] = useState("");
   const [severity, setSeverity] = useState<SeverityLevel>("medium");
 
   const reset = () => {
@@ -1229,8 +1215,7 @@ function CreateCustomRuleSheet({
     setIdSuffix("");
     setTitle("");
     setDescription("");
-    setConditions([defaultCondition()]);
-    setCombine("and");
+    setDetectionCel("");
     setSeverity("medium");
   };
 
@@ -1240,16 +1225,7 @@ function CreateCustomRuleSheet({
       setIdSuffix(customRuleIDSuffix(next.ruleId));
       setTitle(next.title);
       setDescription(next.description);
-      // Prefer the suggested condition matcher (which can target tool calls,
-      // arguments, keywords, …); fall back to a content/regex clause for
-      // older/heuristic suggestions that only return a regex.
-      if (next.matchConfig && next.matchConfig.conditions.length > 0) {
-        setConditions(next.matchConfig.conditions);
-        setCombine(next.matchConfig.combine === "or" ? "or" : "and");
-      } else {
-        setConditions([{ target: "content", op: "regex", value: next.regex }]);
-        setCombine("and");
-      }
+      setDetectionCel(next.detectionCel ?? "");
       setSeverity(
         (SEVERITY_LEVELS as readonly string[]).includes(next.severity)
           ? (next.severity as SeverityLevel)
@@ -1284,8 +1260,7 @@ function CreateCustomRuleSheet({
     setIdSuffix("");
     setTitle("");
     setDescription("");
-    setConditions([defaultCondition()]);
-    setCombine("and");
+    setDetectionCel("");
     setSeverity("medium");
     setStep("review");
   };
@@ -1300,10 +1275,15 @@ function CreateCustomRuleSheet({
         : null,
     [idSuffix, existingCustomIds],
   );
-  const conditionsError = validateConditions(conditions);
+  const celStatus = useCelStatus(detectionCel);
+  const celError =
+    detectionCel.trim() === ""
+      ? "Add a detection expression"
+      : celStatus.kind === "error"
+        ? "Fix the detection expression"
+        : null;
 
-  const canSubmit =
-    idSuffix.trim() && title.trim() && !idError && !conditionsError;
+  const canSubmit = idSuffix.trim() && title.trim() && !idError && !celError;
 
   const handleSubmit = () => {
     const finalRuleId = customRuleIDFromSuffix(idSuffix);
@@ -1312,16 +1292,15 @@ function CreateCustomRuleSheet({
       toast.error(finalIdError);
       return;
     }
-    if (conditionsError) {
-      toast.error(conditionsError);
+    if (celError) {
+      toast.error(celError);
       return;
     }
     onCreate({
       id: finalRuleId,
       title: title.trim(),
       description: description.trim(),
-      conditions,
-      combine,
+      detectionCel,
       severity,
     });
     reset();
@@ -1340,7 +1319,7 @@ function CreateCustomRuleSheet({
           <SheetTitle>New Custom Detection Rule</SheetTitle>
           <SheetDescription>
             {step === "prompt"
-              ? "Describe what you want to detect. We'll suggest the rule ID, regex, and severity, you tweak before saving."
+              ? "Describe what you want to detect. We'll suggest the rule ID, detection expression, and severity, you tweak before saving."
               : "Review the suggested rule. Adjust any field before saving."}
           </SheetDescription>
         </SheetHeader>
@@ -1359,8 +1338,8 @@ function CreateCustomRuleSheet({
                   placeholder="e.g. internal Acme service tokens that look like acme_ followed by 32 lowercase hex characters"
                 />
                 <p className="text-muted-foreground text-xs">
-                  Tip: include a sample value or the format so the model picks a
-                  tight regex.
+                  Tip: include a sample value or the format so the model writes
+                  a tight expression.
                 </p>
               </div>
             </div>
@@ -1429,14 +1408,14 @@ function CreateCustomRuleSheet({
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Match conditions</Label>
-                <ConditionBuilder
-                  conditions={conditions}
-                  combine={combine}
-                  onChange={(c, cb) => {
-                    setConditions(c);
-                    setCombine(cb);
-                  }}
+                <Label className="text-sm font-medium">
+                  Detection expression
+                </Label>
+                <CelExpressionField
+                  value={detectionCel}
+                  onChange={setDetectionCel}
+                  placeholder='e.g. content.match("acme_[0-9a-f]{32}")'
+                  examples={DETECTION_CEL_EXAMPLES}
                 />
               </div>
             </div>

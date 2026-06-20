@@ -57,6 +57,14 @@ type Client struct {
 	// listRiskCategories endpoint.
 	ListRiskCategoriesDoer goahttp.Doer
 
+	// GetDetectionSchema Doer is the HTTP client used to make requests to the
+	// getDetectionSchema endpoint.
+	GetDetectionSchemaDoer goahttp.Doer
+
+	// CompileCel Doer is the HTTP client used to make requests to the compileCel
+	// endpoint.
+	CompileCelDoer goahttp.Doer
+
 	// GetRiskUserBreakdown Doer is the HTTP client used to make requests to the
 	// getRiskUserBreakdown endpoint.
 	GetRiskUserBreakdownDoer goahttp.Doer
@@ -167,6 +175,8 @@ func NewClient(
 		ListRiskResultsByChatDoer:          doer,
 		GetRiskOverviewDoer:                doer,
 		ListRiskCategoriesDoer:             doer,
+		GetDetectionSchemaDoer:             doer,
+		CompileCelDoer:                     doer,
 		GetRiskUserBreakdownDoer:           doer,
 		GetRiskRuleBreakdownDoer:           doer,
 		GetRiskPolicyStatusDoer:            doer,
@@ -430,6 +440,54 @@ func (c *Client) ListRiskCategories() goa.Endpoint {
 		resp, err := c.ListRiskCategoriesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "listRiskCategories", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetDetectionSchema returns an endpoint that makes HTTP requests to the risk
+// service getDetectionSchema server.
+func (c *Client) GetDetectionSchema() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetDetectionSchemaRequest(c.encoder)
+		decodeResponse = DecodeGetDetectionSchemaResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetDetectionSchemaRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetDetectionSchemaDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "getDetectionSchema", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CompileCel returns an endpoint that makes HTTP requests to the risk service
+// compileCel server.
+func (c *Client) CompileCel() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCompileCelRequest(c.encoder)
+		decodeResponse = DecodeCompileCelResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCompileCelRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CompileCelDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "compileCel", err)
 		}
 		return decodeResponse(resp)
 	}

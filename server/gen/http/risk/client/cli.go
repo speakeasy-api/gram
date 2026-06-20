@@ -754,6 +754,69 @@ func BuildListRiskCategoriesPayload(riskListRiskCategoriesApikeyToken string, ri
 	return v, nil
 }
 
+// BuildGetDetectionSchemaPayload builds the payload for the risk
+// getDetectionSchema endpoint from CLI flags.
+func BuildGetDetectionSchemaPayload(riskGetDetectionSchemaApikeyToken string, riskGetDetectionSchemaSessionToken string, riskGetDetectionSchemaProjectSlugInput string) (*risk.GetDetectionSchemaPayload, error) {
+	var apikeyToken *string
+	{
+		if riskGetDetectionSchemaApikeyToken != "" {
+			apikeyToken = &riskGetDetectionSchemaApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetDetectionSchemaSessionToken != "" {
+			sessionToken = &riskGetDetectionSchemaSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskGetDetectionSchemaProjectSlugInput != "" {
+			projectSlugInput = &riskGetDetectionSchemaProjectSlugInput
+		}
+	}
+	v := &risk.GetDetectionSchemaPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCompileCelPayload builds the payload for the risk compileCel endpoint
+// from CLI flags.
+func BuildCompileCelPayload(riskCompileCelCel string, riskCompileCelApikeyToken string, riskCompileCelSessionToken string, riskCompileCelProjectSlugInput string) (*risk.CompileCelPayload, error) {
+	var cel string
+	{
+		cel = riskCompileCelCel
+	}
+	var apikeyToken *string
+	{
+		if riskCompileCelApikeyToken != "" {
+			apikeyToken = &riskCompileCelApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskCompileCelSessionToken != "" {
+			sessionToken = &riskCompileCelSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskCompileCelProjectSlugInput != "" {
+			projectSlugInput = &riskCompileCelProjectSlugInput
+		}
+	}
+	v := &risk.CompileCelPayload{}
+	v.Cel = cel
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetRiskUserBreakdownPayload builds the payload for the risk
 // getRiskUserBreakdown endpoint from CLI flags.
 func BuildGetRiskUserBreakdownPayload(riskGetRiskUserBreakdownExternalUserID string, riskGetRiskUserBreakdownFrom string, riskGetRiskUserBreakdownTo string, riskGetRiskUserBreakdownApikeyToken string, riskGetRiskUserBreakdownSessionToken string, riskGetRiskUserBreakdownProjectSlugInput string) (*risk.GetRiskUserBreakdownPayload, error) {

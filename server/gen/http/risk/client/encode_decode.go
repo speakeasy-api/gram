@@ -2483,6 +2483,485 @@ func DecodeListRiskCategoriesResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildGetDetectionSchemaRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "getDetectionSchema" endpoint
+func (c *Client) BuildGetDetectionSchemaRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetDetectionSchemaRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "getDetectionSchema", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetDetectionSchemaRequest returns an encoder for requests sent to the
+// risk getDetectionSchema server.
+func EncodeGetDetectionSchemaRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.GetDetectionSchemaPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "getDetectionSchema", "*risk.GetDetectionSchemaPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetDetectionSchemaResponse returns a decoder for responses returned by
+// the risk getDetectionSchema endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetDetectionSchemaResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetDetectionSchemaResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetDetectionSchemaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionSchema", err)
+			}
+			err = ValidateGetDetectionSchemaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionSchema", err)
+			}
+			res := NewGetDetectionSchemaDetectionSchemaResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetDetectionSchemaUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionSchema", err)
+			}
+			err = ValidateGetDetectionSchemaUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionSchema", err)
+			}
+			return nil, NewGetDetectionSchemaUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetDetectionSchemaForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionSchema", err)
+			}
+			err = ValidateGetDetectionSchemaForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionSchema", err)
+			}
+			return nil, NewGetDetectionSchemaForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetDetectionSchemaBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionSchema", err)
+			}
+			err = ValidateGetDetectionSchemaBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionSchema", err)
+			}
+			return nil, NewGetDetectionSchemaBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetDetectionSchemaNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionSchema", err)
+			}
+			err = ValidateGetDetectionSchemaNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionSchema", err)
+			}
+			return nil, NewGetDetectionSchemaNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetDetectionSchemaConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionSchema", err)
+			}
+			err = ValidateGetDetectionSchemaConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionSchema", err)
+			}
+			return nil, NewGetDetectionSchemaConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetDetectionSchemaUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionSchema", err)
+			}
+			err = ValidateGetDetectionSchemaUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionSchema", err)
+			}
+			return nil, NewGetDetectionSchemaUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetDetectionSchemaInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionSchema", err)
+			}
+			err = ValidateGetDetectionSchemaInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionSchema", err)
+			}
+			return nil, NewGetDetectionSchemaInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetDetectionSchemaInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getDetectionSchema", err)
+				}
+				err = ValidateGetDetectionSchemaInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getDetectionSchema", err)
+				}
+				return nil, NewGetDetectionSchemaInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetDetectionSchemaUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getDetectionSchema", err)
+				}
+				err = ValidateGetDetectionSchemaUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getDetectionSchema", err)
+				}
+				return nil, NewGetDetectionSchemaUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "getDetectionSchema", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetDetectionSchemaGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionSchema", err)
+			}
+			err = ValidateGetDetectionSchemaGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionSchema", err)
+			}
+			return nil, NewGetDetectionSchemaGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "getDetectionSchema", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCompileCelRequest instantiates a HTTP request object with method and
+// path set to call the "risk" service "compileCel" endpoint
+func (c *Client) BuildCompileCelRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CompileCelRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "compileCel", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCompileCelRequest returns an encoder for requests sent to the risk
+// compileCel server.
+func EncodeCompileCelRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.CompileCelPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "compileCel", "*risk.CompileCelPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("cel", p.Cel)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeCompileCelResponse returns a decoder for responses returned by the
+// risk compileCel endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeCompileCelResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCompileCelResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CompileCelResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileCel", err)
+			}
+			err = ValidateCompileCelResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileCel", err)
+			}
+			res := NewCompileCelCelCompileResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CompileCelUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileCel", err)
+			}
+			err = ValidateCompileCelUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileCel", err)
+			}
+			return nil, NewCompileCelUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CompileCelForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileCel", err)
+			}
+			err = ValidateCompileCelForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileCel", err)
+			}
+			return nil, NewCompileCelForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CompileCelBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileCel", err)
+			}
+			err = ValidateCompileCelBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileCel", err)
+			}
+			return nil, NewCompileCelBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CompileCelNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileCel", err)
+			}
+			err = ValidateCompileCelNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileCel", err)
+			}
+			return nil, NewCompileCelNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CompileCelConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileCel", err)
+			}
+			err = ValidateCompileCelConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileCel", err)
+			}
+			return nil, NewCompileCelConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CompileCelUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileCel", err)
+			}
+			err = ValidateCompileCelUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileCel", err)
+			}
+			return nil, NewCompileCelUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CompileCelInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileCel", err)
+			}
+			err = ValidateCompileCelInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileCel", err)
+			}
+			return nil, NewCompileCelInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CompileCelInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "compileCel", err)
+				}
+				err = ValidateCompileCelInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "compileCel", err)
+				}
+				return nil, NewCompileCelInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CompileCelUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "compileCel", err)
+				}
+				err = ValidateCompileCelUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "compileCel", err)
+				}
+				return nil, NewCompileCelUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "compileCel", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CompileCelGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileCel", err)
+			}
+			err = ValidateCompileCelGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileCel", err)
+			}
+			return nil, NewCompileCelGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "compileCel", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetRiskUserBreakdownRequest instantiates a HTTP request object with
 // method and path set to call the "risk" service "getRiskUserBreakdown"
 // endpoint
@@ -7438,6 +7917,33 @@ func unmarshalRiskResultResponseBodyToTypesRiskResult(v *RiskResultResponseBody)
 			res.Tags[i] = val
 		}
 	}
+	if v.Spans != nil {
+		res.Spans = make([]*types.RiskSpan, len(v.Spans))
+		for i, val := range v.Spans {
+			if val == nil {
+				res.Spans[i] = nil
+				continue
+			}
+			res.Spans[i] = unmarshalRiskSpanResponseBodyToTypesRiskSpan(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalRiskSpanResponseBodyToTypesRiskSpan builds a value of type
+// *types.RiskSpan from a value of type *RiskSpanResponseBody.
+func unmarshalRiskSpanResponseBodyToTypesRiskSpan(v *RiskSpanResponseBody) *types.RiskSpan {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskSpan{
+		Match:    *v.Match,
+		Field:    v.Field,
+		Path:     v.Path,
+		StartPos: v.StartPos,
+		EndPos:   v.EndPos,
+	}
 
 	return res
 }
@@ -7467,6 +7973,33 @@ func unmarshalRiskResultRedactedResponseBodyToTypesRiskResultRedacted(v *RiskRes
 		for i, val := range v.Tags {
 			res.Tags[i] = val
 		}
+	}
+	if v.SpansRedacted != nil {
+		res.SpansRedacted = make([]*types.RiskSpanRedacted, len(v.SpansRedacted))
+		for i, val := range v.SpansRedacted {
+			if val == nil {
+				res.SpansRedacted[i] = nil
+				continue
+			}
+			res.SpansRedacted[i] = unmarshalRiskSpanRedactedResponseBodyToTypesRiskSpanRedacted(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalRiskSpanRedactedResponseBodyToTypesRiskSpanRedacted builds a value
+// of type *types.RiskSpanRedacted from a value of type
+// *RiskSpanRedactedResponseBody.
+func unmarshalRiskSpanRedactedResponseBodyToTypesRiskSpanRedacted(v *RiskSpanRedactedResponseBody) *types.RiskSpanRedacted {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskSpanRedacted{
+		MatchRedacted: *v.MatchRedacted,
+		Field:         v.Field,
+		Path:          v.Path,
+		PositionKnown: *v.PositionKnown,
 	}
 
 	return res
@@ -7553,6 +8086,32 @@ func unmarshalRiskCategoryDefinitionResponseBodyToRiskRiskCategoryDefinition(v *
 	res.RuleIds = make([]string, len(v.RuleIds))
 	for i, val := range v.RuleIds {
 		res.RuleIds[i] = val
+	}
+
+	return res
+}
+
+// unmarshalDetectionSchemaVariableResponseBodyToRiskDetectionSchemaVariable
+// builds a value of type *risk.DetectionSchemaVariable from a value of type
+// *DetectionSchemaVariableResponseBody.
+func unmarshalDetectionSchemaVariableResponseBodyToRiskDetectionSchemaVariable(v *DetectionSchemaVariableResponseBody) *risk.DetectionSchemaVariable {
+	res := &risk.DetectionSchemaVariable{
+		Name:        *v.Name,
+		Type:        *v.Type,
+		Description: *v.Description,
+	}
+
+	return res
+}
+
+// unmarshalDetectionSchemaFunctionResponseBodyToRiskDetectionSchemaFunction
+// builds a value of type *risk.DetectionSchemaFunction from a value of type
+// *DetectionSchemaFunctionResponseBody.
+func unmarshalDetectionSchemaFunctionResponseBodyToRiskDetectionSchemaFunction(v *DetectionSchemaFunctionResponseBody) *risk.DetectionSchemaFunction {
+	res := &risk.DetectionSchemaFunction{
+		Name:        *v.Name,
+		Signature:   *v.Signature,
+		Description: *v.Description,
 	}
 
 	return res

@@ -3095,6 +3095,14 @@ CREATE TABLE IF NOT EXISTS risk_results (
   confidence DOUBLE PRECISION,
   tags TEXT[],
 
+  -- All matched spans attributed to this one finding, as a JSON array of
+  -- {match,start_pos,end_pos}. A finding can carry several correlated spans
+  -- (e.g. a custom rule matching a tool's function name AND its arguments on
+  -- the same call). match/start_pos/end_pos above mirror the primary (first)
+  -- span for back-compat; spans is the full set. NULL for legacy rows and for
+  -- empty/dead-letter rows.
+  spans jsonb,
+
   -- Populated on rows that represent a message the scanner could not analyze
   -- after exhausting its retry budget
   dead_letter_reason TEXT,

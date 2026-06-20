@@ -584,8 +584,6 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, v
 			Description:  rule.Description,
 			DetectionCel: rule.DetectionCel.String,
 			Regex:        rule.Regex.String,
-			MatchConfig:  nil,
-			Action:       ra.ActionDeny,
 		})
 	}
 
