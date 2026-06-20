@@ -967,6 +967,8 @@ func TestGenerateClaudeObservabilityOptimisticBlockingFilesAndCommands(t *testin
 	require.Contains(t, hook, "gram_breaker_before")
 	require.Contains(t, hook, "gram_breaker_after 1")
 	require.Contains(t, hook, "gram_breaker_after 0")
+	require.Contains(t, hook, "gram_emit_error_message")
+	require.NotContains(t, hook, "gram_emit_fail_open_response")
 	require.Contains(t, hook, "systemMessage")
 	require.NotContains(t, hook, "additionalContext")
 	require.NotContains(t, hook, "permissionDecision")
@@ -987,13 +989,15 @@ func TestGenerateClaudeObservabilityOptimisticBlockingFilesAndCommands(t *testin
 
 	require.Contains(t, breaker, "# Configuration:")
 	require.Contains(t, breaker, "GRAM_BREAKER_OPEN_EXIT_CODE: exit code returned")
-	require.Contains(t, breaker, "BREAKER_NAME: breaker identity")
-	require.Contains(t, breaker, "BREAKER_THRESHOLD: consecutive Gram outage failures")
-	require.Contains(t, breaker, "BREAKER_COOLDOWN: seconds to wait")
-	require.Contains(t, breaker, "BREAKER_LOCK_STALE_AFTER: maximum trusted age")
-	require.Contains(t, breaker, `BREAKER_DIR: directory for breaker state`)
-	require.Contains(t, breaker, `BREAKER_DIR="${BREAKER_DIR:-${CLAUDE_PLUGIN_DATA:-/tmp}/circuit-breakers}"`)
-	require.Contains(t, breaker, `BREAKER_LOCK_STALE_AFTER="${BREAKER_LOCK_STALE_AFTER:-12}"`)
+	require.Contains(t, breaker, "GRAM_BREAKER_NAME: breaker identity")
+	require.Contains(t, breaker, "Default: acme-observability.")
+	require.Contains(t, breaker, "GRAM_BREAKER_THRESHOLD: consecutive Gram outage failures")
+	require.Contains(t, breaker, "GRAM_BREAKER_COOLDOWN: seconds to wait")
+	require.Contains(t, breaker, "GRAM_BREAKER_LOCK_STALE_AFTER: maximum trusted age")
+	require.Contains(t, breaker, `GRAM_BREAKER_DIR: directory for breaker state`)
+	require.Contains(t, breaker, `GRAM_BREAKER_NAME="${GRAM_BREAKER_NAME:-acme-observability}"`)
+	require.Contains(t, breaker, `GRAM_BREAKER_DIR="${GRAM_BREAKER_DIR:-${CLAUDE_PLUGIN_DATA:-/tmp}/circuit-breakers}"`)
+	require.Contains(t, breaker, `GRAM_BREAKER_LOCK_STALE_AFTER="${GRAM_BREAKER_LOCK_STALE_AFTER:-12}"`)
 	require.Less(t, strings.Index(breaker, "# Configuration:"), strings.Index(breaker, "_gram_breaker_is_int()"))
 
 	var parsed claudeHooksConfig
@@ -1070,7 +1074,7 @@ printf '{"message":"down"}\n500'
 		cmd.Env = append(os.Environ(),
 			"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 			"GRAM_CURL_COUNT="+curlCountPath,
-			"BREAKER_DIR="+filepath.Join(dir, "state"),
+			"GRAM_BREAKER_DIR="+filepath.Join(dir, "state"),
 			"GRAM_HTTP_MAX_ATTEMPTS=1",
 			"GRAM_DEVICE_AGENT_COMMANDS=missing-gram-agent",
 		)
@@ -1093,7 +1097,11 @@ printf '{"message":"down"}\n500'
 	require.Equal(t, countAfterFailures, countAfterOpen, "open circuit must skip the HTTP call")
 
 	var response map[string]any
-	require.NoError(t, json.Unmarshal(output, &response))
+	stdout := string(output)
+	if idx := strings.Index(stdout, "\nGram hook degraded\n"); idx >= 0 {
+		stdout = stdout[:idx+1]
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &response))
 	systemMessage, ok := response["systemMessage"].(string)
 	require.True(t, ok)
 	require.Contains(t, systemMessage, "Gram hook degraded")
@@ -1108,15 +1116,15 @@ func TestGeneratedBreakerReclaimsAgeBoundedOwnersEvenWhenPIDLooksAlive(t *testin
 	t.Parallel()
 
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "breaker.sh"), renderBreakerScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "breaker.sh"), renderBreakerScript("gram-observability-claude-hooks"), 0o755))
 	cmd := exec.Command("bash", "-c", `
 set -u
 . ./breaker.sh
-BREAKER_DIR="$PWD/state"
-BREAKER_LOCK_STALE_AFTER=1
-mkdir -p "$BREAKER_DIR"
+GRAM_BREAKER_DIR="$PWD/state"
+GRAM_BREAKER_LOCK_STALE_AFTER=1
+mkdir -p "$GRAM_BREAKER_DIR"
 
-lock_dir="$BREAKER_DIR/gram-observability-claude-hooks.lockdir"
+lock_dir="$GRAM_BREAKER_DIR/gram-observability-claude-hooks.lockdir"
 mkdir "$lock_dir"
 printf '1\n' > "$lock_dir/owner.pid"
 sleep 2
@@ -1127,7 +1135,7 @@ if [ "$status" -ne 0 ]; then
 fi
 
 old=$(( $(date +%s) - 20 ))
-state_file="$BREAKER_DIR/gram-observability-claude-hooks.state"
+state_file="$GRAM_BREAKER_DIR/gram-observability-claude-hooks.state"
 printf 'half_open 5 %s 1\n' "$old" > "$state_file"
 gram_breaker_before
 status=$?

@@ -633,7 +633,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "claude")
 	if !cfg.ObservabilityMode {
-		files[path.Join(subdir, "hooks/breaker.sh")] = renderBreakerScript()
+		files[path.Join(subdir, "hooks/breaker.sh")] = renderBreakerScript(name)
 	}
 	files[path.Join(subdir, "hooks/mcp_inventory.sh")] = renderClaudeMCPInventoryScript(cfg)
 
@@ -1021,8 +1021,8 @@ gram_http_post() {
 `)
 }
 
-func renderBreakerScript() []byte {
-	return []byte(`#!/usr/bin/env bash
+func renderBreakerScript(pluginName string) []byte {
+	script := `#!/usr/bin/env bash
 # Filesystem-backed circuit breaker for Gram hook senders.
 #
 # Sourced (not executed) by generated Claude hook.sh when Observability Mode is
@@ -1038,23 +1038,23 @@ func renderBreakerScript() []byte {
 # Configuration:
 #   GRAM_BREAKER_OPEN_EXIT_CODE: exit code returned by gram_breaker_before while
 #     the circuit is open. Default: 75.
-#   BREAKER_NAME: breaker identity used to derive state and lock filenames.
-#     Default: gram-observability-claude-hooks.
-#   BREAKER_THRESHOLD: consecutive Gram outage failures before opening the
+#   GRAM_BREAKER_NAME: breaker identity used to derive state and lock filenames.
+#     Default: __GRAM_BREAKER_DEFAULT_NAME__.
+#   GRAM_BREAKER_THRESHOLD: consecutive Gram outage failures before opening the
 #     circuit. Default: 5.
-#   BREAKER_COOLDOWN: seconds to wait before allowing a half-open recovery
+#   GRAM_BREAKER_COOLDOWN: seconds to wait before allowing a half-open recovery
 #     probe. Default: 60.
-#   BREAKER_LOCK_STALE_AFTER: maximum trusted age, in seconds, for lock and
+#   GRAM_BREAKER_LOCK_STALE_AFTER: maximum trusted age, in seconds, for lock and
 #     half-open ownership. Default: 12 (the hook HTTP timeout plus 2 seconds).
-#   BREAKER_DIR: directory for breaker state and lock directories. Default:
+#   GRAM_BREAKER_DIR: directory for breaker state and lock directories. Default:
 #     ${CLAUDE_PLUGIN_DATA:-/tmp}/circuit-breakers.
 
 GRAM_BREAKER_OPEN_EXIT_CODE="${GRAM_BREAKER_OPEN_EXIT_CODE:-75}"
-BREAKER_NAME="${BREAKER_NAME:-gram-observability-claude-hooks}"
-BREAKER_THRESHOLD="${BREAKER_THRESHOLD:-5}"
-BREAKER_COOLDOWN="${BREAKER_COOLDOWN:-60}"
-BREAKER_LOCK_STALE_AFTER="${BREAKER_LOCK_STALE_AFTER:-12}"
-BREAKER_DIR="${BREAKER_DIR:-${CLAUDE_PLUGIN_DATA:-/tmp}/circuit-breakers}"
+GRAM_BREAKER_NAME="${GRAM_BREAKER_NAME:-__GRAM_BREAKER_DEFAULT_NAME__}"
+GRAM_BREAKER_THRESHOLD="${GRAM_BREAKER_THRESHOLD:-5}"
+GRAM_BREAKER_COOLDOWN="${GRAM_BREAKER_COOLDOWN:-60}"
+GRAM_BREAKER_LOCK_STALE_AFTER="${GRAM_BREAKER_LOCK_STALE_AFTER:-12}"
+GRAM_BREAKER_DIR="${GRAM_BREAKER_DIR:-${CLAUDE_PLUGIN_DATA:-/tmp}/circuit-breakers}"
 
 _gram_breaker_is_int() {
   case "${1:-}" in
@@ -1168,22 +1168,6 @@ _gram_breaker_write_state() {
 }
 
 _gram_breaker_prepare() {
-  GRAM_BREAKER_NAME="$BREAKER_NAME"
-  GRAM_BREAKER_THRESHOLD="$BREAKER_THRESHOLD"
-  GRAM_BREAKER_COOLDOWN="$BREAKER_COOLDOWN"
-  GRAM_BREAKER_LOCK_STALE_AFTER="$BREAKER_LOCK_STALE_AFTER"
-  GRAM_BREAKER_DIR="$BREAKER_DIR"
-
-  if ! _gram_breaker_is_int "$GRAM_BREAKER_THRESHOLD" || [ "$GRAM_BREAKER_THRESHOLD" -lt 1 ]; then
-    GRAM_BREAKER_THRESHOLD=5
-  fi
-  if ! _gram_breaker_is_int "$GRAM_BREAKER_COOLDOWN"; then
-    GRAM_BREAKER_COOLDOWN=60
-  fi
-  if ! _gram_breaker_is_int "$GRAM_BREAKER_LOCK_STALE_AFTER" || [ "$GRAM_BREAKER_LOCK_STALE_AFTER" -lt 1 ]; then
-    GRAM_BREAKER_LOCK_STALE_AFTER=12
-  fi
-
   GRAM_BREAKER_SAFE_NAME="${GRAM_BREAKER_NAME//[!A-Za-z0-9_.-]/_}"
   if [ -z "$GRAM_BREAKER_SAFE_NAME" ]; then
     GRAM_BREAKER_SAFE_NAME="default"
@@ -1293,7 +1277,8 @@ gram_breaker_after() {
   _gram_breaker_unlock
   return 0
 }
-`)
+`
+	return []byte(strings.ReplaceAll(script, "__GRAM_BREAKER_DEFAULT_NAME__", shellDoubleQuoteValue(pluginName)))
 }
 
 func renderCurlAuthConfigSnippet(cfg GenerateConfig, failureExit int) string {
@@ -1321,6 +1306,10 @@ auth_config_arg=(--config "$auth_config")
 
 func curlConfigQuote(value string) string {
 	return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(value)
+}
+
+func shellDoubleQuoteValue(value string) string {
+	return strings.NewReplacer(`\`, `\\`, `"`, `\"`, "$", `\$`, "`", "\\`").Replace(value)
 }
 
 func renderOptimisticClaudeHookScript(cfg GenerateConfig, keyPrefix, authConfigSnippet string) []byte {
@@ -1365,14 +1354,21 @@ gram_json_escape() {
   printf '%s' "$s"
 }
 
-gram_emit_fail_open_response() {
-  local message
+gram_emit_error_message() {
+  local reason="${1:-}"
+  local system_message="${2:-}"
   local escaped_message
 
-  message="Gram hook degraded. Gram is temporarily unavailable, so this hook is allowing the request without policy evaluation. Continue normally."
+  if [ -z "$reason" ]; then
+    reason="${system_message:-Speakeasy hook returned an error}"
+  fi
+  if [ -z "$system_message" ]; then
+    system_message="$reason"
+  fi
 
-  escaped_message="$(gram_json_escape "$message")"
+  escaped_message="$(gram_json_escape "$system_message")"
   printf '{"systemMessage":"%s"}\n' "$escaped_message"
+  printf '%s\n' "$reason" >&2
 }
 
 GRAM_HTTP_CODE="000"
@@ -1380,11 +1376,15 @@ GRAM_HTTP_BODY="{}"
 gram_breaker_before
 breaker_status=$?
 if [ "$breaker_status" -eq "$GRAM_BREAKER_OPEN_EXIT_CODE" ]; then
-  gram_emit_fail_open_response
+  gram_emit_error_message \
+    "Gram hook degraded" \
+    "Gram hook degraded. Gram is temporarily unavailable, so this hook is allowing the request without policy evaluation. Continue normally."
   exit 0
 fi
 if [ "$breaker_status" -ne 0 ]; then
-  gram_emit_fail_open_response
+  gram_emit_error_message \
+    "Gram hook degraded" \
+    "Gram hook degraded. Gram is temporarily unavailable, so this hook is allowing the request without policy evaluation. Continue normally."
   exit 0
 fi
 
@@ -1401,7 +1401,9 @@ body="$GRAM_HTTP_BODY"
 # allow the request and let the circuit breaker decide when to probe again.
 if [ "$http_code" = "000" ] || [ "$http_code" -ge 500 ] 2>/dev/null; then
   gram_breaker_after 1 || true
-  gram_emit_fail_open_response
+  gram_emit_error_message \
+    "Gram hook degraded" \
+    "Gram hook degraded. Gram is temporarily unavailable, so this hook is allowing the request without policy evaluation. Continue normally."
   exit 0
 fi
 
@@ -1412,8 +1414,9 @@ if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 400 ] 2>/dev/null;
   exit 0
 fi
 
-echo "$body"
-echo "Speakeasy hook returned HTTP ${http_code}" >&2
+gram_emit_error_message \
+  "Speakeasy hook returned HTTP ${http_code}" \
+  "Speakeasy hook returned HTTP ${http_code}"
 exit 2
 `
 	replacements := map[string]string{
