@@ -118,7 +118,7 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 // for generator changes that alter behaviour in ways the placeholder
 // fingerprint pass can't observe. The Plugin Generate Check CI workflow
 // requires this to change whenever generate.go does.
-const pluginGeneratorVersion = "4"
+const pluginGeneratorVersion = "5"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -618,8 +618,9 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 		if event == "SessionStart" || event == "ConfigChange" {
 			script = "mcp_inventory.sh"
 		}
+		command := `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + script + `"`
 		hookEvents[event] = []claudeHookMatcher{
-			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + script + `"`, Async: claudeHookAsyncFlag(event, cfg.ObservabilityMode)}}},
+			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: command, Async: claudeHookAsyncFlag(event, cfg.ObservabilityMode)}}},
 		}
 	}
 	hooksJSON, err := marshalJSON(claudeHooksConfig{Hooks: hookEvents})
@@ -631,6 +632,9 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
 	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "claude")
+	if !cfg.ObservabilityMode {
+		files[path.Join(subdir, "hooks/breaker.sh")] = renderBreakerScript()
+	}
 	files[path.Join(subdir, "hooks/mcp_inventory.sh")] = renderClaudeMCPInventoryScript(cfg)
 
 	return nil
@@ -1017,6 +1021,281 @@ gram_http_post() {
 `)
 }
 
+func renderBreakerScript() []byte {
+	return []byte(`#!/usr/bin/env bash
+# Filesystem-backed circuit breaker for Gram hook senders.
+#
+# Sourced (not executed) by generated Claude hook.sh when Observability Mode is
+# off. The breaker tracks repeated Gram outages and lets the hook fail open
+# while periodically probing for recovery.
+#
+# Usage:
+#   . "$script_dir/breaker.sh"
+#   gram_breaker_before || exit $?
+#   command args...
+#   gram_breaker_after $?
+#
+# Configuration:
+#   GRAM_BREAKER_OPEN_EXIT_CODE: exit code returned by gram_breaker_before while
+#     the circuit is open. Default: 75.
+#   BREAKER_NAME: breaker identity used to derive state and lock filenames.
+#     Default: gram-observability-claude-hooks.
+#   BREAKER_THRESHOLD: consecutive Gram outage failures before opening the
+#     circuit. Default: 5.
+#   BREAKER_COOLDOWN: seconds to wait before allowing a half-open recovery
+#     probe. Default: 60.
+#   BREAKER_LOCK_STALE_AFTER: maximum trusted age, in seconds, for lock and
+#     half-open ownership. Default: 12 (the hook HTTP timeout plus 2 seconds).
+#   BREAKER_DIR: directory for breaker state and lock directories. Default:
+#     ${CLAUDE_PLUGIN_DATA:-/tmp}/circuit-breakers.
+
+GRAM_BREAKER_OPEN_EXIT_CODE="${GRAM_BREAKER_OPEN_EXIT_CODE:-75}"
+BREAKER_NAME="${BREAKER_NAME:-gram-observability-claude-hooks}"
+BREAKER_THRESHOLD="${BREAKER_THRESHOLD:-5}"
+BREAKER_COOLDOWN="${BREAKER_COOLDOWN:-60}"
+BREAKER_LOCK_STALE_AFTER="${BREAKER_LOCK_STALE_AFTER:-12}"
+BREAKER_DIR="${BREAKER_DIR:-${CLAUDE_PLUGIN_DATA:-/tmp}/circuit-breakers}"
+
+_gram_breaker_is_int() {
+  case "${1:-}" in
+    '' | *[!0-9]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+_gram_breaker_pid_running() {
+  local pid="$1"
+  _gram_breaker_is_int "$pid" || return 1
+  [ "$pid" -gt 0 ] || return 1
+  kill -0 "$pid" >/dev/null 2>&1
+}
+
+_gram_breaker_unlock() {
+  local owner_pid=""
+  if [ -r "$GRAM_BREAKER_LOCK_OWNER_FILE" ]; then
+    read -r owner_pid <"$GRAM_BREAKER_LOCK_OWNER_FILE" || true
+  fi
+  if [ "$owner_pid" = "$$" ]; then
+    rm -f "$GRAM_BREAKER_LOCK_OWNER_FILE" 2>/dev/null || true
+    rmdir "$GRAM_BREAKER_LOCK_DIR" 2>/dev/null || true
+  fi
+}
+
+_gram_breaker_lock() {
+  local owner_pid now mtime
+
+  while ! mkdir "$GRAM_BREAKER_LOCK_DIR" 2>/dev/null; do
+    mtime="$(stat -f %m "$GRAM_BREAKER_LOCK_DIR" 2>/dev/null ||
+      stat -c %Y "$GRAM_BREAKER_LOCK_DIR" 2>/dev/null)" || {
+      sleep 0.005
+      continue
+    }
+    if _gram_breaker_is_int "$mtime"; then
+      now="$(date +%s)"
+      if [ $((now - mtime)) -ge "$GRAM_BREAKER_LOCK_STALE_AFTER" ]; then
+        rm -f "$GRAM_BREAKER_LOCK_OWNER_FILE" 2>/dev/null || true
+        rmdir "$GRAM_BREAKER_LOCK_DIR" 2>/dev/null || true
+        sleep 0.005
+        continue
+      fi
+    fi
+
+    owner_pid=""
+    if [ -r "$GRAM_BREAKER_LOCK_OWNER_FILE" ]; then
+      read -r owner_pid <"$GRAM_BREAKER_LOCK_OWNER_FILE" || true
+      if _gram_breaker_pid_running "$owner_pid"; then
+        sleep 0.005
+        continue
+      fi
+      if _gram_breaker_is_int "$owner_pid" && [ "$owner_pid" -gt 0 ]; then
+        rm -f "$GRAM_BREAKER_LOCK_OWNER_FILE" 2>/dev/null || true
+        rmdir "$GRAM_BREAKER_LOCK_DIR" 2>/dev/null || true
+      fi
+    fi
+    sleep 0.005
+  done
+
+  if ! printf '%s\n' "$$" >"$GRAM_BREAKER_LOCK_OWNER_FILE"; then
+    rm -f "$GRAM_BREAKER_LOCK_OWNER_FILE" 2>/dev/null || true
+    rmdir "$GRAM_BREAKER_LOCK_DIR" 2>/dev/null || true
+    return 1
+  fi
+}
+
+_gram_breaker_read_state() {
+  GRAM_BREAKER_STATE="closed"
+  GRAM_BREAKER_FAILURES=0
+  GRAM_BREAKER_OPENED_AT=0
+  GRAM_BREAKER_OWNER_PID=0
+
+  if [ -r "$GRAM_BREAKER_STATE_FILE" ]; then
+    read -r GRAM_BREAKER_STATE GRAM_BREAKER_FAILURES GRAM_BREAKER_OPENED_AT GRAM_BREAKER_OWNER_PID <"$GRAM_BREAKER_STATE_FILE" || true
+  fi
+
+  case "$GRAM_BREAKER_STATE" in
+    closed | open | half_open) ;;
+    *) GRAM_BREAKER_STATE="closed" ;;
+  esac
+  if ! _gram_breaker_is_int "$GRAM_BREAKER_FAILURES"; then
+    GRAM_BREAKER_FAILURES=0
+  fi
+  if ! _gram_breaker_is_int "$GRAM_BREAKER_OPENED_AT"; then
+    GRAM_BREAKER_OPENED_AT=0
+  fi
+  if ! _gram_breaker_is_int "$GRAM_BREAKER_OWNER_PID"; then
+    GRAM_BREAKER_OWNER_PID=0
+  fi
+}
+
+_gram_breaker_write_state() {
+  local state="$1"
+  local failures="$2"
+  local opened_at="$3"
+  local owner_pid="${4:-0}"
+  local tmp
+
+  if ! _gram_breaker_is_int "$owner_pid"; then
+    owner_pid=0
+  fi
+
+  tmp="$(mktemp "${GRAM_BREAKER_DIR}/.${GRAM_BREAKER_SAFE_NAME}.XXXXXX")" || return 1
+  if printf '%s %s %s %s\n' "$state" "$failures" "$opened_at" "$owner_pid" >"$tmp"; then
+    mv "$tmp" "$GRAM_BREAKER_STATE_FILE"
+    return $?
+  fi
+  rm -f "$tmp"
+  return 1
+}
+
+_gram_breaker_prepare() {
+  GRAM_BREAKER_NAME="$BREAKER_NAME"
+  GRAM_BREAKER_THRESHOLD="$BREAKER_THRESHOLD"
+  GRAM_BREAKER_COOLDOWN="$BREAKER_COOLDOWN"
+  GRAM_BREAKER_LOCK_STALE_AFTER="$BREAKER_LOCK_STALE_AFTER"
+  GRAM_BREAKER_DIR="$BREAKER_DIR"
+
+  if ! _gram_breaker_is_int "$GRAM_BREAKER_THRESHOLD" || [ "$GRAM_BREAKER_THRESHOLD" -lt 1 ]; then
+    GRAM_BREAKER_THRESHOLD=5
+  fi
+  if ! _gram_breaker_is_int "$GRAM_BREAKER_COOLDOWN"; then
+    GRAM_BREAKER_COOLDOWN=60
+  fi
+  if ! _gram_breaker_is_int "$GRAM_BREAKER_LOCK_STALE_AFTER" || [ "$GRAM_BREAKER_LOCK_STALE_AFTER" -lt 1 ]; then
+    GRAM_BREAKER_LOCK_STALE_AFTER=12
+  fi
+
+  GRAM_BREAKER_SAFE_NAME="${GRAM_BREAKER_NAME//[!A-Za-z0-9_.-]/_}"
+  if [ -z "$GRAM_BREAKER_SAFE_NAME" ]; then
+    GRAM_BREAKER_SAFE_NAME="default"
+  fi
+
+  mkdir -p "$GRAM_BREAKER_DIR" 2>/dev/null || return 1
+  [ -d "$GRAM_BREAKER_DIR" ] && [ -w "$GRAM_BREAKER_DIR" ] || return 1
+  GRAM_BREAKER_STATE_FILE="${GRAM_BREAKER_DIR}/${GRAM_BREAKER_SAFE_NAME}.state"
+  GRAM_BREAKER_LOCK_DIR="${GRAM_BREAKER_DIR}/${GRAM_BREAKER_SAFE_NAME}.lockdir"
+  GRAM_BREAKER_LOCK_OWNER_FILE="${GRAM_BREAKER_LOCK_DIR}/owner.pid"
+}
+
+gram_breaker_before() {
+  _gram_breaker_prepare || return 2
+
+  local now elapsed
+
+  GRAM_BREAKER_RUN_MODE=""
+  GRAM_BREAKER_RUN_PID=""
+  _gram_breaker_lock || return 1
+  _gram_breaker_read_state
+
+  case "$GRAM_BREAKER_STATE" in
+    closed)
+      GRAM_BREAKER_RUN_MODE="closed"
+      _gram_breaker_unlock
+      return 0
+      ;;
+    open)
+      now="$(date +%s)"
+      elapsed=$((now - GRAM_BREAKER_OPENED_AT))
+      if [ "$elapsed" -ge "$GRAM_BREAKER_COOLDOWN" ]; then
+        GRAM_BREAKER_RUN_MODE="half_open"
+        GRAM_BREAKER_RUN_PID="$$"
+        _gram_breaker_write_state "half_open" "$GRAM_BREAKER_FAILURES" "$now" "$GRAM_BREAKER_RUN_PID" || {
+          _gram_breaker_unlock
+          return 1
+        }
+        _gram_breaker_unlock
+        return 0
+      fi
+      _gram_breaker_unlock
+      return "$GRAM_BREAKER_OPEN_EXIT_CODE"
+      ;;
+    half_open)
+      now="$(date +%s)"
+      elapsed=$((now - GRAM_BREAKER_OPENED_AT))
+      if [ "$elapsed" -ge "$GRAM_BREAKER_LOCK_STALE_AFTER" ] || ! _gram_breaker_pid_running "$GRAM_BREAKER_OWNER_PID"; then
+        GRAM_BREAKER_RUN_MODE="half_open"
+        GRAM_BREAKER_RUN_PID="$$"
+        _gram_breaker_write_state "half_open" "$GRAM_BREAKER_FAILURES" "$now" "$GRAM_BREAKER_RUN_PID" || {
+          _gram_breaker_unlock
+          return 1
+        }
+        _gram_breaker_unlock
+        return 0
+      fi
+      _gram_breaker_unlock
+      return "$GRAM_BREAKER_OPEN_EXIT_CODE"
+      ;;
+  esac
+
+  _gram_breaker_unlock
+  return 1
+}
+
+gram_breaker_after() {
+  local command_status="$1"
+  local now failures
+
+  _gram_breaker_prepare || return 2
+  _gram_breaker_lock || return 1
+  _gram_breaker_read_state
+
+  case "${GRAM_BREAKER_RUN_MODE:-}" in
+    half_open)
+      if [ "$GRAM_BREAKER_STATE" != "half_open" ] || [ "$GRAM_BREAKER_OWNER_PID" != "${GRAM_BREAKER_RUN_PID:-$$}" ]; then
+        _gram_breaker_unlock
+        return 0
+      fi
+      if [ "$command_status" -eq 0 ]; then
+        _gram_breaker_write_state "closed" 0 0 0
+      else
+        now="$(date +%s)"
+        _gram_breaker_write_state "open" "$GRAM_BREAKER_THRESHOLD" "$now" 0
+      fi
+      ;;
+    closed)
+      if [ "$GRAM_BREAKER_STATE" != "closed" ]; then
+        _gram_breaker_unlock
+        return 0
+      fi
+      if [ "$command_status" -eq 0 ]; then
+        _gram_breaker_write_state "closed" 0 0 0
+      else
+        failures=$((GRAM_BREAKER_FAILURES + 1))
+        if [ "$failures" -ge "$GRAM_BREAKER_THRESHOLD" ]; then
+          now="$(date +%s)"
+          _gram_breaker_write_state "open" "$failures" "$now" 0
+        else
+          _gram_breaker_write_state "closed" "$failures" "$GRAM_BREAKER_OPENED_AT" 0
+        fi
+      fi
+      ;;
+  esac
+
+  _gram_breaker_unlock
+  return 0
+}
+`)
+}
+
 func renderCurlAuthConfigSnippet(cfg GenerateConfig, failureExit int) string {
 	var config strings.Builder
 	fmt.Fprintf(&config, "header = \"Gram-Key: %s\"\n", curlConfigQuote(cfg.HooksAPIKey))
@@ -1042,6 +1321,111 @@ auth_config_arg=(--config "$auth_config")
 
 func curlConfigQuote(value string) string {
 	return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(value)
+}
+
+func renderOptimisticClaudeHookScript(cfg GenerateConfig, keyPrefix, authConfigSnippet string) []byte {
+	script := `#!/usr/bin/env bash
+# Generated by Speakeasy. Do not edit - overwritten on every publish.
+# Key prefix: __KEY_PREFIX__ (correlate with the dashboard's API Keys page).
+#
+# Send a Claude hook event to Speakeasy. When reachable, the server is the sole
+# authority on whether to block:
+#   HTTP 2xx -> allow (exit 0). Body forwarded to stdout.
+#   HTTP 4xx -> block (exit 2). Server message relayed to stderr.
+#   HTTP 000/5xx -> allow with degradation context; counted by the breaker.
+# If Speakeasy is unreachable or repeatedly returns 5xx, fail open with context
+# so Claude can continue while the circuit breaker probes for recovery.
+
+set -u
+
+server_url="${GRAM_HOOKS_SERVER_URL:-__SERVER_URL__}"
+
+__AUTH_CONFIG_SNIPPET__
+__IDENTITY_SOURCE_SNIPPET__# shellcheck source=/dev/null
+. "$script_dir/breaker.sh"
+
+payload=$(cat)
+if type gram_enrich_identity_payload >/dev/null 2>&1; then
+  payload=$(gram_enrich_identity_payload "$payload")
+fi
+
+hook_hostname=$(hostname 2>/dev/null || true)
+hook_hostname_header=()
+if [ -n "$hook_hostname" ]; then
+  hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
+fi
+
+gram_json_escape() {
+  local s="${1:-}"
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\n'/\\n}
+  s=${s//$'\r'/\\r}
+  s=${s//$'\t'/\\t}
+  printf '%s' "$s"
+}
+
+gram_emit_fail_open_response() {
+  local message
+  local escaped_message
+
+  message="Gram hook degraded. Gram is temporarily unavailable, so this hook is allowing the request without policy evaluation. Continue normally."
+
+  escaped_message="$(gram_json_escape "$message")"
+  printf '{"systemMessage":"%s"}\n' "$escaped_message"
+}
+
+GRAM_HTTP_CODE="000"
+GRAM_HTTP_BODY="{}"
+gram_breaker_before
+breaker_status=$?
+if [ "$breaker_status" -eq "$GRAM_BREAKER_OPEN_EXIT_CODE" ]; then
+  gram_emit_fail_open_response
+  exit 0
+fi
+if [ "$breaker_status" -ne 0 ]; then
+  gram_emit_fail_open_response
+  exit 0
+fi
+
+# gram_http_post (http.sh) retries transient resets so a single reset no
+# longer blocks the tool call; the server still decides allow/block.
+gram_http_post "${server_url}/rpc/hooks.claude" "$payload" 10 \
+  ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"}
+
+http_code="$GRAM_HTTP_CODE"
+body="$GRAM_HTTP_BODY"
+
+# curl returns 000 on connection failure. Treat 000/5xx as a Gram outage:
+# allow the request and let the circuit breaker decide when to probe again.
+if [ "$http_code" = "000" ] || [ "$http_code" -ge 500 ] 2>/dev/null; then
+  gram_breaker_after 1 || true
+  gram_emit_fail_open_response
+  exit 0
+fi
+
+gram_breaker_after 0 || true
+
+if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 400 ] 2>/dev/null; then
+  echo "$body"
+  exit 0
+fi
+
+echo "$body"
+echo "Speakeasy hook returned HTTP ${http_code}" >&2
+exit 2
+`
+	replacements := map[string]string{
+		"__KEY_PREFIX__":              keyPrefix,
+		"__SERVER_URL__":              cfg.ServerURL,
+		"__AUTH_CONFIG_SNIPPET__":     authConfigSnippet,
+		"__IDENTITY_SOURCE_SNIPPET__": renderIdentitySourceSnippet(),
+	}
+	for old, new := range replacements {
+		script = strings.ReplaceAll(script, old, new)
+	}
+	return []byte(script)
 }
 
 // renderHookScript produces the bash wrapper that forwards hook event JSON
@@ -1073,6 +1457,10 @@ func renderHookScript(cfg GenerateConfig, platform string) []byte {
 	// Codex treats any stdout as a structured response and rejects unknown JSON,
 	// so for codex we suppress stdout on 2xx (empty stdout = allow).
 	// Both platforms treat exit 2 as a block; the reason goes to stderr.
+	if platform == "claude" && !cfg.ObservabilityMode {
+		return renderOptimisticClaudeHookScript(cfg, keyPrefix, authConfigSnippet)
+	}
+
 	if platform == "codex" {
 		return fmt.Appendf(nil, `#!/usr/bin/env bash
 # Generated by Speakeasy. Do not edit — overwritten on every publish.

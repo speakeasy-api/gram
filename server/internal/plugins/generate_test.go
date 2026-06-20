@@ -947,6 +947,67 @@ func TestGenerateClaudeObservabilityBlockingEventsDefaultToSync(t *testing.T) {
 	}
 }
 
+func TestGenerateClaudeObservabilityOptimisticBlockingFilesAndCommands(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	slug := ClaudeObservabilitySlug(cfg)
+	hook := string(files[slug+"/hooks/hook.sh"])
+	breaker := string(files[slug+"/hooks/breaker.sh"])
+	require.NotEmpty(t, breaker, "optimistic blocking mode must generate hooks/breaker.sh")
+
+	require.Contains(t, hook, `. "$script_dir/breaker.sh"`)
+	require.Contains(t, hook, "gram_breaker_before")
+	require.Contains(t, hook, "gram_breaker_after 1")
+	require.Contains(t, hook, "gram_breaker_after 0")
+	require.Contains(t, hook, "systemMessage")
+	require.NotContains(t, hook, "additionalContext")
+	require.NotContains(t, hook, "permissionDecision")
+	require.NotContains(t, hook, "hookSpecificOutput")
+	require.NotContains(t, hook, "event_name")
+	require.NotContains(t, hook, "hook cwd:")
+	require.NotContains(t, hook, "state file:")
+	require.NotContains(t, hook, "Gram hook returned HTTP")
+	require.NotContains(t, hook, "circuit open")
+	require.NotContains(t, hook, "python3", "optimistic blocking hook.sh must stay shell-only")
+
+	for _, generated := range []string{hook, breaker} {
+		require.NotContains(t, generated, "gram_cb_")
+		require.NotContains(t, generated, "GRAM_CB_")
+		require.NotContains(t, generated, "CB_")
+		require.NotContains(t, generated, "gram_cb_run")
+	}
+
+	require.Contains(t, breaker, "# Configuration:")
+	require.Contains(t, breaker, "GRAM_BREAKER_OPEN_EXIT_CODE: exit code returned")
+	require.Contains(t, breaker, "BREAKER_NAME: breaker identity")
+	require.Contains(t, breaker, "BREAKER_THRESHOLD: consecutive Gram outage failures")
+	require.Contains(t, breaker, "BREAKER_COOLDOWN: seconds to wait")
+	require.Contains(t, breaker, "BREAKER_LOCK_STALE_AFTER: maximum trusted age")
+	require.Contains(t, breaker, `BREAKER_DIR: directory for breaker state`)
+	require.Contains(t, breaker, `BREAKER_DIR="${BREAKER_DIR:-${CLAUDE_PLUGIN_DATA:-/tmp}/circuit-breakers}"`)
+	require.Contains(t, breaker, `BREAKER_LOCK_STALE_AFTER="${BREAKER_LOCK_STALE_AFTER:-12}"`)
+	require.Less(t, strings.Index(breaker, "# Configuration:"), strings.Index(breaker, "_gram_breaker_is_int()"))
+
+	var parsed claudeHooksConfig
+	require.NoError(t, json.Unmarshal(files[slug+"/hooks/hooks.json"], &parsed))
+	for _, event := range ClaudeObservabilityHookEvents {
+		command := parsed.Hooks[event][0].Hooks[0].Command
+		if event == "SessionStart" || event == "ConfigChange" {
+			require.Contains(t, command, "hooks/mcp_inventory.sh")
+			continue
+		}
+		require.Equal(t, `bash "$CLAUDE_PLUGIN_ROOT/hooks/hook.sh"`, command)
+	}
+}
+
 // With observability mode on, every hook event is emitted async so the plugin
 // can only observe and report — no hook can deny or delay a tool call.
 func TestGenerateClaudeObservabilityModeForcesAsyncForAllEvents(t *testing.T) {
@@ -961,6 +1022,8 @@ func TestGenerateClaudeObservabilityModeForcesAsyncForAllEvents(t *testing.T) {
 	files, err := GeneratePluginPackages(nil, cfg)
 	require.NoError(t, err)
 
+	require.Nil(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/breaker.sh"], "full observability mode is already async/non-blocking and must not ship breaker.sh")
+
 	var parsed claudeHooksConfig
 	require.NoError(t, json.Unmarshal(files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"], &parsed))
 
@@ -969,6 +1032,117 @@ func TestGenerateClaudeObservabilityModeForcesAsyncForAllEvents(t *testing.T) {
 		require.NotNil(t, matchers[0].Hooks[0].Async, "event %q must carry an async flag", event)
 		require.True(t, *matchers[0].Hooks[0].Async, "event %q must be async in observability mode", event)
 	}
+}
+
+func TestGeneratedClaudeOptimisticHookFailsOpenAndSkipsHTTPWhenCircuitOpen(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "claude")
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	for _, file := range []string{"hooks/hook.sh", "hooks/http.sh", "hooks/identity.sh", "hooks/breaker.sh"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, filepath.Base(file)), files[file], 0o755))
+	}
+
+	curlCountPath := filepath.Join(dir, "curl-count")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
+count=0
+if [ -r "$GRAM_CURL_COUNT" ]; then
+  read -r count < "$GRAM_CURL_COUNT" || count=0
+fi
+count=$((count + 1))
+printf '%s\n' "$count" > "$GRAM_CURL_COUNT"
+cat >/dev/null
+printf '{"message":"down"}\n500'
+`), 0o755))
+
+	runHook := func() []byte {
+		t.Helper()
+		cmd := exec.Command("bash", filepath.Join(dir, "hook.sh"))
+		cmd.Dir = dir
+		cmd.Stdin = strings.NewReader(`{"hook_event_name":"PreToolUse"}`)
+		cmd.Env = append(os.Environ(),
+			"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+			"GRAM_CURL_COUNT="+curlCountPath,
+			"BREAKER_DIR="+filepath.Join(dir, "state"),
+			"GRAM_HTTP_MAX_ATTEMPTS=1",
+			"GRAM_DEVICE_AGENT_COMMANDS=missing-gram-agent",
+		)
+		output, err := cmd.CombinedOutput()
+		require.NoError(t, err, string(output))
+		return output
+	}
+
+	for range 5 {
+		output := runHook()
+		require.Contains(t, string(output), "Gram hook degraded")
+	}
+
+	countAfterFailures := strings.TrimSpace(string(requireFileBytes(t, curlCountPath)))
+	require.Equal(t, "5", countAfterFailures)
+
+	output := runHook()
+	require.Contains(t, string(output), "Gram hook degraded")
+	countAfterOpen := strings.TrimSpace(string(requireFileBytes(t, curlCountPath)))
+	require.Equal(t, countAfterFailures, countAfterOpen, "open circuit must skip the HTTP call")
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(output, &response))
+	systemMessage, ok := response["systemMessage"].(string)
+	require.True(t, ok)
+	require.Contains(t, systemMessage, "Gram hook degraded")
+	require.NotContains(t, systemMessage, "hook cwd:")
+	require.NotContains(t, systemMessage, "state file:")
+	require.NotContains(t, systemMessage, "HTTP 500")
+	require.NotContains(t, systemMessage, "circuit open")
+	require.NotContains(t, response, "hookSpecificOutput")
+}
+
+func TestGeneratedBreakerReclaimsAgeBoundedOwnersEvenWhenPIDLooksAlive(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "breaker.sh"), renderBreakerScript(), 0o755))
+	cmd := exec.Command("bash", "-c", `
+set -u
+. ./breaker.sh
+BREAKER_DIR="$PWD/state"
+BREAKER_LOCK_STALE_AFTER=1
+mkdir -p "$BREAKER_DIR"
+
+lock_dir="$BREAKER_DIR/gram-observability-claude-hooks.lockdir"
+mkdir "$lock_dir"
+printf '1\n' > "$lock_dir/owner.pid"
+sleep 2
+gram_breaker_before
+status=$?
+if [ "$status" -ne 0 ]; then
+  exit "$status"
+fi
+
+old=$(( $(date +%s) - 20 ))
+state_file="$BREAKER_DIR/gram-observability-claude-hooks.state"
+printf 'half_open 5 %s 1\n' "$old" > "$state_file"
+gram_breaker_before
+status=$?
+if [ "$status" -ne 0 ]; then
+  exit "$status"
+fi
+read -r state failures opened_at owner_pid < "$state_file"
+if [ "$state" != "half_open" ] || [ "$owner_pid" != "$$" ]; then
+  printf 'unexpected state: %s %s %s %s\n' "$state" "$failures" "$opened_at" "$owner_pid" >&2
+  exit 1
+fi
+`)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
 }
 
 // mcp_inventory.sh enriches the payload with MCP inventory and posts to the
