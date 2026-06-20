@@ -18,6 +18,7 @@ type RiskCustomDetectionRule struct {
 	Description    string
 	Regex          pgtype.Text
 	MatchConfig    []byte
+	DetectionExpr  pgtype.Text
 	Severity       string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
@@ -54,6 +55,8 @@ type RiskPolicy struct {
 	DisabledRules        []string
 	CustomRuleIds        []string
 	MessageTypes         []string
+	ScopeInclude         pgtype.Text
+	ScopeExempt          pgtype.Text
 	Action               string
 	AudienceType         string
 	AutoName             bool
