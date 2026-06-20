@@ -7185,6 +7185,21 @@ type DetectionSchemaVariableResponseBody struct {
 	Type string `form:"type" json:"type" xml:"type"`
 	// Plain-English description of what the variable holds.
 	Description string `form:"description" json:"description" xml:"description"`
+	// Member fields on each element when this variable is an object or list of
+	// objects (e.g. a 'tools' element's name/server/function/args). Empty for
+	// scalar variables.
+	Fields []*DetectionSchemaFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
+}
+
+// DetectionSchemaFieldResponseBody is used to define fields on response body
+// types.
+type DetectionSchemaFieldResponseBody struct {
+	// Field name as written in CEL after the bind variable (e.g. 'name', 'server').
+	Name string `form:"name" json:"name" xml:"name"`
+	// Descriptive type tag for the editor (e.g. 'field').
+	Type string `form:"type" json:"type" xml:"type"`
+	// Plain-English description of what the field holds.
+	Description string `form:"description" json:"description" xml:"description"`
 }
 
 // DetectionSchemaFunctionResponseBody is used to define fields on response

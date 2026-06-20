@@ -6,6 +6,10 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  DetectionSchemaField,
+  DetectionSchemaField$inboundSchema,
+} from "./detectionschemafield.js";
 
 /**
  * One variable an author may reference in a detection or scope CEL expression.
@@ -15,6 +19,10 @@ export type DetectionSchemaVariable = {
    * Plain-English description of what the variable holds.
    */
   description: string;
+  /**
+   * Member fields on each element when this variable is an object or list of objects (e.g. a 'tools' element's name/server/function/args). Empty for scalar variables.
+   */
+  fields?: Array<DetectionSchemaField> | undefined;
   /**
    * Variable name as written in CEL (e.g. 'content', 'tools').
    */
@@ -31,6 +39,7 @@ export const DetectionSchemaVariable$inboundSchema: z.ZodMiniType<
   unknown
 > = z.object({
   description: z.string(),
+  fields: z.optional(z.array(DetectionSchemaField$inboundSchema)),
   name: z.string(),
   type: z.string(),
 });

@@ -7197,6 +7197,21 @@ type DetectionSchemaVariableResponseBody struct {
 	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
 	// Plain-English description of what the variable holds.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Member fields on each element when this variable is an object or list of
+	// objects (e.g. a 'tools' element's name/server/function/args). Empty for
+	// scalar variables.
+	Fields []*DetectionSchemaFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
+}
+
+// DetectionSchemaFieldResponseBody is used to define fields on response body
+// types.
+type DetectionSchemaFieldResponseBody struct {
+	// Field name as written in CEL after the bind variable (e.g. 'name', 'server').
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Descriptive type tag for the editor (e.g. 'field').
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// Plain-English description of what the field holds.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 }
 
 // DetectionSchemaFunctionResponseBody is used to define fields on response
@@ -22296,6 +22311,28 @@ func ValidateRiskCategoryDefinitionResponseBody(body *RiskCategoryDefinitionResp
 // ValidateDetectionSchemaVariableResponseBody runs the validations defined on
 // DetectionSchemaVariableResponseBody
 func ValidateDetectionSchemaVariableResponseBody(body *DetectionSchemaVariableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	for _, e := range body.Fields {
+		if e != nil {
+			if err2 := ValidateDetectionSchemaFieldResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateDetectionSchemaFieldResponseBody runs the validations defined on
+// DetectionSchemaFieldResponseBody
+func ValidateDetectionSchemaFieldResponseBody(body *DetectionSchemaFieldResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

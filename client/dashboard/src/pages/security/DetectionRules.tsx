@@ -583,7 +583,6 @@ function CustomRuleDetail({
           <CelExpressionField
             value={detectionCel}
             onChange={setDetectionCel}
-            placeholder='e.g. content.match("acme_[0-9a-f]{32}")'
             examples={DETECTION_CEL_EXAMPLES}
           />
         </div>
@@ -1414,7 +1413,6 @@ function CreateCustomRuleSheet({
                 <CelExpressionField
                   value={detectionCel}
                   onChange={setDetectionCel}
-                  placeholder='e.g. content.match("acme_[0-9a-f]{32}")'
                   examples={DETECTION_CEL_EXAMPLES}
                 />
               </div>

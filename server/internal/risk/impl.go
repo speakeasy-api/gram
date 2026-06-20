@@ -1423,10 +1423,22 @@ func (s *Service) GetDetectionSchema(ctx context.Context, payload *gen.GetDetect
 	schema := celenv.Describe()
 	vars := make([]*gen.DetectionSchemaVariable, 0, len(schema.Variables))
 	for _, v := range schema.Variables {
+		var fields []*gen.DetectionSchemaField
+		if len(v.Fields) > 0 {
+			fields = make([]*gen.DetectionSchemaField, 0, len(v.Fields))
+			for _, f := range v.Fields {
+				fields = append(fields, &gen.DetectionSchemaField{
+					Name:        f.Name,
+					Type:        f.Type,
+					Description: f.Description,
+				})
+			}
+		}
 		vars = append(vars, &gen.DetectionSchemaVariable{
 			Name:        v.Name,
 			Type:        v.Type,
 			Description: v.Description,
+			Fields:      fields,
 		})
 	}
 	fns := make([]*gen.DetectionSchemaFunction, 0, len(schema.Functions))

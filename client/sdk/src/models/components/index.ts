@@ -94,6 +94,7 @@ export * from "./deploymentfunctions.js";
 export * from "./deploymentlogevent.js";
 export * from "./deploymentpackage.js";
 export * from "./deploymentsummary.js";
+export * from "./detectionschemafield.js";
 export * from "./detectionschemafunction.js";
 export * from "./detectionschemaresult.js";
 export * from "./detectionschemavariable.js";

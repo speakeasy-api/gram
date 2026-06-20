@@ -308,6 +308,17 @@ type DenyRiskPolicyBypassRequestPayload struct {
 	ID string
 }
 
+// One member field available on an object-typed variable's element (e.g.
+// 'name' on a 'tool').
+type DetectionSchemaField struct {
+	// Field name as written in CEL after the bind variable (e.g. 'name', 'server').
+	Name string
+	// Descriptive type tag for the editor (e.g. 'field').
+	Type string
+	// Plain-English description of what the field holds.
+	Description string
+}
+
 // One matcher/helper function available in a detection or scope CEL expression.
 type DetectionSchemaFunction struct {
 	// Function name (e.g. 'match', 'includes', 'get').
@@ -336,6 +347,10 @@ type DetectionSchemaVariable struct {
 	Type string
 	// Plain-English description of what the variable holds.
 	Description string
+	// Member fields on each element when this variable is an object or list of
+	// objects (e.g. a 'tools' element's name/server/function/args). Empty for
+	// scalar variables.
+	Fields []*DetectionSchemaField
 }
 
 // GetCustomDetectionRulePayload is the payload type of the risk service

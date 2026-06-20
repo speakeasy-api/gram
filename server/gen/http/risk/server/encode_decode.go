@@ -7908,6 +7908,32 @@ func marshalRiskDetectionSchemaVariableToDetectionSchemaVariableResponseBody(v *
 		Type:        v.Type,
 		Description: v.Description,
 	}
+	if v.Fields != nil {
+		res.Fields = make([]*DetectionSchemaFieldResponseBody, len(v.Fields))
+		for i, val := range v.Fields {
+			if val == nil {
+				res.Fields[i] = nil
+				continue
+			}
+			res.Fields[i] = marshalRiskDetectionSchemaFieldToDetectionSchemaFieldResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalRiskDetectionSchemaFieldToDetectionSchemaFieldResponseBody builds a
+// value of type *DetectionSchemaFieldResponseBody from a value of type
+// *risk.DetectionSchemaField.
+func marshalRiskDetectionSchemaFieldToDetectionSchemaFieldResponseBody(v *risk.DetectionSchemaField) *DetectionSchemaFieldResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &DetectionSchemaFieldResponseBody{
+		Name:        v.Name,
+		Type:        v.Type,
+		Description: v.Description,
+	}
 
 	return res
 }

@@ -2706,7 +2706,6 @@ function PolicySheetBody({
                 <CelExpressionField
                   value={scopeIncludeCel}
                   onChange={setScopeIncludeCel}
-                  placeholder='e.g. tools.exists(t, t.server.eq("github"))'
                   examples={SCOPE_INCLUDE_CEL_EXAMPLES}
                 />
               </div>
@@ -2725,7 +2724,6 @@ function PolicySheetBody({
               <CelExpressionField
                 value={scopeExemptCel}
                 onChange={setScopeExemptCel}
-                placeholder='e.g. tools.exists(t, t.server.eq("internal-docs"))'
                 examples={SCOPE_EXEMPT_CEL_EXAMPLES}
               />
             </div>

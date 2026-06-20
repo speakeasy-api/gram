@@ -8100,6 +8100,32 @@ func unmarshalDetectionSchemaVariableResponseBodyToRiskDetectionSchemaVariable(v
 		Type:        *v.Type,
 		Description: *v.Description,
 	}
+	if v.Fields != nil {
+		res.Fields = make([]*risk.DetectionSchemaField, len(v.Fields))
+		for i, val := range v.Fields {
+			if val == nil {
+				res.Fields[i] = nil
+				continue
+			}
+			res.Fields[i] = unmarshalDetectionSchemaFieldResponseBodyToRiskDetectionSchemaField(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalDetectionSchemaFieldResponseBodyToRiskDetectionSchemaField builds a
+// value of type *risk.DetectionSchemaField from a value of type
+// *DetectionSchemaFieldResponseBody.
+func unmarshalDetectionSchemaFieldResponseBodyToRiskDetectionSchemaField(v *DetectionSchemaFieldResponseBody) *risk.DetectionSchemaField {
+	if v == nil {
+		return nil
+	}
+	res := &risk.DetectionSchemaField{
+		Name:        *v.Name,
+		Type:        *v.Type,
+		Description: *v.Description,
+	}
 
 	return res
 }

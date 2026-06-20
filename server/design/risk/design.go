@@ -1206,12 +1206,23 @@ var RiskCategoriesResult = Type("RiskCategoriesResult", func() {
 	Required("categories")
 })
 
+var DetectionSchemaField = Type("DetectionSchemaField", func() {
+	Description("One member field available on an object-typed variable's element (e.g. 'name' on a 'tool').")
+
+	Attribute("name", String, "Field name as written in CEL after the bind variable (e.g. 'name', 'server').")
+	Attribute("type", String, "Descriptive type tag for the editor (e.g. 'field').")
+	Attribute("description", String, "Plain-English description of what the field holds.")
+
+	Required("name", "type", "description")
+})
+
 var DetectionSchemaVariable = Type("DetectionSchemaVariable", func() {
 	Description("One variable an author may reference in a detection or scope CEL expression.")
 
 	Attribute("name", String, "Variable name as written in CEL (e.g. 'content', 'tools').")
 	Attribute("type", String, "Descriptive type tag for the editor (e.g. 'field', 'list(tool)', 'string').")
 	Attribute("description", String, "Plain-English description of what the variable holds.")
+	Attribute("fields", ArrayOf(DetectionSchemaField), "Member fields on each element when this variable is an object or list of objects (e.g. a 'tools' element's name/server/function/args). Empty for scalar variables.")
 
 	Required("name", "type", "description")
 })

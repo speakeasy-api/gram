@@ -36865,6 +36865,23 @@ components:
         - functions_tool_count
         - external_mcp_asset_count
         - external_mcp_tool_count
+    DetectionSchemaField:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Plain-English description of what the field holds.
+        name:
+          type: string
+          description: Field name as written in CEL after the bind variable (e.g. 'name', 'server').
+        type:
+          type: string
+          description: Descriptive type tag for the editor (e.g. 'field').
+      description: One member field available on an object-typed variable's element (e.g. 'name' on a 'tool').
+      required:
+        - name
+        - type
+        - description
     DetectionSchemaFunction:
       type: object
       properties:
@@ -36905,6 +36922,11 @@ components:
         description:
           type: string
           description: Plain-English description of what the variable holds.
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/DetectionSchemaField'
+          description: Member fields on each element when this variable is an object or list of objects (e.g. a 'tools' element's name/server/function/args). Empty for scalar variables.
         name:
           type: string
           description: Variable name as written in CEL (e.g. 'content', 'tools').
