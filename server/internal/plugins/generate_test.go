@@ -967,6 +967,7 @@ func TestGenerateClaudeObservabilityOptimisticBlockingFilesAndCommands(t *testin
 	require.Contains(t, hook, "gram_breaker_before")
 	require.Contains(t, hook, "gram_breaker_after 1")
 	require.Contains(t, hook, "gram_breaker_after 0")
+	require.Contains(t, hook, "GRAM_BREAKER_AFTER_DECISION")
 	require.Contains(t, hook, "gram_emit_error_message")
 	require.NotContains(t, hook, "gram_emit_fail_open_response")
 	require.Contains(t, hook, "systemMessage")
@@ -988,16 +989,20 @@ func TestGenerateClaudeObservabilityOptimisticBlockingFilesAndCommands(t *testin
 	}
 
 	require.Contains(t, breaker, "# Configuration:")
+	require.Contains(t, breaker, "GRAM_BREAKER_AFTER_DECISION")
+	require.Contains(t, breaker, "GRAM_BREAKER_AFTER_REASON")
 	require.Contains(t, breaker, "GRAM_BREAKER_OPEN_EXIT_CODE: exit code returned")
 	require.Contains(t, breaker, "GRAM_BREAKER_NAME: breaker identity")
 	require.Contains(t, breaker, "Default: acme-observability.")
-	require.Contains(t, breaker, "GRAM_BREAKER_THRESHOLD: consecutive Gram outage failures")
+	require.Contains(t, breaker, "GRAM_BREAKER_THRESHOLD: Gram outage failures required within the error")
+	require.Contains(t, breaker, "GRAM_BREAKER_ERROR_WINDOW: seconds over which failures are counted")
 	require.Contains(t, breaker, "GRAM_BREAKER_COOLDOWN: seconds to wait")
 	require.Contains(t, breaker, "GRAM_BREAKER_LOCK_STALE_AFTER: maximum trusted age")
 	require.Contains(t, breaker, "GRAM_BREAKER_LOCK_WAIT: seconds to wait")
 	require.Contains(t, breaker, `GRAM_BREAKER_DIR: directory for breaker state`)
 	require.Contains(t, breaker, `GRAM_BREAKER_NAME="${GRAM_BREAKER_NAME:-acme-observability}"`)
 	require.Contains(t, breaker, `GRAM_BREAKER_DIR="${GRAM_BREAKER_DIR:-${CLAUDE_PLUGIN_DATA:-/tmp}/circuit-breakers}"`)
+	require.Contains(t, breaker, `GRAM_BREAKER_ERROR_WINDOW="${GRAM_BREAKER_ERROR_WINDOW:-30}"`)
 	require.Contains(t, breaker, `GRAM_BREAKER_LOCK_STALE_AFTER="${GRAM_BREAKER_LOCK_STALE_AFTER:-12}"`)
 	require.Contains(t, breaker, `GRAM_BREAKER_LOCK_WAIT="${GRAM_BREAKER_LOCK_WAIT:-0.005}"`)
 	require.NotContains(t, breaker, "sleep 0.005")
@@ -1070,7 +1075,7 @@ cat >/dev/null
 printf '{"message":"down"}\n500'
 `), 0o755))
 
-	runHook := func() []byte {
+	runHook := func() ([]byte, int) {
 		t.Helper()
 		cmd := exec.Command("bash", filepath.Join(dir, "hook.sh"))
 		cmd.Dir = dir
@@ -1083,19 +1088,33 @@ printf '{"message":"down"}\n500'
 			"GRAM_DEVICE_AGENT_COMMANDS=missing-gram-agent",
 		)
 		output, err := cmd.CombinedOutput()
-		require.NoError(t, err, string(output))
-		return output
+		if err == nil {
+			return output, 0
+		}
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, err, &exitErr, string(output))
+		return output, exitErr.ExitCode()
 	}
 
-	for range 5 {
-		output := runHook()
-		require.Contains(t, string(output), "Gram hook degraded")
+	for range 4 {
+		output, code := runHook()
+		require.Equal(t, 2, code, string(output))
+		require.Contains(t, string(output), "Speakeasy hook returned HTTP 500")
+		require.NotContains(t, string(output), "Gram hook degraded")
 	}
+
+	countBeforeThreshold := strings.TrimSpace(string(requireFileBytes(t, curlCountPath)))
+	require.Equal(t, "4", countBeforeThreshold)
+
+	output, code := runHook()
+	require.Equal(t, 0, code, string(output))
+	require.Contains(t, string(output), "Gram hook degraded")
 
 	countAfterFailures := strings.TrimSpace(string(requireFileBytes(t, curlCountPath)))
 	require.Equal(t, "5", countAfterFailures)
 
-	output := runHook()
+	output, code = runHook()
+	require.Equal(t, 0, code, string(output))
 	require.Contains(t, string(output), "Gram hook degraded")
 	countAfterOpen := strings.TrimSpace(string(requireFileBytes(t, curlCountPath)))
 	require.Equal(t, countAfterFailures, countAfterOpen, "open circuit must skip the HTTP call")
@@ -1114,6 +1133,112 @@ printf '{"message":"down"}\n500'
 	require.NotContains(t, systemMessage, "HTTP 500")
 	require.NotContains(t, systemMessage, "circuit open")
 	require.NotContains(t, response, "hookSpecificOutput")
+}
+
+func TestGeneratedBreakerAfterDecisionBlocksUntilThreshold(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "breaker.sh"), renderBreakerScript("threshold-test"), 0o755))
+	cmd := exec.Command("bash", "-c", `
+set -u
+. ./breaker.sh
+GRAM_BREAKER_DIR="$PWD/state"
+GRAM_BREAKER_THRESHOLD=3
+mkdir -p "$GRAM_BREAKER_DIR"
+
+gram_breaker_before
+gram_breaker_after 1
+printf '%s %s\n' "$GRAM_BREAKER_AFTER_DECISION" "$GRAM_BREAKER_AFTER_REASON"
+
+gram_breaker_before
+gram_breaker_after 1
+printf '%s %s\n' "$GRAM_BREAKER_AFTER_DECISION" "$GRAM_BREAKER_AFTER_REASON"
+
+gram_breaker_before
+gram_breaker_after 1
+printf '%s %s\n' "$GRAM_BREAKER_AFTER_DECISION" "$GRAM_BREAKER_AFTER_REASON"
+`)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	require.Equal(t, []string{
+		"block failure_recorded",
+		"block failure_recorded",
+		"allow threshold_opened",
+	}, strings.Split(strings.TrimSpace(string(output)), "\n"))
+}
+
+func TestGeneratedBreakerAfterDecisionAllowsHalfOpenFailure(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "breaker.sh"), renderBreakerScript("half-open-test"), 0o755))
+	cmd := exec.Command("bash", "-c", `
+set -u
+. ./breaker.sh
+GRAM_BREAKER_DIR="$PWD/state"
+GRAM_BREAKER_THRESHOLD=1
+GRAM_BREAKER_COOLDOWN=0
+mkdir -p "$GRAM_BREAKER_DIR"
+
+gram_breaker_before
+gram_breaker_after 1
+printf '%s %s\n' "$GRAM_BREAKER_AFTER_DECISION" "$GRAM_BREAKER_AFTER_REASON"
+
+gram_breaker_before
+gram_breaker_after 1
+printf '%s %s\n' "$GRAM_BREAKER_AFTER_DECISION" "$GRAM_BREAKER_AFTER_REASON"
+`)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	require.Equal(t, []string{
+		"allow threshold_opened",
+		"allow half_open_failed",
+	}, strings.Split(strings.TrimSpace(string(output)), "\n"))
+}
+
+func TestGeneratedBreakerErrorWindowResetsOldFailures(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "breaker.sh"), renderBreakerScript("window-test"), 0o755))
+	cmd := exec.Command("bash", "-c", `
+set -u
+. ./breaker.sh
+GRAM_BREAKER_DIR="$PWD/state"
+GRAM_BREAKER_THRESHOLD=3
+GRAM_BREAKER_ERROR_WINDOW=1
+mkdir -p "$GRAM_BREAKER_DIR"
+
+gram_breaker_before
+gram_breaker_after 1
+printf '%s %s\n' "$GRAM_BREAKER_AFTER_DECISION" "$GRAM_BREAKER_AFTER_REASON"
+
+sleep 2
+
+gram_breaker_before
+gram_breaker_after 1
+printf '%s %s\n' "$GRAM_BREAKER_AFTER_DECISION" "$GRAM_BREAKER_AFTER_REASON"
+
+gram_breaker_before
+gram_breaker_after 1
+printf '%s %s\n' "$GRAM_BREAKER_AFTER_DECISION" "$GRAM_BREAKER_AFTER_REASON"
+
+gram_breaker_before
+gram_breaker_after 1
+printf '%s %s\n' "$GRAM_BREAKER_AFTER_DECISION" "$GRAM_BREAKER_AFTER_REASON"
+`)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	require.Equal(t, []string{
+		"block failure_recorded",
+		"block failure_recorded",
+		"block failure_recorded",
+		"allow threshold_opened",
+	}, strings.Split(strings.TrimSpace(string(output)), "\n"))
 }
 
 func TestGeneratedBreakerReclaimsAgeBoundedOwnersEvenWhenPIDLooksAlive(t *testing.T) {
@@ -1140,15 +1265,105 @@ fi
 
 old=$(( $(date +%s) - 20 ))
 state_file="$GRAM_BREAKER_DIR/gram-observability-claude-hooks.state"
-printf 'half_open 5 %s 1\n' "$old" > "$state_file"
+printf 'half_open 5 0 %s 1\n' "$old" > "$state_file"
 gram_breaker_before
 status=$?
 if [ "$status" -ne 0 ]; then
   exit "$status"
 fi
-read -r state failures opened_at owner_pid < "$state_file"
+read -r state failures window_started_at opened_at owner_pid < "$state_file"
 if [ "$state" != "half_open" ] || [ "$owner_pid" != "$$" ]; then
-  printf 'unexpected state: %s %s %s %s\n' "$state" "$failures" "$opened_at" "$owner_pid" >&2
+  printf 'unexpected state: %s %s %s %s %s\n' "$state" "$failures" "$window_started_at" "$opened_at" "$owner_pid" >&2
+  exit 1
+fi
+`)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+}
+
+func TestGeneratedBreakerLockStressAllowsOnlyOneOwner(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "breaker.sh"), renderBreakerScript("stress-test"), 0o755))
+
+	cmd := exec.Command("bash", "-c", `
+set -u
+cat > worker.sh <<'WORKER'
+#!/usr/bin/env bash
+set -u
+. ./breaker.sh
+
+i=0
+while [ "$i" -lt "${ITERS:-20}" ]; do
+  _gram_breaker_prepare || {
+    echo "prepare failed" >> "$VIOLATIONS"
+    exit 1
+  }
+  _gram_breaker_lock || {
+    echo "lock failed" >> "$VIOLATIONS"
+    exit 1
+  }
+
+  active=0
+  if mkdir "$ACTIVE_DIR" 2>/dev/null; then
+    active=1
+    printf '%s\n' "$$" > "$ACTIVE_DIR/pid" 2>/dev/null || true
+  else
+    echo "concurrent critical section" >> "$VIOLATIONS"
+  fi
+
+  sleep 0.001
+
+  if [ "$active" -eq 1 ]; then
+    rm -f "$ACTIVE_DIR/pid" 2>/dev/null || true
+    rmdir "$ACTIVE_DIR" 2>/dev/null || echo "active cleanup failed" >> "$VIOLATIONS"
+  fi
+  _gram_breaker_unlock || true
+  i=$((i + 1))
+done
+WORKER
+chmod +x worker.sh
+
+export GRAM_BREAKER_DIR="$PWD/state"
+export GRAM_BREAKER_NAME="stress-test"
+export GRAM_BREAKER_LOCK_WAIT=0.001
+export GRAM_BREAKER_LOCK_STALE_AFTER=2
+export ACTIVE_DIR="$PWD/active-owner"
+export VIOLATIONS="$PWD/violations"
+export ITERS=20
+
+mkdir -p "$GRAM_BREAKER_DIR"
+: > "$VIOLATIONS"
+
+pids=""
+n=0
+while [ "$n" -lt 25 ]; do
+  bash ./worker.sh &
+  pids="$pids $!"
+  n=$((n + 1))
+done
+
+failed=0
+for pid in $pids; do
+  if ! wait "$pid"; then
+    failed=1
+  fi
+done
+if [ "$failed" -ne 0 ]; then
+  echo "worker failed" >> "$VIOLATIONS"
+fi
+
+if [ -s "$VIOLATIONS" ]; then
+  cat "$VIOLATIONS" >&2
+  exit 1
+fi
+
+. ./breaker.sh
+_gram_breaker_prepare
+if [ -d "$GRAM_BREAKER_LOCK_DIR" ]; then
+  echo "lockdir leaked: $GRAM_BREAKER_LOCK_DIR" >&2
   exit 1
 fi
 `)

@@ -1040,8 +1040,10 @@ func renderBreakerScript(pluginName string) []byte {
 #     the circuit is open. Default: 75.
 #   GRAM_BREAKER_NAME: breaker identity used to derive state and lock filenames.
 #     Default: __GRAM_BREAKER_DEFAULT_NAME__.
-#   GRAM_BREAKER_THRESHOLD: consecutive Gram outage failures before opening the
-#     circuit. Default: 5.
+#   GRAM_BREAKER_THRESHOLD: Gram outage failures required within the error
+#     window before opening the circuit. Default: 5.
+#   GRAM_BREAKER_ERROR_WINDOW: seconds over which failures are counted.
+#     Default: 30.
 #   GRAM_BREAKER_COOLDOWN: seconds to wait before allowing a half-open recovery
 #     probe. Default: 60.
 #   GRAM_BREAKER_LOCK_STALE_AFTER: maximum trusted age, in seconds, for lock and
@@ -1054,6 +1056,7 @@ func renderBreakerScript(pluginName string) []byte {
 GRAM_BREAKER_OPEN_EXIT_CODE="${GRAM_BREAKER_OPEN_EXIT_CODE:-75}"
 GRAM_BREAKER_NAME="${GRAM_BREAKER_NAME:-__GRAM_BREAKER_DEFAULT_NAME__}"
 GRAM_BREAKER_THRESHOLD="${GRAM_BREAKER_THRESHOLD:-5}"
+GRAM_BREAKER_ERROR_WINDOW="${GRAM_BREAKER_ERROR_WINDOW:-30}"
 GRAM_BREAKER_COOLDOWN="${GRAM_BREAKER_COOLDOWN:-60}"
 GRAM_BREAKER_LOCK_STALE_AFTER="${GRAM_BREAKER_LOCK_STALE_AFTER:-12}"
 GRAM_BREAKER_LOCK_WAIT="${GRAM_BREAKER_LOCK_WAIT:-0.005}"
@@ -1126,13 +1129,31 @@ _gram_breaker_lock() {
 }
 
 _gram_breaker_read_state() {
+  local state_file_line
+
   GRAM_BREAKER_STATE="closed"
   GRAM_BREAKER_FAILURES=0
+  GRAM_BREAKER_WINDOW_STARTED_AT=0
   GRAM_BREAKER_OPENED_AT=0
   GRAM_BREAKER_OWNER_PID=0
 
   if [ -r "$GRAM_BREAKER_STATE_FILE" ]; then
-    read -r GRAM_BREAKER_STATE GRAM_BREAKER_FAILURES GRAM_BREAKER_OPENED_AT GRAM_BREAKER_OWNER_PID <"$GRAM_BREAKER_STATE_FILE" || true
+    read -r state_file_line <"$GRAM_BREAKER_STATE_FILE" || true
+    set -- $state_file_line
+    if [ "$#" -eq 4 ]; then
+      # Older generated breakers wrote: state failures opened_at owner_pid.
+      GRAM_BREAKER_STATE="$1"
+      GRAM_BREAKER_FAILURES="$2"
+      GRAM_BREAKER_WINDOW_STARTED_AT=0
+      GRAM_BREAKER_OPENED_AT="$3"
+      GRAM_BREAKER_OWNER_PID="$4"
+    elif [ "$#" -ge 5 ]; then
+      GRAM_BREAKER_STATE="$1"
+      GRAM_BREAKER_FAILURES="$2"
+      GRAM_BREAKER_WINDOW_STARTED_AT="$3"
+      GRAM_BREAKER_OPENED_AT="$4"
+      GRAM_BREAKER_OWNER_PID="$5"
+    fi
   fi
 
   case "$GRAM_BREAKER_STATE" in
@@ -1141,6 +1162,9 @@ _gram_breaker_read_state() {
   esac
   if ! _gram_breaker_is_int "$GRAM_BREAKER_FAILURES"; then
     GRAM_BREAKER_FAILURES=0
+  fi
+  if ! _gram_breaker_is_int "$GRAM_BREAKER_WINDOW_STARTED_AT"; then
+    GRAM_BREAKER_WINDOW_STARTED_AT=0
   fi
   if ! _gram_breaker_is_int "$GRAM_BREAKER_OPENED_AT"; then
     GRAM_BREAKER_OPENED_AT=0
@@ -1153,16 +1177,20 @@ _gram_breaker_read_state() {
 _gram_breaker_write_state() {
   local state="$1"
   local failures="$2"
-  local opened_at="$3"
-  local owner_pid="${4:-0}"
+  local window_started_at="$3"
+  local opened_at="$4"
+  local owner_pid="${5:-0}"
   local tmp
 
+  if ! _gram_breaker_is_int "$window_started_at"; then
+    window_started_at=0
+  fi
   if ! _gram_breaker_is_int "$owner_pid"; then
     owner_pid=0
   fi
 
   tmp="$(mktemp "${GRAM_BREAKER_DIR}/.${GRAM_BREAKER_SAFE_NAME}.XXXXXX")" || return 1
-  if printf '%s %s %s %s\n' "$state" "$failures" "$opened_at" "$owner_pid" >"$tmp"; then
+  if printf '%s %s %s %s %s\n' "$state" "$failures" "$window_started_at" "$opened_at" "$owner_pid" >"$tmp"; then
     mv "$tmp" "$GRAM_BREAKER_STATE_FILE"
     return $?
   fi
@@ -1205,7 +1233,7 @@ gram_breaker_before() {
       if [ "$elapsed" -ge "$GRAM_BREAKER_COOLDOWN" ]; then
         GRAM_BREAKER_RUN_MODE="half_open"
         GRAM_BREAKER_RUN_PID="$$"
-        _gram_breaker_write_state "half_open" "$GRAM_BREAKER_FAILURES" "$now" "$GRAM_BREAKER_RUN_PID" || {
+        _gram_breaker_write_state "half_open" "$GRAM_BREAKER_FAILURES" "$GRAM_BREAKER_WINDOW_STARTED_AT" "$now" "$GRAM_BREAKER_RUN_PID" || {
           _gram_breaker_unlock
           return 1
         }
@@ -1221,7 +1249,7 @@ gram_breaker_before() {
       if [ "$elapsed" -ge "$GRAM_BREAKER_LOCK_STALE_AFTER" ] || ! _gram_breaker_pid_running "$GRAM_BREAKER_OWNER_PID"; then
         GRAM_BREAKER_RUN_MODE="half_open"
         GRAM_BREAKER_RUN_PID="$$"
-        _gram_breaker_write_state "half_open" "$GRAM_BREAKER_FAILURES" "$now" "$GRAM_BREAKER_RUN_PID" || {
+        _gram_breaker_write_state "half_open" "$GRAM_BREAKER_FAILURES" "$GRAM_BREAKER_WINDOW_STARTED_AT" "$now" "$GRAM_BREAKER_RUN_PID" || {
           _gram_breaker_unlock
           return 1
         }
@@ -1241,6 +1269,9 @@ gram_breaker_after() {
   local command_status="$1"
   local now failures
 
+  GRAM_BREAKER_AFTER_DECISION="unchanged"
+  GRAM_BREAKER_AFTER_REASON=""
+
   _gram_breaker_prepare || return 2
   _gram_breaker_lock || return 1
   _gram_breaker_read_state
@@ -1248,30 +1279,69 @@ gram_breaker_after() {
   case "${GRAM_BREAKER_RUN_MODE:-}" in
     half_open)
       if [ "$GRAM_BREAKER_STATE" != "half_open" ] || [ "$GRAM_BREAKER_OWNER_PID" != "${GRAM_BREAKER_RUN_PID:-$$}" ]; then
+        GRAM_BREAKER_AFTER_DECISION="allow"
+        GRAM_BREAKER_AFTER_REASON="state_changed"
         _gram_breaker_unlock
         return 0
       fi
       if [ "$command_status" -eq 0 ]; then
-        _gram_breaker_write_state "closed" 0 0 0
+        _gram_breaker_write_state "closed" 0 0 0 0 || {
+          _gram_breaker_unlock
+          return 1
+        }
+        GRAM_BREAKER_AFTER_DECISION="allow"
+        GRAM_BREAKER_AFTER_REASON="success_closed"
       else
         now="$(date +%s)"
-        _gram_breaker_write_state "open" "$GRAM_BREAKER_THRESHOLD" "$now" 0
+        _gram_breaker_write_state "open" "$GRAM_BREAKER_THRESHOLD" 0 "$now" 0 || {
+          _gram_breaker_unlock
+          return 1
+        }
+        GRAM_BREAKER_AFTER_DECISION="allow"
+        GRAM_BREAKER_AFTER_REASON="half_open_failed"
       fi
       ;;
     closed)
       if [ "$GRAM_BREAKER_STATE" != "closed" ]; then
+        case "$GRAM_BREAKER_STATE" in
+          open | half_open)
+            GRAM_BREAKER_AFTER_DECISION="allow"
+            GRAM_BREAKER_AFTER_REASON="state_changed"
+            ;;
+        esac
         _gram_breaker_unlock
         return 0
       fi
       if [ "$command_status" -eq 0 ]; then
-        _gram_breaker_write_state "closed" 0 0 0
+        _gram_breaker_write_state "closed" 0 0 0 0 || {
+          _gram_breaker_unlock
+          return 1
+        }
+        GRAM_BREAKER_AFTER_DECISION="allow"
+        GRAM_BREAKER_AFTER_REASON="success_reset"
       else
-        failures=$((GRAM_BREAKER_FAILURES + 1))
-        if [ "$failures" -ge "$GRAM_BREAKER_THRESHOLD" ]; then
-          now="$(date +%s)"
-          _gram_breaker_write_state "open" "$failures" "$now" 0
+        now="$(date +%s)"
+        if [ "$GRAM_BREAKER_WINDOW_STARTED_AT" -le 0 ] ||
+          [ $((now - GRAM_BREAKER_WINDOW_STARTED_AT)) -gt "$GRAM_BREAKER_ERROR_WINDOW" ]; then
+          failures=1
+          GRAM_BREAKER_WINDOW_STARTED_AT="$now"
         else
-          _gram_breaker_write_state "closed" "$failures" "$GRAM_BREAKER_OPENED_AT" 0
+          failures=$((GRAM_BREAKER_FAILURES + 1))
+        fi
+        if [ "$failures" -ge "$GRAM_BREAKER_THRESHOLD" ]; then
+          _gram_breaker_write_state "open" "$failures" "$GRAM_BREAKER_WINDOW_STARTED_AT" "$now" 0 || {
+            _gram_breaker_unlock
+            return 1
+          }
+          GRAM_BREAKER_AFTER_DECISION="allow"
+          GRAM_BREAKER_AFTER_REASON="threshold_opened"
+        else
+          _gram_breaker_write_state "closed" "$failures" "$GRAM_BREAKER_WINDOW_STARTED_AT" "$GRAM_BREAKER_OPENED_AT" 0 || {
+            _gram_breaker_unlock
+            return 1
+          }
+          GRAM_BREAKER_AFTER_DECISION="block"
+          GRAM_BREAKER_AFTER_REASON="failure_recorded"
         fi
       fi
       ;;
@@ -1403,11 +1473,24 @@ body="$GRAM_HTTP_BODY"
 # curl returns 000 on connection failure. Treat 000/5xx as a Gram outage:
 # allow the request and let the circuit breaker decide when to probe again.
 if [ "$http_code" = "000" ] || [ "$http_code" -ge 500 ] 2>/dev/null; then
-  gram_breaker_after 1 || true
+  if ! gram_breaker_after 1; then
+    gram_emit_error_message \
+      "Speakeasy hook returned HTTP ${http_code}" \
+      "Speakeasy hook returned HTTP ${http_code}"
+    exit 2
+  fi
+  case "$GRAM_BREAKER_AFTER_DECISION" in
+    allow)
+      gram_emit_error_message \
+        "Gram hook degraded" \
+        "Gram hook degraded. Gram is temporarily unavailable, so this hook is allowing the request without policy evaluation. Continue normally."
+      exit 0
+      ;;
+  esac
   gram_emit_error_message \
-    "Gram hook degraded" \
-    "Gram hook degraded. Gram is temporarily unavailable, so this hook is allowing the request without policy evaluation. Continue normally."
-  exit 0
+    "Speakeasy hook returned HTTP ${http_code}" \
+    "Speakeasy hook returned HTTP ${http_code}"
+  exit 2
 fi
 
 gram_breaker_after 0 || true
