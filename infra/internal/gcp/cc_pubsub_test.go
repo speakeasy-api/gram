@@ -6,7 +6,12 @@ import (
 	"testing"
 	"time"
 
+	pubsubv1 "github.com/speakeasy-api/gram/infra/gen/gcp/pubsub/v1"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func TestBuildPubSubValues_StableOrder(t *testing.T) {
@@ -149,6 +154,76 @@ func TestCCPubSub_WriteValues(t *testing.T) {
 	require.NotContains(t, content, "cnrm.cloud.google.com/project-id")
 	require.NotContains(t, content, "apiVersion")
 	require.NotContains(t, content, "PubSubTopic")
+}
+
+// TestDiscoverPubSub_DeprecatedOption verifies that a marker message carrying
+// the standard protobuf `option deprecated = true` produces a "deprecated"
+// label on the generated topic/subscription (and the synthesized DLQ), while a
+// non-deprecated message gets no such label.
+func TestDiscoverPubSub_DeprecatedOption(t *testing.T) {
+	t.Parallel()
+
+	const pkg = "test.deprecated.v1"
+
+	deprecatedTopicOpts := &descriptorpb.MessageOptions{Deprecated: new(true)}
+	proto.SetExtension(deprecatedTopicOpts, pubsubv1.E_Topic, pubsubv1.TopicOptions_builder{
+		RetentionHint: durationpb.New(24 * time.Hour),
+	}.Build())
+
+	activeTopicOpts := &descriptorpb.MessageOptions{}
+	proto.SetExtension(activeTopicOpts, pubsubv1.E_Topic, pubsubv1.TopicOptions_builder{}.Build())
+
+	deprecatedSubOpts := &descriptorpb.MessageOptions{Deprecated: new(true)}
+	proto.SetExtension(deprecatedSubOpts, pubsubv1.E_Subscription, pubsubv1.SubscriptionOptions_builder{
+		Topic: new(pkg + ".Event"),
+		DeadLetter: pubsubv1.DeadLetterPolicy_builder{
+			MaxDeliveryAttempts: new(int32(5)),
+		}.Build(),
+	}.Build())
+
+	fileProto := &descriptorpb.FileDescriptorProto{
+		Name:       new("test/deprecated/v1/test.proto"),
+		Package:    new(pkg),
+		Syntax:     new("proto3"),
+		Dependency: []string{"gcp/pubsub/v1/options.proto"},
+		MessageType: []*descriptorpb.DescriptorProto{
+			{Name: new("Event"), Options: deprecatedTopicOpts},
+			{Name: new("ActiveEvent"), Options: activeTopicOpts},
+			{Name: new("Processor"), Options: deprecatedSubOpts},
+		},
+	}
+
+	set := &descriptorpb.FileDescriptorSet{
+		File: []*descriptorpb.FileDescriptorProto{
+			protodesc.ToFileDescriptorProto(descriptorpb.File_google_protobuf_descriptor_proto),
+			protodesc.ToFileDescriptorProto(durationpb.File_google_protobuf_duration_proto),
+			protodesc.ToFileDescriptorProto(pubsubv1.File_gcp_pubsub_v1_options_proto),
+			fileProto,
+		},
+	}
+	raw, err := proto.Marshal(set)
+	require.NoError(t, err)
+
+	topics, subs, err := discoverPubSubFromDescriptor(raw)
+	require.NoError(t, err)
+
+	topicsByName := map[string]DesiredTopic{}
+	for _, topic := range topics {
+		topicsByName[topic.Name] = topic
+	}
+	subsByName := map[string]DesiredSubscription{}
+	for _, sub := range subs {
+		subsByName[sub.Name] = sub
+	}
+
+	// Deprecated topic carries the label; active topic does not.
+	require.Equal(t, deprecatedLabelValue, topicsByName["test-deprecated-v1-event"].Labels[deprecatedLabelKey])
+	require.NotContains(t, topicsByName["test-deprecated-v1-active-event"].Labels, deprecatedLabelKey)
+
+	// Deprecated subscription carries the label, and the label propagates to its
+	// synthesized dead-letter topic.
+	require.Equal(t, deprecatedLabelValue, subsByName["test-deprecated-v1-processor"].Labels[deprecatedLabelKey])
+	require.Equal(t, deprecatedLabelValue, topicsByName["test-deprecated-v1-processor-dlq"].Labels[deprecatedLabelKey])
 }
 
 func TestDurationToGCPString(t *testing.T) {
