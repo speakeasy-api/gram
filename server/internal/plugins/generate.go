@@ -1043,7 +1043,7 @@ func renderBreakerScript(pluginName string) []byte {
 #   GRAM_BREAKER_THRESHOLD: Gram outage failures required within the error
 #     window before opening the circuit. Default: 5.
 #   GRAM_BREAKER_ERROR_WINDOW: seconds over which failures are counted.
-#     Default: 30.
+#     Default: 60.
 #   GRAM_BREAKER_COOLDOWN: seconds to wait before allowing a half-open recovery
 #     probe. Default: 60.
 #   GRAM_BREAKER_LOCK_STALE_AFTER: maximum trusted age, in seconds, for lock and
@@ -1056,7 +1056,7 @@ func renderBreakerScript(pluginName string) []byte {
 GRAM_BREAKER_OPEN_EXIT_CODE="${GRAM_BREAKER_OPEN_EXIT_CODE:-75}"
 GRAM_BREAKER_NAME="${GRAM_BREAKER_NAME:-__GRAM_BREAKER_DEFAULT_NAME__}"
 GRAM_BREAKER_THRESHOLD="${GRAM_BREAKER_THRESHOLD:-5}"
-GRAM_BREAKER_ERROR_WINDOW="${GRAM_BREAKER_ERROR_WINDOW:-30}"
+GRAM_BREAKER_ERROR_WINDOW="${GRAM_BREAKER_ERROR_WINDOW:-60}"
 GRAM_BREAKER_COOLDOWN="${GRAM_BREAKER_COOLDOWN:-60}"
 GRAM_BREAKER_LOCK_STALE_AFTER="${GRAM_BREAKER_LOCK_STALE_AFTER:-12}"
 GRAM_BREAKER_LOCK_WAIT="${GRAM_BREAKER_LOCK_WAIT:-0.005}"
