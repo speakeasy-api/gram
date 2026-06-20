@@ -121,3 +121,18 @@ def pubsub_publisher_for_message[M: Message](
 
     handle = broker.publisher_for_message(message_type)
     return Publisher(handle, message_type.DESCRIPTOR.full_name)
+
+
+async def pubsub_publisher_for_message_async[M: Message](
+    broker: PublisherBroker, message_type: type[M]
+) -> Publisher[M]:
+    """Async :func:`pubsub_publisher_for_message`.
+
+    Resolves the handle via the broker's async path so an emulator topic
+    reconcile runs off the event loop. Prefer this from async wiring.
+    """
+    if message_type is None:
+        raise ValueError("message type must not be None")
+
+    handle = await broker.publisher_for_message_async(message_type)
+    return Publisher(handle, message_type.DESCRIPTOR.full_name)

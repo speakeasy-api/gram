@@ -36,13 +36,18 @@ from .discover import (
     to_kebab,
     topic_options_from_message,
 )
-from .publisher import Publisher, pubsub_publisher_for_message
+from .publisher import (
+    Publisher,
+    pubsub_publisher_for_message,
+    pubsub_publisher_for_message_async,
+)
 from .subscriber import (
     MessageCallback,
     MessageMetadata,
     ReceivedMessage,
     Subscriber,
     pubsub_subscriber_for_message,
+    pubsub_subscriber_for_message_async,
 )
 
 __all__ = [
@@ -58,7 +63,9 @@ __all__ = [
     "SubscriberBroker",
     "SubscriberHandle",
     "pubsub_publisher_for_message",
+    "pubsub_publisher_for_message_async",
     "pubsub_subscriber_for_message",
+    "pubsub_subscriber_for_message_async",
     "resolve_dead_letter_topic_name",
     "resolve_subscription_name",
     "resolve_topic_name",
