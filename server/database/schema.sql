@@ -3004,19 +3004,18 @@ CREATE TABLE IF NOT EXISTS risk_custom_detection_rules (
   rule_id TEXT NOT NULL,
   title TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
-  -- Legacy single-pattern matcher. Superseded by match_config; retained
-  -- (nullable) so existing rules keep evaluating until a later ticket
-  -- backfills them into match_config and contracts this column away.
+  -- Legacy single-pattern matcher. Superseded by detection_expr; retained
+  -- (nullable) so existing rules keep evaluating until a later contract
+  -- migration drops it (after its readers are gone).
   regex TEXT,
-  -- Sparse, self-describing matcher config: an ANDed/ORed list of
-  -- {target, op, value, path?} conditions over message targets (content,
-  -- user_prompt, tool_server, tool_function, tool_args, ...). When NULL the
-  -- rule falls back to the regex column. See rule_engine.go for the shape.
+  -- Legacy structured matcher: an ANDed/ORed list of {target, op, value,
+  -- path?} conditions over message targets (content, user_prompt, tool_server,
+  -- tool_function, tool_args, ...). Also superseded by detection_expr and
+  -- retained until that same contract migration; new rules leave this NULL.
   match_config JSONB,
   -- CEL detection predicate, evaluated by internal/risk/celenv. A true verdict
-  -- produces a finding. NULL means no matcher configured (falls back to regex).
-  -- Supersedes match_config, which is retained until a later contract migration
-  -- drops it (after its readers are gone).
+  -- produces a finding. NULL means no CEL matcher is configured, in which case
+  -- the rule falls back to its legacy match_config / regex columns.
   detection_expr TEXT,
   severity TEXT NOT NULL DEFAULT 'medium',
 
