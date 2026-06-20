@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
@@ -64,7 +65,7 @@ type AnalyzeBatch struct {
 	tracer          trace.Tracer
 	metrics         *riskMetrics
 	db              *pgxpool.Pool
-	scanner         *Scanner
+	scanner         *gitleaks.Scanner
 	piiScanner      PIIScanner
 	piScanner       *PromptInjectionScanner
 	shadowMCPClient *shadowmcp.Client
@@ -72,6 +73,7 @@ type AnalyzeBatch struct {
 	judge           PromptJudge
 	flags           feature.Provider
 	presidioPub     gcp.Publisher[*riskv1.PresidioAnalysis]
+	gitleaksPub     gcp.Publisher[*riskv1.GitleaksAnalysis]
 }
 
 func NewAnalyzeBatch(
@@ -86,6 +88,7 @@ func NewAnalyzeBatch(
 	judge PromptJudge,
 	flags feature.Provider,
 	presidioPub gcp.Publisher[*riskv1.PresidioAnalysis],
+	gitleaksPub gcp.Publisher[*riskv1.GitleaksAnalysis],
 ) *AnalyzeBatch {
 	if piiScanner == nil {
 		piiScanner = &StubPIIScanner{}
@@ -98,7 +101,7 @@ func NewAnalyzeBatch(
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
 		metrics:         newRiskMetrics(meterProvider, logger),
 		db:              db,
-		scanner:         NewScanner(),
+		scanner:         gitleaks.NewScanner(),
 		piiScanner:      piiScanner,
 		piScanner:       piScanner,
 		shadowMCPClient: shadowMCPClient,
@@ -106,6 +109,7 @@ func NewAnalyzeBatch(
 		judge:           judge,
 		flags:           flags,
 		presidioPub:     presidioPub,
+		gitleaksPub:     gitleaksPub,
 	}
 }
 
@@ -343,12 +347,40 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if slices.Contains(args.Sources, "gitleaks") {
 		wg.Go(func() {
+			// Shadow-mode publish: fire a per-message GitleaksAnalysis so the
+			// streams subscriber re-runs the same scan and publishes findings.
+			// Issue every publish first so the Pub/Sub client can batch them;
+			// the returned futures are drained afterwards (see presidio below).
+			createdAt := time.Now().UTC().Format(time.RFC3339)
+			publishResults := make([]gcp.PublishResult, len(contents))
+			for i, content := range contents {
+				publishResults[i] = a.gitleaksPub.Publish(ctx, riskv1.GitleaksAnalysis_builder{
+					RequestId:         new(requestID.String()),
+					ChatMessageId:     new(msgids[i].String()),
+					ProjectId:         new(args.ProjectID.String()),
+					OrganizationId:    &args.OrganizationID,
+					RiskPolicyId:      new(args.RiskPolicyID.String()),
+					RiskPolicyVersion: &args.PolicyVersion,
+					CreatedAt:         &createdAt,
+
+					ReplyUrn: nil, // No reply support yet; fire and forget to exercise publish flow.
+					Content:  new(content),
+				}.Build())
+			}
+			for _, res := range publishResults {
+				if _, err := res.Get(ctx); err != nil {
+					a.logger.WarnContext(ctx, "failed to publish gitleaks scan request", attr.SlogError(err))
+				}
+			}
+
 			results, err := a.scanner.ScanBatchParallel(contents)
 			if err != nil {
 				gitleaksErr = err
 				return
 			}
-			gitleaksFindings = results
+			for i, detections := range results {
+				gitleaksFindings[i] = fromDetections(detections)
+			}
 		})
 	}
 

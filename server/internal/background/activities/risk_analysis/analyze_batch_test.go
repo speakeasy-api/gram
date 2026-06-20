@@ -51,9 +51,15 @@ func newPresidioPub() *gcp.MockPublisher[*riskv1.PresidioAnalysis] {
 	return pub
 }
 
+func newGitleaksPub() *gcp.MockPublisher[*riskv1.GitleaksAnalysis] {
+	pub := gcp.NewMockPublisher[*riskv1.GitleaksAnalysis]()
+	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+	return pub
+}
+
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub())
+	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub())
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
@@ -109,6 +115,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		nil,
 		nil,
 		newPresidioPub(),
+		newGitleaksPub(),
 	)
 
 	// Execute via Temporal test activity environment to satisfy activity.RecordHeartbeat
@@ -199,6 +206,7 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		nil,
 		nil,
 		newPresidioPub(),
+		newGitleaksPub(),
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -301,6 +309,7 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		judge,
 		flags,
 		newPresidioPub(),
+		newGitleaksPub(),
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -383,6 +392,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		judge,
 		flags,
 		newPresidioPub(),
+		newGitleaksPub(),
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -810,6 +820,7 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		nil,
 		nil,
 		newPresidioPub(),
+		newGitleaksPub(),
 	)
 
 	var ts testsuite.WorkflowTestSuite

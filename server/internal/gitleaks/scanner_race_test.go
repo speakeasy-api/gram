@@ -1,4 +1,4 @@
-package risk_analysis_test
+package gitleaks_test
 
 import (
 	"sync"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/gitleaks"
 )
 
 // TestConcurrentScanBatchParallel verifies that multiple concurrent calls to
@@ -35,7 +35,7 @@ func TestConcurrentScanBatchParallel(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			_, err := risk_analysis.NewScanner().ScanBatchParallel(messages)
+			_, err := gitleaks.NewScanner().ScanBatchParallel(messages)
 			errs[idx] = err
 		}(i)
 	}
