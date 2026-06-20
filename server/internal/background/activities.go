@@ -49,7 +49,7 @@ import (
 )
 
 type Publishers struct {
-	PresidioRequest gcp.Publisher[*riskv1.PresidioRequest]
+	PresidioAnalysis gcp.Publisher[*riskv1.PresidioAnalysis]
 }
 
 type Activities struct {
@@ -182,7 +182,7 @@ func NewActivities(
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
-		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), riskjudge.New(logger, tracerProvider, meterProvider, chatClient), features, publishers.PresidioRequest),
+		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), riskjudge.New(logger, tracerProvider, meterProvider, chatClient), features, publishers.PresidioAnalysis),
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
 		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),

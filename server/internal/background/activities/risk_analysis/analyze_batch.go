@@ -15,7 +15,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -72,7 +71,7 @@ type AnalyzeBatch struct {
 	mcpMatchLookup  MCPMatchLookup
 	judge           PromptJudge
 	flags           feature.Provider
-	presidioPub     gcp.Publisher[*riskv1.PresidioRequest]
+	presidioPub     gcp.Publisher[*riskv1.PresidioAnalysis]
 }
 
 func NewAnalyzeBatch(
@@ -86,7 +85,7 @@ func NewAnalyzeBatch(
 	mcpMatchLookup MCPMatchLookup,
 	judge PromptJudge,
 	flags feature.Provider,
-	presidioPub gcp.Publisher[*riskv1.PresidioRequest],
+	presidioPub gcp.Publisher[*riskv1.PresidioAnalysis],
 ) *AnalyzeBatch {
 	if piiScanner == nil {
 		piiScanner = &StubPIIScanner{}
@@ -319,8 +318,10 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	n := len(messages)
 	contents := make([]string, n)
+	msgids := make([]uuid.UUID, n)
 	for i, msg := range messages {
 		contents[i] = msg.Content
+		msgids[i] = msg.ID
 	}
 
 	requestID, err := uuid.NewV7()
@@ -353,14 +354,31 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if slices.Contains(args.Sources, "presidio") {
 		wg.Go(func() {
-			if _, err := a.presidioPub.Publish(ctx, riskv1.PresidioRequest_builder{
-				RequestId: new(requestID.String()),
-				CreatedAt: timestamppb.Now(),
-				ReplyUrn:  nil, // No reply support yet; fire and forget to exercise publish flow.
-				Contents:  contents,
-				Entities:  args.PresidioEntities,
-			}.Build()).Get(ctx); err != nil {
-				a.logger.WarnContext(ctx, "failed to publish presidio scan request", attr.SlogError(err))
+			// Issue every publish first so the Pub/Sub client can batch them;
+			// the returned futures are drained afterwards. Calling Get inside
+			// the loop would block on each message's server ack before sending
+			// the next, defeating that batching.
+			createdAt := time.Now().UTC().Format(time.RFC3339)
+			publishResults := make([]gcp.PublishResult, len(contents))
+			for i, content := range contents {
+				publishResults[i] = a.presidioPub.Publish(ctx, riskv1.PresidioAnalysis_builder{
+					RequestId:         new(requestID.String()),
+					ChatMessageId:     new(msgids[i].String()),
+					ProjectId:         new(args.ProjectID.String()),
+					OrganizationId:    &args.OrganizationID,
+					RiskPolicyId:      new(args.RiskPolicyID.String()),
+					RiskPolicyVersion: &args.PolicyVersion,
+					CreatedAt:         &createdAt,
+
+					ReplyUrn: nil, // No reply support yet; fire and forget to exercise publish flow.
+					Content:  &content,
+					Entities: args.PresidioEntities,
+				}.Build())
+			}
+			for _, res := range publishResults {
+				if _, err := res.Get(ctx); err != nil {
+					a.logger.WarnContext(ctx, "failed to publish presidio scan request", attr.SlogError(err))
+				}
 			}
 
 			// PIIScanner may return partial results alongside an error;

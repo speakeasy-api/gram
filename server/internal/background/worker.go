@@ -136,7 +136,7 @@ func ForDeploymentProcessing(
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
 		Publishers: &Publishers{
-			PresidioRequest: gcp.NewNoopPublisher[*riskv1.PresidioRequest](),
+			PresidioAnalysis: gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
 		},
 	}
 }

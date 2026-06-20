@@ -45,8 +45,8 @@ func (j *recordingPromptJudge) Evaluate(_ context.Context, in risk_analysis.Judg
 // call and reports success. Tests that don't enable the "presidio" source
 // never invoke it; tests that do get a fire-and-forget success. Wiring a real
 // mock (never nil) keeps the publish path off the nil-deref cliff.
-func newPresidioPub() *gcp.MockPublisher[*riskv1.PresidioRequest] {
-	pub := gcp.NewMockPublisher[*riskv1.PresidioRequest]()
+func newPresidioPub() *gcp.MockPublisher[*riskv1.PresidioAnalysis] {
+	pub := gcp.NewMockPublisher[*riskv1.PresidioAnalysis]()
 	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
 	return pub
 }

@@ -954,11 +954,11 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		Stop(ctx context.Context) error
 	}, 0, 1)
 
-	presidioRequest, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.PresidioRequest{})
+	presidioAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.PresidioAnalysis{})
 	if err != nil {
-		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for presidio scan requests: %w", err)
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for presidio analysis: %w", err)
 	}
-	pubs = append(pubs, labelledStop{label: "presidioRequest", pub: presidioRequest})
+	pubs = append(pubs, labelledStop{label: "presidioAnalysis", pub: presidioAnalysis})
 
 	shutdown := func(ctx context.Context) error {
 		var err error
@@ -971,6 +971,6 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 
 	return &background.Publishers{
-		PresidioRequest: presidioRequest,
+		PresidioAnalysis: presidioAnalysis,
 	}, shutdown, nil
 }
