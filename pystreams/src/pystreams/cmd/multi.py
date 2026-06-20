@@ -8,10 +8,11 @@ import click
 import structlog
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
 from gram.ping.v1 import ping_pb2, processor_pb2
-from gram.risk.v1 import presidio_analysis_pb2, presidio_analyzer_pb2
+from gram.risk.v1 import finding_pb2, presidio_analysis_pb2, presidio_analyzer_pb2
 from gram_infra.pubsub import (
     EmulatedPubSubBroker,
     PubSubBroker,
+    pubsub_publisher_for_message_async,
 )
 
 from pystreams import attr
@@ -20,7 +21,7 @@ from pystreams.deps.blocking import activate_blocking_detection
 from pystreams.deps.loop_lag import monitor_event_loop_lag
 from pystreams.health import HealthState, serve_control
 from pystreams.ping.handler import PingHandler
-from pystreams.risk.handler import PresidioHandler
+from pystreams.risk.handler import PresidioHandler, build_default_analyzer
 
 from . import flags_control, flags_gcp, flags_service
 from .receiver import ReceiverGroup
@@ -89,6 +90,10 @@ async def multi(
     # closes them on exit (including a clean teardown on Ctrl-C).
     with broker:
         health_state = HealthState()
+        findings_publisher = await pubsub_publisher_for_message_async(
+            broker, finding_pb2.Finding
+        )
+        presidio_analyzer = await build_default_analyzer()
 
         async with anyio.create_task_group() as tg:
             tg.start_soon(_shutdown_on_signal, tg.cancel_scope, health_state, logger)
@@ -118,7 +123,7 @@ async def multi(
             await receivers.receive(
                 presidio_analysis_pb2.PresidioAnalysis,
                 presidio_analyzer_pb2.PresidioAnalyzer,
-                PresidioHandler(logger).handle,
+                PresidioHandler(logger, findings_publisher, presidio_analyzer).handle,
             )
 
             health_state.set_ready()
