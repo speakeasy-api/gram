@@ -1,5 +1,5 @@
 import structlog
-from gram.risk.v1 import presidio_request_pb2
+from gram.risk.v1 import presidio_analysis_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 from structlog.testing import capture_logs
 
@@ -40,18 +40,47 @@ def _handler(analyzer: FakeAnalyzer) -> PresidioHandler:
     return PresidioHandler(structlog.get_logger(), analyzer=analyzer)
 
 
+def _analysis(
+    *,
+    content: str,
+    request_id: str = "req-1",
+    reply_urn: str = "",
+    entities: list[str] | None = None,
+) -> presidio_analysis_pb2.PresidioAnalysis:
+    """Build a fully-populated PresidioAnalysis message.
+
+    The identifying-context fields aren't read by the handler, but real messages
+    always carry them, so fill them with representative values and let each test
+    override only the fields it exercises.
+    """
+    return presidio_analysis_pb2.PresidioAnalysis(
+        request_id=request_id,
+        chat_message_id="cm-1",
+        project_id="proj-1",
+        organization_id="org-1",
+        risk_policy_id="policy-1",
+        risk_policy_version=1,
+        created_at="2026-06-20T00:00:00Z",
+        reply_urn=reply_urn,
+        content=content,
+        entities=entities or [],
+    )
+
+
 async def test_logs_when_entities_detected():
     analyzer = FakeAnalyzer(
         {
-            "email me at a@b.com": ["EMAIL_ADDRESS"],
-            "call 555-0100": ["PHONE_NUMBER", "PHONE_NUMBER"],
+            "email me at a@b.com or call 555-0100": [
+                "EMAIL_ADDRESS",
+                "PHONE_NUMBER",
+                "PHONE_NUMBER",
+            ],
         }
     )
     handler = _handler(analyzer)
-    msg = presidio_request_pb2.PresidioRequest(
-        request_id="req-1",
+    msg = _analysis(
         reply_urn="urn:reply:1",
-        contents=["email me at a@b.com", "call 555-0100"],
+        content="email me at a@b.com or call 555-0100",
     )
 
     with capture_logs() as logs:
@@ -69,10 +98,9 @@ async def test_logs_when_entities_detected():
 
 async def test_no_log_when_nothing_detected():
     handler = _handler(FakeAnalyzer())  # detects nothing
-    msg = presidio_request_pb2.PresidioRequest(
-        request_id="req-1",
+    msg = _analysis(
         reply_urn="urn:reply:1",
-        contents=["nothing sensitive here"],
+        content="nothing sensitive here",
     )
 
     with capture_logs() as logs:
@@ -84,9 +112,8 @@ async def test_no_log_when_nothing_detected():
 async def test_requested_entities_forwarded_to_analyzer():
     analyzer = FakeAnalyzer({"a@b.com": ["EMAIL_ADDRESS"]})
     handler = _handler(analyzer)
-    msg = presidio_request_pb2.PresidioRequest(
-        request_id="req-1",
-        contents=["a@b.com"],
+    msg = _analysis(
+        content="a@b.com",
         entities=["EMAIL_ADDRESS", "PHONE_NUMBER"],
     )
 
@@ -103,7 +130,7 @@ async def test_requested_entities_forwarded_to_analyzer():
 async def test_empty_entities_means_scan_all():
     analyzer = FakeAnalyzer({"a@b.com": ["EMAIL_ADDRESS"]})
     handler = _handler(analyzer)
-    msg = presidio_request_pb2.PresidioRequest(request_id="req-1", contents=["a@b.com"])
+    msg = _analysis(content="a@b.com")
 
     with capture_logs() as logs:
         await handler.handle(msg, _meta())
@@ -126,9 +153,7 @@ class _BoomAnalyzer:
 async def test_scan_failure_is_swallowed_and_logged():
     handler = PresidioHandler(structlog.get_logger(), analyzer=_BoomAnalyzer())
     secret = "my ssn is 123-45-6789"
-    msg = presidio_request_pb2.PresidioRequest(
-        request_id="req-1", reply_urn="urn:reply:1", contents=[secret]
-    )
+    msg = _analysis(reply_urn="urn:reply:1", content=secret)
 
     # A scan failure must not propagate: raising here would nack the message and,
     # with no dead-letter policy on the subscription, poison it via redelivery.
@@ -150,9 +175,7 @@ async def test_does_not_leak_content_or_values():
     secret = "my ssn is 123-45-6789"
     analyzer = FakeAnalyzer({secret: ["US_SSN"]})
     handler = _handler(analyzer)
-    msg = presidio_request_pb2.PresidioRequest(
-        request_id="req-1", reply_urn="urn:reply:1", contents=[secret]
-    )
+    msg = _analysis(reply_urn="urn:reply:1", content=secret)
 
     with capture_logs() as logs:
         await handler.handle(msg, _meta())

@@ -2,7 +2,7 @@ from typing import Protocol
 
 import structlog
 from asyncer import asyncify
-from gram.risk.v1 import presidio_request_pb2
+from gram.risk.v1 import presidio_analysis_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
@@ -43,7 +43,7 @@ class Analyzer(Protocol):
 
 
 class PresidioHandler:
-    """Scans :class:`PresidioRequest` payloads for PII using Presidio.
+    """Scans :class:`PresidioAnalysis` payloads for PII using Presidio.
 
     This is intentionally a stub: detection results are not forwarded anywhere
     yet because no downstream consumer exists. The handler only emits an opaque
@@ -63,7 +63,7 @@ class PresidioHandler:
 
     async def handle(
         self,
-        message: presidio_request_pb2.PresidioRequest,
+        message: presidio_analysis_pb2.PresidioAnalysis,
         meta: MessageMetadata,
     ) -> None:
         # An empty list means "analyze every entity Presidio knows about".
@@ -73,7 +73,7 @@ class PresidioHandler:
         # loop so a large request can't stall other subscriptions.
         try:
             detected = await asyncify(self._scan)(
-                contents=list(message.contents),
+                content=message.content,
                 entities=requested,
             )
         except Exception as exc:
@@ -113,12 +113,11 @@ class PresidioHandler:
             delivery_attempt=meta.delivery_attempt,
         )
 
-    def _scan(self, contents: list[str], entities: list[str] | None) -> dict[str, int]:
-        """Analyze each content string, returning a count per entity type."""
+    def _scan(self, content: str, entities: list[str] | None) -> dict[str, int]:
+        """Analyze the content string, returning a count per entity type."""
         counts: dict[str, int] = {}
-        for content in contents:
-            for result in self.analyzer.analyze(
-                text=content, entities=entities, language="en"
-            ):
-                counts[result.entity_type] = counts.get(result.entity_type, 0) + 1
+        for result in self.analyzer.analyze(
+            text=content, entities=entities, language="en"
+        ):
+            counts[result.entity_type] = counts.get(result.entity_type, 0) + 1
         return counts

@@ -22,6 +22,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Deprecated: Marked as deprecated in gram/risk/v1/presidio_scanner.proto.
 type PresidioScanner struct {
 	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -53,6 +54,7 @@ func (x *PresidioScanner) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
+// Deprecated: Marked as deprecated in gram/risk/v1/presidio_scanner.proto.
 type PresidioScanner_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -69,10 +71,10 @@ var File_gram_risk_v1_presidio_scanner_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_presidio_scanner_proto_rawDesc = "" +
 	"\n" +
-	"#gram/risk/v1/presidio_scanner.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"M\n" +
-	"\x0fPresidioScanner::\x92\xb5\x186\x12\x05\b\x80\x9a\x9e\x01\x18\x01\"\x02\b<2\t\n" +
+	"#gram/risk/v1/presidio_scanner.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"O\n" +
+	"\x0fPresidioScanner:<\x92\xb5\x186\x12\x05\b\x80\x9a\x9e\x01\x18\x01\"\x02\b<2\t\n" +
 	"\x02\b\n" +
-	"\x12\x03\b\xd8\x04R\x1cgram.risk.v1.PresidioRequestB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
+	"\x12\x03\b\xd8\x04R\x1cgram.risk.v1.PresidioRequest\x18\x01B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_presidio_scanner_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_risk_v1_presidio_scanner_proto_goTypes = []any{

@@ -8,6 +8,10 @@ import "google/protobuf/timestamp.proto";
 option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
 
 message PresidioRequest {
+  // Use PresidioAnalysis instead of this message. This message is deprecated
+  // and will be removed in a future release.
+  option deprecated = true;
+
   string request_id = 1;
   google.protobuf.Timestamp created_at = 2;
   string reply_urn = 3;

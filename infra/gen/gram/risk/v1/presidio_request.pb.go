@@ -22,6 +22,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Deprecated: Marked as deprecated in gram/risk/v1/presidio_request.proto.
 type PresidioRequest struct {
 	state                  protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_RequestId   *string                `protobuf:"bytes,1,opt,name=request_id,json=requestId"`
@@ -158,6 +159,7 @@ func (x *PresidioRequest) ClearReplyUrn() {
 	x.xxx_hidden_ReplyUrn = nil
 }
 
+// Deprecated: Marked as deprecated in gram/risk/v1/presidio_request.proto.
 type PresidioRequest_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -190,7 +192,7 @@ var File_gram_risk_v1_presidio_request_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_presidio_request_proto_rawDesc = "" +
 	"\n" +
-	"#gram/risk/v1/presidio_request.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcc\x01\n" +
+	"#gram/risk/v1/presidio_request.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xce\x01\n" +
 	"\x0fPresidioRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x129\n" +
@@ -198,8 +200,7 @@ const file_gram_risk_v1_presidio_request_proto_rawDesc = "" +
 	"created_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1b\n" +
 	"\treply_urn\x18\x03 \x01(\tR\breplyUrn\x12\x1a\n" +
 	"\bcontents\x18\x04 \x03(\tR\bcontents\x12\x1a\n" +
-	"\bentities\x18\x05 \x03(\tR\bentities:\n" +
-	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
+	"\bentities\x18\x05 \x03(\tR\bentities:\f\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$\x18\x01B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_presidio_request_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_risk_v1_presidio_request_proto_goTypes = []any{

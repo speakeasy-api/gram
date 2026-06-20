@@ -8,7 +8,7 @@ import click
 import structlog
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
 from gram.ping.v1 import ping_pb2, processor_pb2
-from gram.risk.v1 import presidio_request_pb2, presidio_scanner_pb2
+from gram.risk.v1 import presidio_analysis_pb2, presidio_analyzer_pb2
 from gram_infra.pubsub import (
     EmulatedPubSubBroker,
     PubSubBroker,
@@ -116,8 +116,8 @@ async def multi(
                 PingHandler(logger, ping_log_level).handle,
             )
             await receivers.receive(
-                presidio_request_pb2.PresidioRequest,
-                presidio_scanner_pb2.PresidioScanner,
+                presidio_analysis_pb2.PresidioAnalysis,
+                presidio_analyzer_pb2.PresidioAnalyzer,
                 PresidioHandler(logger).handle,
             )
 
