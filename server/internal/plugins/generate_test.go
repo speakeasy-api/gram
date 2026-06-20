@@ -994,10 +994,14 @@ func TestGenerateClaudeObservabilityOptimisticBlockingFilesAndCommands(t *testin
 	require.Contains(t, breaker, "GRAM_BREAKER_THRESHOLD: consecutive Gram outage failures")
 	require.Contains(t, breaker, "GRAM_BREAKER_COOLDOWN: seconds to wait")
 	require.Contains(t, breaker, "GRAM_BREAKER_LOCK_STALE_AFTER: maximum trusted age")
+	require.Contains(t, breaker, "GRAM_BREAKER_LOCK_WAIT: seconds to wait")
 	require.Contains(t, breaker, `GRAM_BREAKER_DIR: directory for breaker state`)
 	require.Contains(t, breaker, `GRAM_BREAKER_NAME="${GRAM_BREAKER_NAME:-acme-observability}"`)
 	require.Contains(t, breaker, `GRAM_BREAKER_DIR="${GRAM_BREAKER_DIR:-${CLAUDE_PLUGIN_DATA:-/tmp}/circuit-breakers}"`)
 	require.Contains(t, breaker, `GRAM_BREAKER_LOCK_STALE_AFTER="${GRAM_BREAKER_LOCK_STALE_AFTER:-12}"`)
+	require.Contains(t, breaker, `GRAM_BREAKER_LOCK_WAIT="${GRAM_BREAKER_LOCK_WAIT:-0.005}"`)
+	require.NotContains(t, breaker, "sleep 0.005")
+	require.Contains(t, breaker, `sleep "$GRAM_BREAKER_LOCK_WAIT"`)
 	require.Less(t, strings.Index(breaker, "# Configuration:"), strings.Index(breaker, "_gram_breaker_is_int()"))
 
 	var parsed claudeHooksConfig

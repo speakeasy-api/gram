@@ -1046,6 +1046,8 @@ func renderBreakerScript(pluginName string) []byte {
 #     probe. Default: 60.
 #   GRAM_BREAKER_LOCK_STALE_AFTER: maximum trusted age, in seconds, for lock and
 #     half-open ownership. Default: 12 (the hook HTTP timeout plus 2 seconds).
+#   GRAM_BREAKER_LOCK_WAIT: seconds to wait between lock acquisition attempts.
+#     Default: 0.005.
 #   GRAM_BREAKER_DIR: directory for breaker state and lock directories. Default:
 #     ${CLAUDE_PLUGIN_DATA:-/tmp}/circuit-breakers.
 
@@ -1054,6 +1056,7 @@ GRAM_BREAKER_NAME="${GRAM_BREAKER_NAME:-__GRAM_BREAKER_DEFAULT_NAME__}"
 GRAM_BREAKER_THRESHOLD="${GRAM_BREAKER_THRESHOLD:-5}"
 GRAM_BREAKER_COOLDOWN="${GRAM_BREAKER_COOLDOWN:-60}"
 GRAM_BREAKER_LOCK_STALE_AFTER="${GRAM_BREAKER_LOCK_STALE_AFTER:-12}"
+GRAM_BREAKER_LOCK_WAIT="${GRAM_BREAKER_LOCK_WAIT:-0.005}"
 GRAM_BREAKER_DIR="${GRAM_BREAKER_DIR:-${CLAUDE_PLUGIN_DATA:-/tmp}/circuit-breakers}"
 
 _gram_breaker_is_int() {
@@ -1087,7 +1090,7 @@ _gram_breaker_lock() {
   while ! mkdir "$GRAM_BREAKER_LOCK_DIR" 2>/dev/null; do
     mtime="$(stat -f %m "$GRAM_BREAKER_LOCK_DIR" 2>/dev/null ||
       stat -c %Y "$GRAM_BREAKER_LOCK_DIR" 2>/dev/null)" || {
-      sleep 0.005
+      sleep "$GRAM_BREAKER_LOCK_WAIT"
       continue
     }
     if _gram_breaker_is_int "$mtime"; then
@@ -1095,7 +1098,7 @@ _gram_breaker_lock() {
       if [ $((now - mtime)) -ge "$GRAM_BREAKER_LOCK_STALE_AFTER" ]; then
         rm -f "$GRAM_BREAKER_LOCK_OWNER_FILE" 2>/dev/null || true
         rmdir "$GRAM_BREAKER_LOCK_DIR" 2>/dev/null || true
-        sleep 0.005
+        sleep "$GRAM_BREAKER_LOCK_WAIT"
         continue
       fi
     fi
@@ -1104,7 +1107,7 @@ _gram_breaker_lock() {
     if [ -r "$GRAM_BREAKER_LOCK_OWNER_FILE" ]; then
       read -r owner_pid <"$GRAM_BREAKER_LOCK_OWNER_FILE" || true
       if _gram_breaker_pid_running "$owner_pid"; then
-        sleep 0.005
+        sleep "$GRAM_BREAKER_LOCK_WAIT"
         continue
       fi
       if _gram_breaker_is_int "$owner_pid" && [ "$owner_pid" -gt 0 ]; then
@@ -1112,7 +1115,7 @@ _gram_breaker_lock() {
         rmdir "$GRAM_BREAKER_LOCK_DIR" 2>/dev/null || true
       fi
     fi
-    sleep 0.005
+    sleep "$GRAM_BREAKER_LOCK_WAIT"
   done
 
   if ! printf '%s\n' "$$" >"$GRAM_BREAKER_LOCK_OWNER_FILE"; then
