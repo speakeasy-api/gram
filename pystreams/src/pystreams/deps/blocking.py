@@ -58,11 +58,16 @@ def activate_blocking_detection(
     logger = logger.bind(**{attr.COMPONENT: "aiocop"})
 
     def _on_slow_task(event: aiocop.SlowTaskEvent) -> None:
-        # aiocop's own stack capture incidentally trips low-severity audit events
-        # (e.g. linecache's os.stat), so it fires this callback for essentially
-        # every scheduled step. Only surface tasks that actually overran the
-        # threshold or carry non-trivial blocking IO — the rest is noise.
-        if not event.exceeded_threshold and event.severity_level == "low":
+        # aiocop's own stack capture (traceback.extract_stack -> linecache) trips
+        # dozens of os.stat/open audit events per scheduled step, inflating the
+        # severity score to medium/high even when the task never stalled the loop.
+        # Elapsed-vs-threshold is the honest signal: a task that ran under the
+        # threshold didn't block meaningfully regardless of severity label, so
+        # gate logging on that and let the severity descriptor only colour the
+        # entries that genuinely overran. Raising on real violations is handled
+        # separately inside aiocop (enable_raise_on_violations), so this only
+        # quiets the logs and never suppresses a genuine stall.
+        if not event.exceeded_threshold:
             return
         _violations_counter.add(1, {"severity": event.severity_level})
         logger.warning(
