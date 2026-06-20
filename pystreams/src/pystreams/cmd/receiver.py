@@ -15,7 +15,7 @@ from typing import TypeVar
 import anyio.abc
 import structlog
 from google.protobuf.message import Message
-from gram_infra.pubsub import SubscriberBroker, pubsub_subscriber_for_message
+from gram_infra.pubsub import SubscriberBroker, pubsub_subscriber_for_message_async
 from gram_infra.pubsub.subscriber import MessageCallback
 
 from pystreams.deps.tracing import traced
@@ -31,7 +31,7 @@ class ReceiverGroup:
     broker: SubscriberBroker
     logger: structlog.stdlib.BoundLogger
 
-    def receive(
+    async def receive(
         self,
         message_type: type[M],
         subscription_type: type[Message],
@@ -41,9 +41,11 @@ class ReceiverGroup:
 
         The handler is wrapped so every delivered message runs inside a
         ``stream.handleMessage`` span tagged with the topic and subscription
-        proto names.
+        proto names. Async because resolving the subscriber may reconcile the
+        topic/subscription against the local emulator, which is offloaded off the
+        event loop rather than blocking it.
         """
-        subscriber = pubsub_subscriber_for_message(
+        subscriber = await pubsub_subscriber_for_message_async(
             self.broker,
             message_type,
             subscription_type,

@@ -110,12 +110,12 @@ async def multi(
 
             # Register subscription receivers here. Each call resolves a
             # subscriber and starts consuming with per-message tracing.
-            receivers.receive(
+            await receivers.receive(
                 ping_pb2.Message,
                 processor_pb2.PyProcessor,
                 PingHandler(logger, ping_log_level).handle,
             )
-            receivers.receive(
+            await receivers.receive(
                 presidio_request_pb2.PresidioRequest,
                 presidio_scanner_pb2.PresidioScanner,
                 PresidioHandler(logger).handle,

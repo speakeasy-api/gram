@@ -644,3 +644,30 @@ def pubsub_subscriber_for_message[M: Message](
         topic_proto_name=message_type.DESCRIPTOR.full_name,
         subscription_proto_name=subscription_type.DESCRIPTOR.full_name,
     )
+
+
+async def pubsub_subscriber_for_message_async[M: Message](
+    broker: SubscriberBroker,
+    message_type: type[M],
+    subscription_type: type[Message],
+    *,
+    logger: structlog.stdlib.BoundLogger | None = None,
+) -> Subscriber[M]:
+    """Async :func:`pubsub_subscriber_for_message`.
+
+    Resolves the handle via the broker's async path so an emulator topic/
+    subscription reconcile runs off the event loop. Prefer this from async wiring.
+    """
+    if message_type is None:
+        raise ValueError("message type must not be None")
+    if subscription_type is None:
+        raise ValueError("subscription marker message type must not be None")
+
+    handle = await broker.subscriber_for_message_async(message_type, subscription_type)
+    return Subscriber(
+        handle,
+        message_type,
+        logger=logger or structlog.get_logger(__name__),
+        topic_proto_name=message_type.DESCRIPTOR.full_name,
+        subscription_proto_name=subscription_type.DESCRIPTOR.full_name,
+    )

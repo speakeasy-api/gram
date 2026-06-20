@@ -399,6 +399,7 @@ version = "0.1.0"
 source = { editable = "infra" }
 dependencies = [
     { name = "anyio" },
+    { name = "asyncer" },
     { name = "google-cloud-pubsub" },
     { name = "opentelemetry-api" },
     { name = "protobuf" },
@@ -419,6 +420,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.13.0" },
+    { name = "asyncer", specifier = ">=0.0.17" },
     { name = "google-cloud-pubsub", specifier = ">=2.31.0" },
     { name = "opentelemetry-api", specifier = ">=1.42.1" },
     { name = "protobuf", specifier = ">=7.35.0,<8" },
