@@ -90,6 +90,12 @@ pubsub:
     spec: {}
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-finding
+    name: gram-risk-v1-finding
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-presidio-analysis
     name: gram-risk-v1-presidio-analysis
     spec:

@@ -10,8 +10,9 @@ import (
 //
 // Covers:
 //   - IANA-reserved address space (RFC1918 private, loopback, link-local,
-//     multicast, CGNAT/RFC6598, documentation/RFC5737, 6to4 deprecated,
-//     class E, "this network", limited broadcast, RFC2544 benchmarking).
+//     RFC4193 unique-local, multicast, CGNAT/RFC6598, documentation/RFC5737,
+//     6to4 deprecated, class E, "this network", limited broadcast, RFC2544
+//     benchmarking).
 //   - Well-known public DNS resolvers (Cloudflare 1.1.1.1, Google 8.8.8.8,
 //     Quad9, OpenDNS, AdGuard, CleanBrowsing, Yandex, etc.) curated against
 //     winutil, Technitium, RaspAP, Tunnelblick, and several maintained gists.
@@ -89,6 +90,7 @@ var nonPIIIPPrefixes = []prefixHit{
 	{netip.MustParsePrefix("::1/128"), "loopback addresses"},
 	{netip.MustParsePrefix("169.254.0.0/16"), "link-local addresses"},
 	{netip.MustParsePrefix("fe80::/10"), "link-local addresses"},
+	{netip.MustParsePrefix("fc00::/7"), "RFC4193 unique-local space"},
 	{netip.MustParsePrefix("224.0.0.0/4"), "multicast address space"},
 	{netip.MustParsePrefix("ff00::/8"), "multicast address space"},
 	{netip.MustParsePrefix("100.64.0.0/10"), "CGNAT shared space RFC6598"},
