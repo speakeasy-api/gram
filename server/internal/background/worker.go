@@ -137,6 +137,7 @@ func ForDeploymentProcessing(
 		PluginPublisher:                nil,
 		Publishers: &Publishers{
 			PresidioAnalysis: gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
+			GitleaksAnalysis: gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
 		},
 	}
 }

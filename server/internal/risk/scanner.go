@@ -7,13 +7,11 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/zricethezav/gitleaks/v8/detect"
 	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/errgroup"
 
@@ -115,8 +113,7 @@ type Scanner struct {
 	logger     *slog.Logger
 	db         *pgxpool.Pool
 	repo       *repo.Queries
-	gitleaksMu sync.Mutex                 // DetectString is not concurrent-safe
-	detector   *detect.Detector           // pre-created, reused across scans
+	gitleaks   *ra.GitleaksScanner        // pre-created, reused & serialized across scans
 	piiScanner ra.PIIScanner              // nil if Presidio is unavailable
 	piScanner  *ra.PromptInjectionScanner // never nil; stub-classifier when L1 disabled
 	judge      ra.PromptJudge             // nil-safe; guarded at the call site
@@ -132,9 +129,9 @@ type Scanner struct {
 // (init relies on viper global state and should never realistically fail,
 // but propagating the error keeps startup honest).
 func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, piScanner *ra.PromptInjectionScanner, judge ra.PromptJudge, flags feature.Provider, meterProvider metric.MeterProvider) (*Scanner, error) {
-	det, err := ra.SharedDetector()
+	gitleaksScanner, err := ra.NewGitleaksScanner()
 	if err != nil {
-		return nil, fmt.Errorf("create gitleaks detector: %w", err)
+		return nil, fmt.Errorf("create gitleaks scanner: %w", err)
 	}
 
 	if piScanner == nil {
@@ -145,8 +142,7 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 		logger:     logger.With(attr.SlogComponent("risk-scanner")),
 		db:         db,
 		repo:       repo.New(db),
-		gitleaksMu: sync.Mutex{},
-		detector:   det,
+		gitleaks:   gitleaksScanner,
 		piiScanner: piiScanner,
 		piScanner:  piScanner,
 		judge:      judge,
@@ -212,7 +208,7 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 	// Fan out across policies. The first goroutine that finds a match returns
 	// errMatchFound, which causes errgroup to cancel its context — sibling
 	// goroutines stop their in-flight Presidio HTTP calls early instead of
-	// finishing uselessly. Gitleaks scans serialize on s.gitleaksMu (the v8
+	// finishing uselessly. Gitleaks scans serialize inside s.gitleaks (the v8
 	// detector is not concurrent-safe); the real win is Presidio fan-out.
 	var (
 		winner   atomic.Pointer[ScanResult]
@@ -553,13 +549,9 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, t
 	return ra.ScanCustomDetectionRules(text, compiled), nil
 }
 
-// scanGitleaks runs DetectString on the pre-created detector under
-// gitleaksMu. The detector is reused (avoiding per-scan rule compilation)
-// but DetectString mutates internal state (rules, line counters, last-finding
-// bookkeeping) without synchronization, so calls must serialize.
+// scanGitleaks scans text on the pre-created, reused gitleaks scanner. The
+// scanner reuses one detector (avoiding per-scan rule compilation) and
+// serializes the underlying DetectString call, which mutates detector state.
 func (s *Scanner) scanGitleaks(text string) []ra.Finding {
-	s.gitleaksMu.Lock()
-	raw := s.detector.DetectString(text)
-	s.gitleaksMu.Unlock()
-	return ra.ConvertFindings(text, raw)
+	return s.gitleaks.Scan(text)
 }
