@@ -393,8 +393,14 @@ func (f *fieldVal) includes(sub string) bool {
 	if sub == "" {
 		return false
 	}
-	low := strings.ToLower(sub)
-	return f.scan(func(t string) [][]int { return indexAll(strings.ToLower(t), low) })
+	// Case-insensitive substring via a quoted-literal regex so match offsets are
+	// computed against the original text (lowercasing a copy and reusing its
+	// offsets can be wrong, or panic, when a case-fold changes byte length).
+	re, err := regexp.Compile("(?i)" + regexp.QuoteMeta(sub))
+	if err != nil {
+		return false
+	}
+	return f.scan(func(t string) [][]int { return re.FindAllStringIndex(t, -1) })
 }
 
 func (f *fieldVal) eq(s string) bool {
@@ -429,23 +435,6 @@ func (f *fieldVal) globMatch(pattern string) bool {
 
 func (f *fieldVal) present() bool {
 	return f.scan(func(t string) [][]int { return whole(t, t != "") })
-}
-
-// indexAll returns the [start,end) byte ranges of every non-overlapping
-// occurrence of needle in haystack.
-func indexAll(haystack, needle string) [][]int {
-	var out [][]int
-	for from := 0; ; {
-		idx := strings.Index(haystack[from:], needle)
-		if idx < 0 {
-			break
-		}
-		start := from + idx
-		end := start + len(needle)
-		out = append(out, []int{start, end})
-		from = end
-	}
-	return out
 }
 
 // normalizeJSONPath converts a leading $-rooted / bracket-indexed path into the
