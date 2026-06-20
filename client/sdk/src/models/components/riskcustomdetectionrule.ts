@@ -8,10 +8,6 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-import {
-  RiskMatchConfig,
-  RiskMatchConfig$inboundSchema,
-} from "./riskmatchconfig.js";
 
 /**
  * Severity level for findings produced by this rule.
@@ -40,12 +36,15 @@ export type RiskCustomDetectionRule = {
    */
   description: string;
   /**
+   * CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding. Supersedes regex.
+   */
+  detectionCel?: string | undefined;
+  /**
    * The custom detection rule ID.
    */
   id: string;
-  matchConfig?: RiskMatchConfig | undefined;
   /**
-   * Legacy RE2-compatible regex pattern. Superseded by match_config; empty when the rule uses match_config.
+   * Legacy RE2-compatible regex pattern (read-only). Live for existing rules; evaluated as content.match(regex) when detection_cel is empty. New rules author detection_cel instead.
    */
   regex: string;
   /**
@@ -82,8 +81,8 @@ export const RiskCustomDetectionRule$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     description: z.string(),
+    detection_cel: z.optional(z.string()),
     id: z.string(),
-    match_config: z.optional(RiskMatchConfig$inboundSchema),
     regex: z.string(),
     rule_id: z.string(),
     severity: RiskCustomDetectionRuleSeverity$inboundSchema,
@@ -96,7 +95,7 @@ export const RiskCustomDetectionRule$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
-      "match_config": "matchConfig",
+      "detection_cel": "detectionCel",
       "rule_id": "ruleId",
       "updated_at": "updatedAt",
     });

@@ -325,14 +325,13 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "generate policy id").LogError(ctx, s.logger)
 	}
 
-	// Application predicates (scope/exemption) apply to both standard and prompt
-	// policies, so they are not gated by policyType like the detection fields.
-	applicationConfig, err := applicationConfigToStorage(payload.ApplicationConfig)
-	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid application_config")
+	// Scope predicates (CEL) apply to both standard and prompt policies, so they
+	// are not gated by policyType like the detection fields.
+	if err := validateScopeCEL(payload.ScopeIncludeCel); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid scope_include_cel")
 	}
-	if err := ra.ValidateApplicationConfig(applicationConfig); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid application_config")
+	if err := validateScopeCEL(payload.ScopeExemptCel); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid scope_exempt_cel")
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -352,9 +351,9 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		PromptInjectionRules: createPolicyDetectionField(policyType, payload.PromptInjectionRules),
 		DisabledRules:        createPolicyDetectionField(policyType, payload.DisabledRules),
 		CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
-		ExemptRuleIds:        createPolicyDetectionField(policyType, payload.ExemptRuleIds),
 		MessageTypes:         payload.MessageTypes,
-		ApplicationConfig:    applicationConfig,
+		ScopeIncludeCel:      conv.PtrToPGText(payload.ScopeIncludeCel),
+		ScopeExemptCel:       conv.PtrToPGText(payload.ScopeExemptCel),
 		Enabled:              enabled,
 		Action:               action,
 		AudienceType:         audienceType,
@@ -521,14 +520,6 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		customRuleIds = payload.CustomRuleIds
 	}
 
-	exemptRuleIds := current.ExemptRuleIds
-	if payload.ExemptRuleIds != nil {
-		if err := validateCustomRuleIDs(payload.ExemptRuleIds); err != nil {
-			return nil, err
-		}
-		exemptRuleIds = payload.ExemptRuleIds
-	}
-
 	messageTypes := current.MessageTypes
 	if payload.MessageTypes != nil {
 		if err := validateMessageTypes(payload.MessageTypes); err != nil {
@@ -537,17 +528,20 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		messageTypes = payload.MessageTypes
 	}
 
-	// Application predicates: omit to preserve; send (possibly empty) to replace.
-	applicationConfig := current.ApplicationConfig
-	if payload.ApplicationConfig != nil {
-		ac, err := applicationConfigToStorage(payload.ApplicationConfig)
-		if err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid application_config")
+	// Scope predicates (CEL): omit to preserve; send (possibly empty) to replace.
+	scopeIncludeCel := current.ScopeIncludeCel
+	if payload.ScopeIncludeCel != nil {
+		if err := validateScopeCEL(payload.ScopeIncludeCel); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid scope_include_cel")
 		}
-		if err := ra.ValidateApplicationConfig(ac); err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid application_config")
+		scopeIncludeCel = conv.PtrToPGText(payload.ScopeIncludeCel)
+	}
+	scopeExemptCel := current.ScopeExemptCel
+	if payload.ScopeExemptCel != nil {
+		if err := validateScopeCEL(payload.ScopeExemptCel); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid scope_exempt_cel")
 		}
-		applicationConfig = ac
+		scopeExemptCel = conv.PtrToPGText(payload.ScopeExemptCel)
 	}
 
 	enabled := current.Enabled
@@ -672,9 +666,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		PromptInjectionRules: promptInjectionRules,
 		DisabledRules:        disabledRules,
 		CustomRuleIds:        customRuleIds,
-		ExemptRuleIds:        exemptRuleIds,
 		MessageTypes:         messageTypes,
-		ApplicationConfig:    applicationConfig,
+		ScopeIncludeCel:      scopeIncludeCel,
+		ScopeExemptCel:       scopeExemptCel,
 		Enabled:              enabled,
 		Action:               action,
 		AudienceType:         audienceType,
@@ -1596,20 +1590,13 @@ func (s *Service) CreateCustomDetectionRule(ctx context.Context, payload *gen.Cr
 	if payload.Description != nil {
 		description = strings.TrimSpace(*payload.Description)
 	}
-	regexPattern := strings.TrimSpace(conv.PtrValOr(payload.Regex, ""))
+	detectionCel := strings.TrimSpace(conv.PtrValOr(payload.DetectionCel, ""))
 	severity := payload.Severity
 	if severity == "" {
 		severity = "medium"
 	}
-	if err := validateCustomDetectionRule(ruleID, title, regexPattern, severity); err != nil {
+	if err := validateCustomDetectionRule(ruleID, title, detectionCel, severity); err != nil {
 		return nil, err
-	}
-	matchConfig, err := customRuleMatchConfigToStorage(payload.MatchConfig)
-	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid match_config")
-	}
-	if err := ra.ValidateMatchConfig(matchConfig); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid match_config")
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -1624,8 +1611,7 @@ func (s *Service) CreateCustomDetectionRule(ctx context.Context, payload *gen.Cr
 		RuleID:         ruleID,
 		Title:          title,
 		Description:    description,
-		Regex:          pgtype.Text{String: regexPattern, Valid: true},
-		MatchConfig:    matchConfig,
+		DetectionCel:   conv.ToPGTextEmpty(detectionCel),
 		Severity:       severity,
 	})
 	if err != nil {
@@ -1712,16 +1698,9 @@ func (s *Service) UpdateCustomDetectionRule(ctx context.Context, payload *gen.Up
 	if payload.Description != nil {
 		description = strings.TrimSpace(*payload.Description)
 	}
-	regexPattern := strings.TrimSpace(conv.PtrValOr(payload.Regex, ""))
-	if err := validateCustomDetectionRuleFields(title, regexPattern, payload.Severity); err != nil {
+	detectionCel := strings.TrimSpace(conv.PtrValOr(payload.DetectionCel, ""))
+	if err := validateCustomDetectionRuleFields(title, detectionCel, payload.Severity); err != nil {
 		return nil, err
-	}
-	matchConfig, err := customRuleMatchConfigToStorage(payload.MatchConfig)
-	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid match_config")
-	}
-	if err := ra.ValidateMatchConfig(matchConfig); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid match_config")
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -1731,13 +1710,12 @@ func (s *Service) UpdateCustomDetectionRule(ctx context.Context, payload *gen.Up
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := repo.New(dbtx).UpdateCustomDetectionRule(ctx, repo.UpdateCustomDetectionRuleParams{
-		ID:          id,
-		ProjectID:   *authCtx.ProjectID,
-		Title:       title,
-		Description: description,
-		Regex:       pgtype.Text{String: regexPattern, Valid: true},
-		MatchConfig: matchConfig,
-		Severity:    payload.Severity,
+		ID:           id,
+		ProjectID:    *authCtx.ProjectID,
+		Title:        title,
+		Description:  description,
+		DetectionCel: conv.ToPGTextEmpty(detectionCel),
+		Severity:     payload.Severity,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "custom detection rule not found").LogError(ctx, s.logger)
@@ -1837,12 +1815,11 @@ func heuristicCustomRuleSuggestion(prompt string, existingIDs []string) *gen.Sug
 	}
 
 	return &gen.SuggestCustomDetectionRuleResult{
-		RuleID:      ruleID,
-		Title:       title,
-		Description: strings.TrimSpace(prompt),
-		Regex:       "",
-		MatchConfig: nil,
-		Severity:    "medium",
+		RuleID:       ruleID,
+		Title:        title,
+		Description:  strings.TrimSpace(prompt),
+		DetectionCel: nil,
+		Severity:     "medium",
 	}
 }
 
@@ -1914,24 +1891,48 @@ func validateMessageTypes(messageTypes []string) error {
 	return nil
 }
 
-func validateCustomDetectionRule(ruleID, title, regexPattern, severity string) error {
+func validateCustomDetectionRule(ruleID, title, detectionCel, severity string) error {
 	if !customRuleIDPattern.MatchString(ruleID) {
 		return oops.E(oops.CodeInvalid, nil, "rule_id must match custom.[a-z0-9_]+")
 	}
-	return validateCustomDetectionRuleFields(title, regexPattern, severity)
+	return validateCustomDetectionRuleFields(title, detectionCel, severity)
 }
 
-func validateCustomDetectionRuleFields(title, regexPattern, severity string) error {
+func validateCustomDetectionRuleFields(title, detectionCel, severity string) error {
 	if title == "" {
 		return oops.E(oops.CodeInvalid, nil, "title must not be empty")
 	}
-	if _, err := regexp.Compile(regexPattern); err != nil {
-		return oops.E(oops.CodeInvalid, err, "regex is invalid")
+	if err := validateCEL(detectionCel); err != nil {
+		return oops.E(oops.CodeInvalid, err, "detection_cel is invalid")
 	}
 	if !customRuleSeverityAllow[severity] {
 		return oops.E(oops.CodeInvalid, nil, "severity must be one of info, low, medium, high, critical")
 	}
 	return nil
+}
+
+// validateCEL compiles a CEL predicate (scope or detection) so an invalid
+// expression is rejected at save time. Empty is valid.
+func validateCEL(expr string) error {
+	if strings.TrimSpace(expr) == "" {
+		return nil
+	}
+	eng, err := ra.CELEngine()
+	if err != nil {
+		return fmt.Errorf("build cel engine: %w", err)
+	}
+	if _, err := eng.Compile(expr); err != nil {
+		return fmt.Errorf("compile cel: %w", err)
+	}
+	return nil
+}
+
+// validateScopeCEL validates an optional CEL scope predicate from a payload.
+func validateScopeCEL(expr *string) error {
+	if expr == nil {
+		return nil
+	}
+	return validateCEL(*expr)
 }
 
 func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
@@ -2031,11 +2032,11 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	}
 
 	var parsed struct {
-		RuleID      string          `json:"rule_id"`
-		Title       string          `json:"title"`
-		Description string          `json:"description"`
-		Severity    string          `json:"severity"`
-		MatchConfig json.RawMessage `json:"match_config"`
+		RuleID       string `json:"rule_id"`
+		Title        string `json:"title"`
+		Description  string `json:"description"`
+		Severity     string `json:"severity"`
+		DetectionCel string `json:"detection_cel"`
 	}
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
 		return nil, fmt.Errorf("parse llm response: %w", err)
@@ -2049,12 +2050,12 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	if !strings.HasPrefix(parsed.RuleID, "custom.") || !customRuleIDPattern.MatchString(parsed.RuleID) {
 		return nil, fmt.Errorf("model returned invalid rule_id %q", parsed.RuleID)
 	}
-	if err := ra.ValidateMatchConfig(parsed.MatchConfig); err != nil {
-		return nil, fmt.Errorf("model returned invalid match_config: %w", err)
+	parsed.DetectionCel = strings.TrimSpace(parsed.DetectionCel)
+	if parsed.DetectionCel == "" {
+		return nil, fmt.Errorf("model returned empty detection_cel")
 	}
-	matchConfig := customRuleMatchConfigFromStorage(parsed.MatchConfig)
-	if matchConfig == nil {
-		return nil, fmt.Errorf("model returned empty match_config")
+	if err := validateCEL(parsed.DetectionCel); err != nil {
+		return nil, fmt.Errorf("model returned invalid detection_cel: %w", err)
 	}
 	if !customRuleSeverityAllow[parsed.Severity] {
 		parsed.Severity = "medium"
@@ -2064,12 +2065,11 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	}
 
 	return &gen.SuggestCustomDetectionRuleResult{
-		RuleID:      parsed.RuleID,
-		Title:       parsed.Title,
-		Description: parsed.Description,
-		Regex:       "",
-		MatchConfig: matchConfig,
-		Severity:    parsed.Severity,
+		RuleID:       parsed.RuleID,
+		Title:        parsed.Title,
+		Description:  parsed.Description,
+		DetectionCel: conv.PtrEmpty(parsed.DetectionCel),
+		Severity:     parsed.Severity,
 	}, nil
 }
 
@@ -2106,7 +2106,7 @@ func (s *Service) TestDetectionRule(ctx context.Context, payload *gen.TestDetect
 	case ruleID == "prompt_injection.default" || strings.HasPrefix(ruleID, "prompt_injection."):
 		return s.testPromptInjectionRule(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), text)
 	case strings.HasPrefix(ruleID, "custom."):
-		return s.testCustomRule(ruleID, conv.PtrValOr(payload.Regex, ""), payload.MatchConfig, text)
+		return s.testCustomRule(ruleID, conv.PtrValOr(payload.DetectionCel, ""), text)
 	default:
 		return &gen.TestDetectionRuleResult{
 			Matches:   nil,
@@ -2196,44 +2196,40 @@ func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID,
 	}, nil
 }
 
-func (s *Service) testCustomRule(ruleID, pattern string, cfg *types.RiskMatchConfig, text string) (*gen.TestDetectionRuleResult, error) {
-	pattern = strings.TrimSpace(pattern)
-	if pattern == "" && cfg == nil {
+func (s *Service) testCustomRule(ruleID, detectionCel, text string) (*gen.TestDetectionRuleResult, error) {
+	detectionCel = strings.TrimSpace(detectionCel)
+	if detectionCel == "" {
 		return &gen.TestDetectionRuleResult{
 			Matches:   nil,
 			Supported: false,
-			Reason:    new("Custom rules require a regex or match_config. Custom rules are stored client-side, so pass one in the request body."),
-		}, nil
-	}
-	// The playground only has pasted text, so it can simulate content- and
-	// user-prompt-targeted conditions but not tool calls or other message parts.
-	if cfg != nil && !customRuleTestableFromText(cfg) {
-		return &gen.TestDetectionRuleResult{
-			Matches:   nil,
-			Supported: false,
-			Reason:    new("This rule matches tool calls or other message parts the text playground can't simulate. Save it and run analysis to see matches."),
+			Reason:    new("Custom rules require a detection_cel expression. Custom rules are stored client-side, so pass one in the request body."),
 		}, nil
 	}
 
-	raw, err := customRuleMatchConfigToStorage(cfg)
+	eng, err := ra.CELEngine()
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid match_config")
+		return nil, oops.E(oops.CodeUnexpected, err, "build cel engine")
 	}
-	// The playground reports whether the conditions match the sample text, so
-	// evaluate it as a plain detection (deny) rule regardless of how a policy
-	// would configure its action.
-	compiled, err := ra.CompileCustomDetectionRules([]ra.CustomDetectionRule{{
-		RuleID:      ruleID,
-		Title:       "",
-		Description: "Custom rule match",
-		MatchConfig: ra.EffectiveMatchConfig(raw, pattern),
-		Action:      ra.ActionDeny,
+	// The playground only has pasted text, so it evaluates against a user
+	// message (content/prompt populated, no tool calls). Tool-targeted rules
+	// simply won't match here; save them and run analysis to see matches.
+	compiled, err := ra.CompileCELRules(eng, []ra.CustomDetectionRule{{
+		RuleID:       ruleID,
+		Title:        "",
+		Description:  "Custom rule match",
+		DetectionCel: detectionCel,
+		Regex:        "",
+		MatchConfig:  nil,
+		Action:       ra.ActionDeny,
 	}})
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid custom rule")
+		return nil, oops.E(oops.CodeInvalid, err, "invalid detection_cel")
 	}
 
-	findings := ra.ScanCustomDetectionRules(ra.MessageView{Content: text, Type: message.User, Tools: nil}, compiled).Findings
+	findings, err := ra.ScanCELRules(eng, ra.MessageView{Content: text, Type: message.User, Tools: nil}, compiled)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "evaluate detection rule")
+	}
 	matches := make([]*gen.TestDetectionRuleMatch, 0, len(findings))
 	for _, f := range findings {
 		matches = append(matches, findingToMatch(f))
@@ -2243,23 +2239,6 @@ func (s *Service) testCustomRule(ruleID, pattern string, cfg *types.RiskMatchCon
 		Supported: true,
 		Reason:    nil,
 	}, nil
-}
-
-// customRuleTestableFromText reports whether every condition targets a part of
-// the message the text playground can stand in for (content or the user
-// prompt). Tool-call and other message-part targets cannot be simulated.
-func customRuleTestableFromText(cfg *types.RiskMatchConfig) bool {
-	for _, c := range cfg.Conditions {
-		if c == nil {
-			continue
-		}
-		switch ra.Target(c.Target) {
-		case ra.TargetContent, ra.TargetUserPrompt:
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 func findingToMatch(f ra.Finding) *gen.TestDetectionRuleMatch {
@@ -2308,9 +2287,9 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		PromptInjectionRules:  row.PromptInjectionRules,
 		DisabledRules:         row.DisabledRules,
 		CustomRuleIds:         row.CustomRuleIds,
-		ExemptRuleIds:         row.ExemptRuleIds,
 		MessageTypes:          row.MessageTypes,
-		ApplicationConfig:     applicationConfigFromStorage(row.ApplicationConfig),
+		ScopeIncludeCel:       conv.FromPGText[string](row.ScopeIncludeCel),
+		ScopeExemptCel:        conv.FromPGText[string](row.ScopeExemptCel),
 		Enabled:               row.Enabled,
 		Action:                row.Action,
 		AudienceType:          row.AudienceType,
@@ -2341,9 +2320,9 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		PromptInjectionRules:  row.PromptInjectionRules,
 		DisabledRules:         row.DisabledRules,
 		CustomRuleIds:         row.CustomRuleIds,
-		ExemptRuleIds:         row.ExemptRuleIds,
 		MessageTypes:          row.MessageTypes,
-		ApplicationConfig:     applicationConfigFromStorage(row.ApplicationConfig),
+		ScopeIncludeCel:       conv.FromPGText[string](row.ScopeIncludeCel),
+		ScopeExemptCel:        conv.FromPGText[string](row.ScopeExemptCel),
 		Enabled:               row.Enabled,
 		Action:                row.Action,
 		AudienceType:          row.AudienceType,
@@ -2362,166 +2341,16 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 
 func customDetectionRuleToType(row repo.RiskCustomDetectionRule) *types.RiskCustomDetectionRule {
 	return &types.RiskCustomDetectionRule{
-		ID:          row.ID.String(),
-		RuleID:      row.RuleID,
-		Title:       row.Title,
-		Description: row.Description,
-		Regex:       conv.PtrValOr(conv.FromPGText[string](row.Regex), ""),
-		MatchConfig: customRuleMatchConfigFromStorage(row.MatchConfig),
-		Severity:    row.Severity,
-		CreatedAt:   row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:   row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:           row.ID.String(),
+		RuleID:       row.RuleID,
+		Title:        row.Title,
+		Description:  row.Description,
+		Regex:        conv.PtrValOr(conv.FromPGText[string](row.Regex), ""),
+		DetectionCel: conv.FromPGText[string](row.DetectionCel),
+		Severity:     row.Severity,
+		CreatedAt:    row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:    row.UpdatedAt.Time.Format(time.RFC3339),
 	}
-}
-
-// customRuleMatchConfigToStorage converts the API match_config into the JSONB
-// representation the rule engine evaluates. Returns nil for a nil config so the
-// column stays NULL (the rule falls back to its regex). The engine and API
-// share the same JSON shape but distinct Go types, so we map explicitly rather
-// than re-marshal the Goa type (whose fields lack snake_case json tags).
-// matchConfigToEngine converts an API match_config into the engine struct,
-// returning nil for nil/empty (no conditions).
-func matchConfigToEngine(in *types.RiskMatchConfig) *ra.MatchConfig {
-	if in == nil {
-		return nil
-	}
-	cfg := ra.MatchConfig{
-		Combine:    ra.MatchCombine(conv.PtrValOr(in.Combine, "")),
-		Conditions: make([]ra.Condition, 0, len(in.Conditions)),
-	}
-	for _, c := range in.Conditions {
-		if c == nil {
-			continue
-		}
-		cfg.Conditions = append(cfg.Conditions, ra.Condition{
-			Target:          ra.Target(c.Target),
-			Op:              ra.Op(c.Op),
-			Value:           conv.PtrValOr(c.Value, ""),
-			Values:          c.Values,
-			Path:            conv.PtrValOr(c.Path, ""),
-			CaseInsensitive: conv.PtrValOr(c.CaseInsensitive, false),
-		})
-	}
-	if len(cfg.Conditions) == 0 {
-		return nil
-	}
-	return &cfg
-}
-
-// matchConfigFromEngine maps an engine match_config back into the API type,
-// returning nil for nil/empty.
-func matchConfigFromEngine(cfg *ra.MatchConfig) *types.RiskMatchConfig {
-	if cfg == nil || len(cfg.Conditions) == 0 {
-		return nil
-	}
-	out := &types.RiskMatchConfig{
-		Combine:    conv.PtrEmpty(string(cfg.Combine)),
-		Conditions: make([]*types.RiskMatchCondition, 0, len(cfg.Conditions)),
-	}
-	for _, c := range cfg.Conditions {
-		out.Conditions = append(out.Conditions, &types.RiskMatchCondition{
-			Target:          string(c.Target),
-			Op:              string(c.Op),
-			Value:           conv.PtrEmpty(c.Value),
-			Values:          c.Values,
-			Path:            conv.PtrEmpty(c.Path),
-			CaseInsensitive: conv.PtrEmpty(c.CaseInsensitive),
-		})
-	}
-	return out
-}
-
-func customRuleMatchConfigToStorage(in *types.RiskMatchConfig) ([]byte, error) {
-	cfg := matchConfigToEngine(in)
-	if cfg == nil {
-		return nil, nil
-	}
-	raw, err := json.Marshal(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("marshal match_config: %w", err)
-	}
-	return raw, nil
-}
-
-// customRuleMatchConfigFromStorage maps stored match_config JSONB back into the
-// API type. Returns nil for an empty/NULL column. The bytes were validated on
-// write, so a decode error is treated as "no config".
-func customRuleMatchConfigFromStorage(raw []byte) *types.RiskMatchConfig {
-	if len(raw) == 0 {
-		return nil
-	}
-	var cfg ra.MatchConfig
-	if err := json.Unmarshal(raw, &cfg); err != nil {
-		return nil
-	}
-	return matchConfigFromEngine(&cfg)
-}
-
-// applicationConfigToStorage marshals an API application_config into the
-// risk_policies.application_config JSONB { includes, exempts }. Returns nil when
-// no predicate is set.
-func applicationConfigToStorage(in *types.RiskPolicyApplication) ([]byte, error) {
-	if in == nil {
-		return nil, nil
-	}
-	app := ra.PolicyApplication{
-		Includes: matchConfigsToEngine(in.Includes),
-		Exempts:  matchConfigsToEngine(in.Exempts),
-	}
-	if len(app.Includes) == 0 && len(app.Exempts) == 0 {
-		return nil, nil
-	}
-	raw, err := json.Marshal(app)
-	if err != nil {
-		return nil, fmt.Errorf("marshal application_config: %w", err)
-	}
-	return raw, nil
-}
-
-// applicationConfigFromStorage maps stored application_config JSONB back into the
-// API type. Returns nil for empty/NULL or undecodable bytes (validated on write).
-func applicationConfigFromStorage(raw []byte) *types.RiskPolicyApplication {
-	if len(raw) == 0 {
-		return nil
-	}
-	var app ra.PolicyApplication
-	if err := json.Unmarshal(raw, &app); err != nil {
-		return nil
-	}
-	includes := matchConfigsFromEngine(app.Includes)
-	exempts := matchConfigsFromEngine(app.Exempts)
-	if len(includes) == 0 && len(exempts) == 0 {
-		return nil
-	}
-	return &types.RiskPolicyApplication{Includes: includes, Exempts: exempts}
-}
-
-// matchConfigsToEngine maps a list of API match_configs to engine structs,
-// dropping empty entries; returns nil for an all-empty list.
-func matchConfigsToEngine(in []*types.RiskMatchConfig) []*ra.MatchConfig {
-	out := make([]*ra.MatchConfig, 0, len(in))
-	for _, c := range in {
-		if cfg := matchConfigToEngine(c); cfg != nil {
-			out = append(out, cfg)
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func matchConfigsFromEngine(in []*ra.MatchConfig) []*types.RiskMatchConfig {
-	out := make([]*types.RiskMatchConfig, 0, len(in))
-	for _, c := range in {
-		if cfg := matchConfigFromEngine(c); cfg != nil {
-			out = append(out, cfg)
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }
 
 func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID string, sources, presidioEntities []string, action string, existingNames []string) string {
@@ -2753,8 +2582,7 @@ func payloadHasPromptPolicyDetectionConfig(payload *gen.UpdateRiskPolicyPayload)
 		len(payload.PresidioEntities) > 0 ||
 		len(payload.PromptInjectionRules) > 0 ||
 		len(payload.DisabledRules) > 0 ||
-		len(payload.CustomRuleIds) > 0 ||
-		len(payload.ExemptRuleIds) > 0
+		len(payload.CustomRuleIds) > 0
 }
 
 func payloadHasCreatePromptPolicyDetectionConfig(payload *gen.CreateRiskPolicyPayload) bool {
@@ -2762,8 +2590,7 @@ func payloadHasCreatePromptPolicyDetectionConfig(payload *gen.CreateRiskPolicyPa
 		len(payload.PresidioEntities) > 0 ||
 		len(payload.PromptInjectionRules) > 0 ||
 		len(payload.DisabledRules) > 0 ||
-		len(payload.CustomRuleIds) > 0 ||
-		len(payload.ExemptRuleIds) > 0
+		len(payload.CustomRuleIds) > 0
 }
 
 func createPolicyDetectionField(policyType string, values []string) []string {

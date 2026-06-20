@@ -122,17 +122,22 @@ func (m MatchConfig) combineOrDefault() MatchCombine {
 }
 
 // CustomDetectionRule is a policy-selected custom rule as loaded from the
-// database. MatchConfig is the raw match_config JSONB. Action is the rule's
-// polarity within the owning policy (deny by default); the caller resolves it
-// from the policy's rules map before compiling. Callers translate a legacy
-// regex-column rule into match_config via EffectiveMatchConfig before
-// compiling, so the engine is purely condition-driven.
+// database. DetectionCel is the rule's CEL detection predicate; when empty the
+// rule falls back to its legacy Regex column (evaluated as content.match(regex)).
+// Action is the rule's polarity within the owning policy (deny by default); the
+// caller resolves it from the policy's rules map before compiling.
+//
+// MatchConfig is retained only for the legacy structured engine (now dead on the
+// live path; scheduled for removal with the rest of rule_engine.go's structured
+// matcher). New evaluation goes through CompileCELRules.
 type CustomDetectionRule struct {
-	RuleID      string
-	Title       string
-	Description string
-	MatchConfig []byte
-	Action      Action
+	RuleID       string
+	Title        string
+	Description  string
+	DetectionCel string
+	Regex        string
+	MatchConfig  []byte
+	Action       Action
 }
 
 // CompiledCustomDetectionRule is a rule with its conditions compiled (regexes,

@@ -4,18 +4,12 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import {
-  RiskMatchConfig,
-  RiskMatchConfig$Outbound,
-  RiskMatchConfig$outboundSchema,
-} from "./riskmatchconfig.js";
 
 export type TestDetectionRuleRequestBody = {
-  matchConfig?: RiskMatchConfig | undefined;
   /**
-   * Legacy regex pattern for `custom.*` rule ids; ignored for built-in rules and when match_config is set.
+   * CEL detection predicate for `custom.*` rule ids, evaluated against the sample message.
    */
-  regex?: string | undefined;
+  detectionCel?: string | undefined;
   /**
    * Rule identifier to evaluate (e.g. `secret.aws_access_token`, `pii.email_address`, `custom.acme_token`).
    */
@@ -28,8 +22,7 @@ export type TestDetectionRuleRequestBody = {
 
 /** @internal */
 export type TestDetectionRuleRequestBody$Outbound = {
-  match_config?: RiskMatchConfig$Outbound | undefined;
-  regex?: string | undefined;
+  detection_cel?: string | undefined;
   rule_id: string;
   text: string;
 };
@@ -40,14 +33,13 @@ export const TestDetectionRuleRequestBody$outboundSchema: z.ZodMiniType<
   TestDetectionRuleRequestBody
 > = z.pipe(
   z.object({
-    matchConfig: z.optional(RiskMatchConfig$outboundSchema),
-    regex: z.optional(z.string()),
+    detectionCel: z.optional(z.string()),
     ruleId: z.string(),
     text: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      matchConfig: "match_config",
+      detectionCel: "detection_cel",
       ruleId: "rule_id",
     });
   }),

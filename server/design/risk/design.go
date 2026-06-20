@@ -31,9 +31,9 @@ var _ = Service("risk", func() {
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
-			Attribute("exempt_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
-			Attribute("application_config", shared.RiskPolicyApplication, "Granular policy application: includes (a message is evaluated when it matches ANY include; supersedes message_types) and exempts (a message is skipped when it matches ANY exempt). Omit to rely only on message_types + exempt_rule_ids.")
+			Attribute("scope_include_cel", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.")
+			Attribute("scope_exempt_cel", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -136,9 +136,9 @@ var _ = Service("risk", func() {
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
-			Attribute("exempt_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
-			Attribute("application_config", shared.RiskPolicyApplication, "Granular policy application: includes (a message is evaluated when it matches ANY include; supersedes message_types) and exempts (a message is skipped when it matches ANY exempt). Omit to preserve the current value.")
+			Attribute("scope_include_cel", String, "CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.")
+			Attribute("scope_exempt_cel", String, "CEL exemption predicate. Omit to preserve the current value; send empty to clear.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -687,8 +687,7 @@ var _ = Service("risk", func() {
 			Attribute("rule_id", String, "Stable rule identifier, prefixed with `custom.`.")
 			Attribute("title", String, "Human-readable title for the rule.")
 			Attribute("description", String, "Description of what the rule detects.")
-			Attribute("regex", String, "Legacy RE2-compatible regex pattern. Prefer match_config for new rules.")
-			Attribute("match_config", shared.RiskMatchConfig, "Sparse condition-based matcher. When set, supersedes regex.")
+			Attribute("detection_cel", String, "CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.")
 			Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
 				Enum("info", "low", "medium", "high", "critical")
 				Default("medium")
@@ -779,8 +778,7 @@ var _ = Service("risk", func() {
 			})
 			Attribute("title", String, "Human-readable title for the rule.")
 			Attribute("description", String, "Description of what the rule detects.")
-			Attribute("regex", String, "Legacy RE2-compatible regex pattern. Prefer match_config for new rules.")
-			Attribute("match_config", shared.RiskMatchConfig, "Sparse condition-based matcher. When set, supersedes regex.")
+			Attribute("detection_cel", String, "CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.")
 			Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
 				Enum("info", "low", "medium", "high", "critical")
 			})
@@ -1021,8 +1019,7 @@ var _ = Service("risk", func() {
 				MinLength(1)
 				MaxLength(50000)
 			})
-			Attribute("regex", String, "Legacy regex pattern for `custom.*` rule ids; ignored for built-in rules and when match_config is set.")
-			Attribute("match_config", shared.RiskMatchConfig, "Condition-based matcher for `custom.*` rule ids. Content-targeted conditions are evaluated against the sample text; tool-targeted rules cannot be simulated from text.")
+			Attribute("detection_cel", String, "CEL detection predicate for `custom.*` rule ids, evaluated against the sample message.")
 			Required("rule_id", "text")
 		})
 
@@ -1047,12 +1044,11 @@ var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", 
 	Attribute("rule_id", String, "Suggested stable identifier, prefixed with `custom.`.")
 	Attribute("title", String, "Short, human-friendly title for the rule.")
 	Attribute("description", String, "Description of what the rule detects and why it matters.")
-	Attribute("regex", String, "Legacy RE2-compatible regex pattern. Empty when match_config is returned; kept for back-compat.")
-	Attribute("match_config", shared.RiskMatchConfig, "Suggested condition-based matcher (targets, ops, conditions). Preferred over regex when present.")
+	Attribute("detection_cel", String, "Suggested CEL detection predicate.")
 	Attribute("severity", String, "Suggested severity level.", func() {
 		Enum("info", "low", "medium", "high", "critical")
 	})
-	Required("rule_id", "title", "description", "regex", "severity")
+	Required("rule_id", "title", "description", "severity")
 })
 
 var TestDetectionRuleMatch = Type("TestDetectionRuleMatch", func() {

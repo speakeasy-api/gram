@@ -31,19 +31,20 @@ type RiskPolicy struct {
 	// dropped at scan time.
 	DisabledRules []string
 	// Custom detection rule ids attached as detectors: a match produces a finding.
+	// Custom rules are pure detectors; exemptions are expressed via
+	// scope_exempt_cel.
 	CustomRuleIds []string
-	// Custom detection rule ids attached as exemptions: when one matches a
-	// message, the whole policy is skipped for that message (an allowlist).
-	// Disjoint from custom_rule_ids.
-	ExemptRuleIds []string
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string
-	// Granular policy application: include (which messages the policy evaluates,
-	// in addition to message_types) and exempt (messages skipped entirely). Null
-	// when the policy relies only on message_types + exempt_rule_ids.
-	ApplicationConfig *RiskPolicyApplication
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeIncludeCel *string
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExemptCel *string
 	// Whether the policy is active.
 	Enabled bool
 	// Policy action: flag (log only) or block (deny in real-time).

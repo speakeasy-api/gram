@@ -9,10 +9,6 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  RiskPolicyApplication,
-  RiskPolicyApplication$inboundSchema,
-} from "./riskpolicyapplication.js";
-import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$inboundSchema,
 } from "./riskpolicymodelconfig.js";
@@ -58,7 +54,6 @@ export type RiskPolicy = {
    * Policy action: flag (log only) or block (deny in real-time).
    */
   action: RiskPolicyAction;
-  applicationConfig?: RiskPolicyApplication | undefined;
   /**
    * Principal URNs the policy applies to. Contains user:all when audience_type is everyone.
    */
@@ -76,7 +71,7 @@ export type RiskPolicy = {
    */
   createdAt: Date;
   /**
-   * Custom detection rule ids attached as detectors: a match produces a finding.
+   * Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors; exemptions are expressed via scope_exempt_cel.
    */
   customRuleIds?: Array<string> | undefined;
   /**
@@ -87,10 +82,6 @@ export type RiskPolicy = {
    * Whether the policy is active.
    */
   enabled: boolean;
-  /**
-   * Custom detection rule ids attached as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.
-   */
-  exemptRuleIds?: Array<string> | undefined;
   /**
    * The risk policy ID.
    */
@@ -128,6 +119,14 @@ export type RiskPolicy = {
    * Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.
    */
   promptInjectionRules?: Array<string> | undefined;
+  /**
+   * CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.
+   */
+  scopeExemptCel?: string | undefined;
+  /**
+   * CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.
+   */
+  scopeIncludeCel?: string | undefined;
   /**
    * Detection sources enabled for this policy.
    */
@@ -170,7 +169,6 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
   .pipe(
     z.object({
       action: z._default(RiskPolicyAction$inboundSchema, "flag"),
-      application_config: z.optional(RiskPolicyApplication$inboundSchema),
       audience_principal_urns: z.array(z.string()),
       audience_type: z._default(
         RiskPolicyAudienceType$inboundSchema,
@@ -184,7 +182,6 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       custom_rule_ids: z.optional(z.array(z.string())),
       disabled_rules: z.optional(z.array(z.string())),
       enabled: z.boolean(),
-      exempt_rule_ids: z.optional(z.array(z.string())),
       id: z.string(),
       message_types: z.optional(z.array(z.string())),
       model_config: z.optional(RiskPolicyModelConfig$inboundSchema),
@@ -195,6 +192,8 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       project_id: z.string(),
       prompt: z.optional(z.string()),
       prompt_injection_rules: z.optional(z.array(z.string())),
+      scope_exempt_cel: z.optional(z.string()),
+      scope_include_cel: z.optional(z.string()),
       sources: z.array(z.string()),
       total_messages: z.int(),
       updated_at: z.pipe(
@@ -206,14 +205,12 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
-        "application_config": "applicationConfig",
         "audience_principal_urns": "audiencePrincipalUrns",
         "audience_type": "audienceType",
         "auto_name": "autoName",
         "created_at": "createdAt",
         "custom_rule_ids": "customRuleIds",
         "disabled_rules": "disabledRules",
-        "exempt_rule_ids": "exemptRuleIds",
         "message_types": "messageTypes",
         "model_config": "modelConfig",
         "pending_messages": "pendingMessages",
@@ -221,6 +218,8 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "presidio_entities": "presidioEntities",
         "project_id": "projectId",
         "prompt_injection_rules": "promptInjectionRules",
+        "scope_exempt_cel": "scopeExemptCel",
+        "scope_include_cel": "scopeIncludeCel",
         "total_messages": "totalMessages",
         "updated_at": "updatedAt",
         "user_message": "userMessage",

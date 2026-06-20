@@ -1,101 +1,49 @@
 package risk_analysis
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/message"
-	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 )
 
-func mustJSON(t *testing.T, cfg MatchConfig) []byte {
+func celRules(t *testing.T, rules ...CustomDetectionRule) []CompiledCELRule {
 	t.Helper()
-	raw, err := json.Marshal(cfg)
+	eng, err := CELEngine()
 	require.NoError(t, err)
-	return raw
+	compiled, err := CompileCELRules(eng, rules)
+	require.NoError(t, err)
+	return compiled
 }
 
-// --- serializer ---------------------------------------------------------------
-
-func TestMatchConfigToCEL_TextRegex(t *testing.T) {
-	t.Parallel()
-	expr, err := MatchConfigToCEL(MatchConfig{
-		Combine:    CombineAnd,
-		Conditions: []Condition{{Target: TargetContent, Op: OpRegex, Value: "secret"}},
-	})
-	require.NoError(t, err)
-	require.Equal(t, `content.match("secret")`, expr)
-}
-
-func TestMatchConfigToCEL_ToolConditionsAreCorrelated(t *testing.T) {
-	t.Parallel()
-	// two tool conditions => one tools.exists so they bind to the SAME call.
-	expr, err := MatchConfigToCEL(MatchConfig{
-		Combine: CombineAnd,
-		Conditions: []Condition{
-			{Target: TargetToolFunction, Op: OpRegex, Value: "bash"},
-			{Target: TargetToolArgs, Op: OpRegex, Value: "DROP TABLE", Path: "command"},
-		},
-	})
-	require.NoError(t, err)
-	require.Equal(t, `tools.exists(t, t.function.match("bash") && t.args.get("command").match("DROP TABLE"))`, expr)
-}
-
-func TestMatchConfigToCEL_MixedTargets(t *testing.T) {
-	t.Parallel()
-	expr, err := MatchConfigToCEL(MatchConfig{
-		Combine: CombineOr,
-		Conditions: []Condition{
-			{Target: TargetContent, Op: OpContains, Values: []string{"a", "b"}},
-			{Target: TargetToolServer, Op: OpEquals, Value: ""},
-		},
-	})
-	require.NoError(t, err)
-	require.Equal(t, `(content.includes("a") || content.includes("b")) || tools.exists(t, t.server.eq(""))`, expr)
-}
-
-// --- end-to-end: structured rule -> CEL -> Findings against a real view -------
-
-func newCELEngine(t *testing.T) *celenv.Engine {
+func scanCEL(t *testing.T, view MessageView, rules []CompiledCELRule) []Finding {
 	t.Helper()
-	eng, err := celenv.New()
+	eng, err := CELEngine()
 	require.NoError(t, err)
-	return eng
-}
-
-func TestScanCELRules_CorrelatedToolRule(t *testing.T) {
-	t.Parallel()
-	eng := newCELEngine(t)
-
-	rules, err := CompileCELRules(eng, []CustomDetectionRule{{
-		RuleID:      "custom.bash_drop",
-		Title:       "bash drop table",
-		Description: "destructive SQL via a bash tool",
-		MatchConfig: mustJSON(t, MatchConfig{
-			Combine: CombineAnd,
-			Conditions: []Condition{
-				{Target: TargetToolFunction, Op: OpRegex, Value: "bash"},
-				{Target: TargetToolArgs, Op: OpRegex, Value: "DROP TABLE", Path: "command"},
-			},
-		}),
-		Action: ActionDeny,
-	}})
-	require.NoError(t, err)
-	require.Len(t, rules, 1)
-
-	// view built like customRuleMessageView would for a tool_request.
-	view := MessageView{
-		Type: message.ToolRequest,
-		Tools: []ToolView{
-			NewToolView("shell:run_bash_command", `{"command":"DROP TABLE users"}`),
-		},
-	}
-
 	findings, err := ScanCELRules(eng, view, rules)
 	require.NoError(t, err)
-	require.Len(t, findings, 2) // one span per matched condition
+	return findings
+}
+
+// Correlated tool rule: both conditions bind to the same call; one finding per
+// matched span.
+func TestScanCELRules_CorrelatedToolRule(t *testing.T) {
+	t.Parallel()
+	rules := celRules(t, CustomDetectionRule{
+		RuleID:       "custom.bash_drop",
+		Title:        "bash drop table",
+		Description:  "destructive SQL via a bash tool",
+		DetectionCel: `tools.exists(t, t.function.match("bash") && t.args.get("command").match("DROP TABLE"))`,
+	})
+
+	view := MessageView{
+		Type:  message.ToolRequest,
+		Tools: []ToolView{NewToolView("shell:run_bash_command", `{"command":"DROP TABLE users"}`)},
+	}
+
+	findings := scanCEL(t, view, rules)
+	require.Len(t, findings, 2)
 
 	byMatch := map[string]Finding{}
 	for _, f := range findings {
@@ -108,24 +56,14 @@ func TestScanCELRules_CorrelatedToolRule(t *testing.T) {
 	require.Contains(t, byMatch, "DROP TABLE")
 }
 
+// Correlation does not cross tools.
 func TestScanCELRules_CorrelationDoesNotCrossTools(t *testing.T) {
 	t.Parallel()
-	eng := newCELEngine(t)
+	rules := celRules(t, CustomDetectionRule{
+		RuleID:       "custom.bash_drop",
+		DetectionCel: `tools.exists(t, t.function.match("bash") && t.args.get("command").match("DROP TABLE"))`,
+	})
 
-	rules, err := CompileCELRules(eng, []CustomDetectionRule{{
-		RuleID: "custom.bash_drop",
-		MatchConfig: mustJSON(t, MatchConfig{
-			Combine: CombineAnd,
-			Conditions: []Condition{
-				{Target: TargetToolFunction, Op: OpRegex, Value: "bash"},
-				{Target: TargetToolArgs, Op: OpRegex, Value: "DROP TABLE", Path: "command"},
-			},
-		}),
-		Action: ActionDeny,
-	}})
-	require.NoError(t, err)
-
-	// bash tool is harmless; the DROP is in a different (non-bash) tool.
 	view := MessageView{
 		Type: message.ToolRequest,
 		Tools: []ToolView{
@@ -134,29 +72,32 @@ func TestScanCELRules_CorrelationDoesNotCrossTools(t *testing.T) {
 		},
 	}
 
-	findings, err := ScanCELRules(eng, view, rules)
-	require.NoError(t, err)
-	require.Empty(t, findings)
+	require.Empty(t, scanCEL(t, view, rules))
 }
 
+// A content rule yields one finding per occurrence.
 func TestScanCELRules_ContentRule(t *testing.T) {
 	t.Parallel()
-	eng := newCELEngine(t)
+	rules := celRules(t, CustomDetectionRule{
+		RuleID:       "custom.secret",
+		DetectionCel: `content.match("secret")`,
+	})
 
-	rules, err := CompileCELRules(eng, []CustomDetectionRule{{
-		RuleID: "custom.secret",
-		MatchConfig: mustJSON(t, MatchConfig{
-			Combine:    CombineAnd,
-			Conditions: []Condition{{Target: TargetContent, Op: OpRegex, Value: "secret"}},
-		}),
-		Action: ActionDeny,
-	}})
-	require.NoError(t, err)
-
-	view := MessageView{Type: message.User, Content: "the secret is a secret"}
-	findings, err := ScanCELRules(eng, view, rules)
-	require.NoError(t, err)
+	findings := scanCEL(t, MessageView{Type: message.User, Content: "the secret is a secret"}, rules)
 	require.Len(t, findings, 2)
 	require.Equal(t, 4, findings[0].StartPos)
 	require.Equal(t, 16, findings[1].StartPos)
+}
+
+// Legacy regex rules (no detection_cel) evaluate as content.match(regex).
+func TestScanCELRules_LegacyRegexFallback(t *testing.T) {
+	t.Parallel()
+	rules := celRules(t, CustomDetectionRule{
+		RuleID: "custom.legacy",
+		Regex:  "AKIA[0-9A-Z]{16}",
+	})
+
+	findings := scanCEL(t, MessageView{Type: message.User, Content: "key AKIA1234567890ABCDEF here"}, rules)
+	require.Len(t, findings, 1)
+	require.Equal(t, "AKIA1234567890ABCDEF", findings[0].Match)
 }

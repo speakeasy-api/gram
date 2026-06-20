@@ -73,10 +73,10 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to scan for. When empty, scans all entities.")
 	Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.")
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
-	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding.")
-	Attribute("exempt_rule_ids", ArrayOf(String), "Custom detection rule ids attached as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.")
+	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors; exemptions are expressed via scope_exempt_cel.")
 	Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.")
-	Attribute("application_config", RiskPolicyApplication, "Granular policy application: include (which messages the policy evaluates, in addition to message_types) and exempt (messages skipped entirely). Null when the policy relies only on message_types + exempt_rule_ids.")
+	Attribute("scope_include_cel", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.")
+	Attribute("scope_exempt_cel", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
 	Attribute("action", String, "Policy action: flag (log only) or block (deny in real-time).", func() {
 		RiskPolicyActionEnum()
@@ -104,59 +104,6 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "audience_type", "audience_principal_urns", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
 })
 
-// RiskMatchConditionTargetEnum constrains the message field a condition reads.
-// The target also implicitly scopes the condition to a message type (e.g.
-// tool_server only matches tool-request messages). Kept here so payloads and
-// the result type stay in sync.
-func RiskMatchConditionTargetEnum() {
-	Enum("content", "user_prompt", "assistant_text", "tool_result", "tool_name", "tool_server", "tool_function", "tool_args")
-}
-
-// RiskMatchConditionOpEnum constrains the comparison a condition applies.
-func RiskMatchConditionOpEnum() {
-	Enum("regex", "equals", "not_equals", "glob", "keyword", "exists", "contains", "not_contains", "starts_with", "ends_with", "in")
-}
-
-var RiskMatchCondition = Type("RiskMatchCondition", func() {
-	Meta("struct:pkg:path", "types")
-
-	Attribute("target", String, "Message field the condition reads. The target also scopes the condition to a message type.", func() {
-		RiskMatchConditionTargetEnum()
-	})
-	Attribute("op", String, "Comparison applied to the resolved target value.", func() {
-		RiskMatchConditionOpEnum()
-	})
-	Attribute("value", String, "Operand for regex/equals/not_equals/glob. Empty is meaningful for equals (e.g. `tool_server == \"\"` matches native tools).")
-	Attribute("values", ArrayOf(String), "Keywords for the keyword op (case-insensitive substring).")
-	Attribute("path", String, "gjson/JSONPath into the tool_args JSON (tool_args target only).")
-	Attribute("case_insensitive", Boolean, "Lowercase both sides for equals/not_equals/keyword.")
-
-	Required("target", "op")
-})
-
-var RiskMatchConfig = Type("RiskMatchConfig", func() {
-	Meta("struct:pkg:path", "types")
-
-	Attribute("combine", String, "How the conditions reduce to a verdict.", func() {
-		Enum("and", "or")
-	})
-	Attribute("conditions", ArrayOf(RiskMatchCondition), "Conditions evaluated against a message; all (and) or any (or) must match.")
-
-	Required("conditions")
-})
-
-// RiskPolicyApplication is a policy's granular application predicate set, stored
-// in risk_policies.application_config. include narrows which messages the policy
-// evaluates (in addition to the coarse message_types filter); exempt takes a
-// matched message out of the policy entirely (an inline allowlist alongside
-// exempt_rule_ids).
-var RiskPolicyApplication = Type("RiskPolicyApplication", func() {
-	Meta("struct:pkg:path", "types")
-
-	Attribute("includes", ArrayOf(RiskMatchConfig), "Include predicates (the fine-grained scope). A message is evaluated when it matches ANY include; the list supersedes message_types. Empty/omitted scopes by message_types instead.")
-	Attribute("exempts", ArrayOf(RiskMatchConfig), "Exempt predicates. A message is skipped for the whole policy when it matches ANY exempt (alongside exempt_rule_ids). Empty/omitted means no inline exemption.")
-})
-
 var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -166,8 +113,8 @@ var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {
 	Attribute("rule_id", String, "Stable rule identifier, prefixed with `custom.`.")
 	Attribute("title", String, "Human-readable title for the rule.")
 	Attribute("description", String, "Description of what the rule detects.")
-	Attribute("regex", String, "Legacy RE2-compatible regex pattern. Superseded by match_config; empty when the rule uses match_config.")
-	Attribute("match_config", RiskMatchConfig, "Sparse condition-based matcher. When set, supersedes regex.")
+	Attribute("regex", String, "Legacy RE2-compatible regex pattern (read-only). Live for existing rules; evaluated as content.match(regex) when detection_cel is empty. New rules author detection_cel instead.")
+	Attribute("detection_cel", String, "CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding. Supersedes regex.")
 	Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
 		Enum("info", "low", "medium", "high", "critical")
 	})

@@ -6,11 +6,6 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 import {
-  RiskPolicyApplication,
-  RiskPolicyApplication$Outbound,
-  RiskPolicyApplication$outboundSchema,
-} from "./riskpolicyapplication.js";
-import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$Outbound,
   RiskPolicyModelConfig$outboundSchema,
@@ -57,7 +52,6 @@ export type CreateRiskPolicyRequestBody = {
    * Policy action: flag or block.
    */
   action?: Action | undefined;
-  applicationConfig?: RiskPolicyApplication | undefined;
   /**
    * Principal URNs this policy applies to. For audience_type=everyone, the server stores user:all.
    */
@@ -82,10 +76,6 @@ export type CreateRiskPolicyRequestBody = {
    * Whether the policy is active.
    */
   enabled?: boolean | undefined;
-  /**
-   * Custom detection rule ids to attach as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.
-   */
-  exemptRuleIds?: Array<string> | undefined;
   /**
    * Message types this policy applies to. When empty or omitted, the policy scans all supported types.
    */
@@ -112,6 +102,14 @@ export type CreateRiskPolicyRequestBody = {
    */
   promptInjectionRules?: Array<string> | undefined;
   /**
+   * CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.
+   */
+  scopeExemptCel?: string | undefined;
+  /**
+   * CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.
+   */
+  scopeIncludeCel?: string | undefined;
+  /**
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
@@ -137,14 +135,12 @@ export const PolicyType$outboundSchema: z.ZodMiniEnum<typeof PolicyType> = z
 /** @internal */
 export type CreateRiskPolicyRequestBody$Outbound = {
   action: string;
-  application_config?: RiskPolicyApplication$Outbound | undefined;
   audience_principal_urns?: Array<string> | undefined;
   audience_type: string;
   auto_name?: boolean | undefined;
   custom_rule_ids?: Array<string> | undefined;
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
-  exempt_rule_ids?: Array<string> | undefined;
   message_types?: Array<string> | undefined;
   model_config?: RiskPolicyModelConfig$Outbound | undefined;
   name?: string | undefined;
@@ -152,6 +148,8 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   presidio_entities?: Array<string> | undefined;
   prompt?: string | undefined;
   prompt_injection_rules?: Array<string> | undefined;
+  scope_exempt_cel?: string | undefined;
+  scope_include_cel?: string | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
 };
@@ -163,14 +161,12 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     action: z._default(Action$outboundSchema, "flag"),
-    applicationConfig: z.optional(RiskPolicyApplication$outboundSchema),
     audiencePrincipalUrns: z.optional(z.array(z.string())),
     audienceType: z._default(AudienceType$outboundSchema, "everyone"),
     autoName: z.optional(z.boolean()),
     customRuleIds: z.optional(z.array(z.string())),
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
-    exemptRuleIds: z.optional(z.array(z.string())),
     messageTypes: z.optional(z.array(z.string())),
     modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     name: z.optional(z.string()),
@@ -178,23 +174,25 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     presidioEntities: z.optional(z.array(z.string())),
     prompt: z.optional(z.string()),
     promptInjectionRules: z.optional(z.array(z.string())),
+    scopeExemptCel: z.optional(z.string()),
+    scopeIncludeCel: z.optional(z.string()),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      applicationConfig: "application_config",
       audiencePrincipalUrns: "audience_principal_urns",
       audienceType: "audience_type",
       autoName: "auto_name",
       customRuleIds: "custom_rule_ids",
       disabledRules: "disabled_rules",
-      exemptRuleIds: "exempt_rule_ids",
       messageTypes: "message_types",
       modelConfig: "model_config",
       policyType: "policy_type",
       presidioEntities: "presidio_entities",
       promptInjectionRules: "prompt_injection_rules",
+      scopeExemptCel: "scope_exempt_cel",
+      scopeIncludeCel: "scope_include_cel",
       userMessage: "user_message",
     });
   }),

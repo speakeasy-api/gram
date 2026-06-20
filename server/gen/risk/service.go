@@ -149,10 +149,9 @@ type CreateCustomDetectionRulePayload struct {
 	Title string
 	// Description of what the rule detects.
 	Description *string
-	// Legacy RE2-compatible regex pattern. Prefer match_config for new rules.
-	Regex *string
-	// Sparse condition-based matcher. When set, supersedes regex.
-	MatchConfig *types.RiskMatchConfig
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionCel *string
 	// Severity level for findings produced by this rule.
 	Severity string
 }
@@ -209,18 +208,16 @@ type CreateRiskPolicyPayload struct {
 	DisabledRules []string
 	// Custom detection rule ids to attach as detectors: a match produces a finding.
 	CustomRuleIds []string
-	// Custom detection rule ids to attach as exemptions: when one matches a
-	// message, the whole policy is skipped for that message (an allowlist).
-	// Disjoint from custom_rule_ids.
-	ExemptRuleIds []string
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
 	MessageTypes []string
-	// Granular policy application: includes (a message is evaluated when it
-	// matches ANY include; supersedes message_types) and exempts (a message is
-	// skipped when it matches ANY exempt). Omit to rely only on message_types +
-	// exempt_rule_ids.
-	ApplicationConfig *types.RiskPolicyApplication
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Omit/empty means all
+	// messages are in scope.
+	ScopeIncludeCel *string
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Omit/empty means no inline exemption.
+	ScopeExemptCel *string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
@@ -727,12 +724,8 @@ type SuggestCustomDetectionRuleResult struct {
 	Title string
 	// Description of what the rule detects and why it matters.
 	Description string
-	// Legacy RE2-compatible regex pattern. Empty when match_config is returned;
-	// kept for back-compat.
-	Regex string
-	// Suggested condition-based matcher (targets, ops, conditions). Preferred over
-	// regex when present.
-	MatchConfig *types.RiskMatchConfig
+	// Suggested CEL detection predicate.
+	DetectionCel *string
 	// Suggested severity level.
 	Severity string
 }
@@ -768,13 +761,9 @@ type TestDetectionRulePayload struct {
 	RuleID string
 	// Sample text to scan.
 	Text string
-	// Legacy regex pattern for `custom.*` rule ids; ignored for built-in rules and
-	// when match_config is set.
-	Regex *string
-	// Condition-based matcher for `custom.*` rule ids. Content-targeted conditions
-	// are evaluated against the sample text; tool-targeted rules cannot be
-	// simulated from text.
-	MatchConfig *types.RiskMatchConfig
+	// CEL detection predicate for `custom.*` rule ids, evaluated against the
+	// sample message.
+	DetectionCel *string
 }
 
 // TestDetectionRuleResult is the result type of the risk service
@@ -815,10 +804,9 @@ type UpdateCustomDetectionRulePayload struct {
 	Title string
 	// Description of what the rule detects.
 	Description *string
-	// Legacy RE2-compatible regex pattern. Prefer match_config for new rules.
-	Regex *string
-	// Sparse condition-based matcher. When set, supersedes regex.
-	MatchConfig *types.RiskMatchConfig
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionCel *string
 	// Severity level for findings produced by this rule.
 	Severity string
 }
@@ -869,17 +857,15 @@ type UpdateRiskPolicyPayload struct {
 	// Custom detection rule ids to attach as detectors: a match produces a
 	// finding. Omit to preserve the current selection.
 	CustomRuleIds []string
-	// Custom detection rule ids to attach as exemptions: when one matches a
-	// message, the whole policy is skipped for that message (an allowlist).
-	// Disjoint from custom_rule_ids.
-	ExemptRuleIds []string
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
 	MessageTypes []string
-	// Granular policy application: includes (a message is evaluated when it
-	// matches ANY include; supersedes message_types) and exempts (a message is
-	// skipped when it matches ANY exempt). Omit to preserve the current value.
-	ApplicationConfig *types.RiskPolicyApplication
+	// CEL scope predicate (in addition to message_types). Omit to preserve the
+	// current value; send empty to clear.
+	ScopeIncludeCel *string
+	// CEL exemption predicate. Omit to preserve the current value; send empty to
+	// clear.
+	ScopeExemptCel *string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.

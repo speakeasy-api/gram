@@ -5,11 +5,6 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
-import {
-  RiskMatchConfig,
-  RiskMatchConfig$Outbound,
-  RiskMatchConfig$outboundSchema,
-} from "./riskmatchconfig.js";
 
 /**
  * Severity level for findings produced by this rule.
@@ -34,14 +29,13 @@ export type UpdateCustomDetectionRuleRequestBody = {
    */
   description?: string | undefined;
   /**
+   * CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.
+   */
+  detectionCel?: string | undefined;
+  /**
    * The custom detection rule ID.
    */
   id: string;
-  matchConfig?: RiskMatchConfig | undefined;
-  /**
-   * Legacy RE2-compatible regex pattern. Prefer match_config for new rules.
-   */
-  regex?: string | undefined;
   /**
    * Severity level for findings produced by this rule.
    */
@@ -61,9 +55,8 @@ export const UpdateCustomDetectionRuleRequestBodySeverity$outboundSchema:
 /** @internal */
 export type UpdateCustomDetectionRuleRequestBody$Outbound = {
   description?: string | undefined;
+  detection_cel?: string | undefined;
   id: string;
-  match_config?: RiskMatchConfig$Outbound | undefined;
-  regex?: string | undefined;
   severity: string;
   title: string;
 };
@@ -75,15 +68,14 @@ export const UpdateCustomDetectionRuleRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     description: z.optional(z.string()),
+    detectionCel: z.optional(z.string()),
     id: z.string(),
-    matchConfig: z.optional(RiskMatchConfig$outboundSchema),
-    regex: z.optional(z.string()),
     severity: UpdateCustomDetectionRuleRequestBodySeverity$outboundSchema,
     title: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      matchConfig: "match_config",
+      detectionCel: "detection_cel",
     });
   }),
 );

@@ -18,11 +18,13 @@ type RiskCustomDetectionRule struct {
 	Title string
 	// Description of what the rule detects.
 	Description string
-	// Legacy RE2-compatible regex pattern. Superseded by match_config; empty when
-	// the rule uses match_config.
+	// Legacy RE2-compatible regex pattern (read-only). Live for existing rules;
+	// evaluated as content.match(regex) when detection_cel is empty. New rules
+	// author detection_cel instead.
 	Regex string
-	// Sparse condition-based matcher. When set, supersedes regex.
-	MatchConfig *RiskMatchConfig
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding. Supersedes regex.
+	DetectionCel *string
 	// Severity level for findings produced by this rule.
 	Severity string
 	// When the custom detection rule was created.

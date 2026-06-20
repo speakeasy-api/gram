@@ -583,7 +583,7 @@ func TestAnalyzeBatch_CustomDetectionRuleFinding(t *testing.T) {
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
-	td = seedCustomRulePolicySelection(t, conn, td, "custom.acme_token", `ACME-[A-Z0-9]{8}`, nil)
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.acme_token", `content.match("ACME-[A-Z0-9]{8}")`)
 
 	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
 		ChatID:    td.chatID,
@@ -617,7 +617,7 @@ func TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex(t *testing.T) {
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
-	td = seedCustomRulePolicySelection(t, conn, td, "custom.future_rule", "", nil)
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.future_rule", "")
 
 	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
 		ChatID:    td.chatID,
@@ -648,8 +648,7 @@ func TestAnalyzeBatch_CustomDetectionRuleMatchConfigToolServer(t *testing.T) {
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
-	cfg := []byte(`{"conditions":[{"target":"tool_server","op":"equals","value":"mise"}]}`)
-	td = seedCustomRulePolicySelection(t, conn, td, "custom.mise_tool", "", cfg)
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.mise_tool", `tools.exists(t, t.server.eq("mise"))`)
 
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "mcp__mise__run_task", map[string]any{"task": "build"})
 
@@ -846,12 +845,12 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 	return result
 }
 
-func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData, ruleID string, regex string, matchConfig []byte) testData {
+func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData, ruleID string, detectionCel string) testData {
 	t.Helper()
 
-	regexValue := pgtype.Text{}
-	if regex != "" {
-		regexValue = pgtype.Text{String: regex, Valid: true}
+	detectionValue := pgtype.Text{}
+	if detectionCel != "" {
+		detectionValue = pgtype.Text{String: detectionCel, Valid: true}
 	}
 	_, err := riskrepo.New(conn).CreateCustomDetectionRule(t.Context(), riskrepo.CreateCustomDetectionRuleParams{
 		ProjectID:      td.projectID,
@@ -859,8 +858,7 @@ func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData
 		RuleID:         ruleID,
 		Title:          "ACME token",
 		Description:    "ACME token",
-		Regex:          regexValue,
-		MatchConfig:    matchConfig,
+		DetectionCel:   detectionValue,
 		Severity:       "high",
 	})
 	require.NoError(t, err)

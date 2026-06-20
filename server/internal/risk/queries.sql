@@ -10,9 +10,9 @@ INSERT INTO risk_policies (
   , prompt_injection_rules
   , disabled_rules
   , custom_rule_ids
-  , exempt_rule_ids
   , message_types
-  , application_config
+  , scope_include_cel
+  , scope_exempt_cel
   , enabled
   , action
   , audience_type
@@ -33,9 +33,9 @@ VALUES (
   , @prompt_injection_rules
   , @disabled_rules
   , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
-  , COALESCE(sqlc.arg(exempt_rule_ids)::text[], '{}'::text[])
   , sqlc.arg(message_types)::text[]
-  , sqlc.narg(application_config)::jsonb
+  , sqlc.narg(scope_include_cel)::text
+  , sqlc.narg(scope_exempt_cel)::text
   , @enabled
   , @action
   , @audience_type
@@ -90,9 +90,9 @@ SET name = @name
   , prompt_injection_rules = @prompt_injection_rules
   , disabled_rules = @disabled_rules
   , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
-  , exempt_rule_ids = COALESCE(sqlc.arg(exempt_rule_ids)::text[], '{}'::text[])
   , message_types = sqlc.arg(message_types)::text[]
-  , application_config = sqlc.narg(application_config)::jsonb
+  , scope_include_cel = sqlc.narg(scope_include_cel)::text
+  , scope_exempt_cel = sqlc.narg(scope_exempt_cel)::text
   , enabled = @enabled
   , action = @action
   , audience_type = @audience_type
@@ -106,9 +106,9 @@ SET name = @name
         OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
         OR disabled_rules IS DISTINCT FROM @disabled_rules
         OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
-        OR exempt_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(exempt_rule_ids)::text[], '{}'::text[])
         OR message_types IS DISTINCT FROM sqlc.arg(message_types)::text[]
-        OR application_config IS DISTINCT FROM sqlc.narg(application_config)::jsonb
+        OR scope_include_cel IS DISTINCT FROM sqlc.narg(scope_include_cel)::text
+        OR scope_exempt_cel IS DISTINCT FROM sqlc.narg(scope_exempt_cel)::text
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
         OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text
@@ -260,8 +260,7 @@ INSERT INTO risk_custom_detection_rules (
   , rule_id
   , title
   , description
-  , regex
-  , match_config
+  , detection_cel
   , severity
 )
 VALUES (
@@ -270,8 +269,7 @@ VALUES (
   , @rule_id
   , @title
   , @description
-  , @regex
-  , @match_config
+  , sqlc.narg(detection_cel)::text
   , @severity
 )
 RETURNING *;
@@ -294,8 +292,7 @@ WHERE id = @id
 UPDATE risk_custom_detection_rules
 SET title = @title
   , description = @description
-  , regex = @regex
-  , match_config = @match_config
+  , detection_cel = sqlc.narg(detection_cel)::text
   , severity = @severity
   , updated_at = clock_timestamp()
 WHERE id = @id

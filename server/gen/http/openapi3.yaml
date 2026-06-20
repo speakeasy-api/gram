@@ -35531,11 +35531,9 @@ components:
                 description:
                     type: string
                     description: Description of what the rule detects.
-                match_config:
-                    $ref: '#/components/schemas/RiskMatchConfig'
-                regex:
+                detection_cel:
                     type: string
-                    description: Legacy RE2-compatible regex pattern. Prefer match_config for new rules.
+                    description: 'CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.'
                 rule_id:
                     type: string
                     description: Stable rule identifier, prefixed with `custom.`.
@@ -36207,8 +36205,6 @@ components:
                     enum:
                         - flag
                         - block
-                application_config:
-                    $ref: '#/components/schemas/RiskPolicyApplication'
                 audience_principal_urns:
                     type: array
                     items:
@@ -36237,11 +36233,6 @@ components:
                 enabled:
                     type: boolean
                     description: Whether the policy is active.
-                exempt_rule_ids:
-                    type: array
-                    items:
-                        type: string
-                    description: 'Custom detection rule ids to attach as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.'
                 message_types:
                     type: array
                     items:
@@ -36272,6 +36263,12 @@ components:
                     items:
                         type: string
                     description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
+                scope_exempt_cel:
+                    type: string
+                    description: 'CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.'
+                scope_include_cel:
+                    type: string
+                    description: 'CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.'
                 sources:
                     type: array
                     items:
@@ -43200,15 +43197,16 @@ components:
                 description:
                     type: string
                     description: Description of what the rule detects.
+                detection_cel:
+                    type: string
+                    description: 'CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding. Supersedes regex.'
                 id:
                     type: string
                     description: The custom detection rule ID.
                     format: uuid
-                match_config:
-                    $ref: '#/components/schemas/RiskMatchConfig'
                 regex:
                     type: string
-                    description: Legacy RE2-compatible regex pattern. Superseded by match_config; empty when the rule uses match_config.
+                    description: Legacy RE2-compatible regex pattern (read-only). Live for existing rules; evaluated as content.match(regex) when detection_cel is empty. New rules author detection_cel instead.
                 rule_id:
                     type: string
                     description: Stable rule identifier, prefixed with `custom.`.
@@ -43300,69 +43298,6 @@ components:
                     format: uuid
             required:
                 - id
-        RiskMatchCondition:
-            type: object
-            properties:
-                case_insensitive:
-                    type: boolean
-                    description: Lowercase both sides for equals/not_equals/keyword.
-                op:
-                    type: string
-                    description: Comparison applied to the resolved target value.
-                    enum:
-                        - regex
-                        - equals
-                        - not_equals
-                        - glob
-                        - keyword
-                        - exists
-                        - contains
-                        - not_contains
-                        - starts_with
-                        - ends_with
-                        - in
-                path:
-                    type: string
-                    description: gjson/JSONPath into the tool_args JSON (tool_args target only).
-                target:
-                    type: string
-                    description: Message field the condition reads. The target also scopes the condition to a message type.
-                    enum:
-                        - content
-                        - user_prompt
-                        - assistant_text
-                        - tool_result
-                        - tool_name
-                        - tool_server
-                        - tool_function
-                        - tool_args
-                value:
-                    type: string
-                    description: Operand for regex/equals/not_equals/glob. Empty is meaningful for equals (e.g. `tool_server == ""` matches native tools).
-                values:
-                    type: array
-                    items:
-                        type: string
-                    description: Keywords for the keyword op (case-insensitive substring).
-            required:
-                - target
-                - op
-        RiskMatchConfig:
-            type: object
-            properties:
-                combine:
-                    type: string
-                    description: How the conditions reduce to a verdict.
-                    enum:
-                        - and
-                        - or
-                conditions:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/RiskMatchCondition'
-                    description: Conditions evaluated against a message; all (and) or any (or) must match.
-            required:
-                - conditions
         RiskOverviewCategory:
             type: object
             properties:
@@ -43479,8 +43414,6 @@ components:
                     enum:
                         - flag
                         - block
-                application_config:
-                    $ref: '#/components/schemas/RiskPolicyApplication'
                 audience_principal_urns:
                     type: array
                     items:
@@ -43504,7 +43437,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: 'Custom detection rule ids attached as detectors: a match produces a finding.'
+                    description: 'Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors; exemptions are expressed via scope_exempt_cel.'
                 disabled_rules:
                     type: array
                     items:
@@ -43513,11 +43446,6 @@ components:
                 enabled:
                     type: boolean
                     description: Whether the policy is active.
-                exempt_rule_ids:
-                    type: array
-                    items:
-                        type: string
-                    description: 'Custom detection rule ids attached as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.'
                 id:
                     type: string
                     description: The risk policy ID.
@@ -43560,6 +43488,12 @@ components:
                     items:
                         type: string
                     description: Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.
+                scope_exempt_cel:
+                    type: string
+                    description: 'CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.'
+                scope_include_cel:
+                    type: string
+                    description: 'CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.'
                 sources:
                     type: array
                     items:
@@ -43596,19 +43530,6 @@ components:
                 - updated_at
                 - pending_messages
                 - total_messages
-        RiskPolicyApplication:
-            type: object
-            properties:
-                exempts:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/RiskMatchConfig'
-                    description: Exempt predicates. A message is skipped for the whole policy when it matches ANY exempt (alongside exempt_rule_ids). Empty/omitted means no inline exemption.
-                includes:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/RiskMatchConfig'
-                    description: Include predicates (the fine-grained scope). A message is evaluated when it matches ANY include; the list supersedes message_types. Empty/omitted scopes by message_types instead.
         RiskPolicyBypassApprovalRequestBody:
             type: object
             properties:
@@ -45337,11 +45258,9 @@ components:
                 description:
                     type: string
                     description: Description of what the rule detects and why it matters.
-                match_config:
-                    $ref: '#/components/schemas/RiskMatchConfig'
-                regex:
+                detection_cel:
                     type: string
-                    description: Legacy RE2-compatible regex pattern. Empty when match_config is returned; kept for back-compat.
+                    description: Suggested CEL detection predicate.
                 rule_id:
                     type: string
                     description: Suggested stable identifier, prefixed with `custom.`.
@@ -45361,7 +45280,6 @@ components:
                 - rule_id
                 - title
                 - description
-                - regex
                 - severity
         TUMPeriod:
             type: object
@@ -45509,11 +45427,9 @@ components:
         TestDetectionRuleRequestBody:
             type: object
             properties:
-                match_config:
-                    $ref: '#/components/schemas/RiskMatchConfig'
-                regex:
+                detection_cel:
                     type: string
-                    description: Legacy regex pattern for `custom.*` rule ids; ignored for built-in rules and when match_config is set.
+                    description: CEL detection predicate for `custom.*` rule ids, evaluated against the sample message.
                 rule_id:
                     type: string
                     description: Rule identifier to evaluate (e.g. `secret.aws_access_token`, `pii.email_address`, `custom.acme_token`).
@@ -47073,15 +46989,13 @@ components:
                 description:
                     type: string
                     description: Description of what the rule detects.
+                detection_cel:
+                    type: string
+                    description: 'CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.'
                 id:
                     type: string
                     description: The custom detection rule ID.
                     format: uuid
-                match_config:
-                    $ref: '#/components/schemas/RiskMatchConfig'
-                regex:
-                    type: string
-                    description: Legacy RE2-compatible regex pattern. Prefer match_config for new rules.
                 severity:
                     type: string
                     description: Severity level for findings produced by this rule.
@@ -47639,8 +47553,6 @@ components:
                     enum:
                         - flag
                         - block
-                application_config:
-                    $ref: '#/components/schemas/RiskPolicyApplication'
                 audience_principal_urns:
                     type: array
                     items:
@@ -47668,11 +47580,6 @@ components:
                 enabled:
                     type: boolean
                     description: Whether the policy is active.
-                exempt_rule_ids:
-                    type: array
-                    items:
-                        type: string
-                    description: 'Custom detection rule ids to attach as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.'
                 id:
                     type: string
                     description: The policy ID.
@@ -47700,6 +47607,12 @@ components:
                     items:
                         type: string
                     description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
+                scope_exempt_cel:
+                    type: string
+                    description: CEL exemption predicate. Omit to preserve the current value; send empty to clear.
+                scope_include_cel:
+                    type: string
+                    description: CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.
                 sources:
                     type: array
                     items:

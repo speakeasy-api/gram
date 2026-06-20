@@ -35,18 +35,16 @@ type CreateRiskPolicyRequestBody struct {
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids to attach as detectors: a match produces a finding.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Custom detection rule ids to attach as exemptions: when one matches a
-	// message, the whole policy is skipped for that message (an allowlist).
-	// Disjoint from custom_rule_ids.
-	ExemptRuleIds []string `form:"exempt_rule_ids,omitempty" json:"exempt_rule_ids,omitempty" xml:"exempt_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
-	// Granular policy application: includes (a message is evaluated when it
-	// matches ANY include; supersedes message_types) and exempts (a message is
-	// skipped when it matches ANY exempt). Omit to rely only on message_types +
-	// exempt_rule_ids.
-	ApplicationConfig *RiskPolicyApplicationRequestBody `form:"application_config,omitempty" json:"application_config,omitempty" xml:"application_config,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Omit/empty means all
+	// messages are in scope.
+	ScopeIncludeCel *string `form:"scope_include_cel,omitempty" json:"scope_include_cel,omitempty" xml:"scope_include_cel,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Omit/empty means no inline exemption.
+	ScopeExemptCel *string `form:"scope_exempt_cel,omitempty" json:"scope_exempt_cel,omitempty" xml:"scope_exempt_cel,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -88,17 +86,15 @@ type UpdateRiskPolicyRequestBody struct {
 	// Custom detection rule ids to attach as detectors: a match produces a
 	// finding. Omit to preserve the current selection.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Custom detection rule ids to attach as exemptions: when one matches a
-	// message, the whole policy is skipped for that message (an allowlist).
-	// Disjoint from custom_rule_ids.
-	ExemptRuleIds []string `form:"exempt_rule_ids,omitempty" json:"exempt_rule_ids,omitempty" xml:"exempt_rule_ids,omitempty"`
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
-	// Granular policy application: includes (a message is evaluated when it
-	// matches ANY include; supersedes message_types) and exempts (a message is
-	// skipped when it matches ANY exempt). Omit to preserve the current value.
-	ApplicationConfig *RiskPolicyApplicationRequestBody `form:"application_config,omitempty" json:"application_config,omitempty" xml:"application_config,omitempty"`
+	// CEL scope predicate (in addition to message_types). Omit to preserve the
+	// current value; send empty to clear.
+	ScopeIncludeCel *string `form:"scope_include_cel,omitempty" json:"scope_include_cel,omitempty" xml:"scope_include_cel,omitempty"`
+	// CEL exemption predicate. Omit to preserve the current value; send empty to
+	// clear.
+	ScopeExemptCel *string `form:"scope_exempt_cel,omitempty" json:"scope_exempt_cel,omitempty" xml:"scope_exempt_cel,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -173,10 +169,9 @@ type CreateCustomDetectionRuleRequestBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Legacy RE2-compatible regex pattern. Prefer match_config for new rules.
-	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
-	// Sparse condition-based matcher. When set, supersedes regex.
-	MatchConfig *RiskMatchConfigRequestBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionCel *string `form:"detection_cel,omitempty" json:"detection_cel,omitempty" xml:"detection_cel,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 }
@@ -190,10 +185,9 @@ type UpdateCustomDetectionRuleRequestBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Legacy RE2-compatible regex pattern. Prefer match_config for new rules.
-	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
-	// Sparse condition-based matcher. When set, supersedes regex.
-	MatchConfig *RiskMatchConfigRequestBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionCel *string `form:"detection_cel,omitempty" json:"detection_cel,omitempty" xml:"detection_cel,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 }
@@ -261,13 +255,9 @@ type TestDetectionRuleRequestBody struct {
 	RuleID *string `form:"rule_id,omitempty" json:"rule_id,omitempty" xml:"rule_id,omitempty"`
 	// Sample text to scan.
 	Text *string `form:"text,omitempty" json:"text,omitempty" xml:"text,omitempty"`
-	// Legacy regex pattern for `custom.*` rule ids; ignored for built-in rules and
-	// when match_config is set.
-	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
-	// Condition-based matcher for `custom.*` rule ids. Content-targeted conditions
-	// are evaluated against the sample text; tool-targeted rules cannot be
-	// simulated from text.
-	MatchConfig *RiskMatchConfigRequestBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
+	// CEL detection predicate for `custom.*` rule ids, evaluated against the
+	// sample message.
+	DetectionCel *string `form:"detection_cel,omitempty" json:"detection_cel,omitempty" xml:"detection_cel,omitempty"`
 }
 
 // CreateRiskPolicyResponseBody is the type of the "risk" service
@@ -295,19 +285,20 @@ type CreateRiskPolicyResponseBody struct {
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids attached as detectors: a match produces a finding.
+	// Custom rules are pure detectors; exemptions are expressed via
+	// scope_exempt_cel.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Custom detection rule ids attached as exemptions: when one matches a
-	// message, the whole policy is skipped for that message (an allowlist).
-	// Disjoint from custom_rule_ids.
-	ExemptRuleIds []string `form:"exempt_rule_ids,omitempty" json:"exempt_rule_ids,omitempty" xml:"exempt_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
-	// Granular policy application: include (which messages the policy evaluates,
-	// in addition to message_types) and exempt (messages skipped entirely). Null
-	// when the policy relies only on message_types + exempt_rule_ids.
-	ApplicationConfig *RiskPolicyApplicationResponseBody `form:"application_config,omitempty" json:"application_config,omitempty" xml:"application_config,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeIncludeCel *string `form:"scope_include_cel,omitempty" json:"scope_include_cel,omitempty" xml:"scope_include_cel,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExemptCel *string `form:"scope_exempt_cel,omitempty" json:"scope_exempt_cel,omitempty" xml:"scope_exempt_cel,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -373,19 +364,20 @@ type GetRiskPolicyResponseBody struct {
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids attached as detectors: a match produces a finding.
+	// Custom rules are pure detectors; exemptions are expressed via
+	// scope_exempt_cel.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Custom detection rule ids attached as exemptions: when one matches a
-	// message, the whole policy is skipped for that message (an allowlist).
-	// Disjoint from custom_rule_ids.
-	ExemptRuleIds []string `form:"exempt_rule_ids,omitempty" json:"exempt_rule_ids,omitempty" xml:"exempt_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
-	// Granular policy application: include (which messages the policy evaluates,
-	// in addition to message_types) and exempt (messages skipped entirely). Null
-	// when the policy relies only on message_types + exempt_rule_ids.
-	ApplicationConfig *RiskPolicyApplicationResponseBody `form:"application_config,omitempty" json:"application_config,omitempty" xml:"application_config,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeIncludeCel *string `form:"scope_include_cel,omitempty" json:"scope_include_cel,omitempty" xml:"scope_include_cel,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExemptCel *string `form:"scope_exempt_cel,omitempty" json:"scope_exempt_cel,omitempty" xml:"scope_exempt_cel,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -444,19 +436,20 @@ type UpdateRiskPolicyResponseBody struct {
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids attached as detectors: a match produces a finding.
+	// Custom rules are pure detectors; exemptions are expressed via
+	// scope_exempt_cel.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Custom detection rule ids attached as exemptions: when one matches a
-	// message, the whole policy is skipped for that message (an allowlist).
-	// Disjoint from custom_rule_ids.
-	ExemptRuleIds []string `form:"exempt_rule_ids,omitempty" json:"exempt_rule_ids,omitempty" xml:"exempt_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
-	// Granular policy application: include (which messages the policy evaluates,
-	// in addition to message_types) and exempt (messages skipped entirely). Null
-	// when the policy relies only on message_types + exempt_rule_ids.
-	ApplicationConfig *RiskPolicyApplicationResponseBody `form:"application_config,omitempty" json:"application_config,omitempty" xml:"application_config,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeIncludeCel *string `form:"scope_include_cel,omitempty" json:"scope_include_cel,omitempty" xml:"scope_include_cel,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExemptCel *string `form:"scope_exempt_cel,omitempty" json:"scope_exempt_cel,omitempty" xml:"scope_exempt_cel,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -763,11 +756,13 @@ type CreateCustomDetectionRuleResponseBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// Description of what the rule detects.
 	Description string `form:"description" json:"description" xml:"description"`
-	// Legacy RE2-compatible regex pattern. Superseded by match_config; empty when
-	// the rule uses match_config.
+	// Legacy RE2-compatible regex pattern (read-only). Live for existing rules;
+	// evaluated as content.match(regex) when detection_cel is empty. New rules
+	// author detection_cel instead.
 	Regex string `form:"regex" json:"regex" xml:"regex"`
-	// Sparse condition-based matcher. When set, supersedes regex.
-	MatchConfig *RiskMatchConfigResponseBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding. Supersedes regex.
+	DetectionCel *string `form:"detection_cel,omitempty" json:"detection_cel,omitempty" xml:"detection_cel,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 	// When the custom detection rule was created.
@@ -794,11 +789,13 @@ type GetCustomDetectionRuleResponseBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// Description of what the rule detects.
 	Description string `form:"description" json:"description" xml:"description"`
-	// Legacy RE2-compatible regex pattern. Superseded by match_config; empty when
-	// the rule uses match_config.
+	// Legacy RE2-compatible regex pattern (read-only). Live for existing rules;
+	// evaluated as content.match(regex) when detection_cel is empty. New rules
+	// author detection_cel instead.
 	Regex string `form:"regex" json:"regex" xml:"regex"`
-	// Sparse condition-based matcher. When set, supersedes regex.
-	MatchConfig *RiskMatchConfigResponseBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding. Supersedes regex.
+	DetectionCel *string `form:"detection_cel,omitempty" json:"detection_cel,omitempty" xml:"detection_cel,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 	// When the custom detection rule was created.
@@ -818,11 +815,13 @@ type UpdateCustomDetectionRuleResponseBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// Description of what the rule detects.
 	Description string `form:"description" json:"description" xml:"description"`
-	// Legacy RE2-compatible regex pattern. Superseded by match_config; empty when
-	// the rule uses match_config.
+	// Legacy RE2-compatible regex pattern (read-only). Live for existing rules;
+	// evaluated as content.match(regex) when detection_cel is empty. New rules
+	// author detection_cel instead.
 	Regex string `form:"regex" json:"regex" xml:"regex"`
-	// Sparse condition-based matcher. When set, supersedes regex.
-	MatchConfig *RiskMatchConfigResponseBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding. Supersedes regex.
+	DetectionCel *string `form:"detection_cel,omitempty" json:"detection_cel,omitempty" xml:"detection_cel,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 	// When the custom detection rule was created.
@@ -907,12 +906,8 @@ type SuggestCustomDetectionRuleResponseBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// Description of what the rule detects and why it matters.
 	Description string `form:"description" json:"description" xml:"description"`
-	// Legacy RE2-compatible regex pattern. Empty when match_config is returned;
-	// kept for back-compat.
-	Regex string `form:"regex" json:"regex" xml:"regex"`
-	// Suggested condition-based matcher (targets, ops, conditions). Preferred over
-	// regex when present.
-	MatchConfig *RiskMatchConfigResponseBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
+	// Suggested CEL detection predicate.
+	DetectionCel *string `form:"detection_cel,omitempty" json:"detection_cel,omitempty" xml:"detection_cel,omitempty"`
 	// Suggested severity level.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 }
@@ -6518,46 +6513,6 @@ type TestDetectionRuleGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RiskPolicyApplicationResponseBody is used to define fields on response body
-// types.
-type RiskPolicyApplicationResponseBody struct {
-	// Include predicates (the fine-grained scope). A message is evaluated when it
-	// matches ANY include; the list supersedes message_types. Empty/omitted scopes
-	// by message_types instead.
-	Includes []*RiskMatchConfigResponseBody `form:"includes,omitempty" json:"includes,omitempty" xml:"includes,omitempty"`
-	// Exempt predicates. A message is skipped for the whole policy when it matches
-	// ANY exempt (alongside exempt_rule_ids). Empty/omitted means no inline
-	// exemption.
-	Exempts []*RiskMatchConfigResponseBody `form:"exempts,omitempty" json:"exempts,omitempty" xml:"exempts,omitempty"`
-}
-
-// RiskMatchConfigResponseBody is used to define fields on response body types.
-type RiskMatchConfigResponseBody struct {
-	// How the conditions reduce to a verdict.
-	Combine *string `form:"combine,omitempty" json:"combine,omitempty" xml:"combine,omitempty"`
-	// Conditions evaluated against a message; all (and) or any (or) must match.
-	Conditions []*RiskMatchConditionResponseBody `form:"conditions" json:"conditions" xml:"conditions"`
-}
-
-// RiskMatchConditionResponseBody is used to define fields on response body
-// types.
-type RiskMatchConditionResponseBody struct {
-	// Message field the condition reads. The target also scopes the condition to a
-	// message type.
-	Target string `form:"target" json:"target" xml:"target"`
-	// Comparison applied to the resolved target value.
-	Op string `form:"op" json:"op" xml:"op"`
-	// Operand for regex/equals/not_equals/glob. Empty is meaningful for equals
-	// (e.g. `tool_server == ""` matches native tools).
-	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
-	// Keywords for the keyword op (case-insensitive substring).
-	Values []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
-	// gjson/JSONPath into the tool_args JSON (tool_args target only).
-	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
-	// Lowercase both sides for equals/not_equals/keyword.
-	CaseInsensitive *bool `form:"case_insensitive,omitempty" json:"case_insensitive,omitempty" xml:"case_insensitive,omitempty"`
-}
-
 // RiskPolicyModelConfigResponseBody is used to define fields on response body
 // types.
 type RiskPolicyModelConfigResponseBody struct {
@@ -6596,19 +6551,20 @@ type RiskPolicyResponseBody struct {
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
 	// Custom detection rule ids attached as detectors: a match produces a finding.
+	// Custom rules are pure detectors; exemptions are expressed via
+	// scope_exempt_cel.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Custom detection rule ids attached as exemptions: when one matches a
-	// message, the whole policy is skipped for that message (an allowlist).
-	// Disjoint from custom_rule_ids.
-	ExemptRuleIds []string `form:"exempt_rule_ids,omitempty" json:"exempt_rule_ids,omitempty" xml:"exempt_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
-	// Granular policy application: include (which messages the policy evaluates,
-	// in addition to message_types) and exempt (messages skipped entirely). Null
-	// when the policy relies only on message_types + exempt_rule_ids.
-	ApplicationConfig *RiskPolicyApplicationResponseBody `form:"application_config,omitempty" json:"application_config,omitempty" xml:"application_config,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeIncludeCel *string `form:"scope_include_cel,omitempty" json:"scope_include_cel,omitempty" xml:"scope_include_cel,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExemptCel *string `form:"scope_exempt_cel,omitempty" json:"scope_exempt_cel,omitempty" xml:"scope_exempt_cel,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -6845,11 +6801,13 @@ type RiskCustomDetectionRuleResponseBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// Description of what the rule detects.
 	Description string `form:"description" json:"description" xml:"description"`
-	// Legacy RE2-compatible regex pattern. Superseded by match_config; empty when
-	// the rule uses match_config.
+	// Legacy RE2-compatible regex pattern (read-only). Live for existing rules;
+	// evaluated as content.match(regex) when detection_cel is empty. New rules
+	// author detection_cel instead.
 	Regex string `form:"regex" json:"regex" xml:"regex"`
-	// Sparse condition-based matcher. When set, supersedes regex.
-	MatchConfig *RiskMatchConfigResponseBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding. Supersedes regex.
+	DetectionCel *string `form:"detection_cel,omitempty" json:"detection_cel,omitempty" xml:"detection_cel,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 	// When the custom detection rule was created.
@@ -6909,45 +6867,6 @@ type TestDetectionRuleMatchResponseBody struct {
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 }
 
-// RiskPolicyApplicationRequestBody is used to define fields on request body
-// types.
-type RiskPolicyApplicationRequestBody struct {
-	// Include predicates (the fine-grained scope). A message is evaluated when it
-	// matches ANY include; the list supersedes message_types. Empty/omitted scopes
-	// by message_types instead.
-	Includes []*RiskMatchConfigRequestBody `form:"includes,omitempty" json:"includes,omitempty" xml:"includes,omitempty"`
-	// Exempt predicates. A message is skipped for the whole policy when it matches
-	// ANY exempt (alongside exempt_rule_ids). Empty/omitted means no inline
-	// exemption.
-	Exempts []*RiskMatchConfigRequestBody `form:"exempts,omitempty" json:"exempts,omitempty" xml:"exempts,omitempty"`
-}
-
-// RiskMatchConfigRequestBody is used to define fields on request body types.
-type RiskMatchConfigRequestBody struct {
-	// How the conditions reduce to a verdict.
-	Combine *string `form:"combine,omitempty" json:"combine,omitempty" xml:"combine,omitempty"`
-	// Conditions evaluated against a message; all (and) or any (or) must match.
-	Conditions []*RiskMatchConditionRequestBody `form:"conditions,omitempty" json:"conditions,omitempty" xml:"conditions,omitempty"`
-}
-
-// RiskMatchConditionRequestBody is used to define fields on request body types.
-type RiskMatchConditionRequestBody struct {
-	// Message field the condition reads. The target also scopes the condition to a
-	// message type.
-	Target *string `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
-	// Comparison applied to the resolved target value.
-	Op *string `form:"op,omitempty" json:"op,omitempty" xml:"op,omitempty"`
-	// Operand for regex/equals/not_equals/glob. Empty is meaningful for equals
-	// (e.g. `tool_server == ""` matches native tools).
-	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
-	// Keywords for the keyword op (case-insensitive substring).
-	Values []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
-	// gjson/JSONPath into the tool_args JSON (tool_args target only).
-	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
-	// Lowercase both sides for equals/not_equals/keyword.
-	CaseInsensitive *bool `form:"case_insensitive,omitempty" json:"case_insensitive,omitempty" xml:"case_insensitive,omitempty"`
-}
-
 // RiskPolicyModelConfigRequestBody is used to define fields on request body
 // types.
 type RiskPolicyModelConfigRequestBody struct {
@@ -6970,6 +6889,8 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
 		PolicyType:      res.PolicyType,
+		ScopeIncludeCel: res.ScopeIncludeCel,
+		ScopeExemptCel:  res.ScopeExemptCel,
 		Enabled:         res.Enabled,
 		Action:          res.Action,
 		AudienceType:    res.AudienceType,
@@ -7014,20 +6935,11 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 			body.CustomRuleIds[i] = val
 		}
 	}
-	if res.ExemptRuleIds != nil {
-		body.ExemptRuleIds = make([]string, len(res.ExemptRuleIds))
-		for i, val := range res.ExemptRuleIds {
-			body.ExemptRuleIds[i] = val
-		}
-	}
 	if res.MessageTypes != nil {
 		body.MessageTypes = make([]string, len(res.MessageTypes))
 		for i, val := range res.MessageTypes {
 			body.MessageTypes[i] = val
 		}
-	}
-	if res.ApplicationConfig != nil {
-		body.ApplicationConfig = marshalTypesRiskPolicyApplicationToRiskPolicyApplicationResponseBody(res.ApplicationConfig)
 	}
 	if res.AudiencePrincipalUrns != nil {
 		body.AudiencePrincipalUrns = make([]string, len(res.AudiencePrincipalUrns))
@@ -7070,6 +6982,8 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
 		PolicyType:      res.PolicyType,
+		ScopeIncludeCel: res.ScopeIncludeCel,
+		ScopeExemptCel:  res.ScopeExemptCel,
 		Enabled:         res.Enabled,
 		Action:          res.Action,
 		AudienceType:    res.AudienceType,
@@ -7114,20 +7028,11 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 			body.CustomRuleIds[i] = val
 		}
 	}
-	if res.ExemptRuleIds != nil {
-		body.ExemptRuleIds = make([]string, len(res.ExemptRuleIds))
-		for i, val := range res.ExemptRuleIds {
-			body.ExemptRuleIds[i] = val
-		}
-	}
 	if res.MessageTypes != nil {
 		body.MessageTypes = make([]string, len(res.MessageTypes))
 		for i, val := range res.MessageTypes {
 			body.MessageTypes[i] = val
 		}
-	}
-	if res.ApplicationConfig != nil {
-		body.ApplicationConfig = marshalTypesRiskPolicyApplicationToRiskPolicyApplicationResponseBody(res.ApplicationConfig)
 	}
 	if res.AudiencePrincipalUrns != nil {
 		body.AudiencePrincipalUrns = make([]string, len(res.AudiencePrincipalUrns))
@@ -7151,6 +7056,8 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
 		PolicyType:      res.PolicyType,
+		ScopeIncludeCel: res.ScopeIncludeCel,
+		ScopeExemptCel:  res.ScopeExemptCel,
 		Enabled:         res.Enabled,
 		Action:          res.Action,
 		AudienceType:    res.AudienceType,
@@ -7195,20 +7102,11 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 			body.CustomRuleIds[i] = val
 		}
 	}
-	if res.ExemptRuleIds != nil {
-		body.ExemptRuleIds = make([]string, len(res.ExemptRuleIds))
-		for i, val := range res.ExemptRuleIds {
-			body.ExemptRuleIds[i] = val
-		}
-	}
 	if res.MessageTypes != nil {
 		body.MessageTypes = make([]string, len(res.MessageTypes))
 		for i, val := range res.MessageTypes {
 			body.MessageTypes[i] = val
 		}
-	}
-	if res.ApplicationConfig != nil {
-		body.ApplicationConfig = marshalTypesRiskPolicyApplicationToRiskPolicyApplicationResponseBody(res.ApplicationConfig)
 	}
 	if res.AudiencePrincipalUrns != nil {
 		body.AudiencePrincipalUrns = make([]string, len(res.AudiencePrincipalUrns))
@@ -7621,17 +7519,15 @@ func NewRevokeRiskPolicyBypassRequestResponseBody(res *risk.RiskPolicyBypassRequ
 // the result of the "createCustomDetectionRule" endpoint of the "risk" service.
 func NewCreateCustomDetectionRuleResponseBody(res *types.RiskCustomDetectionRule) *CreateCustomDetectionRuleResponseBody {
 	body := &CreateCustomDetectionRuleResponseBody{
-		ID:          res.ID,
-		RuleID:      res.RuleID,
-		Title:       res.Title,
-		Description: res.Description,
-		Regex:       res.Regex,
-		Severity:    res.Severity,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
-	}
-	if res.MatchConfig != nil {
-		body.MatchConfig = marshalTypesRiskMatchConfigToRiskMatchConfigResponseBody(res.MatchConfig)
+		ID:           res.ID,
+		RuleID:       res.RuleID,
+		Title:        res.Title,
+		Description:  res.Description,
+		Regex:        res.Regex,
+		DetectionCel: res.DetectionCel,
+		Severity:     res.Severity,
+		CreatedAt:    res.CreatedAt,
+		UpdatedAt:    res.UpdatedAt,
 	}
 	return body
 }
@@ -7659,17 +7555,15 @@ func NewListCustomDetectionRulesResponseBody(res *risk.ListCustomDetectionRulesR
 // result of the "getCustomDetectionRule" endpoint of the "risk" service.
 func NewGetCustomDetectionRuleResponseBody(res *types.RiskCustomDetectionRule) *GetCustomDetectionRuleResponseBody {
 	body := &GetCustomDetectionRuleResponseBody{
-		ID:          res.ID,
-		RuleID:      res.RuleID,
-		Title:       res.Title,
-		Description: res.Description,
-		Regex:       res.Regex,
-		Severity:    res.Severity,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
-	}
-	if res.MatchConfig != nil {
-		body.MatchConfig = marshalTypesRiskMatchConfigToRiskMatchConfigResponseBody(res.MatchConfig)
+		ID:           res.ID,
+		RuleID:       res.RuleID,
+		Title:        res.Title,
+		Description:  res.Description,
+		Regex:        res.Regex,
+		DetectionCel: res.DetectionCel,
+		Severity:     res.Severity,
+		CreatedAt:    res.CreatedAt,
+		UpdatedAt:    res.UpdatedAt,
 	}
 	return body
 }
@@ -7678,17 +7572,15 @@ func NewGetCustomDetectionRuleResponseBody(res *types.RiskCustomDetectionRule) *
 // the result of the "updateCustomDetectionRule" endpoint of the "risk" service.
 func NewUpdateCustomDetectionRuleResponseBody(res *types.RiskCustomDetectionRule) *UpdateCustomDetectionRuleResponseBody {
 	body := &UpdateCustomDetectionRuleResponseBody{
-		ID:          res.ID,
-		RuleID:      res.RuleID,
-		Title:       res.Title,
-		Description: res.Description,
-		Regex:       res.Regex,
-		Severity:    res.Severity,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
-	}
-	if res.MatchConfig != nil {
-		body.MatchConfig = marshalTypesRiskMatchConfigToRiskMatchConfigResponseBody(res.MatchConfig)
+		ID:           res.ID,
+		RuleID:       res.RuleID,
+		Title:        res.Title,
+		Description:  res.Description,
+		Regex:        res.Regex,
+		DetectionCel: res.DetectionCel,
+		Severity:     res.Severity,
+		CreatedAt:    res.CreatedAt,
+		UpdatedAt:    res.UpdatedAt,
 	}
 	return body
 }
@@ -7753,14 +7645,11 @@ func NewUpdateRiskExclusionResponseBody(res *types.RiskExclusion) *UpdateRiskExc
 // service.
 func NewSuggestCustomDetectionRuleResponseBody(res *risk.SuggestCustomDetectionRuleResult) *SuggestCustomDetectionRuleResponseBody {
 	body := &SuggestCustomDetectionRuleResponseBody{
-		RuleID:      res.RuleID,
-		Title:       res.Title,
-		Description: res.Description,
-		Regex:       res.Regex,
-		Severity:    res.Severity,
-	}
-	if res.MatchConfig != nil {
-		body.MatchConfig = marshalTypesRiskMatchConfigToRiskMatchConfigResponseBody(res.MatchConfig)
+		RuleID:       res.RuleID,
+		Title:        res.Title,
+		Description:  res.Description,
+		DetectionCel: res.DetectionCel,
+		Severity:     res.Severity,
 	}
 	return body
 }
@@ -12153,11 +12042,13 @@ func NewTestDetectionRuleGatewayErrorResponseBody(res *goa.ServiceError) *TestDe
 // payload.
 func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CreateRiskPolicyPayload {
 	v := &risk.CreateRiskPolicyPayload{
-		Name:        body.Name,
-		Enabled:     body.Enabled,
-		AutoName:    body.AutoName,
-		UserMessage: body.UserMessage,
-		Prompt:      body.Prompt,
+		Name:            body.Name,
+		ScopeIncludeCel: body.ScopeIncludeCel,
+		ScopeExemptCel:  body.ScopeExemptCel,
+		Enabled:         body.Enabled,
+		AutoName:        body.AutoName,
+		UserMessage:     body.UserMessage,
+		Prompt:          body.Prompt,
 	}
 	if body.PolicyType != nil {
 		v.PolicyType = *body.PolicyType
@@ -12201,20 +12092,11 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 			v.CustomRuleIds[i] = val
 		}
 	}
-	if body.ExemptRuleIds != nil {
-		v.ExemptRuleIds = make([]string, len(body.ExemptRuleIds))
-		for i, val := range body.ExemptRuleIds {
-			v.ExemptRuleIds[i] = val
-		}
-	}
 	if body.MessageTypes != nil {
 		v.MessageTypes = make([]string, len(body.MessageTypes))
 		for i, val := range body.MessageTypes {
 			v.MessageTypes[i] = val
 		}
-	}
-	if body.ApplicationConfig != nil {
-		v.ApplicationConfig = unmarshalRiskPolicyApplicationRequestBodyToTypesRiskPolicyApplication(body.ApplicationConfig)
 	}
 	if body.Action == nil {
 		v.Action = "flag"
@@ -12264,14 +12146,16 @@ func NewGetRiskPolicyPayload(id string, apikeyToken *string, sessionToken *strin
 // payload.
 func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.UpdateRiskPolicyPayload {
 	v := &risk.UpdateRiskPolicyPayload{
-		ID:           *body.ID,
-		Name:         *body.Name,
-		Enabled:      body.Enabled,
-		Action:       body.Action,
-		AudienceType: body.AudienceType,
-		AutoName:     body.AutoName,
-		UserMessage:  body.UserMessage,
-		Prompt:       body.Prompt,
+		ID:              *body.ID,
+		Name:            *body.Name,
+		ScopeIncludeCel: body.ScopeIncludeCel,
+		ScopeExemptCel:  body.ScopeExemptCel,
+		Enabled:         body.Enabled,
+		Action:          body.Action,
+		AudienceType:    body.AudienceType,
+		AutoName:        body.AutoName,
+		UserMessage:     body.UserMessage,
+		Prompt:          body.Prompt,
 	}
 	if body.Sources != nil {
 		v.Sources = make([]string, len(body.Sources))
@@ -12303,20 +12187,11 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 			v.CustomRuleIds[i] = val
 		}
 	}
-	if body.ExemptRuleIds != nil {
-		v.ExemptRuleIds = make([]string, len(body.ExemptRuleIds))
-		for i, val := range body.ExemptRuleIds {
-			v.ExemptRuleIds[i] = val
-		}
-	}
 	if body.MessageTypes != nil {
 		v.MessageTypes = make([]string, len(body.MessageTypes))
 		for i, val := range body.MessageTypes {
 			v.MessageTypes[i] = val
 		}
-	}
-	if body.ApplicationConfig != nil {
-		v.ApplicationConfig = unmarshalRiskPolicyApplicationRequestBodyToTypesRiskPolicyApplication(body.ApplicationConfig)
 	}
 	if body.AudiencePrincipalUrns != nil {
 		v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))
@@ -12557,16 +12432,13 @@ func NewTriggerRiskAnalysisPayload(body *TriggerRiskAnalysisRequestBody, apikeyT
 // createCustomDetectionRule endpoint payload.
 func NewCreateCustomDetectionRulePayload(body *CreateCustomDetectionRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CreateCustomDetectionRulePayload {
 	v := &risk.CreateCustomDetectionRulePayload{
-		RuleID:      *body.RuleID,
-		Title:       *body.Title,
-		Description: body.Description,
-		Regex:       body.Regex,
+		RuleID:       *body.RuleID,
+		Title:        *body.Title,
+		Description:  body.Description,
+		DetectionCel: body.DetectionCel,
 	}
 	if body.Severity != nil {
 		v.Severity = *body.Severity
-	}
-	if body.MatchConfig != nil {
-		v.MatchConfig = unmarshalRiskMatchConfigRequestBodyToTypesRiskMatchConfig(body.MatchConfig)
 	}
 	if body.Severity == nil {
 		v.Severity = "medium"
@@ -12605,14 +12477,11 @@ func NewGetCustomDetectionRulePayload(id string, apikeyToken *string, sessionTok
 // updateCustomDetectionRule endpoint payload.
 func NewUpdateCustomDetectionRulePayload(body *UpdateCustomDetectionRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.UpdateCustomDetectionRulePayload {
 	v := &risk.UpdateCustomDetectionRulePayload{
-		ID:          *body.ID,
-		Title:       *body.Title,
-		Description: body.Description,
-		Regex:       body.Regex,
-		Severity:    *body.Severity,
-	}
-	if body.MatchConfig != nil {
-		v.MatchConfig = unmarshalRiskMatchConfigRequestBodyToTypesRiskMatchConfig(body.MatchConfig)
+		ID:           *body.ID,
+		Title:        *body.Title,
+		Description:  body.Description,
+		DetectionCel: body.DetectionCel,
+		Severity:     *body.Severity,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -12743,12 +12612,9 @@ func NewSuggestCustomDetectionRulePayload(body *SuggestCustomDetectionRuleReques
 // payload.
 func NewTestDetectionRulePayload(body *TestDetectionRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.TestDetectionRulePayload {
 	v := &risk.TestDetectionRulePayload{
-		RuleID: *body.RuleID,
-		Text:   *body.Text,
-		Regex:  body.Regex,
-	}
-	if body.MatchConfig != nil {
-		v.MatchConfig = unmarshalRiskMatchConfigRequestBodyToTypesRiskMatchConfig(body.MatchConfig)
+		RuleID:       *body.RuleID,
+		Text:         *body.Text,
+		DetectionCel: body.DetectionCel,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -12763,11 +12629,6 @@ func ValidateCreateRiskPolicyRequestBody(body *CreateRiskPolicyRequestBody) (err
 	if body.PolicyType != nil {
 		if !(*body.PolicyType == "standard" || *body.PolicyType == "prompt_based") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy_type", *body.PolicyType, []any{"standard", "prompt_based"}))
-		}
-	}
-	if body.ApplicationConfig != nil {
-		if err2 := ValidateRiskPolicyApplicationRequestBody(body.ApplicationConfig); err2 != nil {
-			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.Action != nil {
@@ -12794,11 +12655,6 @@ func ValidateUpdateRiskPolicyRequestBody(body *UpdateRiskPolicyRequestBody) (err
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.ApplicationConfig != nil {
-		if err2 := ValidateRiskPolicyApplicationRequestBody(body.ApplicationConfig); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
 	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {
@@ -12884,11 +12740,6 @@ func ValidateCreateCustomDetectionRuleRequestBody(body *CreateCustomDetectionRul
 	if body.Title == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
 	}
-	if body.MatchConfig != nil {
-		if err2 := ValidateRiskMatchConfigRequestBody(body.MatchConfig); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
 	if body.Severity != nil {
 		if !(*body.Severity == "info" || *body.Severity == "low" || *body.Severity == "medium" || *body.Severity == "high" || *body.Severity == "critical") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity", *body.Severity, []any{"info", "low", "medium", "high", "critical"}))
@@ -12911,11 +12762,6 @@ func ValidateUpdateCustomDetectionRuleRequestBody(body *UpdateCustomDetectionRul
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.MatchConfig != nil {
-		if err2 := ValidateRiskMatchConfigRequestBody(body.MatchConfig); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
 	}
 	if body.Severity != nil {
 		if !(*body.Severity == "info" || *body.Severity == "low" || *body.Severity == "medium" || *body.Severity == "high" || *body.Severity == "critical") {
@@ -13029,74 +12875,6 @@ func ValidateTestDetectionRuleRequestBody(body *TestDetectionRuleRequestBody) (e
 	if body.Text != nil {
 		if utf8.RuneCountInString(*body.Text) > 50000 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.text", *body.Text, utf8.RuneCountInString(*body.Text), 50000, false))
-		}
-	}
-	if body.MatchConfig != nil {
-		if err2 := ValidateRiskMatchConfigRequestBody(body.MatchConfig); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	return
-}
-
-// ValidateRiskPolicyApplicationRequestBody runs the validations defined on
-// RiskPolicyApplicationRequestBody
-func ValidateRiskPolicyApplicationRequestBody(body *RiskPolicyApplicationRequestBody) (err error) {
-	for _, e := range body.Includes {
-		if e != nil {
-			if err2 := ValidateRiskMatchConfigRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.Exempts {
-		if e != nil {
-			if err2 := ValidateRiskMatchConfigRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateRiskMatchConfigRequestBody runs the validations defined on
-// RiskMatchConfigRequestBody
-func ValidateRiskMatchConfigRequestBody(body *RiskMatchConfigRequestBody) (err error) {
-	if body.Conditions == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("conditions", "body"))
-	}
-	if body.Combine != nil {
-		if !(*body.Combine == "and" || *body.Combine == "or") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.combine", *body.Combine, []any{"and", "or"}))
-		}
-	}
-	for _, e := range body.Conditions {
-		if e != nil {
-			if err2 := ValidateRiskMatchConditionRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateRiskMatchConditionRequestBody runs the validations defined on
-// RiskMatchConditionRequestBody
-func ValidateRiskMatchConditionRequestBody(body *RiskMatchConditionRequestBody) (err error) {
-	if body.Target == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("target", "body"))
-	}
-	if body.Op == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("op", "body"))
-	}
-	if body.Target != nil {
-		if !(*body.Target == "content" || *body.Target == "user_prompt" || *body.Target == "assistant_text" || *body.Target == "tool_result" || *body.Target == "tool_name" || *body.Target == "tool_server" || *body.Target == "tool_function" || *body.Target == "tool_args") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target", *body.Target, []any{"content", "user_prompt", "assistant_text", "tool_result", "tool_name", "tool_server", "tool_function", "tool_args"}))
-		}
-	}
-	if body.Op != nil {
-		if !(*body.Op == "regex" || *body.Op == "equals" || *body.Op == "not_equals" || *body.Op == "glob" || *body.Op == "keyword" || *body.Op == "exists" || *body.Op == "contains" || *body.Op == "not_contains" || *body.Op == "starts_with" || *body.Op == "ends_with" || *body.Op == "in") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", *body.Op, []any{"regex", "equals", "not_equals", "glob", "keyword", "exists", "contains", "not_contains", "starts_with", "ends_with", "in"}))
 		}
 	}
 	return

@@ -2951,25 +2951,22 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- drops any finding whose canonical rule_id appears here.
   disabled_rules TEXT[],
   -- Custom detection rules attached as detectors: a match produces a finding.
+  -- Custom rules are pure detectors; exemptions are expressed inline via
+  -- scope_exempt_cel rather than by reusing a rule as an allowlist.
   custom_rule_ids TEXT[] NOT NULL DEFAULT '{}',
-  -- Custom rules attached as exemptions (policy application, not detection):
-  -- when one matches a message, the whole policy is skipped for that message
-  -- (an allowlist). Disjoint from custom_rule_ids — a rule is either a detector
-  -- or an exemption in a given policy.
-  exempt_rule_ids TEXT[] NOT NULL DEFAULT '{}',
   -- DEPRECATED: superseded by application_config.include — message-type
   -- selection is now a `message_type in (...)` condition within the include
   -- predicate. Kept nullable and read as a fallback until application_config is
   -- backfilled, then dropped in a contract migration (AGE-2785).
   message_types TEXT[],
-  -- Granular policy application as a self-describing JSON object:
-  --   { "include": <match_config>, "exempt": <match_config> }
-  -- A policy applies to a message when `include` matches AND `exempt` does not
-  -- (alongside exempt_rule_ids). `include` generalizes message_types (the cards
-  -- are coarse sugar over a `message_type in (...)` condition); `exempt` is the
-  -- inline exemption predicate. NULL or an absent key means all-in / none-exempt.
-  -- Named application_config (not "scope") to avoid colliding with RBAC scopes.
-  application_config JSONB,
+  -- Granular policy application as CEL scope predicates, evaluated by
+  -- internal/risk/celenv. A policy applies to a message when scope_include_cel
+  -- is true AND scope_exempt_cel is not (alongside exempt_rule_ids).
+  -- scope_include_cel generalizes message_types (the cards are coarse sugar over
+  -- a `type in (...)` condition). NULL include means all-in; NULL exempt means
+  -- none-exempt.
+  scope_include_cel TEXT,
+  scope_exempt_cel TEXT,
   action TEXT NOT NULL DEFAULT 'flag',
   audience_type TEXT NOT NULL DEFAULT 'everyone',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
@@ -3010,15 +3007,17 @@ CREATE TABLE IF NOT EXISTS risk_custom_detection_rules (
   rule_id TEXT NOT NULL,
   title TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
-  -- Legacy single-pattern matcher. Superseded by match_config; retained
-  -- (nullable) so existing rules keep evaluating until a later ticket
-  -- backfills them into match_config and contracts this column away.
+  -- Legacy single-pattern matcher. LIVE IN PRODUCTION — do not drop. Existing
+  -- rules still carry a regex here; the engine evaluates it as
+  -- content.match(<regex>) when detection_cel is unset. New rules author
+  -- detection_cel instead and leave this NULL.
   regex TEXT,
-  -- Sparse, self-describing matcher config: an ANDed/ORed list of
-  -- {target, op, value, path?} conditions over message targets (content,
-  -- user_prompt, tool_server, tool_function, tool_args, ...). When NULL the
-  -- rule falls back to the regex column. See rule_engine.go for the shape.
-  match_config JSONB,
+  -- CEL detection predicate, evaluated by internal/risk/celenv. A boolean
+  -- expression over message fields (content, prompt, assistant, output, and the
+  -- tools list): a true verdict produces a finding, and the matcher methods
+  -- (match/includes/eq/.../get) record the spans that fired for highlighting.
+  -- NULL means no matcher configured yet (a rule falls back to the regex column).
+  detection_cel TEXT,
   severity TEXT NOT NULL DEFAULT 'medium',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
