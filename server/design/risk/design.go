@@ -30,8 +30,10 @@ var _ = Service("risk", func() {
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
-			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy.")
+			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
+			Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.")
+			Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -133,8 +135,10 @@ var _ = Service("risk", func() {
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
-			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy. Omit to preserve the current selection.")
+			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
+			Attribute("scope_include", String, "CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.")
+			Attribute("scope_exempt", String, "CEL exemption predicate. Omit to preserve the current value; send empty to clear.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -392,6 +396,59 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.categories")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCategories"}`)
+	})
+
+	Method("getDetectionDescriptor", func() {
+		Description("Return the machine-readable CEL environment descriptor for the detection-rule and policy-scope editors: the precise types, variables, function overloads (with receiver/param/return types), and macros. The dashboard configures a client-side CEL type-checker from this so it can validate and complete expressions instantly without a round-trip, while staying faithful to the backend engine. Compilation and validation remain server-authoritative on the rule/policy save path.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(DetectionDescriptorResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.detectionDescriptor")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getDetectionDescriptor")
+		Meta("openapi:extension:x-speakeasy-group", "risk.detectionDescriptor")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskDetectionDescriptor"}`)
+	})
+
+	Method("compileExpr", func() {
+		Description("Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("expr", String, "The CEL expression to compile.")
+			Required("expr")
+		})
+
+		Result(ExprCompileResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.compileExpr")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("expr")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "compileExpr")
+		Meta("openapi:extension:x-speakeasy-group", "risk.expr")
+		Meta("openapi:extension:x-speakeasy-name-override", "compile")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCompileExpr"}`)
 	})
 
 	Method("getRiskUserBreakdown", func() {
@@ -683,12 +740,12 @@ var _ = Service("risk", func() {
 			Attribute("rule_id", String, "Stable rule identifier, prefixed with `custom.`.")
 			Attribute("title", String, "Human-readable title for the rule.")
 			Attribute("description", String, "Description of what the rule detects.")
-			Attribute("regex", String, "RE2-compatible regex pattern.")
+			Attribute("detection_expr", String, "CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.")
 			Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
 				Enum("info", "low", "medium", "high", "critical")
 				Default("medium")
 			})
-			Required("rule_id", "title", "regex")
+			Required("rule_id", "title")
 		})
 
 		Result(shared.RiskCustomDetectionRule)
@@ -774,11 +831,11 @@ var _ = Service("risk", func() {
 			})
 			Attribute("title", String, "Human-readable title for the rule.")
 			Attribute("description", String, "Description of what the rule detects.")
-			Attribute("regex", String, "RE2-compatible regex pattern.")
+			Attribute("detection_expr", String, "CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.")
 			Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
 				Enum("info", "low", "medium", "high", "critical")
 			})
-			Required("id", "title", "regex", "severity")
+			Required("id", "title", "severity")
 		})
 
 		Result(shared.RiskCustomDetectionRule)
@@ -1015,7 +1072,7 @@ var _ = Service("risk", func() {
 				MinLength(1)
 				MaxLength(50000)
 			})
-			Attribute("regex", String, "Regex pattern. Required for `custom.*` rule ids since the server doesn't persist custom rules yet; ignored for built-in rules.")
+			Attribute("detection_expr", String, "CEL detection predicate for `custom.*` rule ids, evaluated against the sample message.")
 			Required("rule_id", "text")
 		})
 
@@ -1040,11 +1097,11 @@ var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", 
 	Attribute("rule_id", String, "Suggested stable identifier, prefixed with `custom.`.")
 	Attribute("title", String, "Short, human-friendly title for the rule.")
 	Attribute("description", String, "Description of what the rule detects and why it matters.")
-	Attribute("regex", String, "RE2-compatible regex pattern the rule should match against.")
+	Attribute("detection_expr", String, "Suggested CEL detection predicate.")
 	Attribute("severity", String, "Suggested severity level.", func() {
 		Enum("info", "low", "medium", "high", "critical")
 	})
-	Required("rule_id", "title", "description", "regex", "severity")
+	Required("rule_id", "title", "description", "severity")
 })
 
 var TestDetectionRuleMatch = Type("TestDetectionRuleMatch", func() {
@@ -1147,6 +1204,98 @@ var RiskCategoriesResult = Type("RiskCategoriesResult", func() {
 	Attribute("categories", ArrayOf(RiskCategoryDefinition), "Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.")
 
 	Required("categories")
+})
+
+// --- Machine-readable descriptor (drives the client-side CEL type-checker) ---
+
+var DetectionDescriptorField = Type("DetectionDescriptorField", func() {
+	Description("One typed member of an object type (e.g. 'args' on a 'tool').")
+
+	Attribute("name", String, "Member name as written after a dot (e.g. 'name', 'args').")
+	Attribute("type", String, "Machine type-string of the member (e.g. 'field').")
+	Attribute("description", String, "Plain-English description of the member.")
+
+	Required("name", "type", "description")
+})
+
+var DetectionDescriptorType = Type("DetectionDescriptorType", func() {
+	Description("One CEL type. Registered identically in the Go engine and the client checker under 'name'.")
+
+	Attribute("name", String, "Engine type name (e.g. 'field', 'celenv.celTool').")
+	Attribute("opaque", Boolean, "True when the type has no readable members, only receiver methods (e.g. 'field').")
+	Attribute("fields", ArrayOf(DetectionDescriptorField), "Typed members of a non-opaque object type. Empty when opaque.")
+	Attribute("displayName", String, "Short human label for the editor (e.g. 'field', 'tool').")
+	Attribute("description", String, "Plain-English description of the type.")
+
+	Required("name", "opaque", "displayName", "description")
+})
+
+var DetectionDescriptorVariable = Type("DetectionDescriptorVariable", func() {
+	Description("One author-visible variable, with the machine type the checker consumes and a human display tag.")
+
+	Attribute("name", String, "Variable name as written in CEL (e.g. 'content', 'tools').")
+	Attribute("type", String, "Machine type-string (e.g. 'field', 'string', 'list<celenv.celTool>').")
+	Attribute("displayType", String, "Human type tag for the editor (e.g. 'field', 'list(tool)').")
+	Attribute("description", String, "Plain-English description of the variable.")
+
+	Required("name", "type", "displayType", "description")
+})
+
+var DetectionDescriptorParam = Type("DetectionDescriptorParam", func() {
+	Description("One non-receiver argument of a function overload.")
+
+	Attribute("name", String, "Parameter name (e.g. 'pattern', 'path').")
+	Attribute("type", String, "Machine type-string of the parameter (e.g. 'string').")
+
+	Required("name", "type")
+})
+
+var DetectionDescriptorFunction = Type("DetectionDescriptorFunction", func() {
+	Description("One function overload with the precise types the checker resolves against.")
+
+	Attribute("name", String, "Function name (e.g. 'match', 'get').")
+	Attribute("overloadId", String, "Stable overload identifier (also the engine binding key).")
+	Attribute("member", Boolean, "True for receiver-style calls (x.fn(...)); false for global calls.")
+	Attribute("receiverType", String, "Machine type-string of the receiver when member is true.")
+	Attribute("params", ArrayOf(DetectionDescriptorParam), "Non-receiver parameters in order.")
+	Attribute("returnType", String, "Machine type-string of the result (e.g. 'bool', 'field').")
+	Attribute("signature", String, "Human-readable call signature.")
+	Attribute("description", String, "Plain-English description of the overload.")
+
+	// receiverType is required (empty string for a hypothetical global overload)
+	// so it serializes as a plain string; every current overload is a member.
+	Required("name", "overloadId", "member", "receiverType", "returnType", "signature", "description")
+})
+
+var DetectionDescriptorMacro = Type("DetectionDescriptorMacro", func() {
+	Description("One CEL macro. Macros are built into both engines (not declared), listed here for completion and documentation only.")
+
+	Attribute("name", String, "Macro name (e.g. 'exists', 'has', 'map').")
+	Attribute("signature", String, "Human-readable call signature.")
+	Attribute("description", String, "Plain-English description of the macro's behaviour.")
+	Attribute("returnsBool", Boolean, "True when the macro yields a boolean verdict; false when it yields a list.")
+
+	Required("name", "signature", "description", "returnsBool")
+})
+
+var DetectionDescriptorResult = Type("DetectionDescriptorResult", func() {
+	Description("The machine-readable CEL environment descriptor: types, variables, function overloads, and macros. The single source the Go engine is built from and the client-side type-checker is configured from.")
+
+	Attribute("types", ArrayOf(DetectionDescriptorType), "Declared CEL types (the opaque 'field' and the 'tool' object type).")
+	Attribute("variables", ArrayOf(DetectionDescriptorVariable), "Variables an author may reference.")
+	Attribute("functions", ArrayOf(DetectionDescriptorFunction), "Function overloads with precise receiver/param/return types.")
+	Attribute("macros", ArrayOf(DetectionDescriptorMacro), "Standard CEL macros (exists/all/has/map/...).")
+
+	Required("types", "variables", "functions", "macros")
+})
+
+var ExprCompileResult = Type("ExprCompileResult", func() {
+	Description("The result of compiling a single CEL expression for the editor.")
+
+	Attribute("ok", Boolean, "True when the expression compiled successfully.")
+	Attribute("error", String, "Compiler error message when ok is false; empty otherwise.")
+
+	Required("ok", "error")
 })
 
 var RiskRuleBreakdownEntry = Type("RiskRuleBreakdownEntry", func() {

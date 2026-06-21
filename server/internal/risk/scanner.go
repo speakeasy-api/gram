@@ -184,10 +184,18 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 	// condition under which the fan-out would run the judge — a prompt_based
 	// policy whose message_types apply to this message — so the lookup is
 	// skipped entirely for scans that can never enforce one.
+	// A defined include predicate is the policy's fine-grained scope and
+	// supersedes message_types, so an include-scoped policy is always a candidate
+	// here — the per-message include/exempt check then runs in scanPolicy.
+	inMessageScope := func(p repo.RiskPolicy) bool {
+		return ra.HasIncludeScope(p.ScopeInclude.String) ||
+			len(p.MessageTypes) == 0 ||
+			slices.Contains(p.MessageTypes, messageType)
+	}
+
 	promptPoliciesOn := false
 	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
-		return p.PolicyType == "prompt_based" &&
-			(len(p.MessageTypes) == 0 || slices.Contains(p.MessageTypes, messageType))
+		return p.PolicyType == "prompt_based" && inMessageScope(p)
 	}) {
 		// All enforcing policies for a project belong to the same org.
 		promptPoliciesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptPolicies)
@@ -224,7 +232,8 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 		if !policyApplication.Satisfied {
 			continue
 		}
-		if len(p.MessageTypes) > 0 && !slices.Contains(p.MessageTypes, messageType) {
+		// A defined include predicate supersedes message_types (see inMessageScope).
+		if !inMessageScope(p) {
 			continue
 		}
 
@@ -337,6 +346,29 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
 func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool, piEngineOn bool) (*ScanResult, error) {
+	// Build the structured view once; the application predicates and custom
+	// rules both evaluate against it.
+	view := ra.MessageView{Content: text, Type: messageType, Tools: nil}
+	if messageType == message.ToolRequest && toolName != "" {
+		// In realtime a tool-request's text carries the call arguments (the same
+		// body the judge sees), so it doubles as the tool_args source.
+		view.Tools = []ra.ToolView{ra.NewToolView(toolName, text)}
+	}
+
+	// Policy application gates detection: include narrows scope (alongside
+	// message_types); exempt takes the message out of the policy.
+	eng, err := ra.CELEngine()
+	if err != nil {
+		return nil, fmt.Errorf("build cel engine: %w", err)
+	}
+	app, err := ra.CompileScope(eng, policy.ScopeInclude.String, policy.ScopeExempt.String)
+	if err != nil {
+		return nil, fmt.Errorf("compile policy scope: %w", err)
+	}
+	if !app.Includes(view) || app.Exempts(view) {
+		return nil, nil
+	}
+
 	if policy.PolicyType == "prompt_based" {
 		return s.scanPromptPolicy(ctx, policy, text, messageType, toolName, promptPoliciesOn), nil
 	}
@@ -355,6 +387,17 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 	exclusions := ra.NewExclusionSet(exclusionRows)
 	filter := func(findings []ra.Finding) []ra.Finding {
 		return exclusions.FilterFindings(disabled.FilterFindings(findings))
+	}
+
+	// Evaluate custom detection rules up front; their findings are held for the
+	// block check after the built-in sources. Message exemptions were already
+	// applied above via the policy's scope_exempt.
+	var customFindings []ra.Finding
+	if len(policy.CustomRuleIds) > 0 {
+		customFindings, err = s.scanCustomRules(ctx, policy, view)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	for _, source := range policy.Sources {
@@ -417,24 +460,17 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			}
 		}
 	}
-	if len(policy.CustomRuleIds) > 0 {
-		findings, err := s.scanCustomRules(ctx, policy, text)
-		if err != nil {
-			return nil, err
-		}
-		findings = filter(findings)
-		if len(findings) > 0 {
-			return &ScanResult{
-				Action:      policy.Action,
-				PolicyID:    policy.ID.String(),
-				PolicyName:  policy.Name,
-				Source:      ra.SourceCustom,
-				MessageType: messageType,
-				RuleID:      findings[0].RuleID,
-				Description: findings[0].Description,
-				UserMessage: conv.FromPGText[string](policy.UserMessage),
-			}, nil
-		}
+	if denyFindings := filter(customFindings); len(denyFindings) > 0 {
+		return &ScanResult{
+			Action:      policy.Action,
+			PolicyID:    policy.ID.String(),
+			PolicyName:  policy.Name,
+			Source:      ra.SourceCustom,
+			MessageType: messageType,
+			RuleID:      denyFindings[0].RuleID,
+			Description: denyFindings[0].Description,
+			UserMessage: conv.FromPGText[string](policy.UserMessage),
+		}, nil
 	}
 	return nil, nil
 }
@@ -518,35 +554,48 @@ func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.T
 	}
 }
 
-func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, text string) ([]ra.Finding, error) {
+func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) ([]ra.Finding, error) {
+	if len(policy.CustomRuleIds) == 0 {
+		return nil, nil
+	}
+
 	rules, err := s.repo.ListCustomDetectionRules(ctx, policy.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("list custom detection rules: %w", err)
 	}
 
-	selected := make(map[string]struct{}, len(policy.CustomRuleIds))
+	detectors := make(map[string]struct{}, len(policy.CustomRuleIds))
 	for _, id := range policy.CustomRuleIds {
-		selected[id] = struct{}{}
+		detectors[id] = struct{}{}
 	}
 
-	customRules := make([]ra.CustomDetectionRule, 0, len(policy.CustomRuleIds))
+	customRules := make([]ra.CustomDetectionRule, 0, len(detectors))
 	for _, rule := range rules {
-		if _, ok := selected[rule.RuleID]; !ok {
+		if _, ok := detectors[rule.RuleID]; !ok {
 			continue
 		}
 		customRules = append(customRules, ra.CustomDetectionRule{
-			RuleID:      rule.RuleID,
-			Title:       rule.Title,
-			Description: rule.Description,
-			Regex:       conv.PtrValOr(conv.FromPGText[string](rule.Regex), ""),
+			RuleID:       rule.RuleID,
+			Title:        rule.Title,
+			Description:  rule.Description,
+			DetectionExpr: rule.DetectionExpr.String,
+			Regex:        rule.Regex.String,
 		})
 	}
 
-	compiled, err := ra.CompileCustomDetectionRules(customRules)
+	eng, err := ra.CELEngine()
+	if err != nil {
+		return nil, fmt.Errorf("build cel engine: %w", err)
+	}
+	compiled, err := ra.CompileCELRules(eng, customRules)
 	if err != nil {
 		return nil, fmt.Errorf("compile custom detection rules: %w", err)
 	}
-	return ra.ScanCustomDetectionRules(text, compiled), nil
+	findings, err := ra.ScanCELRules(eng, view, compiled)
+	if err != nil {
+		return nil, fmt.Errorf("scan custom detection rules: %w", err)
+	}
+	return findings, nil
 }
 
 // scanGitleaks scans text on the pre-created, reused gitleaks scanner. The

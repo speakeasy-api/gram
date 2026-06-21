@@ -31,11 +31,18 @@ type CreateRiskPolicyRequestBody struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids to enable for this policy.
+	// Custom detection rule ids to attach as detectors: a match produces a finding.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Omit/empty means all
+	// messages are in scope.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Omit/empty means no inline exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -74,12 +81,18 @@ type UpdateRiskPolicyRequestBody struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids to enable for this policy. Omit to preserve the
-	// current selection.
+	// Custom detection rule ids to attach as detectors: a match produces a
+	// finding. Omit to preserve the current selection.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate (in addition to message_types). Omit to preserve the
+	// current value; send empty to clear.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate. Omit to preserve the current value; send empty to
+	// clear.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -154,8 +167,9 @@ type CreateCustomDetectionRuleRequestBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern.
-	Regex string `form:"regex" json:"regex" xml:"regex"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 }
@@ -169,8 +183,9 @@ type UpdateCustomDetectionRuleRequestBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern.
-	Regex string `form:"regex" json:"regex" xml:"regex"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 }
@@ -238,9 +253,9 @@ type TestDetectionRuleRequestBody struct {
 	RuleID string `form:"rule_id" json:"rule_id" xml:"rule_id"`
 	// Sample text to scan.
 	Text string `form:"text" json:"text" xml:"text"`
-	// Regex pattern. Required for `custom.*` rule ids since the server doesn't
-	// persist custom rules yet; ignored for built-in rules.
-	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// CEL detection predicate for `custom.*` rule ids, evaluated against the
+	// sample message.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 }
 
 // CreateRiskPolicyResponseBody is the type of the "risk" service
@@ -267,12 +282,20 @@ type CreateRiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
+	// Custom rules are pure detectors; exemptions are expressed via scope_exempt.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -337,12 +360,20 @@ type GetRiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
+	// Custom rules are pure detectors; exemptions are expressed via scope_exempt.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -400,12 +431,20 @@ type UpdateRiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
+	// Custom rules are pure detectors; exemptions are expressed via scope_exempt.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -501,6 +540,28 @@ type ListRiskCategoriesResponseBody struct {
 	// Categories in classification-priority order. The last entry is the 'custom'
 	// fallback for findings that match none of the others.
 	Categories []*RiskCategoryDefinitionResponseBody `form:"categories,omitempty" json:"categories,omitempty" xml:"categories,omitempty"`
+}
+
+// GetDetectionDescriptorResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body.
+type GetDetectionDescriptorResponseBody struct {
+	// Declared CEL types (the opaque 'field' and the 'tool' object type).
+	Types []*DetectionDescriptorTypeResponseBody `form:"types,omitempty" json:"types,omitempty" xml:"types,omitempty"`
+	// Variables an author may reference.
+	Variables []*DetectionDescriptorVariableResponseBody `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
+	// Function overloads with precise receiver/param/return types.
+	Functions []*DetectionDescriptorFunctionResponseBody `form:"functions,omitempty" json:"functions,omitempty" xml:"functions,omitempty"`
+	// Standard CEL macros (exists/all/has/map/...).
+	Macros []*DetectionDescriptorMacroResponseBody `form:"macros,omitempty" json:"macros,omitempty" xml:"macros,omitempty"`
+}
+
+// CompileExprResponseBody is the type of the "risk" service "compileExpr"
+// endpoint HTTP response body.
+type CompileExprResponseBody struct {
+	// True when the expression compiled successfully.
+	OK *bool `form:"ok,omitempty" json:"ok,omitempty" xml:"ok,omitempty"`
+	// Compiler error message when ok is false; empty otherwise.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
 }
 
 // GetRiskUserBreakdownResponseBody is the type of the "risk" service
@@ -712,8 +773,13 @@ type CreateCustomDetectionRuleResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern.
+	// Legacy RE2-compatible regex pattern (read-only). Live for existing rules;
+	// evaluated as content.match(regex) when detection_expr is empty. New rules
+	// author detection_expr instead.
 	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding. Supersedes regex.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 	// When the custom detection rule was created.
@@ -740,8 +806,13 @@ type GetCustomDetectionRuleResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern.
+	// Legacy RE2-compatible regex pattern (read-only). Live for existing rules;
+	// evaluated as content.match(regex) when detection_expr is empty. New rules
+	// author detection_expr instead.
 	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding. Supersedes regex.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 	// When the custom detection rule was created.
@@ -761,8 +832,13 @@ type UpdateCustomDetectionRuleResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern.
+	// Legacy RE2-compatible regex pattern (read-only). Live for existing rules;
+	// evaluated as content.match(regex) when detection_expr is empty. New rules
+	// author detection_expr instead.
 	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding. Supersedes regex.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 	// When the custom detection rule was created.
@@ -847,8 +923,8 @@ type SuggestCustomDetectionRuleResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Description of what the rule detects and why it matters.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern the rule should match against.
-	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// Suggested CEL detection predicate.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 	// Suggested severity level.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 }
@@ -2686,6 +2762,376 @@ type ListRiskCategoriesUnexpectedResponseBody struct {
 // "listRiskCategories" endpoint HTTP response body for the "gateway_error"
 // error.
 type ListRiskCategoriesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionDescriptorUnauthorizedResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetDetectionDescriptorUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionDescriptorForbiddenResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "forbidden" error.
+type GetDetectionDescriptorForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionDescriptorBadRequestResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "bad_request" error.
+type GetDetectionDescriptorBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionDescriptorNotFoundResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body for the "not_found"
+// error.
+type GetDetectionDescriptorNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionDescriptorConflictResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body for the "conflict"
+// error.
+type GetDetectionDescriptorConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionDescriptorUnsupportedMediaResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetDetectionDescriptorUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionDescriptorInvalidResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body for the "invalid" error.
+type GetDetectionDescriptorInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionDescriptorInvariantViolationResponseBody is the type of the
+// "risk" service "getDetectionDescriptor" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetDetectionDescriptorInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionDescriptorUnexpectedResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "unexpected" error.
+type GetDetectionDescriptorUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionDescriptorGatewayErrorResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetDetectionDescriptorGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileExprUnauthorizedResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "unauthorized" error.
+type CompileExprUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileExprForbiddenResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "forbidden" error.
+type CompileExprForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileExprBadRequestResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "bad_request" error.
+type CompileExprBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileExprNotFoundResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "not_found" error.
+type CompileExprNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileExprConflictResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "conflict" error.
+type CompileExprConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileExprUnsupportedMediaResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "unsupported_media" error.
+type CompileExprUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileExprInvalidResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "invalid" error.
+type CompileExprInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileExprInvariantViolationResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "invariant_violation"
+// error.
+type CompileExprInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileExprUnexpectedResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "unexpected" error.
+type CompileExprUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CompileExprGatewayErrorResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "gateway_error" error.
+type CompileExprGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -6505,12 +6951,20 @@ type RiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
+	// Custom rules are pure detectors; exemptions are expressed via scope_exempt.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -6576,8 +7030,30 @@ type RiskResultResponseBody struct {
 	Confidence *float64 `form:"confidence,omitempty" json:"confidence,omitempty" xml:"confidence,omitempty"`
 	// Tags from the detection rule.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	// All matched spans attributed to this finding. A finding may carry several
+	// correlated spans (e.g. a custom rule matching a tool's function name and its
+	// arguments on the same call). The top-level match/start_pos/end_pos mirror
+	// the primary (first) span.
+	Spans []*RiskSpanResponseBody `form:"spans,omitempty" json:"spans,omitempty" xml:"spans,omitempty"`
 	// When this result was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+}
+
+// RiskSpanResponseBody is used to define fields on response body types.
+type RiskSpanResponseBody struct {
+	// The matched secret or sensitive data for this span.
+	Match *string `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`
+	// The message field this span matched, in author-facing form (content, prompt,
+	// assistant, output, or tool.name/tool.server/tool.function/tool.args). Empty
+	// for detectors that don't attribute a field (e.g. gitleaks, presidio).
+	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	// The JSON sub-path within the field for a `.get(...)` match (e.g. 'command',
+	// 'payload.sql'). Empty when the whole field value matched.
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// Start byte position within the message content.
+	StartPos *int `form:"start_pos,omitempty" json:"start_pos,omitempty" xml:"start_pos,omitempty"`
+	// End byte position within the message content.
+	EndPos *int `form:"end_pos,omitempty" json:"end_pos,omitempty" xml:"end_pos,omitempty"`
 }
 
 // RiskResultRedactedResponseBody is used to define fields on response body
@@ -6617,8 +7093,25 @@ type RiskResultRedactedResponseBody struct {
 	Confidence *float64 `form:"confidence,omitempty" json:"confidence,omitempty" xml:"confidence,omitempty"`
 	// Tags from the detection rule.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	// All matched spans attributed to this finding, each with its match replaced
+	// by an opaque fingerprint.
+	SpansRedacted []*RiskSpanRedactedResponseBody `form:"spans_redacted,omitempty" json:"spans_redacted,omitempty" xml:"spans_redacted,omitempty"`
 	// When this result was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+}
+
+// RiskSpanRedactedResponseBody is used to define fields on response body types.
+type RiskSpanRedactedResponseBody struct {
+	// Opaque fingerprint of this span's match, in the same form as
+	// RiskResultRedacted.match_redacted.
+	MatchRedacted *string `form:"match_redacted,omitempty" json:"match_redacted,omitempty" xml:"match_redacted,omitempty"`
+	// The message field this span matched (see RiskSpan.field).
+	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	// The JSON sub-path within the field for a `.get(...)` match (see
+	// RiskSpan.path).
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// Whether this span carried byte-position information.
+	PositionKnown *bool `form:"position_known,omitempty" json:"position_known,omitempty" xml:"position_known,omitempty"`
 }
 
 // RiskChatSummaryResponseBody is used to define fields on response body types.
@@ -6701,6 +7194,89 @@ type RiskCategoryDefinitionResponseBody struct {
 	RuleIDPrefix *string `form:"rule_id_prefix,omitempty" json:"rule_id_prefix,omitempty" xml:"rule_id_prefix,omitempty"`
 }
 
+// DetectionDescriptorTypeResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorTypeResponseBody struct {
+	// Engine type name (e.g. 'field', 'celenv.celTool').
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// True when the type has no readable members, only receiver methods (e.g.
+	// 'field').
+	Opaque *bool `form:"opaque,omitempty" json:"opaque,omitempty" xml:"opaque,omitempty"`
+	// Typed members of a non-opaque object type. Empty when opaque.
+	Fields []*DetectionDescriptorFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
+	// Short human label for the editor (e.g. 'field', 'tool').
+	DisplayName *string `form:"displayName,omitempty" json:"displayName,omitempty" xml:"displayName,omitempty"`
+	// Plain-English description of the type.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+}
+
+// DetectionDescriptorFieldResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorFieldResponseBody struct {
+	// Member name as written after a dot (e.g. 'name', 'args').
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Machine type-string of the member (e.g. 'field').
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// Plain-English description of the member.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+}
+
+// DetectionDescriptorVariableResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorVariableResponseBody struct {
+	// Variable name as written in CEL (e.g. 'content', 'tools').
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Machine type-string (e.g. 'field', 'string', 'list<celenv.celTool>').
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// Human type tag for the editor (e.g. 'field', 'list(tool)').
+	DisplayType *string `form:"displayType,omitempty" json:"displayType,omitempty" xml:"displayType,omitempty"`
+	// Plain-English description of the variable.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+}
+
+// DetectionDescriptorFunctionResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorFunctionResponseBody struct {
+	// Function name (e.g. 'match', 'get').
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Stable overload identifier (also the engine binding key).
+	OverloadID *string `form:"overloadId,omitempty" json:"overloadId,omitempty" xml:"overloadId,omitempty"`
+	// True for receiver-style calls (x.fn(...)); false for global calls.
+	Member *bool `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
+	// Machine type-string of the receiver when member is true.
+	ReceiverType *string `form:"receiverType,omitempty" json:"receiverType,omitempty" xml:"receiverType,omitempty"`
+	// Non-receiver parameters in order.
+	Params []*DetectionDescriptorParamResponseBody `form:"params,omitempty" json:"params,omitempty" xml:"params,omitempty"`
+	// Machine type-string of the result (e.g. 'bool', 'field').
+	ReturnType *string `form:"returnType,omitempty" json:"returnType,omitempty" xml:"returnType,omitempty"`
+	// Human-readable call signature.
+	Signature *string `form:"signature,omitempty" json:"signature,omitempty" xml:"signature,omitempty"`
+	// Plain-English description of the overload.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+}
+
+// DetectionDescriptorParamResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorParamResponseBody struct {
+	// Parameter name (e.g. 'pattern', 'path').
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Machine type-string of the parameter (e.g. 'string').
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+}
+
+// DetectionDescriptorMacroResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorMacroResponseBody struct {
+	// Macro name (e.g. 'exists', 'has', 'map').
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Human-readable call signature.
+	Signature *string `form:"signature,omitempty" json:"signature,omitempty" xml:"signature,omitempty"`
+	// Plain-English description of the macro's behaviour.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// True when the macro yields a boolean verdict; false when it yields a list.
+	ReturnsBool *bool `form:"returnsBool,omitempty" json:"returnsBool,omitempty" xml:"returnsBool,omitempty"`
+}
+
 // RiskPolicyBypassRequestResponseBody is used to define fields on response
 // body types.
 type RiskPolicyBypassRequestResponseBody struct {
@@ -6747,8 +7323,13 @@ type RiskCustomDetectionRuleResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern.
+	// Legacy RE2-compatible regex pattern (read-only). Live for existing rules;
+	// evaluated as content.match(regex) when detection_expr is empty. New rules
+	// author detection_expr instead.
 	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding. Supersedes regex.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 	// When the custom detection rule was created.
@@ -6814,6 +7395,8 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 	body := &CreateRiskPolicyRequestBody{
 		Name:         p.Name,
 		PolicyType:   p.PolicyType,
+		ScopeInclude: p.ScopeInclude,
+		ScopeExempt:  p.ScopeExempt,
 		Enabled:      p.Enabled,
 		Action:       p.Action,
 		AudienceType: p.AudienceType,
@@ -6893,6 +7476,8 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 	body := &UpdateRiskPolicyRequestBody{
 		ID:           p.ID,
 		Name:         p.Name,
+		ScopeInclude: p.ScopeInclude,
+		ScopeExempt:  p.ScopeExempt,
 		Enabled:      p.Enabled,
 		Action:       p.Action,
 		AudienceType: p.AudienceType,
@@ -7015,11 +7600,11 @@ func NewTriggerRiskAnalysisRequestBody(p *risk.TriggerRiskAnalysisPayload) *Trig
 // service.
 func NewCreateCustomDetectionRuleRequestBody(p *risk.CreateCustomDetectionRulePayload) *CreateCustomDetectionRuleRequestBody {
 	body := &CreateCustomDetectionRuleRequestBody{
-		RuleID:      p.RuleID,
-		Title:       p.Title,
-		Description: p.Description,
-		Regex:       p.Regex,
-		Severity:    p.Severity,
+		RuleID:        p.RuleID,
+		Title:         p.Title,
+		Description:   p.Description,
+		DetectionExpr: p.DetectionExpr,
+		Severity:      p.Severity,
 	}
 	{
 		var zero string
@@ -7035,11 +7620,11 @@ func NewCreateCustomDetectionRuleRequestBody(p *risk.CreateCustomDetectionRulePa
 // service.
 func NewUpdateCustomDetectionRuleRequestBody(p *risk.UpdateCustomDetectionRulePayload) *UpdateCustomDetectionRuleRequestBody {
 	body := &UpdateCustomDetectionRuleRequestBody{
-		ID:          p.ID,
-		Title:       p.Title,
-		Description: p.Description,
-		Regex:       p.Regex,
-		Severity:    p.Severity,
+		ID:            p.ID,
+		Title:         p.Title,
+		Description:   p.Description,
+		DetectionExpr: p.DetectionExpr,
+		Severity:      p.Severity,
 	}
 	return body
 }
@@ -7133,9 +7718,9 @@ func NewSuggestCustomDetectionRuleRequestBody(p *risk.SuggestCustomDetectionRule
 // payload of the "testDetectionRule" endpoint of the "risk" service.
 func NewTestDetectionRuleRequestBody(p *risk.TestDetectionRulePayload) *TestDetectionRuleRequestBody {
 	body := &TestDetectionRuleRequestBody{
-		RuleID: p.RuleID,
-		Text:   p.Text,
-		Regex:  p.Regex,
+		RuleID:        p.RuleID,
+		Text:          p.Text,
+		DetectionExpr: p.DetectionExpr,
 	}
 	return body
 }
@@ -7148,6 +7733,8 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		ProjectID:       *body.ProjectID,
 		Name:            *body.Name,
 		PolicyType:      *body.PolicyType,
+		ScopeInclude:    body.ScopeInclude,
+		ScopeExempt:     body.ScopeExempt,
 		Enabled:         *body.Enabled,
 		Action:          *body.Action,
 		AudienceType:    *body.AudienceType,
@@ -7529,6 +8116,8 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 		ProjectID:       *body.ProjectID,
 		Name:            *body.Name,
 		PolicyType:      *body.PolicyType,
+		ScopeInclude:    body.ScopeInclude,
+		ScopeExempt:     body.ScopeExempt,
 		Enabled:         *body.Enabled,
 		Action:          *body.Action,
 		AudienceType:    *body.AudienceType,
@@ -7744,6 +8333,8 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		ProjectID:       *body.ProjectID,
 		Name:            *body.Name,
 		PolicyType:      *body.PolicyType,
+		ScopeInclude:    body.ScopeInclude,
+		ScopeExempt:     body.ScopeExempt,
 		Enabled:         *body.Enabled,
 		Action:          *body.Action,
 		AudienceType:    *body.AudienceType,
@@ -8958,6 +9549,357 @@ func NewListRiskCategoriesUnexpected(body *ListRiskCategoriesUnexpectedResponseB
 // NewListRiskCategoriesGatewayError builds a risk service listRiskCategories
 // endpoint gateway_error error.
 func NewListRiskCategoriesGatewayError(body *ListRiskCategoriesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionDescriptorDetectionDescriptorResultOK builds a "risk" service
+// "getDetectionDescriptor" endpoint result from a HTTP "OK" response.
+func NewGetDetectionDescriptorDetectionDescriptorResultOK(body *GetDetectionDescriptorResponseBody) *risk.DetectionDescriptorResult {
+	v := &risk.DetectionDescriptorResult{}
+	v.Types = make([]*risk.DetectionDescriptorType, len(body.Types))
+	for i, val := range body.Types {
+		if val == nil {
+			v.Types[i] = nil
+			continue
+		}
+		v.Types[i] = unmarshalDetectionDescriptorTypeResponseBodyToRiskDetectionDescriptorType(val)
+	}
+	v.Variables = make([]*risk.DetectionDescriptorVariable, len(body.Variables))
+	for i, val := range body.Variables {
+		if val == nil {
+			v.Variables[i] = nil
+			continue
+		}
+		v.Variables[i] = unmarshalDetectionDescriptorVariableResponseBodyToRiskDetectionDescriptorVariable(val)
+	}
+	v.Functions = make([]*risk.DetectionDescriptorFunction, len(body.Functions))
+	for i, val := range body.Functions {
+		if val == nil {
+			v.Functions[i] = nil
+			continue
+		}
+		v.Functions[i] = unmarshalDetectionDescriptorFunctionResponseBodyToRiskDetectionDescriptorFunction(val)
+	}
+	v.Macros = make([]*risk.DetectionDescriptorMacro, len(body.Macros))
+	for i, val := range body.Macros {
+		if val == nil {
+			v.Macros[i] = nil
+			continue
+		}
+		v.Macros[i] = unmarshalDetectionDescriptorMacroResponseBodyToRiskDetectionDescriptorMacro(val)
+	}
+
+	return v
+}
+
+// NewGetDetectionDescriptorUnauthorized builds a risk service
+// getDetectionDescriptor endpoint unauthorized error.
+func NewGetDetectionDescriptorUnauthorized(body *GetDetectionDescriptorUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionDescriptorForbidden builds a risk service
+// getDetectionDescriptor endpoint forbidden error.
+func NewGetDetectionDescriptorForbidden(body *GetDetectionDescriptorForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionDescriptorBadRequest builds a risk service
+// getDetectionDescriptor endpoint bad_request error.
+func NewGetDetectionDescriptorBadRequest(body *GetDetectionDescriptorBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionDescriptorNotFound builds a risk service
+// getDetectionDescriptor endpoint not_found error.
+func NewGetDetectionDescriptorNotFound(body *GetDetectionDescriptorNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionDescriptorConflict builds a risk service
+// getDetectionDescriptor endpoint conflict error.
+func NewGetDetectionDescriptorConflict(body *GetDetectionDescriptorConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionDescriptorUnsupportedMedia builds a risk service
+// getDetectionDescriptor endpoint unsupported_media error.
+func NewGetDetectionDescriptorUnsupportedMedia(body *GetDetectionDescriptorUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionDescriptorInvalid builds a risk service
+// getDetectionDescriptor endpoint invalid error.
+func NewGetDetectionDescriptorInvalid(body *GetDetectionDescriptorInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionDescriptorInvariantViolation builds a risk service
+// getDetectionDescriptor endpoint invariant_violation error.
+func NewGetDetectionDescriptorInvariantViolation(body *GetDetectionDescriptorInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionDescriptorUnexpected builds a risk service
+// getDetectionDescriptor endpoint unexpected error.
+func NewGetDetectionDescriptorUnexpected(body *GetDetectionDescriptorUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetDetectionDescriptorGatewayError builds a risk service
+// getDetectionDescriptor endpoint gateway_error error.
+func NewGetDetectionDescriptorGatewayError(body *GetDetectionDescriptorGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileExprExprCompileResultOK builds a "risk" service "compileExpr"
+// endpoint result from a HTTP "OK" response.
+func NewCompileExprExprCompileResultOK(body *CompileExprResponseBody) *risk.ExprCompileResult {
+	v := &risk.ExprCompileResult{
+		OK:    *body.OK,
+		Error: *body.Error,
+	}
+
+	return v
+}
+
+// NewCompileExprUnauthorized builds a risk service compileExpr endpoint
+// unauthorized error.
+func NewCompileExprUnauthorized(body *CompileExprUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileExprForbidden builds a risk service compileExpr endpoint forbidden
+// error.
+func NewCompileExprForbidden(body *CompileExprForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileExprBadRequest builds a risk service compileExpr endpoint
+// bad_request error.
+func NewCompileExprBadRequest(body *CompileExprBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileExprNotFound builds a risk service compileExpr endpoint not_found
+// error.
+func NewCompileExprNotFound(body *CompileExprNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileExprConflict builds a risk service compileExpr endpoint conflict
+// error.
+func NewCompileExprConflict(body *CompileExprConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileExprUnsupportedMedia builds a risk service compileExpr endpoint
+// unsupported_media error.
+func NewCompileExprUnsupportedMedia(body *CompileExprUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileExprInvalid builds a risk service compileExpr endpoint invalid
+// error.
+func NewCompileExprInvalid(body *CompileExprInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileExprInvariantViolation builds a risk service compileExpr endpoint
+// invariant_violation error.
+func NewCompileExprInvariantViolation(body *CompileExprInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileExprUnexpected builds a risk service compileExpr endpoint
+// unexpected error.
+func NewCompileExprUnexpected(body *CompileExprUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCompileExprGatewayError builds a risk service compileExpr endpoint
+// gateway_error error.
+func NewCompileExprGatewayError(body *CompileExprGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -10539,14 +11481,15 @@ func NewTriggerRiskAnalysisGatewayError(body *TriggerRiskAnalysisGatewayErrorRes
 // response.
 func NewCreateCustomDetectionRuleRiskCustomDetectionRuleOK(body *CreateCustomDetectionRuleResponseBody) *types.RiskCustomDetectionRule {
 	v := &types.RiskCustomDetectionRule{
-		ID:          *body.ID,
-		RuleID:      *body.RuleID,
-		Title:       *body.Title,
-		Description: *body.Description,
-		Regex:       *body.Regex,
-		Severity:    *body.Severity,
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:            *body.ID,
+		RuleID:        *body.RuleID,
+		Title:         *body.Title,
+		Description:   *body.Description,
+		Regex:         *body.Regex,
+		DetectionExpr: body.DetectionExpr,
+		Severity:      *body.Severity,
+		CreatedAt:     *body.CreatedAt,
+		UpdatedAt:     *body.UpdatedAt,
 	}
 
 	return v
@@ -10872,14 +11815,15 @@ func NewListCustomDetectionRulesGatewayError(body *ListCustomDetectionRulesGatew
 // "getCustomDetectionRule" endpoint result from a HTTP "OK" response.
 func NewGetCustomDetectionRuleRiskCustomDetectionRuleOK(body *GetCustomDetectionRuleResponseBody) *types.RiskCustomDetectionRule {
 	v := &types.RiskCustomDetectionRule{
-		ID:          *body.ID,
-		RuleID:      *body.RuleID,
-		Title:       *body.Title,
-		Description: *body.Description,
-		Regex:       *body.Regex,
-		Severity:    *body.Severity,
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:            *body.ID,
+		RuleID:        *body.RuleID,
+		Title:         *body.Title,
+		Description:   *body.Description,
+		Regex:         *body.Regex,
+		DetectionExpr: body.DetectionExpr,
+		Severity:      *body.Severity,
+		CreatedAt:     *body.CreatedAt,
+		UpdatedAt:     *body.UpdatedAt,
 	}
 
 	return v
@@ -11040,14 +11984,15 @@ func NewGetCustomDetectionRuleGatewayError(body *GetCustomDetectionRuleGatewayEr
 // response.
 func NewUpdateCustomDetectionRuleRiskCustomDetectionRuleOK(body *UpdateCustomDetectionRuleResponseBody) *types.RiskCustomDetectionRule {
 	v := &types.RiskCustomDetectionRule{
-		ID:          *body.ID,
-		RuleID:      *body.RuleID,
-		Title:       *body.Title,
-		Description: *body.Description,
-		Regex:       *body.Regex,
-		Severity:    *body.Severity,
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:            *body.ID,
+		RuleID:        *body.RuleID,
+		Title:         *body.Title,
+		Description:   *body.Description,
+		Regex:         *body.Regex,
+		DetectionExpr: body.DetectionExpr,
+		Severity:      *body.Severity,
+		CreatedAt:     *body.CreatedAt,
+		UpdatedAt:     *body.UpdatedAt,
 	}
 
 	return v
@@ -12011,11 +12956,11 @@ func NewDeleteRiskExclusionGatewayError(body *DeleteRiskExclusionGatewayErrorRes
 // "suggestCustomDetectionRule" endpoint result from a HTTP "OK" response.
 func NewSuggestCustomDetectionRuleResultOK(body *SuggestCustomDetectionRuleResponseBody) *risk.SuggestCustomDetectionRuleResult {
 	v := &risk.SuggestCustomDetectionRuleResult{
-		RuleID:      *body.RuleID,
-		Title:       *body.Title,
-		Description: *body.Description,
-		Regex:       *body.Regex,
-		Severity:    *body.Severity,
+		RuleID:        *body.RuleID,
+		Title:         *body.Title,
+		Description:   *body.Description,
+		DetectionExpr: body.DetectionExpr,
+		Severity:      *body.Severity,
 	}
 
 	return v
@@ -12730,6 +13675,64 @@ func ValidateListRiskCategoriesResponseBody(body *ListRiskCategoriesResponseBody
 	return
 }
 
+// ValidateGetDetectionDescriptorResponseBody runs the validations defined on
+// GetDetectionDescriptorResponseBody
+func ValidateGetDetectionDescriptorResponseBody(body *GetDetectionDescriptorResponseBody) (err error) {
+	if body.Types == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("types", "body"))
+	}
+	if body.Variables == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("variables", "body"))
+	}
+	if body.Functions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("functions", "body"))
+	}
+	if body.Macros == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("macros", "body"))
+	}
+	for _, e := range body.Types {
+		if e != nil {
+			if err2 := ValidateDetectionDescriptorTypeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Variables {
+		if e != nil {
+			if err2 := ValidateDetectionDescriptorVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Functions {
+		if e != nil {
+			if err2 := ValidateDetectionDescriptorFunctionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Macros {
+		if e != nil {
+			if err2 := ValidateDetectionDescriptorMacroResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateCompileExprResponseBody runs the validations defined on
+// CompileExprResponseBody
+func ValidateCompileExprResponseBody(body *CompileExprResponseBody) (err error) {
+	if body.OK == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ok", "body"))
+	}
+	if body.Error == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("error", "body"))
+	}
+	return
+}
+
 // ValidateGetRiskUserBreakdownResponseBody runs the validations defined on
 // GetRiskUserBreakdownResponseBody
 func ValidateGetRiskUserBreakdownResponseBody(body *GetRiskUserBreakdownResponseBody) (err error) {
@@ -13340,9 +14343,6 @@ func ValidateSuggestCustomDetectionRuleResponseBody(body *SuggestCustomDetection
 	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
-	}
-	if body.Regex == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("regex", "body"))
 	}
 	if body.Severity == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("severity", "body"))
@@ -15756,6 +16756,487 @@ func ValidateListRiskCategoriesUnexpectedResponseBody(body *ListRiskCategoriesUn
 // ValidateListRiskCategoriesGatewayErrorResponseBody runs the validations
 // defined on listRiskCategories_gateway_error_response_body
 func ValidateListRiskCategoriesGatewayErrorResponseBody(body *ListRiskCategoriesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionDescriptorUnauthorizedResponseBody runs the validations
+// defined on getDetectionDescriptor_unauthorized_response_body
+func ValidateGetDetectionDescriptorUnauthorizedResponseBody(body *GetDetectionDescriptorUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionDescriptorForbiddenResponseBody runs the validations
+// defined on getDetectionDescriptor_forbidden_response_body
+func ValidateGetDetectionDescriptorForbiddenResponseBody(body *GetDetectionDescriptorForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionDescriptorBadRequestResponseBody runs the validations
+// defined on getDetectionDescriptor_bad_request_response_body
+func ValidateGetDetectionDescriptorBadRequestResponseBody(body *GetDetectionDescriptorBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionDescriptorNotFoundResponseBody runs the validations
+// defined on getDetectionDescriptor_not_found_response_body
+func ValidateGetDetectionDescriptorNotFoundResponseBody(body *GetDetectionDescriptorNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionDescriptorConflictResponseBody runs the validations
+// defined on getDetectionDescriptor_conflict_response_body
+func ValidateGetDetectionDescriptorConflictResponseBody(body *GetDetectionDescriptorConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionDescriptorUnsupportedMediaResponseBody runs the
+// validations defined on getDetectionDescriptor_unsupported_media_response_body
+func ValidateGetDetectionDescriptorUnsupportedMediaResponseBody(body *GetDetectionDescriptorUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionDescriptorInvalidResponseBody runs the validations
+// defined on getDetectionDescriptor_invalid_response_body
+func ValidateGetDetectionDescriptorInvalidResponseBody(body *GetDetectionDescriptorInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionDescriptorInvariantViolationResponseBody runs the
+// validations defined on
+// getDetectionDescriptor_invariant_violation_response_body
+func ValidateGetDetectionDescriptorInvariantViolationResponseBody(body *GetDetectionDescriptorInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionDescriptorUnexpectedResponseBody runs the validations
+// defined on getDetectionDescriptor_unexpected_response_body
+func ValidateGetDetectionDescriptorUnexpectedResponseBody(body *GetDetectionDescriptorUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetDetectionDescriptorGatewayErrorResponseBody runs the validations
+// defined on getDetectionDescriptor_gateway_error_response_body
+func ValidateGetDetectionDescriptorGatewayErrorResponseBody(body *GetDetectionDescriptorGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileExprUnauthorizedResponseBody runs the validations defined on
+// compileExpr_unauthorized_response_body
+func ValidateCompileExprUnauthorizedResponseBody(body *CompileExprUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileExprForbiddenResponseBody runs the validations defined on
+// compileExpr_forbidden_response_body
+func ValidateCompileExprForbiddenResponseBody(body *CompileExprForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileExprBadRequestResponseBody runs the validations defined on
+// compileExpr_bad_request_response_body
+func ValidateCompileExprBadRequestResponseBody(body *CompileExprBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileExprNotFoundResponseBody runs the validations defined on
+// compileExpr_not_found_response_body
+func ValidateCompileExprNotFoundResponseBody(body *CompileExprNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileExprConflictResponseBody runs the validations defined on
+// compileExpr_conflict_response_body
+func ValidateCompileExprConflictResponseBody(body *CompileExprConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileExprUnsupportedMediaResponseBody runs the validations defined
+// on compileExpr_unsupported_media_response_body
+func ValidateCompileExprUnsupportedMediaResponseBody(body *CompileExprUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileExprInvalidResponseBody runs the validations defined on
+// compileExpr_invalid_response_body
+func ValidateCompileExprInvalidResponseBody(body *CompileExprInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileExprInvariantViolationResponseBody runs the validations
+// defined on compileExpr_invariant_violation_response_body
+func ValidateCompileExprInvariantViolationResponseBody(body *CompileExprInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileExprUnexpectedResponseBody runs the validations defined on
+// compileExpr_unexpected_response_body
+func ValidateCompileExprUnexpectedResponseBody(body *CompileExprUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCompileExprGatewayErrorResponseBody runs the validations defined on
+// compileExpr_gateway_error_response_body
+func ValidateCompileExprGatewayErrorResponseBody(body *CompileExprGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -20722,8 +22203,24 @@ func ValidateRiskResultResponseBody(body *RiskResultResponseBody) (err error) {
 	if body.ChatID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
 	}
+	for _, e := range body.Spans {
+		if e != nil {
+			if err2 := ValidateRiskSpanResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRiskSpanResponseBody runs the validations defined on
+// RiskSpanResponseBody
+func ValidateRiskSpanResponseBody(body *RiskSpanResponseBody) (err error) {
+	if body.Match == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match", "body"))
 	}
 	return
 }
@@ -20767,8 +22264,27 @@ func ValidateRiskResultRedactedResponseBody(body *RiskResultRedactedResponseBody
 	if body.ChatID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
 	}
+	for _, e := range body.SpansRedacted {
+		if e != nil {
+			if err2 := ValidateRiskSpanRedactedResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRiskSpanRedactedResponseBody runs the validations defined on
+// RiskSpanRedactedResponseBody
+func ValidateRiskSpanRedactedResponseBody(body *RiskSpanRedactedResponseBody) (err error) {
+	if body.MatchRedacted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_redacted", "body"))
+	}
+	if body.PositionKnown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("position_known", "body"))
 	}
 	return
 }
@@ -20877,6 +22393,128 @@ func ValidateRiskCategoryDefinitionResponseBody(body *RiskCategoryDefinitionResp
 	}
 	if body.RuleIDPrefix == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("rule_id_prefix", "body"))
+	}
+	return
+}
+
+// ValidateDetectionDescriptorTypeResponseBody runs the validations defined on
+// DetectionDescriptorTypeResponseBody
+func ValidateDetectionDescriptorTypeResponseBody(body *DetectionDescriptorTypeResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Opaque == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("opaque", "body"))
+	}
+	if body.DisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("displayName", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	for _, e := range body.Fields {
+		if e != nil {
+			if err2 := ValidateDetectionDescriptorFieldResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateDetectionDescriptorFieldResponseBody runs the validations defined on
+// DetectionDescriptorFieldResponseBody
+func ValidateDetectionDescriptorFieldResponseBody(body *DetectionDescriptorFieldResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	return
+}
+
+// ValidateDetectionDescriptorVariableResponseBody runs the validations defined
+// on DetectionDescriptorVariableResponseBody
+func ValidateDetectionDescriptorVariableResponseBody(body *DetectionDescriptorVariableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	if body.DisplayType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("displayType", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	return
+}
+
+// ValidateDetectionDescriptorFunctionResponseBody runs the validations defined
+// on DetectionDescriptorFunctionResponseBody
+func ValidateDetectionDescriptorFunctionResponseBody(body *DetectionDescriptorFunctionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.OverloadID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("overloadId", "body"))
+	}
+	if body.Member == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("member", "body"))
+	}
+	if body.ReceiverType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("receiverType", "body"))
+	}
+	if body.ReturnType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("returnType", "body"))
+	}
+	if body.Signature == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signature", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	for _, e := range body.Params {
+		if e != nil {
+			if err2 := ValidateDetectionDescriptorParamResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateDetectionDescriptorParamResponseBody runs the validations defined on
+// DetectionDescriptorParamResponseBody
+func ValidateDetectionDescriptorParamResponseBody(body *DetectionDescriptorParamResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	return
+}
+
+// ValidateDetectionDescriptorMacroResponseBody runs the validations defined on
+// DetectionDescriptorMacroResponseBody
+func ValidateDetectionDescriptorMacroResponseBody(body *DetectionDescriptorMacroResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Signature == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signature", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.ReturnsBool == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("returnsBool", "body"))
 	}
 	return
 }

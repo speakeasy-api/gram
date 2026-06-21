@@ -46,6 +46,19 @@ type Service interface {
 	// rule_id prefix) used to bucket findings. Dashboards and CLIs should call
 	// this instead of maintaining their own copy of the mapping.
 	ListRiskCategories(context.Context, *ListRiskCategoriesPayload) (res *RiskCategoriesResult, err error)
+	// Return the machine-readable CEL environment descriptor for the
+	// detection-rule and policy-scope editors: the precise types, variables,
+	// function overloads (with receiver/param/return types), and macros. The
+	// dashboard configures a client-side CEL type-checker from this so it can
+	// validate and complete expressions instantly without a round-trip, while
+	// staying faithful to the backend engine. Compilation and validation remain
+	// server-authoritative on the rule/policy save path.
+	GetDetectionDescriptor(context.Context, *GetDetectionDescriptorPayload) (res *DetectionDescriptorResult, err error)
+	// Compile a single CEL expression (a detection predicate or a policy scope
+	// predicate) without evaluating it, so the editor can validate as the author
+	// types. Returns ok=true when it compiles, otherwise ok=false with the
+	// compiler error message. An empty expression is valid (ok=true).
+	CompileExpr(context.Context, *CompileExprPayload) (res *ExprCompileResult, err error)
 	// Per-user breakdowns of findings by category and by rule_id within a time
 	// window. Powers the user drill-down on /risk-overview.
 	GetRiskUserBreakdown(context.Context, *GetRiskUserBreakdownPayload) (res *RiskUserBreakdownResult, err error)
@@ -122,7 +135,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [30]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [32]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getDetectionDescriptor", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
 
 // ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
 // service approveRiskPolicyBypassRequest method.
@@ -137,6 +150,16 @@ type ApproveRiskPolicyBypassRequestPayload struct {
 	GrantedPrincipalUrns []string
 }
 
+// CompileExprPayload is the payload type of the risk service compileExpr
+// method.
+type CompileExprPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The CEL expression to compile.
+	Expr string
+}
+
 // CreateCustomDetectionRulePayload is the payload type of the risk service
 // createCustomDetectionRule method.
 type CreateCustomDetectionRulePayload struct {
@@ -149,8 +172,9 @@ type CreateCustomDetectionRulePayload struct {
 	Title string
 	// Description of what the rule detects.
 	Description *string
-	// RE2-compatible regex pattern.
-	Regex string
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionExpr *string
 	// Severity level for findings produced by this rule.
 	Severity string
 }
@@ -205,11 +229,18 @@ type CreateRiskPolicyPayload struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
-	// Custom detection rule ids to enable for this policy.
+	// Custom detection rule ids to attach as detectors: a match produces a finding.
 	CustomRuleIds []string
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
 	MessageTypes []string
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Omit/empty means all
+	// messages are in scope.
+	ScopeInclude *string
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Omit/empty means no inline exemption.
+	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
@@ -271,6 +302,107 @@ type DenyRiskPolicyBypassRequestPayload struct {
 	ID string
 }
 
+// One typed member of an object type (e.g. 'args' on a 'tool').
+type DetectionDescriptorField struct {
+	// Member name as written after a dot (e.g. 'name', 'args').
+	Name string
+	// Machine type-string of the member (e.g. 'field').
+	Type string
+	// Plain-English description of the member.
+	Description string
+}
+
+// One function overload with the precise types the checker resolves against.
+type DetectionDescriptorFunction struct {
+	// Function name (e.g. 'match', 'get').
+	Name string
+	// Stable overload identifier (also the engine binding key).
+	OverloadID string
+	// True for receiver-style calls (x.fn(...)); false for global calls.
+	Member bool
+	// Machine type-string of the receiver when member is true.
+	ReceiverType string
+	// Non-receiver parameters in order.
+	Params []*DetectionDescriptorParam
+	// Machine type-string of the result (e.g. 'bool', 'field').
+	ReturnType string
+	// Human-readable call signature.
+	Signature string
+	// Plain-English description of the overload.
+	Description string
+}
+
+// One CEL macro. Macros are built into both engines (not declared), listed
+// here for completion and documentation only.
+type DetectionDescriptorMacro struct {
+	// Macro name (e.g. 'exists', 'has', 'map').
+	Name string
+	// Human-readable call signature.
+	Signature string
+	// Plain-English description of the macro's behaviour.
+	Description string
+	// True when the macro yields a boolean verdict; false when it yields a list.
+	ReturnsBool bool
+}
+
+// One non-receiver argument of a function overload.
+type DetectionDescriptorParam struct {
+	// Parameter name (e.g. 'pattern', 'path').
+	Name string
+	// Machine type-string of the parameter (e.g. 'string').
+	Type string
+}
+
+// DetectionDescriptorResult is the result type of the risk service
+// getDetectionDescriptor method.
+type DetectionDescriptorResult struct {
+	// Declared CEL types (the opaque 'field' and the 'tool' object type).
+	Types []*DetectionDescriptorType
+	// Variables an author may reference.
+	Variables []*DetectionDescriptorVariable
+	// Function overloads with precise receiver/param/return types.
+	Functions []*DetectionDescriptorFunction
+	// Standard CEL macros (exists/all/has/map/...).
+	Macros []*DetectionDescriptorMacro
+}
+
+// One CEL type. Registered identically in the Go engine and the client checker
+// under 'name'.
+type DetectionDescriptorType struct {
+	// Engine type name (e.g. 'field', 'celenv.celTool').
+	Name string
+	// True when the type has no readable members, only receiver methods (e.g.
+	// 'field').
+	Opaque bool
+	// Typed members of a non-opaque object type. Empty when opaque.
+	Fields []*DetectionDescriptorField
+	// Short human label for the editor (e.g. 'field', 'tool').
+	DisplayName string
+	// Plain-English description of the type.
+	Description string
+}
+
+// One author-visible variable, with the machine type the checker consumes and
+// a human display tag.
+type DetectionDescriptorVariable struct {
+	// Variable name as written in CEL (e.g. 'content', 'tools').
+	Name string
+	// Machine type-string (e.g. 'field', 'string', 'list<celenv.celTool>').
+	Type string
+	// Human type tag for the editor (e.g. 'field', 'list(tool)').
+	DisplayType string
+	// Plain-English description of the variable.
+	Description string
+}
+
+// ExprCompileResult is the result type of the risk service compileExpr method.
+type ExprCompileResult struct {
+	// True when the expression compiled successfully.
+	OK bool
+	// Compiler error message when ok is false; empty otherwise.
+	Error string
+}
+
 // GetCustomDetectionRulePayload is the payload type of the risk service
 // getCustomDetectionRule method.
 type GetCustomDetectionRulePayload struct {
@@ -279,6 +411,14 @@ type GetCustomDetectionRulePayload struct {
 	ProjectSlugInput *string
 	// The custom detection rule ID.
 	ID string
+}
+
+// GetDetectionDescriptorPayload is the payload type of the risk service
+// getDetectionDescriptor method.
+type GetDetectionDescriptorPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // GetRiskOverviewPayload is the payload type of the risk service
@@ -716,8 +856,8 @@ type SuggestCustomDetectionRuleResult struct {
 	Title string
 	// Description of what the rule detects and why it matters.
 	Description string
-	// RE2-compatible regex pattern the rule should match against.
-	Regex string
+	// Suggested CEL detection predicate.
+	DetectionExpr *string
 	// Suggested severity level.
 	Severity string
 }
@@ -753,9 +893,9 @@ type TestDetectionRulePayload struct {
 	RuleID string
 	// Sample text to scan.
 	Text string
-	// Regex pattern. Required for `custom.*` rule ids since the server doesn't
-	// persist custom rules yet; ignored for built-in rules.
-	Regex *string
+	// CEL detection predicate for `custom.*` rule ids, evaluated against the
+	// sample message.
+	DetectionExpr *string
 }
 
 // TestDetectionRuleResult is the result type of the risk service
@@ -796,8 +936,9 @@ type UpdateCustomDetectionRulePayload struct {
 	Title string
 	// Description of what the rule detects.
 	Description *string
-	// RE2-compatible regex pattern.
-	Regex string
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionExpr *string
 	// Severity level for findings produced by this rule.
 	Severity string
 }
@@ -845,12 +986,18 @@ type UpdateRiskPolicyPayload struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
-	// Custom detection rule ids to enable for this policy. Omit to preserve the
-	// current selection.
+	// Custom detection rule ids to attach as detectors: a match produces a
+	// finding. Omit to preserve the current selection.
 	CustomRuleIds []string
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
 	MessageTypes []string
+	// CEL scope predicate (in addition to message_types). Omit to preserve the
+	// current value; send empty to clear.
+	ScopeInclude *string
+	// CEL exemption predicate. Omit to preserve the current value; send empty to
+	// clear.
+	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.

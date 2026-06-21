@@ -281,7 +281,7 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 		RuleID:         "custom.acme_token",
 		Title:          "ACME token",
 		Description:    "ACME token",
-		Regex:          pgtype.Text{String: `ACME-[A-Z0-9]{8}`, Valid: true},
+		DetectionExpr:   pgtype.Text{String: `content.matchRegex("ACME-[A-Z0-9]{8}")`, Valid: true},
 		Severity:       "high",
 	})
 	require.NoError(t, err)

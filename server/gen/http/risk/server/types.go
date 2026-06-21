@@ -33,11 +33,18 @@ type CreateRiskPolicyRequestBody struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids to enable for this policy.
+	// Custom detection rule ids to attach as detectors: a match produces a finding.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Omit/empty means all
+	// messages are in scope.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Omit/empty means no inline exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -76,12 +83,18 @@ type UpdateRiskPolicyRequestBody struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids to enable for this policy. Omit to preserve the
-	// current selection.
+	// Custom detection rule ids to attach as detectors: a match produces a
+	// finding. Omit to preserve the current selection.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate (in addition to message_types). Omit to preserve the
+	// current value; send empty to clear.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate. Omit to preserve the current value; send empty to
+	// clear.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -156,8 +169,9 @@ type CreateCustomDetectionRuleRequestBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern.
-	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 }
@@ -171,8 +185,9 @@ type UpdateCustomDetectionRuleRequestBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern.
-	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 }
@@ -240,9 +255,9 @@ type TestDetectionRuleRequestBody struct {
 	RuleID *string `form:"rule_id,omitempty" json:"rule_id,omitempty" xml:"rule_id,omitempty"`
 	// Sample text to scan.
 	Text *string `form:"text,omitempty" json:"text,omitempty" xml:"text,omitempty"`
-	// Regex pattern. Required for `custom.*` rule ids since the server doesn't
-	// persist custom rules yet; ignored for built-in rules.
-	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// CEL detection predicate for `custom.*` rule ids, evaluated against the
+	// sample message.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 }
 
 // CreateRiskPolicyResponseBody is the type of the "risk" service
@@ -269,12 +284,20 @@ type CreateRiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
+	// Custom rules are pure detectors; exemptions are expressed via scope_exempt.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -339,12 +362,20 @@ type GetRiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
+	// Custom rules are pure detectors; exemptions are expressed via scope_exempt.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -402,12 +433,20 @@ type UpdateRiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
+	// Custom rules are pure detectors; exemptions are expressed via scope_exempt.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -503,6 +542,28 @@ type ListRiskCategoriesResponseBody struct {
 	// Categories in classification-priority order. The last entry is the 'custom'
 	// fallback for findings that match none of the others.
 	Categories []*RiskCategoryDefinitionResponseBody `form:"categories" json:"categories" xml:"categories"`
+}
+
+// GetDetectionDescriptorResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body.
+type GetDetectionDescriptorResponseBody struct {
+	// Declared CEL types (the opaque 'field' and the 'tool' object type).
+	Types []*DetectionDescriptorTypeResponseBody `form:"types" json:"types" xml:"types"`
+	// Variables an author may reference.
+	Variables []*DetectionDescriptorVariableResponseBody `form:"variables" json:"variables" xml:"variables"`
+	// Function overloads with precise receiver/param/return types.
+	Functions []*DetectionDescriptorFunctionResponseBody `form:"functions" json:"functions" xml:"functions"`
+	// Standard CEL macros (exists/all/has/map/...).
+	Macros []*DetectionDescriptorMacroResponseBody `form:"macros" json:"macros" xml:"macros"`
+}
+
+// CompileExprResponseBody is the type of the "risk" service "compileExpr"
+// endpoint HTTP response body.
+type CompileExprResponseBody struct {
+	// True when the expression compiled successfully.
+	OK bool `form:"ok" json:"ok" xml:"ok"`
+	// Compiler error message when ok is false; empty otherwise.
+	Error string `form:"error" json:"error" xml:"error"`
 }
 
 // GetRiskUserBreakdownResponseBody is the type of the "risk" service
@@ -714,8 +775,13 @@ type CreateCustomDetectionRuleResponseBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// Description of what the rule detects.
 	Description string `form:"description" json:"description" xml:"description"`
-	// RE2-compatible regex pattern.
+	// Legacy RE2-compatible regex pattern (read-only). Live for existing rules;
+	// evaluated as content.match(regex) when detection_expr is empty. New rules
+	// author detection_expr instead.
 	Regex string `form:"regex" json:"regex" xml:"regex"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding. Supersedes regex.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 	// When the custom detection rule was created.
@@ -742,8 +808,13 @@ type GetCustomDetectionRuleResponseBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// Description of what the rule detects.
 	Description string `form:"description" json:"description" xml:"description"`
-	// RE2-compatible regex pattern.
+	// Legacy RE2-compatible regex pattern (read-only). Live for existing rules;
+	// evaluated as content.match(regex) when detection_expr is empty. New rules
+	// author detection_expr instead.
 	Regex string `form:"regex" json:"regex" xml:"regex"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding. Supersedes regex.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 	// When the custom detection rule was created.
@@ -763,8 +834,13 @@ type UpdateCustomDetectionRuleResponseBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// Description of what the rule detects.
 	Description string `form:"description" json:"description" xml:"description"`
-	// RE2-compatible regex pattern.
+	// Legacy RE2-compatible regex pattern (read-only). Live for existing rules;
+	// evaluated as content.match(regex) when detection_expr is empty. New rules
+	// author detection_expr instead.
 	Regex string `form:"regex" json:"regex" xml:"regex"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding. Supersedes regex.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 	// When the custom detection rule was created.
@@ -849,8 +925,8 @@ type SuggestCustomDetectionRuleResponseBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// Description of what the rule detects and why it matters.
 	Description string `form:"description" json:"description" xml:"description"`
-	// RE2-compatible regex pattern the rule should match against.
-	Regex string `form:"regex" json:"regex" xml:"regex"`
+	// Suggested CEL detection predicate.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 	// Suggested severity level.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 }
@@ -2688,6 +2764,376 @@ type ListRiskCategoriesUnexpectedResponseBody struct {
 // "listRiskCategories" endpoint HTTP response body for the "gateway_error"
 // error.
 type ListRiskCategoriesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorUnauthorizedResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetDetectionDescriptorUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorForbiddenResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "forbidden" error.
+type GetDetectionDescriptorForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorBadRequestResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "bad_request" error.
+type GetDetectionDescriptorBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorNotFoundResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body for the "not_found"
+// error.
+type GetDetectionDescriptorNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorConflictResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body for the "conflict"
+// error.
+type GetDetectionDescriptorConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorUnsupportedMediaResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetDetectionDescriptorUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorInvalidResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body for the "invalid" error.
+type GetDetectionDescriptorInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorInvariantViolationResponseBody is the type of the
+// "risk" service "getDetectionDescriptor" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetDetectionDescriptorInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorUnexpectedResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "unexpected" error.
+type GetDetectionDescriptorUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorGatewayErrorResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetDetectionDescriptorGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprUnauthorizedResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "unauthorized" error.
+type CompileExprUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprForbiddenResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "forbidden" error.
+type CompileExprForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprBadRequestResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "bad_request" error.
+type CompileExprBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprNotFoundResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "not_found" error.
+type CompileExprNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprConflictResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "conflict" error.
+type CompileExprConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprUnsupportedMediaResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "unsupported_media" error.
+type CompileExprUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprInvalidResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "invalid" error.
+type CompileExprInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprInvariantViolationResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "invariant_violation"
+// error.
+type CompileExprInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprUnexpectedResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "unexpected" error.
+type CompileExprUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprGatewayErrorResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "gateway_error" error.
+type CompileExprGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -6493,12 +6939,20 @@ type RiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
+	// Custom rules are pure detectors; exemptions are expressed via scope_exempt.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -6564,8 +7018,30 @@ type RiskResultResponseBody struct {
 	Confidence *float64 `form:"confidence,omitempty" json:"confidence,omitempty" xml:"confidence,omitempty"`
 	// Tags from the detection rule.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	// All matched spans attributed to this finding. A finding may carry several
+	// correlated spans (e.g. a custom rule matching a tool's function name and its
+	// arguments on the same call). The top-level match/start_pos/end_pos mirror
+	// the primary (first) span.
+	Spans []*RiskSpanResponseBody `form:"spans,omitempty" json:"spans,omitempty" xml:"spans,omitempty"`
 	// When this result was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
+// RiskSpanResponseBody is used to define fields on response body types.
+type RiskSpanResponseBody struct {
+	// The matched secret or sensitive data for this span.
+	Match string `form:"match" json:"match" xml:"match"`
+	// The message field this span matched, in author-facing form (content, prompt,
+	// assistant, output, or tool.name/tool.server/tool.function/tool.args). Empty
+	// for detectors that don't attribute a field (e.g. gitleaks, presidio).
+	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	// The JSON sub-path within the field for a `.get(...)` match (e.g. 'command',
+	// 'payload.sql'). Empty when the whole field value matched.
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// Start byte position within the message content.
+	StartPos *int `form:"start_pos,omitempty" json:"start_pos,omitempty" xml:"start_pos,omitempty"`
+	// End byte position within the message content.
+	EndPos *int `form:"end_pos,omitempty" json:"end_pos,omitempty" xml:"end_pos,omitempty"`
 }
 
 // RiskResultRedactedResponseBody is used to define fields on response body
@@ -6605,8 +7081,25 @@ type RiskResultRedactedResponseBody struct {
 	Confidence *float64 `form:"confidence,omitempty" json:"confidence,omitempty" xml:"confidence,omitempty"`
 	// Tags from the detection rule.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	// All matched spans attributed to this finding, each with its match replaced
+	// by an opaque fingerprint.
+	SpansRedacted []*RiskSpanRedactedResponseBody `form:"spans_redacted,omitempty" json:"spans_redacted,omitempty" xml:"spans_redacted,omitempty"`
 	// When this result was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
+// RiskSpanRedactedResponseBody is used to define fields on response body types.
+type RiskSpanRedactedResponseBody struct {
+	// Opaque fingerprint of this span's match, in the same form as
+	// RiskResultRedacted.match_redacted.
+	MatchRedacted string `form:"match_redacted" json:"match_redacted" xml:"match_redacted"`
+	// The message field this span matched (see RiskSpan.field).
+	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
+	// The JSON sub-path within the field for a `.get(...)` match (see
+	// RiskSpan.path).
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// Whether this span carried byte-position information.
+	PositionKnown bool `form:"position_known" json:"position_known" xml:"position_known"`
 }
 
 // RiskChatSummaryResponseBody is used to define fields on response body types.
@@ -6689,6 +7182,89 @@ type RiskCategoryDefinitionResponseBody struct {
 	RuleIDPrefix string `form:"rule_id_prefix" json:"rule_id_prefix" xml:"rule_id_prefix"`
 }
 
+// DetectionDescriptorTypeResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorTypeResponseBody struct {
+	// Engine type name (e.g. 'field', 'celenv.celTool').
+	Name string `form:"name" json:"name" xml:"name"`
+	// True when the type has no readable members, only receiver methods (e.g.
+	// 'field').
+	Opaque bool `form:"opaque" json:"opaque" xml:"opaque"`
+	// Typed members of a non-opaque object type. Empty when opaque.
+	Fields []*DetectionDescriptorFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
+	// Short human label for the editor (e.g. 'field', 'tool').
+	DisplayName string `form:"displayName" json:"displayName" xml:"displayName"`
+	// Plain-English description of the type.
+	Description string `form:"description" json:"description" xml:"description"`
+}
+
+// DetectionDescriptorFieldResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorFieldResponseBody struct {
+	// Member name as written after a dot (e.g. 'name', 'args').
+	Name string `form:"name" json:"name" xml:"name"`
+	// Machine type-string of the member (e.g. 'field').
+	Type string `form:"type" json:"type" xml:"type"`
+	// Plain-English description of the member.
+	Description string `form:"description" json:"description" xml:"description"`
+}
+
+// DetectionDescriptorVariableResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorVariableResponseBody struct {
+	// Variable name as written in CEL (e.g. 'content', 'tools').
+	Name string `form:"name" json:"name" xml:"name"`
+	// Machine type-string (e.g. 'field', 'string', 'list<celenv.celTool>').
+	Type string `form:"type" json:"type" xml:"type"`
+	// Human type tag for the editor (e.g. 'field', 'list(tool)').
+	DisplayType string `form:"displayType" json:"displayType" xml:"displayType"`
+	// Plain-English description of the variable.
+	Description string `form:"description" json:"description" xml:"description"`
+}
+
+// DetectionDescriptorFunctionResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorFunctionResponseBody struct {
+	// Function name (e.g. 'match', 'get').
+	Name string `form:"name" json:"name" xml:"name"`
+	// Stable overload identifier (also the engine binding key).
+	OverloadID string `form:"overloadId" json:"overloadId" xml:"overloadId"`
+	// True for receiver-style calls (x.fn(...)); false for global calls.
+	Member bool `form:"member" json:"member" xml:"member"`
+	// Machine type-string of the receiver when member is true.
+	ReceiverType string `form:"receiverType" json:"receiverType" xml:"receiverType"`
+	// Non-receiver parameters in order.
+	Params []*DetectionDescriptorParamResponseBody `form:"params,omitempty" json:"params,omitempty" xml:"params,omitempty"`
+	// Machine type-string of the result (e.g. 'bool', 'field').
+	ReturnType string `form:"returnType" json:"returnType" xml:"returnType"`
+	// Human-readable call signature.
+	Signature string `form:"signature" json:"signature" xml:"signature"`
+	// Plain-English description of the overload.
+	Description string `form:"description" json:"description" xml:"description"`
+}
+
+// DetectionDescriptorParamResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorParamResponseBody struct {
+	// Parameter name (e.g. 'pattern', 'path').
+	Name string `form:"name" json:"name" xml:"name"`
+	// Machine type-string of the parameter (e.g. 'string').
+	Type string `form:"type" json:"type" xml:"type"`
+}
+
+// DetectionDescriptorMacroResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorMacroResponseBody struct {
+	// Macro name (e.g. 'exists', 'has', 'map').
+	Name string `form:"name" json:"name" xml:"name"`
+	// Human-readable call signature.
+	Signature string `form:"signature" json:"signature" xml:"signature"`
+	// Plain-English description of the macro's behaviour.
+	Description string `form:"description" json:"description" xml:"description"`
+	// True when the macro yields a boolean verdict; false when it yields a list.
+	ReturnsBool bool `form:"returnsBool" json:"returnsBool" xml:"returnsBool"`
+}
+
 // RiskPolicyBypassRequestResponseBody is used to define fields on response
 // body types.
 type RiskPolicyBypassRequestResponseBody struct {
@@ -6735,8 +7311,13 @@ type RiskCustomDetectionRuleResponseBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// Description of what the rule detects.
 	Description string `form:"description" json:"description" xml:"description"`
-	// RE2-compatible regex pattern.
+	// Legacy RE2-compatible regex pattern (read-only). Live for existing rules;
+	// evaluated as content.match(regex) when detection_expr is empty. New rules
+	// author detection_expr instead.
 	Regex string `form:"regex" json:"regex" xml:"regex"`
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding. Supersedes regex.
+	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 	// When the custom detection rule was created.
@@ -6818,6 +7399,8 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
 		PolicyType:      res.PolicyType,
+		ScopeInclude:    res.ScopeInclude,
+		ScopeExempt:     res.ScopeExempt,
 		Enabled:         res.Enabled,
 		Action:          res.Action,
 		AudienceType:    res.AudienceType,
@@ -6909,6 +7492,8 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
 		PolicyType:      res.PolicyType,
+		ScopeInclude:    res.ScopeInclude,
+		ScopeExempt:     res.ScopeExempt,
 		Enabled:         res.Enabled,
 		Action:          res.Action,
 		AudienceType:    res.AudienceType,
@@ -6981,6 +7566,8 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
 		PolicyType:      res.PolicyType,
+		ScopeInclude:    res.ScopeInclude,
+		ScopeExempt:     res.ScopeExempt,
 		Enabled:         res.Enabled,
 		Action:          res.Action,
 		AudienceType:    res.AudienceType,
@@ -7187,6 +7774,71 @@ func NewListRiskCategoriesResponseBody(res *risk.RiskCategoriesResult) *ListRisk
 		}
 	} else {
 		body.Categories = []*RiskCategoryDefinitionResponseBody{}
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorResponseBody builds the HTTP response body from the
+// result of the "getDetectionDescriptor" endpoint of the "risk" service.
+func NewGetDetectionDescriptorResponseBody(res *risk.DetectionDescriptorResult) *GetDetectionDescriptorResponseBody {
+	body := &GetDetectionDescriptorResponseBody{}
+	if res.Types != nil {
+		body.Types = make([]*DetectionDescriptorTypeResponseBody, len(res.Types))
+		for i, val := range res.Types {
+			if val == nil {
+				body.Types[i] = nil
+				continue
+			}
+			body.Types[i] = marshalRiskDetectionDescriptorTypeToDetectionDescriptorTypeResponseBody(val)
+		}
+	} else {
+		body.Types = []*DetectionDescriptorTypeResponseBody{}
+	}
+	if res.Variables != nil {
+		body.Variables = make([]*DetectionDescriptorVariableResponseBody, len(res.Variables))
+		for i, val := range res.Variables {
+			if val == nil {
+				body.Variables[i] = nil
+				continue
+			}
+			body.Variables[i] = marshalRiskDetectionDescriptorVariableToDetectionDescriptorVariableResponseBody(val)
+		}
+	} else {
+		body.Variables = []*DetectionDescriptorVariableResponseBody{}
+	}
+	if res.Functions != nil {
+		body.Functions = make([]*DetectionDescriptorFunctionResponseBody, len(res.Functions))
+		for i, val := range res.Functions {
+			if val == nil {
+				body.Functions[i] = nil
+				continue
+			}
+			body.Functions[i] = marshalRiskDetectionDescriptorFunctionToDetectionDescriptorFunctionResponseBody(val)
+		}
+	} else {
+		body.Functions = []*DetectionDescriptorFunctionResponseBody{}
+	}
+	if res.Macros != nil {
+		body.Macros = make([]*DetectionDescriptorMacroResponseBody, len(res.Macros))
+		for i, val := range res.Macros {
+			if val == nil {
+				body.Macros[i] = nil
+				continue
+			}
+			body.Macros[i] = marshalRiskDetectionDescriptorMacroToDetectionDescriptorMacroResponseBody(val)
+		}
+	} else {
+		body.Macros = []*DetectionDescriptorMacroResponseBody{}
+	}
+	return body
+}
+
+// NewCompileExprResponseBody builds the HTTP response body from the result of
+// the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprResponseBody(res *risk.ExprCompileResult) *CompileExprResponseBody {
+	body := &CompileExprResponseBody{
+		OK:    res.OK,
+		Error: res.Error,
 	}
 	return body
 }
@@ -7442,14 +8094,15 @@ func NewRevokeRiskPolicyBypassRequestResponseBody(res *risk.RiskPolicyBypassRequ
 // the result of the "createCustomDetectionRule" endpoint of the "risk" service.
 func NewCreateCustomDetectionRuleResponseBody(res *types.RiskCustomDetectionRule) *CreateCustomDetectionRuleResponseBody {
 	body := &CreateCustomDetectionRuleResponseBody{
-		ID:          res.ID,
-		RuleID:      res.RuleID,
-		Title:       res.Title,
-		Description: res.Description,
-		Regex:       res.Regex,
-		Severity:    res.Severity,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
+		ID:            res.ID,
+		RuleID:        res.RuleID,
+		Title:         res.Title,
+		Description:   res.Description,
+		Regex:         res.Regex,
+		DetectionExpr: res.DetectionExpr,
+		Severity:      res.Severity,
+		CreatedAt:     res.CreatedAt,
+		UpdatedAt:     res.UpdatedAt,
 	}
 	return body
 }
@@ -7477,14 +8130,15 @@ func NewListCustomDetectionRulesResponseBody(res *risk.ListCustomDetectionRulesR
 // result of the "getCustomDetectionRule" endpoint of the "risk" service.
 func NewGetCustomDetectionRuleResponseBody(res *types.RiskCustomDetectionRule) *GetCustomDetectionRuleResponseBody {
 	body := &GetCustomDetectionRuleResponseBody{
-		ID:          res.ID,
-		RuleID:      res.RuleID,
-		Title:       res.Title,
-		Description: res.Description,
-		Regex:       res.Regex,
-		Severity:    res.Severity,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
+		ID:            res.ID,
+		RuleID:        res.RuleID,
+		Title:         res.Title,
+		Description:   res.Description,
+		Regex:         res.Regex,
+		DetectionExpr: res.DetectionExpr,
+		Severity:      res.Severity,
+		CreatedAt:     res.CreatedAt,
+		UpdatedAt:     res.UpdatedAt,
 	}
 	return body
 }
@@ -7493,14 +8147,15 @@ func NewGetCustomDetectionRuleResponseBody(res *types.RiskCustomDetectionRule) *
 // the result of the "updateCustomDetectionRule" endpoint of the "risk" service.
 func NewUpdateCustomDetectionRuleResponseBody(res *types.RiskCustomDetectionRule) *UpdateCustomDetectionRuleResponseBody {
 	body := &UpdateCustomDetectionRuleResponseBody{
-		ID:          res.ID,
-		RuleID:      res.RuleID,
-		Title:       res.Title,
-		Description: res.Description,
-		Regex:       res.Regex,
-		Severity:    res.Severity,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
+		ID:            res.ID,
+		RuleID:        res.RuleID,
+		Title:         res.Title,
+		Description:   res.Description,
+		Regex:         res.Regex,
+		DetectionExpr: res.DetectionExpr,
+		Severity:      res.Severity,
+		CreatedAt:     res.CreatedAt,
+		UpdatedAt:     res.UpdatedAt,
 	}
 	return body
 }
@@ -7565,11 +8220,11 @@ func NewUpdateRiskExclusionResponseBody(res *types.RiskExclusion) *UpdateRiskExc
 // service.
 func NewSuggestCustomDetectionRuleResponseBody(res *risk.SuggestCustomDetectionRuleResult) *SuggestCustomDetectionRuleResponseBody {
 	body := &SuggestCustomDetectionRuleResponseBody{
-		RuleID:      res.RuleID,
-		Title:       res.Title,
-		Description: res.Description,
-		Regex:       res.Regex,
-		Severity:    res.Severity,
+		RuleID:        res.RuleID,
+		Title:         res.Title,
+		Description:   res.Description,
+		DetectionExpr: res.DetectionExpr,
+		Severity:      res.Severity,
 	}
 	return body
 }
@@ -9016,6 +9671,296 @@ func NewListRiskCategoriesUnexpectedResponseBody(res *goa.ServiceError) *ListRis
 // from the result of the "listRiskCategories" endpoint of the "risk" service.
 func NewListRiskCategoriesGatewayErrorResponseBody(res *goa.ServiceError) *ListRiskCategoriesGatewayErrorResponseBody {
 	body := &ListRiskCategoriesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorUnauthorizedResponseBody(res *goa.ServiceError) *GetDetectionDescriptorUnauthorizedResponseBody {
+	body := &GetDetectionDescriptorUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorForbiddenResponseBody builds the HTTP response body
+// from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorForbiddenResponseBody(res *goa.ServiceError) *GetDetectionDescriptorForbiddenResponseBody {
+	body := &GetDetectionDescriptorForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorBadRequestResponseBody builds the HTTP response
+// body from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorBadRequestResponseBody(res *goa.ServiceError) *GetDetectionDescriptorBadRequestResponseBody {
+	body := &GetDetectionDescriptorBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorNotFoundResponseBody builds the HTTP response body
+// from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorNotFoundResponseBody(res *goa.ServiceError) *GetDetectionDescriptorNotFoundResponseBody {
+	body := &GetDetectionDescriptorNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorConflictResponseBody builds the HTTP response body
+// from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorConflictResponseBody(res *goa.ServiceError) *GetDetectionDescriptorConflictResponseBody {
+	body := &GetDetectionDescriptorConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getDetectionDescriptor" endpoint of
+// the "risk" service.
+func NewGetDetectionDescriptorUnsupportedMediaResponseBody(res *goa.ServiceError) *GetDetectionDescriptorUnsupportedMediaResponseBody {
+	body := &GetDetectionDescriptorUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorInvalidResponseBody builds the HTTP response body
+// from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorInvalidResponseBody(res *goa.ServiceError) *GetDetectionDescriptorInvalidResponseBody {
+	body := &GetDetectionDescriptorInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getDetectionDescriptor" endpoint of
+// the "risk" service.
+func NewGetDetectionDescriptorInvariantViolationResponseBody(res *goa.ServiceError) *GetDetectionDescriptorInvariantViolationResponseBody {
+	body := &GetDetectionDescriptorInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorUnexpectedResponseBody(res *goa.ServiceError) *GetDetectionDescriptorUnexpectedResponseBody {
+	body := &GetDetectionDescriptorUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorGatewayErrorResponseBody(res *goa.ServiceError) *GetDetectionDescriptorGatewayErrorResponseBody {
+	body := &GetDetectionDescriptorGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprUnauthorizedResponseBody(res *goa.ServiceError) *CompileExprUnauthorizedResponseBody {
+	body := &CompileExprUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprForbiddenResponseBody builds the HTTP response body from the
+// result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprForbiddenResponseBody(res *goa.ServiceError) *CompileExprForbiddenResponseBody {
+	body := &CompileExprForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprBadRequestResponseBody builds the HTTP response body from the
+// result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprBadRequestResponseBody(res *goa.ServiceError) *CompileExprBadRequestResponseBody {
+	body := &CompileExprBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprNotFoundResponseBody builds the HTTP response body from the
+// result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprNotFoundResponseBody(res *goa.ServiceError) *CompileExprNotFoundResponseBody {
+	body := &CompileExprNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprConflictResponseBody builds the HTTP response body from the
+// result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprConflictResponseBody(res *goa.ServiceError) *CompileExprConflictResponseBody {
+	body := &CompileExprConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprUnsupportedMediaResponseBody(res *goa.ServiceError) *CompileExprUnsupportedMediaResponseBody {
+	body := &CompileExprUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprInvalidResponseBody builds the HTTP response body from the
+// result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprInvalidResponseBody(res *goa.ServiceError) *CompileExprInvalidResponseBody {
+	body := &CompileExprInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprInvariantViolationResponseBody(res *goa.ServiceError) *CompileExprInvariantViolationResponseBody {
+	body := &CompileExprInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprUnexpectedResponseBody builds the HTTP response body from the
+// result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprUnexpectedResponseBody(res *goa.ServiceError) *CompileExprUnexpectedResponseBody {
+	body := &CompileExprUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprGatewayErrorResponseBody(res *goa.ServiceError) *CompileExprGatewayErrorResponseBody {
+	body := &CompileExprGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -11962,11 +12907,13 @@ func NewTestDetectionRuleGatewayErrorResponseBody(res *goa.ServiceError) *TestDe
 // payload.
 func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CreateRiskPolicyPayload {
 	v := &risk.CreateRiskPolicyPayload{
-		Name:        body.Name,
-		Enabled:     body.Enabled,
-		AutoName:    body.AutoName,
-		UserMessage: body.UserMessage,
-		Prompt:      body.Prompt,
+		Name:         body.Name,
+		ScopeInclude: body.ScopeInclude,
+		ScopeExempt:  body.ScopeExempt,
+		Enabled:      body.Enabled,
+		AutoName:     body.AutoName,
+		UserMessage:  body.UserMessage,
+		Prompt:       body.Prompt,
 	}
 	if body.PolicyType != nil {
 		v.PolicyType = *body.PolicyType
@@ -12066,6 +13013,8 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 	v := &risk.UpdateRiskPolicyPayload{
 		ID:           *body.ID,
 		Name:         *body.Name,
+		ScopeInclude: body.ScopeInclude,
+		ScopeExempt:  body.ScopeExempt,
 		Enabled:      body.Enabled,
 		Action:       body.Action,
 		AudienceType: body.AudienceType,
@@ -12216,6 +13165,28 @@ func NewListRiskCategoriesPayload(apikeyToken *string, sessionToken *string, pro
 	return v
 }
 
+// NewGetDetectionDescriptorPayload builds a risk service
+// getDetectionDescriptor endpoint payload.
+func NewGetDetectionDescriptorPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetDetectionDescriptorPayload {
+	v := &risk.GetDetectionDescriptorPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewCompileExprPayload builds a risk service compileExpr endpoint payload.
+func NewCompileExprPayload(expr string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CompileExprPayload {
+	v := &risk.CompileExprPayload{}
+	v.Expr = expr
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewGetRiskUserBreakdownPayload builds a risk service getRiskUserBreakdown
 // endpoint payload.
 func NewGetRiskUserBreakdownPayload(externalUserID string, from *string, to *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetRiskUserBreakdownPayload {
@@ -12348,10 +13319,10 @@ func NewTriggerRiskAnalysisPayload(body *TriggerRiskAnalysisRequestBody, apikeyT
 // createCustomDetectionRule endpoint payload.
 func NewCreateCustomDetectionRulePayload(body *CreateCustomDetectionRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CreateCustomDetectionRulePayload {
 	v := &risk.CreateCustomDetectionRulePayload{
-		RuleID:      *body.RuleID,
-		Title:       *body.Title,
-		Description: body.Description,
-		Regex:       *body.Regex,
+		RuleID:        *body.RuleID,
+		Title:         *body.Title,
+		Description:   body.Description,
+		DetectionExpr: body.DetectionExpr,
 	}
 	if body.Severity != nil {
 		v.Severity = *body.Severity
@@ -12393,11 +13364,11 @@ func NewGetCustomDetectionRulePayload(id string, apikeyToken *string, sessionTok
 // updateCustomDetectionRule endpoint payload.
 func NewUpdateCustomDetectionRulePayload(body *UpdateCustomDetectionRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.UpdateCustomDetectionRulePayload {
 	v := &risk.UpdateCustomDetectionRulePayload{
-		ID:          *body.ID,
-		Title:       *body.Title,
-		Description: body.Description,
-		Regex:       *body.Regex,
-		Severity:    *body.Severity,
+		ID:            *body.ID,
+		Title:         *body.Title,
+		Description:   body.Description,
+		DetectionExpr: body.DetectionExpr,
+		Severity:      *body.Severity,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -12528,9 +13499,9 @@ func NewSuggestCustomDetectionRulePayload(body *SuggestCustomDetectionRuleReques
 // payload.
 func NewTestDetectionRulePayload(body *TestDetectionRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.TestDetectionRulePayload {
 	v := &risk.TestDetectionRulePayload{
-		RuleID: *body.RuleID,
-		Text:   *body.Text,
-		Regex:  body.Regex,
+		RuleID:        *body.RuleID,
+		Text:          *body.Text,
+		DetectionExpr: body.DetectionExpr,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -12656,9 +13627,6 @@ func ValidateCreateCustomDetectionRuleRequestBody(body *CreateCustomDetectionRul
 	if body.Title == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
 	}
-	if body.Regex == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("regex", "body"))
-	}
 	if body.Severity != nil {
 		if !(*body.Severity == "info" || *body.Severity == "low" || *body.Severity == "medium" || *body.Severity == "high" || *body.Severity == "critical") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity", *body.Severity, []any{"info", "low", "medium", "high", "critical"}))
@@ -12675,9 +13643,6 @@ func ValidateUpdateCustomDetectionRuleRequestBody(body *UpdateCustomDetectionRul
 	}
 	if body.Title == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
-	}
-	if body.Regex == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("regex", "body"))
 	}
 	if body.Severity == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("severity", "body"))

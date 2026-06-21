@@ -25,6 +25,11 @@ type Finding struct {
 	// telemetry CH lookup. Not persisted — converters that map Finding
 	// into repo.InsertRiskResultParams ignore it.
 	toolCallID string
+	// field/path attribute a CEL-detector span to the message field (and JSON
+	// sub-path) it matched, for display. Empty for non-CEL detectors. Set by
+	// ScanCELRules; flows into the persisted FindingSpan.
+	field string
+	path  string
 }
 
 // GitleaksScanner is a long-lived, concurrency-safe gitleaks scanner for the

@@ -473,12 +473,20 @@ run();
 * [suggest](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 * [update](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
 
+### [Risk.DetectionDescriptor](docs/sdks/detectiondescriptor/README.md)
+
+* [get](docs/sdks/detectiondescriptor/README.md#get) - getDetectionDescriptor risk
+
 ### [Risk.Exclusions](docs/sdks/exclusions/README.md)
 
 * [create](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 * [delete](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 * [list](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
 * [update](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
+
+### [Risk.Expr](docs/sdks/expr/README.md)
+
+* [compile](docs/sdks/expr/README.md#compile) - compileExpr risk
 
 ### [Risk.Overview](docs/sdks/overview/README.md)
 
@@ -869,10 +877,12 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskCustomRulesList`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`riskCustomRulesSuggest`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 - [`riskCustomRulesUpdate`](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
+- [`riskDetectionDescriptorGet`](docs/sdks/detectiondescriptor/README.md#get) - getDetectionDescriptor risk
 - [`riskExclusionsCreate`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 - [`riskExclusionsDelete`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`riskExclusionsList`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
 - [`riskExclusionsUpdate`](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
+- [`riskExprCompile`](docs/sdks/expr/README.md#compile) - compileExpr risk
 - [`riskOverviewGet`](docs/sdks/overview/README.md#get) - getRiskOverview risk
 - [`riskOverviewRules`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
 - [`riskOverviewUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
@@ -1217,6 +1227,7 @@ To learn about this feature and how to get started, check
 - [`useRevokeUserSessionMutation`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
 - [`useRiskApprovePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
 - [`useRiskCategories`](docs/sdks/categories/README.md#list) - listRiskCategories risk
+- [`useRiskCompileExpr`](docs/sdks/expr/README.md#compile) - compileExpr risk
 - [`useRiskCreateCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#create) - createCustomDetectionRule risk
 - [`useRiskCreateExclusionMutation`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 - [`useRiskCreatePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
@@ -1224,6 +1235,7 @@ To learn about this feature and how to get started, check
 - [`useRiskDeleteCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
 - [`useRiskDeleteExclusionMutation`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`useRiskDenyPolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
+- [`useRiskDetectionDescriptor`](docs/sdks/detectiondescriptor/README.md#get) - getDetectionDescriptor risk
 - [`useRiskGetCustomDetectionRule`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
 - [`useRiskListCustomDetectionRules`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`useRiskListExclusions`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk

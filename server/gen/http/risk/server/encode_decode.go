@@ -2481,6 +2481,449 @@ func EncodeListRiskCategoriesError(encoder func(context.Context, http.ResponseWr
 	}
 }
 
+// EncodeGetDetectionDescriptorResponse returns an encoder for responses
+// returned by the risk getDetectionDescriptor endpoint.
+func EncodeGetDetectionDescriptorResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*risk.DetectionDescriptorResult)
+		enc := encoder(ctx, w)
+		body := NewGetDetectionDescriptorResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetDetectionDescriptorRequest returns a decoder for requests sent to
+// the risk getDetectionDescriptor endpoint.
+func DecodeGetDetectionDescriptorRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*risk.GetDetectionDescriptorPayload, error) {
+	return func(r *http.Request) (*risk.GetDetectionDescriptorPayload, error) {
+		var payload *risk.GetDetectionDescriptorPayload
+		var (
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewGetDetectionDescriptorPayload(apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetDetectionDescriptorError returns an encoder for errors returned by
+// the getDetectionDescriptor risk endpoint.
+func EncodeGetDetectionDescriptorError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDetectionDescriptorUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDetectionDescriptorForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDetectionDescriptorBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDetectionDescriptorNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDetectionDescriptorConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDetectionDescriptorUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDetectionDescriptorInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDetectionDescriptorInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDetectionDescriptorUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDetectionDescriptorGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeCompileExprResponse returns an encoder for responses returned by the
+// risk compileExpr endpoint.
+func EncodeCompileExprResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*risk.ExprCompileResult)
+		enc := encoder(ctx, w)
+		body := NewCompileExprResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeCompileExprRequest returns a decoder for requests sent to the risk
+// compileExpr endpoint.
+func DecodeCompileExprRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*risk.CompileExprPayload, error) {
+	return func(r *http.Request) (*risk.CompileExprPayload, error) {
+		var payload *risk.CompileExprPayload
+		var (
+			expr             string
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+			err              error
+		)
+		expr = r.URL.Query().Get("expr")
+		if expr == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("expr", "query string"))
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewCompileExprPayload(expr, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeCompileExprError returns an encoder for errors returned by the
+// compileExpr risk endpoint.
+func EncodeCompileExprError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompileExprUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompileExprForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompileExprBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompileExprNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompileExprConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompileExprUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompileExprInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompileExprInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompileExprUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCompileExprGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeGetRiskUserBreakdownResponse returns an encoder for responses returned
 // by the risk getRiskUserBreakdown endpoint.
 func EncodeGetRiskUserBreakdownResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -7185,6 +7628,8 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		ProjectID:       v.ProjectID,
 		Name:            v.Name,
 		PolicyType:      v.PolicyType,
+		ScopeInclude:    v.ScopeInclude,
+		ScopeExempt:     v.ScopeExempt,
 		Enabled:         v.Enabled,
 		Action:          v.Action,
 		AudienceType:    v.AudienceType,
@@ -7276,6 +7721,33 @@ func marshalTypesRiskResultToRiskResultResponseBody(v *types.RiskResult) *RiskRe
 			res.Tags[i] = val
 		}
 	}
+	if v.Spans != nil {
+		res.Spans = make([]*RiskSpanResponseBody, len(v.Spans))
+		for i, val := range v.Spans {
+			if val == nil {
+				res.Spans[i] = nil
+				continue
+			}
+			res.Spans[i] = marshalTypesRiskSpanToRiskSpanResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalTypesRiskSpanToRiskSpanResponseBody builds a value of type
+// *RiskSpanResponseBody from a value of type *types.RiskSpan.
+func marshalTypesRiskSpanToRiskSpanResponseBody(v *types.RiskSpan) *RiskSpanResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &RiskSpanResponseBody{
+		Match:    v.Match,
+		Field:    v.Field,
+		Path:     v.Path,
+		StartPos: v.StartPos,
+		EndPos:   v.EndPos,
+	}
 
 	return res
 }
@@ -7305,6 +7777,33 @@ func marshalTypesRiskResultRedactedToRiskResultRedactedResponseBody(v *types.Ris
 		for i, val := range v.Tags {
 			res.Tags[i] = val
 		}
+	}
+	if v.SpansRedacted != nil {
+		res.SpansRedacted = make([]*RiskSpanRedactedResponseBody, len(v.SpansRedacted))
+		for i, val := range v.SpansRedacted {
+			if val == nil {
+				res.SpansRedacted[i] = nil
+				continue
+			}
+			res.SpansRedacted[i] = marshalTypesRiskSpanRedactedToRiskSpanRedactedResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalTypesRiskSpanRedactedToRiskSpanRedactedResponseBody builds a value of
+// type *RiskSpanRedactedResponseBody from a value of type
+// *types.RiskSpanRedacted.
+func marshalTypesRiskSpanRedactedToRiskSpanRedactedResponseBody(v *types.RiskSpanRedacted) *RiskSpanRedactedResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &RiskSpanRedactedResponseBody{
+		MatchRedacted: v.MatchRedacted,
+		Field:         v.Field,
+		Path:          v.Path,
+		PositionKnown: v.PositionKnown,
 	}
 
 	return res
@@ -7400,6 +7899,116 @@ func marshalRiskRiskCategoryDefinitionToRiskCategoryDefinitionResponseBody(v *ri
 	return res
 }
 
+// marshalRiskDetectionDescriptorTypeToDetectionDescriptorTypeResponseBody
+// builds a value of type *DetectionDescriptorTypeResponseBody from a value of
+// type *risk.DetectionDescriptorType.
+func marshalRiskDetectionDescriptorTypeToDetectionDescriptorTypeResponseBody(v *risk.DetectionDescriptorType) *DetectionDescriptorTypeResponseBody {
+	res := &DetectionDescriptorTypeResponseBody{
+		Name:        v.Name,
+		Opaque:      v.Opaque,
+		DisplayName: v.DisplayName,
+		Description: v.Description,
+	}
+	if v.Fields != nil {
+		res.Fields = make([]*DetectionDescriptorFieldResponseBody, len(v.Fields))
+		for i, val := range v.Fields {
+			if val == nil {
+				res.Fields[i] = nil
+				continue
+			}
+			res.Fields[i] = marshalRiskDetectionDescriptorFieldToDetectionDescriptorFieldResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalRiskDetectionDescriptorFieldToDetectionDescriptorFieldResponseBody
+// builds a value of type *DetectionDescriptorFieldResponseBody from a value of
+// type *risk.DetectionDescriptorField.
+func marshalRiskDetectionDescriptorFieldToDetectionDescriptorFieldResponseBody(v *risk.DetectionDescriptorField) *DetectionDescriptorFieldResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &DetectionDescriptorFieldResponseBody{
+		Name:        v.Name,
+		Type:        v.Type,
+		Description: v.Description,
+	}
+
+	return res
+}
+
+// marshalRiskDetectionDescriptorVariableToDetectionDescriptorVariableResponseBody
+// builds a value of type *DetectionDescriptorVariableResponseBody from a value
+// of type *risk.DetectionDescriptorVariable.
+func marshalRiskDetectionDescriptorVariableToDetectionDescriptorVariableResponseBody(v *risk.DetectionDescriptorVariable) *DetectionDescriptorVariableResponseBody {
+	res := &DetectionDescriptorVariableResponseBody{
+		Name:        v.Name,
+		Type:        v.Type,
+		DisplayType: v.DisplayType,
+		Description: v.Description,
+	}
+
+	return res
+}
+
+// marshalRiskDetectionDescriptorFunctionToDetectionDescriptorFunctionResponseBody
+// builds a value of type *DetectionDescriptorFunctionResponseBody from a value
+// of type *risk.DetectionDescriptorFunction.
+func marshalRiskDetectionDescriptorFunctionToDetectionDescriptorFunctionResponseBody(v *risk.DetectionDescriptorFunction) *DetectionDescriptorFunctionResponseBody {
+	res := &DetectionDescriptorFunctionResponseBody{
+		Name:         v.Name,
+		OverloadID:   v.OverloadID,
+		Member:       v.Member,
+		ReceiverType: v.ReceiverType,
+		ReturnType:   v.ReturnType,
+		Signature:    v.Signature,
+		Description:  v.Description,
+	}
+	if v.Params != nil {
+		res.Params = make([]*DetectionDescriptorParamResponseBody, len(v.Params))
+		for i, val := range v.Params {
+			if val == nil {
+				res.Params[i] = nil
+				continue
+			}
+			res.Params[i] = marshalRiskDetectionDescriptorParamToDetectionDescriptorParamResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalRiskDetectionDescriptorParamToDetectionDescriptorParamResponseBody
+// builds a value of type *DetectionDescriptorParamResponseBody from a value of
+// type *risk.DetectionDescriptorParam.
+func marshalRiskDetectionDescriptorParamToDetectionDescriptorParamResponseBody(v *risk.DetectionDescriptorParam) *DetectionDescriptorParamResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &DetectionDescriptorParamResponseBody{
+		Name: v.Name,
+		Type: v.Type,
+	}
+
+	return res
+}
+
+// marshalRiskDetectionDescriptorMacroToDetectionDescriptorMacroResponseBody
+// builds a value of type *DetectionDescriptorMacroResponseBody from a value of
+// type *risk.DetectionDescriptorMacro.
+func marshalRiskDetectionDescriptorMacroToDetectionDescriptorMacroResponseBody(v *risk.DetectionDescriptorMacro) *DetectionDescriptorMacroResponseBody {
+	res := &DetectionDescriptorMacroResponseBody{
+		Name:        v.Name,
+		Signature:   v.Signature,
+		Description: v.Description,
+		ReturnsBool: v.ReturnsBool,
+	}
+
+	return res
+}
+
 // marshalRiskRiskPolicyBypassRequestToRiskPolicyBypassRequestResponseBody
 // builds a value of type *RiskPolicyBypassRequestResponseBody from a value of
 // type *risk.RiskPolicyBypassRequest.
@@ -7444,14 +8053,15 @@ func marshalRiskRiskPolicyBypassRequestToRiskPolicyBypassRequestResponseBody(v *
 // type *types.RiskCustomDetectionRule.
 func marshalTypesRiskCustomDetectionRuleToRiskCustomDetectionRuleResponseBody(v *types.RiskCustomDetectionRule) *RiskCustomDetectionRuleResponseBody {
 	res := &RiskCustomDetectionRuleResponseBody{
-		ID:          v.ID,
-		RuleID:      v.RuleID,
-		Title:       v.Title,
-		Description: v.Description,
-		Regex:       v.Regex,
-		Severity:    v.Severity,
-		CreatedAt:   v.CreatedAt,
-		UpdatedAt:   v.UpdatedAt,
+		ID:            v.ID,
+		RuleID:        v.RuleID,
+		Title:         v.Title,
+		Description:   v.Description,
+		Regex:         v.Regex,
+		DetectionExpr: v.DetectionExpr,
+		Severity:      v.Severity,
+		CreatedAt:     v.CreatedAt,
+		UpdatedAt:     v.UpdatedAt,
 	}
 
 	return res

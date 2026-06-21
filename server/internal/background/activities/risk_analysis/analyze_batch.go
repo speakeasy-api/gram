@@ -189,7 +189,21 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if err != nil {
 		return nil, err
 	}
-	messages = filterMessagesByMessageTypes(messages, args.MessageTypes)
+	// Policy application: a defined include predicate is the fine-grained scope
+	// and supersedes the coarse message_types filter; exempt takes a matched
+	// message out of the policy entirely. Computed once, applied to the source
+	// scanners and the judge.
+	eng, err := CELEngine()
+	if err != nil {
+		return nil, fmt.Errorf("build cel engine: %w", err)
+	}
+	app, err := CompileScope(eng, policy.ScopeInclude.String, policy.ScopeExempt.String)
+	if err != nil {
+		return nil, fmt.Errorf("compile policy scope: %w", err)
+	}
+	if !app.HasInclude() {
+		messages = filterMessagesByMessageTypes(messages, args.MessageTypes)
+	}
 	scannedCount = len(messages)
 	if len(messages) == 0 {
 		if err := a.writeResults(ctx, args, nil); err != nil {
@@ -216,18 +230,19 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return nil, fmt.Errorf("list exclusions: %w", err)
 	}
 
-	findings, err := a.scan(ctx, args, messages, customRules, NewExclusionSet(exclusions))
+	appExcluded := a.applicationExcluded(ctx, app, messages)
+
+	findings, err := a.scan(ctx, args, messages, customRules, NewExclusionSet(exclusions), appExcluded)
 	if err != nil {
 		return nil, err
 	}
 
 	// prompt_based policies are evaluated by the LLM judge rather than the
-	// source-based scanners above. The judge runs on every message left after
-	// the policy's message_types filter (already applied by
-	// filterMessagesByMessageTypes), so it covers whatever types the policy
-	// declares.
+	// source-based scanners above. The judge runs on every in-scope message left
+	// after the policy's message_types filter and application predicates, so it
+	// covers whatever the policy declares.
 	if policy.PolicyType == "prompt_based" {
-		judgeFindings := a.scanPromptJudge(ctx, args, policy, messages)
+		judgeFindings := a.scanPromptJudge(ctx, args, policy, messages, appExcluded)
 		for i := range findings {
 			findings[i] = append(findings[i], judgeFindings[i]...)
 		}
@@ -340,7 +355,7 @@ func drainPublishAcks(ctx context.Context, logger *slog.Logger, warnMsg string, 
 // destructive_tool, cli_destructive) run serially after the parallel scans
 // — shadow_mcp/destructive_tool make per-message DB calls; cli_destructive
 // is purely in-memory regex but kept in the same lane for consistency.
-func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow, customRules []CompiledCustomDetectionRule, exclusions ExclusionSet) ([][]Finding, error) {
+func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow, customRules []CompiledCELRule, exclusions ExclusionSet, appExcluded []bool) ([][]Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
 	activity.RecordHeartbeat(ctx, 0)
@@ -369,6 +384,7 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	var wg sync.WaitGroup
 	var gitleaksErr error
 	var presidioErr error
+	var customErr error
 
 	if slices.Contains(args.Sources, "gitleaks") {
 		wg.Go(func() {
@@ -475,8 +491,18 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if len(customRules) > 0 {
 		wg.Go(func() {
-			for i, content := range contents {
-				customFindings[i] = ScanCustomDetectionRules(content, customRules)
+			eng, err := CELEngine()
+			if err != nil {
+				customErr = err
+				return
+			}
+			for i, msg := range messages {
+				findings, err := ScanCELRules(eng, a.customRuleMessageView(ctx, msg), customRules)
+				if err != nil {
+					customErr = err
+					return
+				}
+				customFindings[i] = findings
 			}
 			activity.RecordHeartbeat(ctx, "custom")
 		})
@@ -487,6 +513,11 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	if gitleaksErr != nil {
 		scanSpan.SetStatus(codes.Error, gitleaksErr.Error())
 		return nil, fmt.Errorf("gitleaks scan batch: %w", gitleaksErr)
+	}
+
+	if customErr != nil {
+		scanSpan.SetStatus(codes.Error, customErr.Error())
+		return nil, fmt.Errorf("custom rule scan: %w", customErr)
 	}
 
 	// When the activity ctx was canceled (heartbeat timeout, parent
@@ -526,6 +557,13 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	merged := make([][]Finding, n)
 	for i := range n {
+		// The message is short-circuited — no findings recorded, including ones
+		// other detectors produced — when the policy's scope predicates put it out
+		// of scope or exempt it.
+		if appExcluded != nil && appExcluded[i] {
+			merged[i] = nil
+			continue
+		}
 		// Gitleaks findings come first so they take priority over presidio
 		// when both scanners match the same text region. Tool-call findings are
 		// non-overlapping with content scanners, so they pass through dedup.
@@ -539,6 +577,22 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 		merged[i] = dedup(combined)
 	}
 	return merged, nil
+}
+
+// applicationExcluded marks messages a policy's application_config takes out of
+// scope (include does not match) or exempts. Returns nil when the policy has no
+// application predicates, so the common path allocates nothing and callers skip
+// the per-message check.
+func (a *AnalyzeBatch) applicationExcluded(ctx context.Context, app CompiledScope, messages []repo.GetMessageContentBatchRow) []bool {
+	if !app.Active() {
+		return nil
+	}
+	excluded := make([]bool, len(messages))
+	for i, msg := range messages {
+		view := a.customRuleMessageView(ctx, msg)
+		excluded[i] = !app.Includes(view) || app.Exempts(view)
+	}
+	return excluded
 }
 
 // judgeConcurrency bounds the number of in-flight judge calls per batch. Judge
@@ -557,7 +611,7 @@ const judgeConcurrency = 8
 // them to the policy's message_types via filterMessagesByMessageTypes — so it
 // covers whatever types the policy declares. Messages are evaluated
 // concurrently with a bounded worker pool.
-func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []repo.GetMessageContentBatchRow) [][]Finding {
+func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []repo.GetMessageContentBatchRow, appExcluded []bool) [][]Finding {
 	out := make([][]Finding, len(messages))
 	cfg := ParseJudgeConfig(policy.ModelConfig)
 	if !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
@@ -566,6 +620,11 @@ func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArg
 
 	indices := make([]int, 0, len(messages))
 	for i, msg := range messages {
+		// Skip messages the policy's application predicates put out of scope or
+		// exempt — never pay for a judge call the policy wouldn't act on.
+		if appExcluded != nil && appExcluded[i] {
+			continue
+		}
 		if _, ok := messageRowMessageType(msg); ok {
 			indices = append(indices, i)
 		}
@@ -670,8 +729,32 @@ func (a *AnalyzeBatch) judgeMessageForRow(ctx context.Context, msg repo.GetMessa
 	return NewJudgeMessage(messageType, "", msg.Content)
 }
 
-func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.UUID, ruleIDs []string) ([]CompiledCustomDetectionRule, error) {
-	if len(ruleIDs) == 0 {
+// customRuleMessageView builds the structured view the custom-rule engine
+// evaluates against: the message's text content, its type, and — for
+// tool-request messages — each recorded tool call with its MCP attribution.
+// Mirrors judgeMessageForRow so a rule sees the same per-call server/function
+// the judge does.
+func (a *AnalyzeBatch) customRuleMessageView(ctx context.Context, msg repo.GetMessageContentBatchRow) MessageView {
+	messageType, _ := messageRowMessageType(msg)
+	view := MessageView{Content: msg.Content, Type: messageType, Tools: nil}
+	if messageType != message.ToolRequest {
+		return view
+	}
+	for _, c := range a.parseRecordedToolCalls(ctx, SourceCustom, msg.ToolCalls) {
+		if c.Function.Name == "" && strings.TrimSpace(c.Function.Arguments) == "" {
+			continue
+		}
+		view.Tools = append(view.Tools, NewToolView(c.Function.Name, c.Function.Arguments))
+	}
+	return view
+}
+
+// customRulesForPolicy loads the custom rules a policy attaches as detectors
+// (risk_policies.custom_rule_ids) and compiles their CEL detection predicates.
+// Custom rules are pure detectors; message exemptions live in the policy's
+// scope_exempt, not in rules.
+func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.UUID, detectorIDs []string) ([]CompiledCELRule, error) {
+	if len(detectorIDs) == 0 {
 		return nil, nil
 	}
 
@@ -680,25 +763,30 @@ func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.
 		return nil, fmt.Errorf("list custom detection rules: %w", err)
 	}
 
-	selected := make(map[string]struct{}, len(ruleIDs))
-	for _, id := range ruleIDs {
-		selected[id] = struct{}{}
+	detectors := make(map[string]struct{}, len(detectorIDs))
+	for _, id := range detectorIDs {
+		detectors[id] = struct{}{}
 	}
 
-	customRules := make([]CustomDetectionRule, 0, len(ruleIDs))
+	customRules := make([]CustomDetectionRule, 0, len(detectors))
 	for _, rule := range rules {
-		if _, ok := selected[rule.RuleID]; !ok {
+		if _, ok := detectors[rule.RuleID]; !ok {
 			continue
 		}
 		customRules = append(customRules, CustomDetectionRule{
-			RuleID:      rule.RuleID,
-			Title:       rule.Title,
-			Description: rule.Description,
-			Regex:       conv.PtrValOr(conv.FromPGText[string](rule.Regex), ""),
+			RuleID:       rule.RuleID,
+			Title:        rule.Title,
+			Description:  rule.Description,
+			DetectionExpr: rule.DetectionExpr.String,
+			Regex:        rule.Regex.String,
 		})
 	}
 
-	compiled, err := CompileCustomDetectionRules(customRules)
+	eng, err := CELEngine()
+	if err != nil {
+		return nil, fmt.Errorf("build cel engine: %w", err)
+	}
+	compiled, err := CompileCELRules(eng, customRules)
 	if err != nil {
 		return nil, err
 	}
@@ -845,6 +933,8 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 			Confidence:       1.0,
 			DeadLetterReason: "",
 			toolCallID:       call.ID,
+			field:            "",
+			path:             "",
 		})
 		if call.ID != "" {
 			deniedCallIDs = append(deniedCallIDs, call.ID)
@@ -905,6 +995,8 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 			Confidence:       1.0,
 			DeadLetterReason: "",
 			toolCallID:       "",
+			field:            "",
+			path:             "",
 		})
 	}
 	return findings
@@ -963,6 +1055,8 @@ func (a *AnalyzeBatch) scanMessageDestructiveCLICalls(ctx context.Context, raw [
 			Confidence:       1.0,
 			DeadLetterReason: "",
 			toolCallID:       "",
+			field:            "",
+			path:             "",
 		})
 	}
 	return findings
@@ -1022,10 +1116,17 @@ func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, mes
 			continue
 		}
 
-		for _, f := range realFindings {
+		for _, grp := range groupFindings(realFindings) {
+			f := grp.primary
 			findingsCount++
 			a.metrics.RecordFindingConfidence(ctx, args.OrganizationID, f.RuleID, f.Confidence)
 			resultID, _ := uuid.NewV7()
+			spansJSON, err := json.Marshal(grp.spans)
+			if err != nil {
+				// A span set that won't marshal is unexpected; fall back to no
+				// spans column rather than dropping the whole finding.
+				spansJSON = nil
+			}
 			rows = append(rows, repo.InsertRiskResultsParams{
 				ID:                resultID,
 				ProjectID:         args.ProjectID,
@@ -1042,11 +1143,57 @@ func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, mes
 				EndPos:            pgtype.Int4{Int32: conv.SafeInt32(f.EndPos), Valid: true},
 				Confidence:        pgtype.Float8{Float64: f.Confidence, Valid: true},
 				Tags:              f.Tags,
+				Spans:             spansJSON,
 				DeadLetterReason:  pgtype.Text{String: "", Valid: false},
 			})
 		}
 	}
 	return rows, findingsCount
+}
+
+// findingGroup is a single logical finding plus the spans attributed to it.
+type findingGroup struct {
+	primary Finding
+	spans   []FindingSpan
+}
+
+// groupFindings collapses findings that are spans of the same detection into one
+// group. Spans correlated to the same tool call (non-empty toolCallID) belong to
+// one finding — e.g. a custom rule matching both a tool's function name and its
+// arguments on the same call. Everything else (content/positional spans,
+// distinct detectors) stays its own finding, so genuinely distinct findings are
+// never merged. Order is preserved; the first span of a group is its primary.
+func groupFindings(findings []Finding) []findingGroup {
+	var order []string
+	groups := map[string]*findingGroup{}
+	uniq := 0
+	for _, f := range findings {
+		var key string
+		if f.toolCallID != "" {
+			key = f.Source + "\x00" + f.RuleID + "\x00" + f.toolCallID
+		} else {
+			key = fmt.Sprintf("u%d", uniq)
+			uniq++
+		}
+		g := groups[key]
+		if g == nil {
+			g = &findingGroup{primary: f, spans: nil}
+			groups[key] = g
+			order = append(order, key)
+		}
+		g.spans = append(g.spans, FindingSpan{
+			Match:    f.Match,
+			Field:    f.field,
+			Path:     f.path,
+			StartPos: f.StartPos,
+			EndPos:   f.EndPos,
+		})
+	}
+	out := make([]findingGroup, 0, len(order))
+	for _, k := range order {
+		out = append(out, *groups[k])
+	}
+	return out
 }
 
 func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, rows []repo.InsertRiskResultsParams) error {
@@ -1172,6 +1319,7 @@ func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) re
 		EndPos:            pgtype.Int4{Int32: 0, Valid: false},
 		Confidence:        pgtype.Float8{Float64: 0, Valid: false},
 		Tags:              nil,
+		Spans:             nil,
 		DeadLetterReason:  pgtype.Text{String: "", Valid: false},
 	}
 }
@@ -1197,6 +1345,7 @@ func deadLetterRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID, f F
 		EndPos:            pgtype.Int4{Int32: 0, Valid: false},
 		Confidence:        pgtype.Float8{Float64: 0, Valid: false},
 		Tags:              nil,
+		Spans:             nil,
 		DeadLetterReason:  pgtype.Text{String: f.DeadLetterReason, Valid: true},
 	}
 }

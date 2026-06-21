@@ -2483,6 +2483,486 @@ func DecodeListRiskCategoriesResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildGetDetectionDescriptorRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "getDetectionDescriptor"
+// endpoint
+func (c *Client) BuildGetDetectionDescriptorRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetDetectionDescriptorRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "getDetectionDescriptor", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetDetectionDescriptorRequest returns an encoder for requests sent to
+// the risk getDetectionDescriptor server.
+func EncodeGetDetectionDescriptorRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.GetDetectionDescriptorPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "getDetectionDescriptor", "*risk.GetDetectionDescriptorPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetDetectionDescriptorResponse returns a decoder for responses
+// returned by the risk getDetectionDescriptor endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetDetectionDescriptorResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetDetectionDescriptorResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetDetectionDescriptorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionDescriptor", err)
+			}
+			err = ValidateGetDetectionDescriptorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionDescriptor", err)
+			}
+			res := NewGetDetectionDescriptorDetectionDescriptorResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetDetectionDescriptorUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionDescriptor", err)
+			}
+			err = ValidateGetDetectionDescriptorUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionDescriptor", err)
+			}
+			return nil, NewGetDetectionDescriptorUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetDetectionDescriptorForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionDescriptor", err)
+			}
+			err = ValidateGetDetectionDescriptorForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionDescriptor", err)
+			}
+			return nil, NewGetDetectionDescriptorForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetDetectionDescriptorBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionDescriptor", err)
+			}
+			err = ValidateGetDetectionDescriptorBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionDescriptor", err)
+			}
+			return nil, NewGetDetectionDescriptorBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetDetectionDescriptorNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionDescriptor", err)
+			}
+			err = ValidateGetDetectionDescriptorNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionDescriptor", err)
+			}
+			return nil, NewGetDetectionDescriptorNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetDetectionDescriptorConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionDescriptor", err)
+			}
+			err = ValidateGetDetectionDescriptorConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionDescriptor", err)
+			}
+			return nil, NewGetDetectionDescriptorConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetDetectionDescriptorUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionDescriptor", err)
+			}
+			err = ValidateGetDetectionDescriptorUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionDescriptor", err)
+			}
+			return nil, NewGetDetectionDescriptorUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetDetectionDescriptorInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionDescriptor", err)
+			}
+			err = ValidateGetDetectionDescriptorInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionDescriptor", err)
+			}
+			return nil, NewGetDetectionDescriptorInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetDetectionDescriptorInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getDetectionDescriptor", err)
+				}
+				err = ValidateGetDetectionDescriptorInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getDetectionDescriptor", err)
+				}
+				return nil, NewGetDetectionDescriptorInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetDetectionDescriptorUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getDetectionDescriptor", err)
+				}
+				err = ValidateGetDetectionDescriptorUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getDetectionDescriptor", err)
+				}
+				return nil, NewGetDetectionDescriptorUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "getDetectionDescriptor", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetDetectionDescriptorGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getDetectionDescriptor", err)
+			}
+			err = ValidateGetDetectionDescriptorGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getDetectionDescriptor", err)
+			}
+			return nil, NewGetDetectionDescriptorGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "getDetectionDescriptor", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCompileExprRequest instantiates a HTTP request object with method and
+// path set to call the "risk" service "compileExpr" endpoint
+func (c *Client) BuildCompileExprRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CompileExprRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "compileExpr", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCompileExprRequest returns an encoder for requests sent to the risk
+// compileExpr server.
+func EncodeCompileExprRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.CompileExprPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "compileExpr", "*risk.CompileExprPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("expr", p.Expr)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeCompileExprResponse returns a decoder for responses returned by the
+// risk compileExpr endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeCompileExprResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCompileExprResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CompileExprResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileExpr", err)
+			}
+			err = ValidateCompileExprResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileExpr", err)
+			}
+			res := NewCompileExprExprCompileResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CompileExprUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileExpr", err)
+			}
+			err = ValidateCompileExprUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileExpr", err)
+			}
+			return nil, NewCompileExprUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CompileExprForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileExpr", err)
+			}
+			err = ValidateCompileExprForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileExpr", err)
+			}
+			return nil, NewCompileExprForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CompileExprBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileExpr", err)
+			}
+			err = ValidateCompileExprBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileExpr", err)
+			}
+			return nil, NewCompileExprBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CompileExprNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileExpr", err)
+			}
+			err = ValidateCompileExprNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileExpr", err)
+			}
+			return nil, NewCompileExprNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CompileExprConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileExpr", err)
+			}
+			err = ValidateCompileExprConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileExpr", err)
+			}
+			return nil, NewCompileExprConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CompileExprUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileExpr", err)
+			}
+			err = ValidateCompileExprUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileExpr", err)
+			}
+			return nil, NewCompileExprUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CompileExprInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileExpr", err)
+			}
+			err = ValidateCompileExprInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileExpr", err)
+			}
+			return nil, NewCompileExprInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CompileExprInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "compileExpr", err)
+				}
+				err = ValidateCompileExprInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "compileExpr", err)
+				}
+				return nil, NewCompileExprInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CompileExprUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "compileExpr", err)
+				}
+				err = ValidateCompileExprUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "compileExpr", err)
+				}
+				return nil, NewCompileExprUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "compileExpr", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CompileExprGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "compileExpr", err)
+			}
+			err = ValidateCompileExprGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "compileExpr", err)
+			}
+			return nil, NewCompileExprGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "compileExpr", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetRiskUserBreakdownRequest instantiates a HTTP request object with
 // method and path set to call the "risk" service "getRiskUserBreakdown"
 // endpoint
@@ -7353,6 +7833,8 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 		ProjectID:       *v.ProjectID,
 		Name:            *v.Name,
 		PolicyType:      *v.PolicyType,
+		ScopeInclude:    v.ScopeInclude,
+		ScopeExempt:     v.ScopeExempt,
 		Enabled:         *v.Enabled,
 		Action:          *v.Action,
 		AudienceType:    *v.AudienceType,
@@ -7436,6 +7918,33 @@ func unmarshalRiskResultResponseBodyToTypesRiskResult(v *RiskResultResponseBody)
 			res.Tags[i] = val
 		}
 	}
+	if v.Spans != nil {
+		res.Spans = make([]*types.RiskSpan, len(v.Spans))
+		for i, val := range v.Spans {
+			if val == nil {
+				res.Spans[i] = nil
+				continue
+			}
+			res.Spans[i] = unmarshalRiskSpanResponseBodyToTypesRiskSpan(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalRiskSpanResponseBodyToTypesRiskSpan builds a value of type
+// *types.RiskSpan from a value of type *RiskSpanResponseBody.
+func unmarshalRiskSpanResponseBodyToTypesRiskSpan(v *RiskSpanResponseBody) *types.RiskSpan {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskSpan{
+		Match:    *v.Match,
+		Field:    v.Field,
+		Path:     v.Path,
+		StartPos: v.StartPos,
+		EndPos:   v.EndPos,
+	}
 
 	return res
 }
@@ -7465,6 +7974,33 @@ func unmarshalRiskResultRedactedResponseBodyToTypesRiskResultRedacted(v *RiskRes
 		for i, val := range v.Tags {
 			res.Tags[i] = val
 		}
+	}
+	if v.SpansRedacted != nil {
+		res.SpansRedacted = make([]*types.RiskSpanRedacted, len(v.SpansRedacted))
+		for i, val := range v.SpansRedacted {
+			if val == nil {
+				res.SpansRedacted[i] = nil
+				continue
+			}
+			res.SpansRedacted[i] = unmarshalRiskSpanRedactedResponseBodyToTypesRiskSpanRedacted(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalRiskSpanRedactedResponseBodyToTypesRiskSpanRedacted builds a value
+// of type *types.RiskSpanRedacted from a value of type
+// *RiskSpanRedactedResponseBody.
+func unmarshalRiskSpanRedactedResponseBodyToTypesRiskSpanRedacted(v *RiskSpanRedactedResponseBody) *types.RiskSpanRedacted {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskSpanRedacted{
+		MatchRedacted: *v.MatchRedacted,
+		Field:         v.Field,
+		Path:          v.Path,
+		PositionKnown: *v.PositionKnown,
 	}
 
 	return res
@@ -7556,6 +8092,116 @@ func unmarshalRiskCategoryDefinitionResponseBodyToRiskRiskCategoryDefinition(v *
 	return res
 }
 
+// unmarshalDetectionDescriptorTypeResponseBodyToRiskDetectionDescriptorType
+// builds a value of type *risk.DetectionDescriptorType from a value of type
+// *DetectionDescriptorTypeResponseBody.
+func unmarshalDetectionDescriptorTypeResponseBodyToRiskDetectionDescriptorType(v *DetectionDescriptorTypeResponseBody) *risk.DetectionDescriptorType {
+	res := &risk.DetectionDescriptorType{
+		Name:        *v.Name,
+		Opaque:      *v.Opaque,
+		DisplayName: *v.DisplayName,
+		Description: *v.Description,
+	}
+	if v.Fields != nil {
+		res.Fields = make([]*risk.DetectionDescriptorField, len(v.Fields))
+		for i, val := range v.Fields {
+			if val == nil {
+				res.Fields[i] = nil
+				continue
+			}
+			res.Fields[i] = unmarshalDetectionDescriptorFieldResponseBodyToRiskDetectionDescriptorField(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalDetectionDescriptorFieldResponseBodyToRiskDetectionDescriptorField
+// builds a value of type *risk.DetectionDescriptorField from a value of type
+// *DetectionDescriptorFieldResponseBody.
+func unmarshalDetectionDescriptorFieldResponseBodyToRiskDetectionDescriptorField(v *DetectionDescriptorFieldResponseBody) *risk.DetectionDescriptorField {
+	if v == nil {
+		return nil
+	}
+	res := &risk.DetectionDescriptorField{
+		Name:        *v.Name,
+		Type:        *v.Type,
+		Description: *v.Description,
+	}
+
+	return res
+}
+
+// unmarshalDetectionDescriptorVariableResponseBodyToRiskDetectionDescriptorVariable
+// builds a value of type *risk.DetectionDescriptorVariable from a value of
+// type *DetectionDescriptorVariableResponseBody.
+func unmarshalDetectionDescriptorVariableResponseBodyToRiskDetectionDescriptorVariable(v *DetectionDescriptorVariableResponseBody) *risk.DetectionDescriptorVariable {
+	res := &risk.DetectionDescriptorVariable{
+		Name:        *v.Name,
+		Type:        *v.Type,
+		DisplayType: *v.DisplayType,
+		Description: *v.Description,
+	}
+
+	return res
+}
+
+// unmarshalDetectionDescriptorFunctionResponseBodyToRiskDetectionDescriptorFunction
+// builds a value of type *risk.DetectionDescriptorFunction from a value of
+// type *DetectionDescriptorFunctionResponseBody.
+func unmarshalDetectionDescriptorFunctionResponseBodyToRiskDetectionDescriptorFunction(v *DetectionDescriptorFunctionResponseBody) *risk.DetectionDescriptorFunction {
+	res := &risk.DetectionDescriptorFunction{
+		Name:         *v.Name,
+		OverloadID:   *v.OverloadID,
+		Member:       *v.Member,
+		ReceiverType: *v.ReceiverType,
+		ReturnType:   *v.ReturnType,
+		Signature:    *v.Signature,
+		Description:  *v.Description,
+	}
+	if v.Params != nil {
+		res.Params = make([]*risk.DetectionDescriptorParam, len(v.Params))
+		for i, val := range v.Params {
+			if val == nil {
+				res.Params[i] = nil
+				continue
+			}
+			res.Params[i] = unmarshalDetectionDescriptorParamResponseBodyToRiskDetectionDescriptorParam(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalDetectionDescriptorParamResponseBodyToRiskDetectionDescriptorParam
+// builds a value of type *risk.DetectionDescriptorParam from a value of type
+// *DetectionDescriptorParamResponseBody.
+func unmarshalDetectionDescriptorParamResponseBodyToRiskDetectionDescriptorParam(v *DetectionDescriptorParamResponseBody) *risk.DetectionDescriptorParam {
+	if v == nil {
+		return nil
+	}
+	res := &risk.DetectionDescriptorParam{
+		Name: *v.Name,
+		Type: *v.Type,
+	}
+
+	return res
+}
+
+// unmarshalDetectionDescriptorMacroResponseBodyToRiskDetectionDescriptorMacro
+// builds a value of type *risk.DetectionDescriptorMacro from a value of type
+// *DetectionDescriptorMacroResponseBody.
+func unmarshalDetectionDescriptorMacroResponseBodyToRiskDetectionDescriptorMacro(v *DetectionDescriptorMacroResponseBody) *risk.DetectionDescriptorMacro {
+	res := &risk.DetectionDescriptorMacro{
+		Name:        *v.Name,
+		Signature:   *v.Signature,
+		Description: *v.Description,
+		ReturnsBool: *v.ReturnsBool,
+	}
+
+	return res
+}
+
 // unmarshalRiskPolicyBypassRequestResponseBodyToRiskRiskPolicyBypassRequest
 // builds a value of type *risk.RiskPolicyBypassRequest from a value of type
 // *RiskPolicyBypassRequestResponseBody.
@@ -7594,14 +8240,15 @@ func unmarshalRiskPolicyBypassRequestResponseBodyToRiskRiskPolicyBypassRequest(v
 // *RiskCustomDetectionRuleResponseBody.
 func unmarshalRiskCustomDetectionRuleResponseBodyToTypesRiskCustomDetectionRule(v *RiskCustomDetectionRuleResponseBody) *types.RiskCustomDetectionRule {
 	res := &types.RiskCustomDetectionRule{
-		ID:          *v.ID,
-		RuleID:      *v.RuleID,
-		Title:       *v.Title,
-		Description: *v.Description,
-		Regex:       *v.Regex,
-		Severity:    *v.Severity,
-		CreatedAt:   *v.CreatedAt,
-		UpdatedAt:   *v.UpdatedAt,
+		ID:            *v.ID,
+		RuleID:        *v.RuleID,
+		Title:         *v.Title,
+		Description:   *v.Description,
+		Regex:         *v.Regex,
+		DetectionExpr: v.DetectionExpr,
+		Severity:      *v.Severity,
+		CreatedAt:     *v.CreatedAt,
+		UpdatedAt:     *v.UpdatedAt,
 	}
 
 	return res
