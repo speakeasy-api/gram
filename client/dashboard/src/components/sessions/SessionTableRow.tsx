@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { UserSession } from "@gram/client/models/components";
 
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -22,9 +23,16 @@ import { RevokeSessionDialog } from "./RevokeSessionDialog";
 export function SessionTableRow({
   session,
   onRevoked,
+  selectable = false,
+  selected = false,
+  onSelectedChange,
 }: {
   session: UserSession;
   onRevoked: () => void;
+  /** Render the leading selection cell so columns align with the table header. */
+  selectable?: boolean;
+  selected?: boolean;
+  onSelectedChange?: (checked: boolean) => void;
 }): JSX.Element {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const { hasScope } = useRBAC();
@@ -35,6 +43,20 @@ export function SessionTableRow({
 
   const row = (
     <DotRow>
+      {selectable && (
+        <td className="w-10 px-3 py-3">
+          {canRevoke && (
+            <div className="flex" onClick={(e) => e.stopPropagation()}>
+              <Checkbox
+                checked={selected}
+                onCheckedChange={(c) => onSelectedChange?.(c === true)}
+                aria-label={`Select session for ${subjectLabel(session)}`}
+              />
+            </div>
+          )}
+        </td>
+      )}
+
       {/* Subject */}
       <td className="px-3 py-3">
         <Type
