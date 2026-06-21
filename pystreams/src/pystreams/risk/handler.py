@@ -93,7 +93,7 @@ class PresidioHandler:
         # latency.
         try:
             scan_started = time.perf_counter()
-            pending = await asyncify(
+            entity_types, pending = await asyncify(
                 self._scan_and_publish, limiter=self._get_scan_limiter()
             )(
                 message=message,
@@ -122,7 +122,7 @@ class PresidioHandler:
             )
             return
 
-        if not pending:
+        if not entity_types:
             return
 
         # The publishes were already fired on the worker thread (the client batches
@@ -144,16 +144,13 @@ class PresidioHandler:
         # rendering, so the line costs nothing in production yet stays available
         # when debugging. The async ``adebug`` keeps that render off the event
         # loop on the occasions debug *is* enabled.
-        entity_types: dict[str, int] = {}
-        for p in pending:
-            entity_types[p.entity_type] = entity_types.get(p.entity_type, 0) + 1
         await self.logger.adebug(
             "presidio scan detected entities",
             request_id=message.request_id,
             reply_urn=message.reply_urn,
             requested_entities=requested or [],
             detected_entity_types=sorted(entity_types),
-            detected_count=len(pending),
+            detected_count=sum(entity_types.values()),
             published_count=published,
             delivery_attempt=meta.delivery_attempt,
             # Per-message latency split, safe to retain (durations, never content):
@@ -169,7 +166,7 @@ class PresidioHandler:
         message: presidio_analysis_pb2.PresidioAnalysis,
         content: str,
         entities: list[str] | None,
-    ) -> list[_PendingPublish]:
+    ) -> tuple[dict[str, int], list[_PendingPublish]]:
         """Scan, then build and fire each finding's publish — all off the loop.
 
         Runs on a worker thread (via ``asyncify``): the analyzer call, the
@@ -179,62 +176,55 @@ class PresidioHandler:
         Keeping the serialization here is the point — done on the loop it would be
         per-finding GIL work competing with message intake.
 
-        A message's findings are independent, so every publish is fired up front
-        (``publish`` returns a future without waiting and the client batches the
-        sends); the returned futures are collected on the loop by ``_collect``. In
-        series a message with N findings would pay N Pub/Sub round-trips back to
-        back; firing them together collapses that toward a single round-trip.
+        Returns the histogram of detected entity types (for the summary log, so the
+        matched values never travel back to the loop) and the fired publishes for
+        ``_collect`` to await. A message's findings are independent, so each publish
+        is fired up front (``publish`` returns a future without waiting and the
+        client batches the sends); in series N findings would pay N Pub/Sub
+        round-trips back to back. A publish that raises *synchronously* (e.g. a
+        stopped client) is logged and skipped here — the same disposition
+        ``_collect`` gives an async commit failure — so one finding's failure
+        neither aborts the rest nor escapes to nack (and duplicate) the message.
         """
         detections = self._scan(content, entities)
         if not detections:
-            return []
+            return {}, []
         # A fresh detection timestamp (UTC, RFC3339) stamped on every finding from
         # this delivery — when the scan ran, not when the request was created.
         created_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        return [
-            _PendingPublish(
-                entity_type=d.entity_type,
+        # An explicit loop, not a comprehension: each publish needs its own
+        # try/except so a synchronous failure skips just that finding.
+        entity_types: dict[str, int] = {}
+        pending: list[_PendingPublish] = []
+        for d in detections:
+            entity_types[d.entity_type] = entity_types.get(d.entity_type, 0) + 1
+            finding = finding_pb2.Finding(
+                # A UUIDv7 per finding: globally unique with a time-ordered prefix,
+                # so findings sort by creation in storage.
+                id=str(uuid.uuid7()),
+                request_id=message.request_id,
+                chat_message_id=message.chat_message_id,
+                project_id=message.project_id,
+                organization_id=message.organization_id,
+                risk_policy_id=message.risk_policy_id,
+                risk_policy_version=message.risk_policy_version,
+                created_at=created_at,
                 rule_id=d.rule_id,
-                result=self._publish(
-                    finding_pb2.Finding(
-                        # A UUIDv7 per finding: globally unique with a time-ordered
-                        # prefix, so findings sort by creation in storage.
-                        id=str(uuid.uuid7()),
-                        request_id=message.request_id,
-                        chat_message_id=message.chat_message_id,
-                        project_id=message.project_id,
-                        organization_id=message.organization_id,
-                        risk_policy_id=message.risk_policy_id,
-                        risk_policy_version=message.risk_policy_version,
-                        created_at=created_at,
-                        rule_id=d.rule_id,
-                        description=_FINDING_DESCRIPTION,
-                        match=d.match,
-                        start_pos=d.start_pos,
-                        end_pos=d.end_pos,
-                        tags=["pii"],
-                        source=SOURCE_PRESIDIO,
-                        confidence=d.confidence,
-                    )
-                ),
+                description=_FINDING_DESCRIPTION,
+                match=d.match,
+                start_pos=d.start_pos,
+                end_pos=d.end_pos,
+                tags=["pii"],
+                source=SOURCE_PRESIDIO,
+                confidence=d.confidence,
             )
-            for d in detections
-        ]
-
-    def _publish(self, finding: finding_pb2.Finding) -> PublishResult:
-        """Fire one publish, deferring a synchronous failure to its result.
-
-        ``publish`` normally returns a future, but a synchronous raise (e.g. a
-        misconfigured client) would otherwise propagate out of ``_scan_and_publish``
-        and be reported as a *scan* failure, aborting the message's remaining
-        findings. Capturing it as a :class:`_FailedPublish` keeps per-finding
-        failure handling uniform whether ``publish`` raises now or the commit fails
-        later — both are logged and skipped by ``_collect``.
-        """
-        try:
-            return self.publisher.publish(finding)
-        except Exception as exc:
-            return _FailedPublish(exc)
+            try:
+                result = self.publisher.publish(finding)
+            except Exception as exc:
+                self._log_publish_failure(message, d.rule_id, exc)
+                continue
+            pending.append(_PendingPublish(rule_id=d.rule_id, result=result))
+        return entity_types, pending
 
     async def _collect(
         self,
@@ -243,7 +233,7 @@ class PresidioHandler:
     ) -> int:
         """Await each already-fired publish's commit; return how many landed.
 
-        A publish failure is logged and skipped rather than raised: nacking the
+        A commit failure is logged and skipped rather than raised: nacking the
         message would redeliver it and re-publish the findings that already
         landed, duplicating them (there is no dedup downstream).
         """
@@ -252,18 +242,29 @@ class PresidioHandler:
             try:
                 await p.result.get()
             except Exception as exc:
-                # Never echo the finding (it carries the matched value); log the
-                # request, rule id, and exception type only.
-                self.logger.error(
-                    "failed to publish risk finding",
-                    request_id=message.request_id,
-                    rule_id=p.rule_id,
-                    error_type=type(exc).__name__,
-                )
+                self._log_publish_failure(message, p.rule_id, exc)
                 continue
             published += 1
 
         return published
+
+    def _log_publish_failure(
+        self,
+        message: presidio_analysis_pb2.PresidioAnalysis,
+        rule_id: str,
+        exc: Exception,
+    ) -> None:
+        """Log one finding's publish failure (synchronous dispatch or async commit).
+
+        Never echo the finding — it carries the matched value — so only the request,
+        rule id, and exception type are logged.
+        """
+        self.logger.error(
+            "failed to publish risk finding",
+            request_id=message.request_id,
+            rule_id=rule_id,
+            error_type=type(exc).__name__,
+        )
 
     def _scan(self, content: str, entities: list[str] | None) -> list[_Detection]:
         """Analyze the content and return the real (non-false-positive) matches.
@@ -382,33 +383,12 @@ class _Detection:
 
 @dataclass(frozen=True)
 class _PendingPublish:
-    """A finding whose publish has already been fired; ``result.get`` confirms it.
+    """A fired publish awaiting its commit; ``result.get`` confirms or raises.
 
     Built and fired off the event loop by ``_scan_and_publish`` so the proto
-    build + serialize never run on the loop thread. The entity type and rule id
-    ride along so the loop can assemble the summary log and per-finding error
-    context without re-deriving them from the detection.
+    build + serialize never run on the loop thread. The rule id rides along so
+    ``_collect`` can attribute a commit failure without re-deriving it.
     """
 
-    entity_type: str
     rule_id: str
     result: PublishResult
-
-
-@dataclass(frozen=True)
-class _FailedPublish:
-    """A :class:`PublishResult` standing in for a publish that raised synchronously.
-
-    ``Publisher.publish`` returns a future, but it can still raise *synchronously*
-    (e.g. a misconfigured client). Capturing that as a result whose ``get`` re-raises
-    routes it through ``_collect``'s normal publish-failure path — logged and
-    skipped — exactly like an async commit failure. So one finding's failure
-    neither aborts the message's other publishes nor lets the error escape the
-    handler and nack the message (which would redeliver and duplicate the findings
-    that already landed).
-    """
-
-    exc: Exception
-
-    async def get(self) -> str:
-        raise self.exc
