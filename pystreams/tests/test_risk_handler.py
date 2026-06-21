@@ -6,41 +6,56 @@ from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 from structlog.testing import capture_logs
 
-from pystreams.risk.handler import PresidioHandler, Recognized
+from pystreams.risk.handler import PresidioHandler
+from pystreams.risk.scanner import Detection
 
 # Matches the RFC3339 UTC form the handler stamps on a finding's created_at.
 _RFC3339_UTC = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 
 
-class _Result:
-    """Minimal stand-in for a Presidio ``RecognizerResult``."""
+def _detection(
+    entity_type: str,
+    match: str,
+    *,
+    start_pos: int = 0,
+    end_pos: int = 0,
+    confidence: float = 0.5,
+) -> Detection:
+    return Detection(
+        entity_type=entity_type,
+        match=match,
+        start_pos=start_pos,
+        end_pos=end_pos,
+        confidence=confidence,
+    )
 
-    def __init__(
-        self, entity_type: str, start: int = 0, end: int = 0, score: float = 0.5
-    ):
-        self.entity_type = entity_type
-        self.start = start
-        self.end = end
-        self.score = score
 
+class FakeScanner:
+    """Returns canned detections (or raises), and records its scan calls.
 
-class FakeAnalyzer:
-    """Records calls and returns canned detections keyed by input text.
-
-    Lets the handler tests run without loading Presidio's NLP model and keeps
-    detection results deterministic.
+    Stands in for a real :class:`~pystreams.risk.scanner.Scanner` so the handler
+    tests exercise finding-building, logging, and publishing without loading
+    Presidio's NLP model.
     """
 
-    def __init__(self, detections: dict[str, list[Recognized]] | None = None):
-        self.detections = detections or {}
+    def __init__(
+        self,
+        detections: list[Detection] | None = None,
+        *,
+        error: Exception | None = None,
+    ):
+        self._detections = detections or []
+        self._error = error
         self.calls: list[tuple[str, list[str] | None]] = []
 
-    def analyze(
-        self, *, text: str, entities: list[str] | None, language: str
-    ) -> list[Recognized]:
-        self.calls.append((text, entities))
-        assert language == "en"
-        return self.detections.get(text, [])
+    async def scan(self, content: str, entities: list[str] | None) -> list[Detection]:
+        self.calls.append((content, entities))
+        if self._error is not None:
+            raise self._error
+        return list(self._detections)
+
+    async def aclose(self) -> None:
+        return None
 
 
 class _FakeResult:
@@ -69,12 +84,12 @@ def _meta(delivery_attempt: int = 1) -> MessageMetadata:
 
 
 def _handler(
-    analyzer: FakeAnalyzer, publisher: FakePublisher | None = None
+    scanner: FakeScanner, publisher: FakePublisher | None = None
 ) -> PresidioHandler:
     return PresidioHandler(
         structlog.get_logger(),
         publisher or FakePublisher(),
-        analyzer=analyzer,
+        scanner,
     )
 
 
@@ -84,11 +99,15 @@ def _message(content: str, **kwargs) -> presidio_analysis_pb2.PresidioAnalysis:
 
 async def test_publishes_a_finding_per_detection():
     content = "email me at a@b.com"
-    analyzer = FakeAnalyzer(
-        {content: [_Result("EMAIL_ADDRESS", start=12, end=19, score=0.85)]}
+    scanner = FakeScanner(
+        [
+            _detection(
+                "EMAIL_ADDRESS", "a@b.com", start_pos=12, end_pos=19, confidence=0.85
+            )
+        ]
     )
     publisher = FakePublisher()
-    handler = _handler(analyzer, publisher)
+    handler = _handler(scanner, publisher)
     msg = _message(
         content,
         request_id="req-1",
@@ -117,7 +136,7 @@ async def test_publishes_a_finding_per_detection():
     # created_at is a fresh detection timestamp, not the request's created_at.
     assert _RFC3339_UTC.fullmatch(finding.created_at)
     assert finding.created_at != "2023-01-01T00:00:00Z"
-    # Detection fields are mapped onto the finding.
+    # Detection fields are mapped onto the finding; rule_id is derived here.
     assert finding.source == "presidio"
     assert finding.rule_id == "pii.email_address"
     assert finding.match == "a@b.com"
@@ -137,22 +156,19 @@ async def test_publishes_a_finding_per_detection():
 
 
 async def test_publishes_one_finding_per_hit_and_dedupes_log_types():
-    content = "call 555-0100 or 555-0199"
-    analyzer = FakeAnalyzer(
-        {
-            content: [
-                _Result("PHONE_NUMBER", start=5, end=13),
-                _Result("PHONE_NUMBER", start=17, end=25),
-            ]
-        }
+    scanner = FakeScanner(
+        [
+            _detection("PHONE_NUMBER", "555-0100", start_pos=5, end_pos=13),
+            _detection("PHONE_NUMBER", "555-0199", start_pos=17, end_pos=25),
+        ]
     )
     publisher = FakePublisher()
-    handler = _handler(analyzer, publisher)
+    handler = _handler(scanner, publisher)
 
     with capture_logs() as logs:
-        await handler.handle(_message(content, request_id="req-1"), _meta())
+        await handler.handle(_message("...", request_id="req-1"), _meta())
 
-    # One finding per recognized span...
+    # One finding per detection...
     assert [f.match for f in publisher.published] == ["555-0100", "555-0199"]
     # ...each with its own distinct id.
     assert len({f.id for f in publisher.published}) == 2
@@ -163,69 +179,10 @@ async def test_publishes_one_finding_per_hit_and_dedupes_log_types():
     assert entry["published_count"] == 2
 
 
-async def test_byte_offsets_for_multibyte_content():
-    # "café " is 5 characters but 6 UTF-8 bytes; a match after it must be
-    # reported in byte positions, not character positions.
-    content = "café a@b.com"
-    analyzer = FakeAnalyzer(
-        {content: [_Result("EMAIL_ADDRESS", start=5, end=12, score=0.9)]}
-    )
-    publisher = FakePublisher()
-    handler = _handler(analyzer, publisher)
-
-    await handler.handle(_message(content, request_id="req-1"), _meta())
-
-    (finding,) = publisher.published
-    assert finding.match == "a@b.com"
-    assert finding.start_pos == 6  # one extra byte from the 'é'
-    assert finding.end_pos == 13
-
-
-async def test_false_positives_are_filtered_before_publishing():
-    # "10.0.0.1" is RFC1918 space and is dropped; "a@b.com" is a real match.
-    content = "10.0.0.1 and a@b.com"
-    analyzer = FakeAnalyzer(
-        {
-            content: [
-                _Result("IP_ADDRESS", start=0, end=8),
-                _Result("EMAIL_ADDRESS", start=13, end=20, score=0.7),
-            ]
-        }
-    )
-    publisher = FakePublisher()
-    handler = _handler(analyzer, publisher)
-
-    with capture_logs() as logs:
-        await handler.handle(_message(content, request_id="req-1"), _meta())
-
-    # Only the real match is published; the reserved IP never reaches the topic.
-    (finding,) = publisher.published
-    assert finding.rule_id == "pii.email_address"
-    assert finding.match == "a@b.com"
-    # The log counts reflect the post-filter set.
-    (entry,) = logs
-    assert entry["detected_entity_types"] == ["EMAIL_ADDRESS"]
-    assert entry["detected_count"] == 1
-    assert entry["published_count"] == 1
-
-
-async def test_all_false_positives_means_no_publish_and_no_log():
-    content = "reach me at user@example.com"
-    analyzer = FakeAnalyzer({content: [_Result("EMAIL_ADDRESS", start=12, end=28)]})
-    publisher = FakePublisher()
-    handler = _handler(analyzer, publisher)
-
-    with capture_logs() as logs:
-        await handler.handle(_message(content, request_id="req-1"), _meta())
-
-    # example.com is a placeholder domain: nothing published, nothing logged.
-    assert publisher.published == []
-    assert logs == []
-
-
 async def test_no_log_or_publish_when_nothing_detected():
+    scanner = FakeScanner([])  # scanner finds nothing
     publisher = FakePublisher()
-    handler = _handler(FakeAnalyzer(), publisher)  # detects nothing
+    handler = _handler(scanner, publisher)
 
     with capture_logs() as logs:
         await handler.handle(_message("nothing sensitive here"), _meta())
@@ -234,9 +191,9 @@ async def test_no_log_or_publish_when_nothing_detected():
     assert publisher.published == []
 
 
-async def test_requested_entities_forwarded_to_analyzer():
-    analyzer = FakeAnalyzer({"a@b.com": [_Result("EMAIL_ADDRESS", start=0, end=7)]})
-    handler = _handler(analyzer)
+async def test_requested_entities_forwarded_to_scanner():
+    scanner = FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com")])
+    handler = _handler(scanner)
     msg = _message(
         "a@b.com", request_id="req-1", entities=["EMAIL_ADDRESS", "PHONE_NUMBER"]
     )
@@ -244,41 +201,32 @@ async def test_requested_entities_forwarded_to_analyzer():
     with capture_logs() as logs:
         await handler.handle(msg, _meta())
 
-    # The explicit request set is passed through to the analyzer verbatim...
-    assert analyzer.calls == [("a@b.com", ["EMAIL_ADDRESS", "PHONE_NUMBER"])]
+    # The explicit request set is passed through to the scanner verbatim...
+    assert scanner.calls == [("a@b.com", ["EMAIL_ADDRESS", "PHONE_NUMBER"])]
     # ...and echoed back on the log line.
     (entry,) = logs
     assert entry["requested_entities"] == ["EMAIL_ADDRESS", "PHONE_NUMBER"]
 
 
 async def test_empty_entities_means_scan_all():
-    analyzer = FakeAnalyzer({"a@b.com": [_Result("EMAIL_ADDRESS", start=0, end=7)]})
-    handler = _handler(analyzer)
+    scanner = FakeScanner([_detection("EMAIL_ADDRESS", "a@b.com")])
+    handler = _handler(scanner)
 
     with capture_logs() as logs:
         await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
 
-    # No entities requested -> None, which tells Presidio to scan every type.
-    assert analyzer.calls == [("a@b.com", None)]
+    # No entities requested -> None, which tells the scanner to scan every type.
+    assert scanner.calls == [("a@b.com", None)]
     (entry,) = logs
     assert entry["requested_entities"] == []
 
 
-class _BoomAnalyzer:
-    """Analyzer whose ``analyze`` always raises, simulating a Presidio failure."""
-
-    def analyze(
-        self, *, text: str, entities: list[str] | None, language: str
-    ) -> list[Recognized]:
-        raise RuntimeError(text)  # message carries content to prove it isn't logged
-
-
 async def test_scan_failure_is_swallowed_and_logged():
-    publisher = FakePublisher()
-    handler = PresidioHandler(
-        structlog.get_logger(), publisher, analyzer=_BoomAnalyzer()
-    )
     secret = "my ssn is 123-45-6789"
+    # The error carries the content to prove it isn't logged.
+    scanner = FakeScanner(error=RuntimeError(secret))
+    publisher = FakePublisher()
+    handler = _handler(scanner, publisher)
     msg = _message(secret, request_id="req-1", reply_urn="urn:reply:1")
 
     # A scan failure must not propagate: raising here would nack the message and,
@@ -291,7 +239,7 @@ async def test_scan_failure_is_swallowed_and_logged():
     assert entry["request_id"] == "req-1"
     assert entry["error_type"] == "RuntimeError"
     assert entry["delivery_attempt"] == 3
-    # Nothing is published when the scan never produced results.
+    # Nothing is published when the scan failed.
     assert publisher.published == []
     # The error must not leak the scanned content even though the exception
     # carried it.
@@ -319,10 +267,8 @@ class _BoomPublisher:
 
 async def test_publish_failure_is_swallowed_and_logged():
     secret = "a@b.com"
-    analyzer = FakeAnalyzer({secret: [_Result("EMAIL_ADDRESS", start=0, end=7)]})
-    handler = PresidioHandler(
-        structlog.get_logger(), _BoomPublisher(), analyzer=analyzer
-    )
+    scanner = FakeScanner([_detection("EMAIL_ADDRESS", secret)])
+    handler = PresidioHandler(structlog.get_logger(), _BoomPublisher(), scanner)
 
     # A publish failure must not propagate either: nacking would redeliver and
     # re-publish any findings that already landed, duplicating them.
@@ -351,10 +297,8 @@ class _SyncBoomPublisher:
 
 async def test_sync_publish_failure_is_swallowed_and_logged():
     secret = "a@b.com"
-    analyzer = FakeAnalyzer({secret: [_Result("EMAIL_ADDRESS", start=0, end=7)]})
-    handler = PresidioHandler(
-        structlog.get_logger(), _SyncBoomPublisher(), analyzer=analyzer
-    )
+    scanner = FakeScanner([_detection("EMAIL_ADDRESS", secret)])
+    handler = PresidioHandler(structlog.get_logger(), _SyncBoomPublisher(), scanner)
 
     # A synchronous publish failure must be treated like an async one: logged as a
     # publish failure and skipped, never escaping to nack/redeliver the message
@@ -376,9 +320,11 @@ async def test_sync_publish_failure_is_swallowed_and_logged():
 
 async def test_does_not_leak_content_or_values_to_logs():
     secret = "my ssn is 123-45-6789"
-    analyzer = FakeAnalyzer({secret: [_Result("US_SSN", start=10, end=21, score=0.99)]})
+    scanner = FakeScanner(
+        [_detection("US_SSN", "123-45-6789", start_pos=10, end_pos=21, confidence=0.99)]
+    )
     publisher = FakePublisher()
-    handler = _handler(analyzer, publisher)
+    handler = _handler(scanner, publisher)
     msg = _message(secret, request_id="req-1", reply_urn="urn:reply:1")
 
     with capture_logs() as logs:
@@ -387,7 +333,7 @@ async def test_does_not_leak_content_or_values_to_logs():
     # The matched value is carried on the published finding...
     (finding,) = publisher.published
     assert finding.match == "123-45-6789"
-    # ...but the scanned content must never appear anywhere in the emitted logs.
+    # ...but the scanned content and matched value must never appear in the logs.
     for entry in logs:
         assert secret not in repr(entry)
         assert "123-45-6789" not in repr(entry)

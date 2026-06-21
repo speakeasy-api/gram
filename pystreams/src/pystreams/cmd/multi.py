@@ -21,7 +21,13 @@ from pystreams.deps.blocking import activate_blocking_detection
 from pystreams.deps.loop_lag import monitor_event_loop_lag
 from pystreams.health import HealthState, serve_control
 from pystreams.ping.handler import PingHandler
-from pystreams.risk.handler import PresidioHandler, build_default_analyzer
+from pystreams.risk.handler import PresidioHandler
+from pystreams.risk.scanner import (
+    ProcessPoolScanner,
+    Scanner,
+    ThreadScanner,
+    build_default_analyzer,
+)
 
 from . import flags_control, flags_gcp, flags_presidio, flags_service
 from .receiver import ReceiverGroup
@@ -55,6 +61,7 @@ async def multi(
     control_port: int,
     # Presidio options
     max_scan_concurrency: int | None,
+    scan_workers: int,
 ):
     logging.configure_logging(
         pretty_log=pretty_log,
@@ -96,53 +103,69 @@ async def multi(
         findings_publisher = await pubsub_publisher_for_message_async(
             broker, finding_pb2.Finding
         )
-        presidio_analyzer = await build_default_analyzer()
-        # Concurrent Presidio scans are GIL-bound, so the handler caps them at a
-        # low default. --max-scan-concurrency overrides it (<=0 disables the cap);
-        # unset (None) leaves the handler default in place.
-        scan_kwargs = (
-            {"max_scan_concurrency": max_scan_concurrency}
-            if max_scan_concurrency is not None
-            else {}
-        )
 
-        async with anyio.create_task_group() as tg:
-            tg.start_soon(_shutdown_on_signal, tg.cancel_scope, health_state, logger)
-            tg.start_soon(monitor_event_loop_lag)
-            # Start the health server first (and wait until it is bound) so the
-            # liveness probe answers as early as possible, then begin consuming
-            # and only then report ready.
-            await tg.start(
-                partial(
-                    serve_control,
-                    health_state,
-                    host=control_host,
-                    port=control_port,
-                    logger=logger,
+        # Choose the scan strategy. With --scan-workers > 0 the scan runs in a pool
+        # of worker processes (each with its own GIL), breaking the single-process
+        # throughput ceiling inside one pod; otherwise it runs in-process on threads
+        # capped by --max-scan-concurrency. The pool owns its own per-worker spaCy
+        # models, so the in-process analyzer is only built for the threaded path.
+        presidio_scanner: Scanner
+        if scan_workers > 0:
+            logger.info("starting presidio scan pool", workers=scan_workers)
+            presidio_scanner = await ProcessPoolScanner.create(max_workers=scan_workers)
+        else:
+            analyzer = await build_default_analyzer()
+            # Concurrent Presidio scans are GIL-bound, so the scanner caps them at a
+            # low default. --max-scan-concurrency overrides it (<=0 disables the
+            # cap); unset (None) leaves the scanner default in place.
+            concurrency_kwargs = (
+                {"max_concurrency": max_scan_concurrency}
+                if max_scan_concurrency is not None
+                else {}
+            )
+            presidio_scanner = ThreadScanner(analyzer, **concurrency_kwargs)
+
+        presidio_handler = PresidioHandler(logger, findings_publisher, presidio_scanner)
+
+        try:
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(
+                    _shutdown_on_signal, tg.cancel_scope, health_state, logger
                 )
-            )
+                tg.start_soon(monitor_event_loop_lag)
+                # Start the health server first (and wait until it is bound) so the
+                # liveness probe answers as early as possible, then begin consuming
+                # and only then report ready.
+                await tg.start(
+                    partial(
+                        serve_control,
+                        health_state,
+                        host=control_host,
+                        port=control_port,
+                        logger=logger,
+                    )
+                )
 
-            receivers = ReceiverGroup(task_group=tg, broker=broker, logger=logger)
+                receivers = ReceiverGroup(task_group=tg, broker=broker, logger=logger)
 
-            # Register subscription receivers here. Each call resolves a
-            # subscriber and starts consuming with per-message tracing.
-            await receivers.receive(
-                ping_pb2.Message,
-                processor_pb2.PyProcessor,
-                PingHandler(logger, ping_log_level).handle,
-            )
-            await receivers.receive(
-                presidio_analysis_pb2.PresidioAnalysis,
-                presidio_analyzer_pb2.PresidioAnalyzer,
-                PresidioHandler(
-                    logger,
-                    findings_publisher,
-                    presidio_analyzer,
-                    **scan_kwargs,
-                ).handle,
-            )
+                # Register subscription receivers here. Each call resolves a
+                # subscriber and starts consuming with per-message tracing.
+                await receivers.receive(
+                    ping_pb2.Message,
+                    processor_pb2.PyProcessor,
+                    PingHandler(logger, ping_log_level).handle,
+                )
+                await receivers.receive(
+                    presidio_analysis_pb2.PresidioAnalysis,
+                    presidio_analyzer_pb2.PresidioAnalyzer,
+                    presidio_handler.handle,
+                )
 
-            health_state.set_ready()
+                health_state.set_ready()
+        finally:
+            # Release the scanner: drains in-flight scans and reaps the worker
+            # processes for the pool scanner; a no-op for the in-process one.
+            await presidio_scanner.aclose()
 
 
 def _build_broker(
