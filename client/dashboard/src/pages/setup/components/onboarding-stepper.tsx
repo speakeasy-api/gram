@@ -84,6 +84,18 @@ export function OnboardingStepper({
             <div
               className={cn("min-w-0 pt-1 pb-8", canJump && "cursor-pointer")}
               onClick={canJump ? () => onStepClick?.(index) : undefined}
+              role={canJump ? "button" : undefined}
+              tabIndex={canJump ? 0 : undefined}
+              onKeyDown={
+                canJump
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onStepClick?.(index);
+                      }
+                    }
+                  : undefined
+              }
             >
               <h3
                 className={cn(

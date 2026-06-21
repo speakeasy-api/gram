@@ -57,9 +57,9 @@ type Client struct {
 	// listRiskCategories endpoint.
 	ListRiskCategoriesDoer goahttp.Doer
 
-	// GetDetectionSchema Doer is the HTTP client used to make requests to the
-	// getDetectionSchema endpoint.
-	GetDetectionSchemaDoer goahttp.Doer
+	// GetDetectionDescriptor Doer is the HTTP client used to make requests to the
+	// getDetectionDescriptor endpoint.
+	GetDetectionDescriptorDoer goahttp.Doer
 
 	// CompileCel Doer is the HTTP client used to make requests to the compileCel
 	// endpoint.
@@ -175,7 +175,7 @@ func NewClient(
 		ListRiskResultsByChatDoer:          doer,
 		GetRiskOverviewDoer:                doer,
 		ListRiskCategoriesDoer:             doer,
-		GetDetectionSchemaDoer:             doer,
+		GetDetectionDescriptorDoer:         doer,
 		CompileCelDoer:                     doer,
 		GetRiskUserBreakdownDoer:           doer,
 		GetRiskRuleBreakdownDoer:           doer,
@@ -445,15 +445,15 @@ func (c *Client) ListRiskCategories() goa.Endpoint {
 	}
 }
 
-// GetDetectionSchema returns an endpoint that makes HTTP requests to the risk
-// service getDetectionSchema server.
-func (c *Client) GetDetectionSchema() goa.Endpoint {
+// GetDetectionDescriptor returns an endpoint that makes HTTP requests to the
+// risk service getDetectionDescriptor server.
+func (c *Client) GetDetectionDescriptor() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeGetDetectionSchemaRequest(c.encoder)
-		decodeResponse = DecodeGetDetectionSchemaResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeGetDetectionDescriptorRequest(c.encoder)
+		decodeResponse = DecodeGetDetectionDescriptorResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetDetectionSchemaRequest(ctx, v)
+		req, err := c.BuildGetDetectionDescriptorRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -461,9 +461,9 @@ func (c *Client) GetDetectionSchema() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.GetDetectionSchemaDoer.Do(req)
+		resp, err := c.GetDetectionDescriptorDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("risk", "getDetectionSchema", err)
+			return nil, goahttp.ErrRequestError("risk", "getDetectionDescriptor", err)
 		}
 		return decodeResponse(resp)
 	}

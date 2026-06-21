@@ -234,7 +234,7 @@ export * from "./riskCreatePolicyBypassRequest.js";
 export * from "./riskDeleteCustomDetectionRule.js";
 export * from "./riskDeleteExclusion.js";
 export * from "./riskDenyPolicyBypassRequest.js";
-export * from "./riskDetectionSchema.js";
+export * from "./riskDetectionDescriptor.js";
 export * from "./riskGetCustomDetectionRule.js";
 export * from "./riskListCustomDetectionRules.js";
 export * from "./riskListExclusions.js";

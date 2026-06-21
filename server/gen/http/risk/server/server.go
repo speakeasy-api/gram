@@ -29,7 +29,7 @@ type Server struct {
 	ListRiskResultsByChat          http.Handler
 	GetRiskOverview                http.Handler
 	ListRiskCategories             http.Handler
-	GetDetectionSchema             http.Handler
+	GetDetectionDescriptor         http.Handler
 	CompileCel                     http.Handler
 	GetRiskUserBreakdown           http.Handler
 	GetRiskRuleBreakdown           http.Handler
@@ -90,7 +90,7 @@ func New(
 			{"ListRiskResultsByChat", "GET", "/rpc/risk.results.byChat"},
 			{"GetRiskOverview", "GET", "/rpc/risk.overview.get"},
 			{"ListRiskCategories", "GET", "/rpc/risk.categories"},
-			{"GetDetectionSchema", "GET", "/rpc/risk.detectionSchema"},
+			{"GetDetectionDescriptor", "GET", "/rpc/risk.detectionDescriptor"},
 			{"CompileCel", "GET", "/rpc/risk.compileCel"},
 			{"GetRiskUserBreakdown", "GET", "/rpc/risk.overview.userBreakdown"},
 			{"GetRiskRuleBreakdown", "GET", "/rpc/risk.overview.rules"},
@@ -123,7 +123,7 @@ func New(
 		ListRiskResultsByChat:          NewListRiskResultsByChatHandler(e.ListRiskResultsByChat, mux, decoder, encoder, errhandler, formatter),
 		GetRiskOverview:                NewGetRiskOverviewHandler(e.GetRiskOverview, mux, decoder, encoder, errhandler, formatter),
 		ListRiskCategories:             NewListRiskCategoriesHandler(e.ListRiskCategories, mux, decoder, encoder, errhandler, formatter),
-		GetDetectionSchema:             NewGetDetectionSchemaHandler(e.GetDetectionSchema, mux, decoder, encoder, errhandler, formatter),
+		GetDetectionDescriptor:         NewGetDetectionDescriptorHandler(e.GetDetectionDescriptor, mux, decoder, encoder, errhandler, formatter),
 		CompileCel:                     NewCompileCelHandler(e.CompileCel, mux, decoder, encoder, errhandler, formatter),
 		GetRiskUserBreakdown:           NewGetRiskUserBreakdownHandler(e.GetRiskUserBreakdown, mux, decoder, encoder, errhandler, formatter),
 		GetRiskRuleBreakdown:           NewGetRiskRuleBreakdownHandler(e.GetRiskRuleBreakdown, mux, decoder, encoder, errhandler, formatter),
@@ -163,7 +163,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListRiskResultsByChat = m(s.ListRiskResultsByChat)
 	s.GetRiskOverview = m(s.GetRiskOverview)
 	s.ListRiskCategories = m(s.ListRiskCategories)
-	s.GetDetectionSchema = m(s.GetDetectionSchema)
+	s.GetDetectionDescriptor = m(s.GetDetectionDescriptor)
 	s.CompileCel = m(s.CompileCel)
 	s.GetRiskUserBreakdown = m(s.GetRiskUserBreakdown)
 	s.GetRiskRuleBreakdown = m(s.GetRiskRuleBreakdown)
@@ -202,7 +202,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListRiskResultsByChatHandler(mux, h.ListRiskResultsByChat)
 	MountGetRiskOverviewHandler(mux, h.GetRiskOverview)
 	MountListRiskCategoriesHandler(mux, h.ListRiskCategories)
-	MountGetDetectionSchemaHandler(mux, h.GetDetectionSchema)
+	MountGetDetectionDescriptorHandler(mux, h.GetDetectionDescriptor)
 	MountCompileCelHandler(mux, h.CompileCel)
 	MountGetRiskUserBreakdownHandler(mux, h.GetRiskUserBreakdown)
 	MountGetRiskRuleBreakdownHandler(mux, h.GetRiskRuleBreakdown)
@@ -761,21 +761,21 @@ func NewListRiskCategoriesHandler(
 	})
 }
 
-// MountGetDetectionSchemaHandler configures the mux to serve the "risk"
-// service "getDetectionSchema" endpoint.
-func MountGetDetectionSchemaHandler(mux goahttp.Muxer, h http.Handler) {
+// MountGetDetectionDescriptorHandler configures the mux to serve the "risk"
+// service "getDetectionDescriptor" endpoint.
+func MountGetDetectionDescriptorHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.detectionSchema", f)
+	mux.Handle("GET", "/rpc/risk.detectionDescriptor", f)
 }
 
-// NewGetDetectionSchemaHandler creates a HTTP handler which loads the HTTP
-// request and calls the "risk" service "getDetectionSchema" endpoint.
-func NewGetDetectionSchemaHandler(
+// NewGetDetectionDescriptorHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "getDetectionDescriptor" endpoint.
+func NewGetDetectionDescriptorHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -784,13 +784,13 @@ func NewGetDetectionSchemaHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeGetDetectionSchemaRequest(mux, decoder)
-		encodeResponse = EncodeGetDetectionSchemaResponse(encoder)
-		encodeError    = EncodeGetDetectionSchemaError(encoder, formatter)
+		decodeRequest  = DecodeGetDetectionDescriptorRequest(mux, decoder)
+		encodeResponse = EncodeGetDetectionDescriptorResponse(encoder)
+		encodeError    = EncodeGetDetectionDescriptorError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getDetectionSchema")
+		ctx = context.WithValue(ctx, goa.MethodKey, "getDetectionDescriptor")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

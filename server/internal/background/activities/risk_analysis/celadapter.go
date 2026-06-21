@@ -13,7 +13,7 @@ import (
 
 // This file is the CEL evaluation path for custom detection and policy scopes,
 // backed by internal/risk/celenv. Rules store a CEL detection predicate
-// (detection_cel, legacy regex evaluated as content.match(regex)); policies
+// (detection_cel, legacy regex evaluated as content.matchRegex(regex)); policies
 // store CEL scope predicates (scope_include_cel / scope_exempt_cel).
 
 // celEngine is the shared, immutable CEL environment, built once. Eval is
@@ -36,14 +36,14 @@ func celMessage(view MessageView) celenv.Message {
 }
 
 // effectiveDetectionCEL returns the CEL predicate a rule should evaluate: its
-// detection_cel when set, else a synthesized content.match(regex) for a legacy
+// detection_cel when set, else a synthesized content.matchRegex(regex) for a legacy
 // regex rule, else empty (no matcher configured).
 func effectiveDetectionCEL(rule CustomDetectionRule) string {
 	if expr := strings.TrimSpace(rule.DetectionCel); expr != "" {
 		return expr
 	}
 	if pattern := strings.TrimSpace(rule.Regex); pattern != "" {
-		return "content.match(" + strconv.Quote(pattern) + ")"
+		return "content.matchRegex(" + strconv.Quote(pattern) + ")"
 	}
 	return ""
 }

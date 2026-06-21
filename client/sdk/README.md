@@ -477,9 +477,9 @@ run();
 * [suggest](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 * [update](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
 
-### [Risk.DetectionSchema](docs/sdks/detectionschema/README.md)
+### [Risk.DetectionDescriptor](docs/sdks/detectiondescriptor/README.md)
 
-* [get](docs/sdks/detectionschema/README.md#get) - getDetectionSchema risk
+* [get](docs/sdks/detectiondescriptor/README.md#get) - getDetectionDescriptor risk
 
 ### [Risk.Exclusions](docs/sdks/exclusions/README.md)
 
@@ -876,7 +876,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskCustomRulesList`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`riskCustomRulesSuggest`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 - [`riskCustomRulesUpdate`](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
-- [`riskDetectionSchemaGet`](docs/sdks/detectionschema/README.md#get) - getDetectionSchema risk
+- [`riskDetectionDescriptorGet`](docs/sdks/detectiondescriptor/README.md#get) - getDetectionDescriptor risk
 - [`riskExclusionsCreate`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 - [`riskExclusionsDelete`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`riskExclusionsList`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
@@ -1230,7 +1230,7 @@ To learn about this feature and how to get started, check
 - [`useRiskDeleteCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
 - [`useRiskDeleteExclusionMutation`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`useRiskDenyPolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
-- [`useRiskDetectionSchema`](docs/sdks/detectionschema/README.md#get) - getDetectionSchema risk
+- [`useRiskDetectionDescriptor`](docs/sdks/detectiondescriptor/README.md#get) - getDetectionDescriptor risk
 - [`useRiskGetCustomDetectionRule`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
 - [`useRiskListCustomDetectionRules`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`useRiskListExclusions`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk

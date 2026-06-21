@@ -608,7 +608,11 @@ function CustomRuleDetail({
           )}
           <Button
             disabled={
-              !dirty || !!celError || !title.trim() || saveState === "saving"
+              !dirty ||
+              !!celError ||
+              celStatus.kind === "validating" ||
+              !title.trim() ||
+              saveState === "saving"
             }
             onClick={() => void handleSave()}
           >
@@ -1282,7 +1286,12 @@ function CreateCustomRuleSheet({
         ? "Fix the detection expression"
         : null;
 
-  const canSubmit = idSuffix.trim() && title.trim() && !idError && !celError;
+  const canSubmit =
+    idSuffix.trim() &&
+    title.trim() &&
+    !idError &&
+    !celError &&
+    celStatus.kind !== "validating";
 
   const handleSubmit = () => {
     const finalRuleId = customRuleIDFromSuffix(idSuffix);

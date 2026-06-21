@@ -46,13 +46,14 @@ type Service interface {
 	// rule_id prefix) used to bucket findings. Dashboards and CLIs should call
 	// this instead of maintaining their own copy of the mapping.
 	ListRiskCategories(context.Context, *ListRiskCategoriesPayload) (res *RiskCategoriesResult, err error)
-	// Return the CEL expression environment for the detection-rule and
-	// policy-scope editors: the variables an author may reference (content,
-	// prompt, tools, ...) and the matcher functions available (match, includes,
-	// get, ...). The dashboard uses this for autocomplete and signature help so
-	// the editor cannot drift from what the backend accepts. Compilation and
-	// validation remain server-authoritative on the rule/policy save path.
-	GetDetectionSchema(context.Context, *GetDetectionSchemaPayload) (res *DetectionSchemaResult, err error)
+	// Return the machine-readable CEL environment descriptor for the
+	// detection-rule and policy-scope editors: the precise types, variables,
+	// function overloads (with receiver/param/return types), and macros. The
+	// dashboard configures a client-side CEL type-checker from this so it can
+	// validate and complete expressions instantly without a round-trip, while
+	// staying faithful to the backend engine. Compilation and validation remain
+	// server-authoritative on the rule/policy save path.
+	GetDetectionDescriptor(context.Context, *GetDetectionDescriptorPayload) (res *DetectionDescriptorResult, err error)
 	// Compile a single CEL expression (a detection predicate or a policy scope
 	// predicate) without evaluating it, so the editor can validate as the author
 	// types. Returns ok=true when it compiles, otherwise ok=false with the
@@ -134,7 +135,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [32]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getDetectionSchema", "compileCel", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [32]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getDetectionDescriptor", "compileCel", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
 
 // ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
 // service approveRiskPolicyBypassRequest method.
@@ -308,49 +309,97 @@ type DenyRiskPolicyBypassRequestPayload struct {
 	ID string
 }
 
-// One member field available on an object-typed variable's element (e.g.
-// 'name' on a 'tool').
-type DetectionSchemaField struct {
-	// Field name as written in CEL after the bind variable (e.g. 'name', 'server').
+// One typed member of an object type (e.g. 'args' on a 'tool').
+type DetectionDescriptorField struct {
+	// Member name as written after a dot (e.g. 'name', 'args').
 	Name string
-	// Descriptive type tag for the editor (e.g. 'field').
+	// Machine type-string of the member (e.g. 'field').
 	Type string
-	// Plain-English description of what the field holds.
+	// Plain-English description of the member.
 	Description string
 }
 
-// One matcher/helper function available in a detection or scope CEL expression.
-type DetectionSchemaFunction struct {
-	// Function name (e.g. 'match', 'includes', 'get').
+// One function overload with the precise types the checker resolves against.
+type DetectionDescriptorFunction struct {
+	// Function name (e.g. 'match', 'get').
 	Name string
-	// Human-readable call signature (e.g. 'field.match(pattern: string) -> bool').
+	// Stable overload identifier (also the engine binding key).
+	OverloadID string
+	// True for receiver-style calls (x.fn(...)); false for global calls.
+	Member bool
+	// Machine type-string of the receiver when member is true.
+	ReceiverType string
+	// Non-receiver parameters in order.
+	Params []*DetectionDescriptorParam
+	// Machine type-string of the result (e.g. 'bool', 'field').
+	ReturnType string
+	// Human-readable call signature.
 	Signature string
-	// Plain-English description of the matcher's behaviour, including span
-	// granularity.
+	// Plain-English description of the overload.
 	Description string
 }
 
-// DetectionSchemaResult is the result type of the risk service
-// getDetectionSchema method.
-type DetectionSchemaResult struct {
-	// Variables an author may reference.
-	Variables []*DetectionSchemaVariable
-	// Matcher and helper functions available.
-	Functions []*DetectionSchemaFunction
+// One CEL macro. Macros are built into both engines (not declared), listed
+// here for completion and documentation only.
+type DetectionDescriptorMacro struct {
+	// Macro name (e.g. 'exists', 'has', 'map').
+	Name string
+	// Human-readable call signature.
+	Signature string
+	// Plain-English description of the macro's behaviour.
+	Description string
+	// True when the macro yields a boolean verdict; false when it yields a list.
+	ReturnsBool bool
 }
 
-// One variable an author may reference in a detection or scope CEL expression.
-type DetectionSchemaVariable struct {
+// One non-receiver argument of a function overload.
+type DetectionDescriptorParam struct {
+	// Parameter name (e.g. 'pattern', 'path').
+	Name string
+	// Machine type-string of the parameter (e.g. 'string').
+	Type string
+}
+
+// DetectionDescriptorResult is the result type of the risk service
+// getDetectionDescriptor method.
+type DetectionDescriptorResult struct {
+	// Declared CEL types (the opaque 'field' and the 'tool' object type).
+	Types []*DetectionDescriptorType
+	// Variables an author may reference.
+	Variables []*DetectionDescriptorVariable
+	// Function overloads with precise receiver/param/return types.
+	Functions []*DetectionDescriptorFunction
+	// Standard CEL macros (exists/all/has/map/...).
+	Macros []*DetectionDescriptorMacro
+}
+
+// One CEL type. Registered identically in the Go engine and the client checker
+// under 'name'.
+type DetectionDescriptorType struct {
+	// Engine type name (e.g. 'field', 'celenv.celTool').
+	Name string
+	// True when the type has no readable members, only receiver methods (e.g.
+	// 'field').
+	Opaque bool
+	// Typed members of a non-opaque object type. Empty when opaque.
+	Fields []*DetectionDescriptorField
+	// Short human label for the editor (e.g. 'field', 'tool').
+	DisplayName string
+	// Plain-English description of the type.
+	Description string
+}
+
+// One author-visible variable, with the machine type the checker consumes and
+// a human display tag.
+type DetectionDescriptorVariable struct {
 	// Variable name as written in CEL (e.g. 'content', 'tools').
 	Name string
-	// Descriptive type tag for the editor (e.g. 'field', 'list(tool)', 'string').
+	// Machine type-string (e.g. 'field', 'string', 'list<celenv.celTool>').
 	Type string
-	// Plain-English description of what the variable holds.
+	// Human type tag for the editor (e.g. 'field', 'list(tool)').
+	DisplayType string
+	// Plain-English description of the variable.
 	Description string
-	// Member fields on each element when this variable is an object or list of
-	// objects (e.g. a 'tools' element's name/server/function/args). Empty for
-	// scalar variables.
-	Fields []*DetectionSchemaField
 }
 
 // GetCustomDetectionRulePayload is the payload type of the risk service
@@ -363,9 +412,9 @@ type GetCustomDetectionRulePayload struct {
 	ID string
 }
 
-// GetDetectionSchemaPayload is the payload type of the risk service
-// getDetectionSchema method.
-type GetDetectionSchemaPayload struct {
+// GetDetectionDescriptorPayload is the payload type of the risk service
+// getDetectionDescriptor method.
+type GetDetectionDescriptorPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string

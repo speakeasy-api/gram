@@ -57,9 +57,9 @@ func ListRiskCategoriesRiskPath() string {
 	return "/rpc/risk.categories"
 }
 
-// GetDetectionSchemaRiskPath returns the URL path to the risk service getDetectionSchema HTTP endpoint.
-func GetDetectionSchemaRiskPath() string {
-	return "/rpc/risk.detectionSchema"
+// GetDetectionDescriptorRiskPath returns the URL path to the risk service getDetectionDescriptor HTTP endpoint.
+func GetDetectionDescriptorRiskPath() string {
+	return "/rpc/risk.detectionDescriptor"
 }
 
 // CompileCelRiskPath returns the URL path to the risk service compileCel HTTP endpoint.

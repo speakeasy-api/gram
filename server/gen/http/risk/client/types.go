@@ -545,13 +545,17 @@ type ListRiskCategoriesResponseBody struct {
 	Categories []*RiskCategoryDefinitionResponseBody `form:"categories,omitempty" json:"categories,omitempty" xml:"categories,omitempty"`
 }
 
-// GetDetectionSchemaResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body.
-type GetDetectionSchemaResponseBody struct {
+// GetDetectionDescriptorResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body.
+type GetDetectionDescriptorResponseBody struct {
+	// Declared CEL types (the opaque 'field' and the 'tool' object type).
+	Types []*DetectionDescriptorTypeResponseBody `form:"types,omitempty" json:"types,omitempty" xml:"types,omitempty"`
 	// Variables an author may reference.
-	Variables []*DetectionSchemaVariableResponseBody `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
-	// Matcher and helper functions available.
-	Functions []*DetectionSchemaFunctionResponseBody `form:"functions,omitempty" json:"functions,omitempty" xml:"functions,omitempty"`
+	Variables []*DetectionDescriptorVariableResponseBody `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
+	// Function overloads with precise receiver/param/return types.
+	Functions []*DetectionDescriptorFunctionResponseBody `form:"functions,omitempty" json:"functions,omitempty" xml:"functions,omitempty"`
+	// Standard CEL macros (exists/all/has/map/...).
+	Macros []*DetectionDescriptorMacroResponseBody `form:"macros,omitempty" json:"macros,omitempty" xml:"macros,omitempty"`
 }
 
 // CompileCelResponseBody is the type of the "risk" service "compileCel"
@@ -2776,10 +2780,67 @@ type ListRiskCategoriesGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetDetectionSchemaUnauthorizedResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "unauthorized"
+// GetDetectionDescriptorUnauthorizedResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetDetectionDescriptorUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionDescriptorForbiddenResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "forbidden" error.
+type GetDetectionDescriptorForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionDescriptorBadRequestResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "bad_request" error.
+type GetDetectionDescriptorBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetDetectionDescriptorNotFoundResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body for the "not_found"
 // error.
-type GetDetectionSchemaUnauthorizedResponseBody struct {
+type GetDetectionDescriptorNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2795,9 +2856,10 @@ type GetDetectionSchemaUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetDetectionSchemaForbiddenResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "forbidden" error.
-type GetDetectionSchemaForbiddenResponseBody struct {
+// GetDetectionDescriptorConflictResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body for the "conflict"
+// error.
+type GetDetectionDescriptorConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2813,64 +2875,10 @@ type GetDetectionSchemaForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetDetectionSchemaBadRequestResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "bad_request" error.
-type GetDetectionSchemaBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetDetectionSchemaNotFoundResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "not_found" error.
-type GetDetectionSchemaNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetDetectionSchemaConflictResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "conflict" error.
-type GetDetectionSchemaConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetDetectionSchemaUnsupportedMediaResponseBody is the type of the "risk"
-// service "getDetectionSchema" endpoint HTTP response body for the
+// GetDetectionDescriptorUnsupportedMediaResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
 // "unsupported_media" error.
-type GetDetectionSchemaUnsupportedMediaResponseBody struct {
+type GetDetectionDescriptorUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2886,9 +2894,9 @@ type GetDetectionSchemaUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetDetectionSchemaInvalidResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "invalid" error.
-type GetDetectionSchemaInvalidResponseBody struct {
+// GetDetectionDescriptorInvalidResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body for the "invalid" error.
+type GetDetectionDescriptorInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2904,10 +2912,10 @@ type GetDetectionSchemaInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetDetectionSchemaInvariantViolationResponseBody is the type of the "risk"
-// service "getDetectionSchema" endpoint HTTP response body for the
+// GetDetectionDescriptorInvariantViolationResponseBody is the type of the
+// "risk" service "getDetectionDescriptor" endpoint HTTP response body for the
 // "invariant_violation" error.
-type GetDetectionSchemaInvariantViolationResponseBody struct {
+type GetDetectionDescriptorInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2923,9 +2931,10 @@ type GetDetectionSchemaInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetDetectionSchemaUnexpectedResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "unexpected" error.
-type GetDetectionSchemaUnexpectedResponseBody struct {
+// GetDetectionDescriptorUnexpectedResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "unexpected" error.
+type GetDetectionDescriptorUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2941,10 +2950,10 @@ type GetDetectionSchemaUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetDetectionSchemaGatewayErrorResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "gateway_error"
-// error.
-type GetDetectionSchemaGatewayErrorResponseBody struct {
+// GetDetectionDescriptorGatewayErrorResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetDetectionDescriptorGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -7188,42 +7197,87 @@ type RiskCategoryDefinitionResponseBody struct {
 	RuleIDPrefix *string `form:"rule_id_prefix,omitempty" json:"rule_id_prefix,omitempty" xml:"rule_id_prefix,omitempty"`
 }
 
-// DetectionSchemaVariableResponseBody is used to define fields on response
+// DetectionDescriptorTypeResponseBody is used to define fields on response
 // body types.
-type DetectionSchemaVariableResponseBody struct {
+type DetectionDescriptorTypeResponseBody struct {
+	// Engine type name (e.g. 'field', 'celenv.celTool').
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// True when the type has no readable members, only receiver methods (e.g.
+	// 'field').
+	Opaque *bool `form:"opaque,omitempty" json:"opaque,omitempty" xml:"opaque,omitempty"`
+	// Typed members of a non-opaque object type. Empty when opaque.
+	Fields []*DetectionDescriptorFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
+	// Short human label for the editor (e.g. 'field', 'tool').
+	DisplayName *string `form:"displayName,omitempty" json:"displayName,omitempty" xml:"displayName,omitempty"`
+	// Plain-English description of the type.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+}
+
+// DetectionDescriptorFieldResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorFieldResponseBody struct {
+	// Member name as written after a dot (e.g. 'name', 'args').
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Machine type-string of the member (e.g. 'field').
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// Plain-English description of the member.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+}
+
+// DetectionDescriptorVariableResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorVariableResponseBody struct {
 	// Variable name as written in CEL (e.g. 'content', 'tools').
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Descriptive type tag for the editor (e.g. 'field', 'list(tool)', 'string').
+	// Machine type-string (e.g. 'field', 'string', 'list<celenv.celTool>').
 	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
-	// Plain-English description of what the variable holds.
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Member fields on each element when this variable is an object or list of
-	// objects (e.g. a 'tools' element's name/server/function/args). Empty for
-	// scalar variables.
-	Fields []*DetectionSchemaFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
-}
-
-// DetectionSchemaFieldResponseBody is used to define fields on response body
-// types.
-type DetectionSchemaFieldResponseBody struct {
-	// Field name as written in CEL after the bind variable (e.g. 'name', 'server').
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Descriptive type tag for the editor (e.g. 'field').
-	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
-	// Plain-English description of what the field holds.
+	// Human type tag for the editor (e.g. 'field', 'list(tool)').
+	DisplayType *string `form:"displayType,omitempty" json:"displayType,omitempty" xml:"displayType,omitempty"`
+	// Plain-English description of the variable.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 }
 
-// DetectionSchemaFunctionResponseBody is used to define fields on response
+// DetectionDescriptorFunctionResponseBody is used to define fields on response
 // body types.
-type DetectionSchemaFunctionResponseBody struct {
-	// Function name (e.g. 'match', 'includes', 'get').
+type DetectionDescriptorFunctionResponseBody struct {
+	// Function name (e.g. 'match', 'get').
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Human-readable call signature (e.g. 'field.match(pattern: string) -> bool').
+	// Stable overload identifier (also the engine binding key).
+	OverloadID *string `form:"overloadId,omitempty" json:"overloadId,omitempty" xml:"overloadId,omitempty"`
+	// True for receiver-style calls (x.fn(...)); false for global calls.
+	Member *bool `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
+	// Machine type-string of the receiver when member is true.
+	ReceiverType *string `form:"receiverType,omitempty" json:"receiverType,omitempty" xml:"receiverType,omitempty"`
+	// Non-receiver parameters in order.
+	Params []*DetectionDescriptorParamResponseBody `form:"params,omitempty" json:"params,omitempty" xml:"params,omitempty"`
+	// Machine type-string of the result (e.g. 'bool', 'field').
+	ReturnType *string `form:"returnType,omitempty" json:"returnType,omitempty" xml:"returnType,omitempty"`
+	// Human-readable call signature.
 	Signature *string `form:"signature,omitempty" json:"signature,omitempty" xml:"signature,omitempty"`
-	// Plain-English description of the matcher's behaviour, including span
-	// granularity.
+	// Plain-English description of the overload.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+}
+
+// DetectionDescriptorParamResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorParamResponseBody struct {
+	// Parameter name (e.g. 'pattern', 'path').
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Machine type-string of the parameter (e.g. 'string').
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+}
+
+// DetectionDescriptorMacroResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorMacroResponseBody struct {
+	// Macro name (e.g. 'exists', 'has', 'map').
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Human-readable call signature.
+	Signature *string `form:"signature,omitempty" json:"signature,omitempty" xml:"signature,omitempty"`
+	// Plain-English description of the macro's behaviour.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// True when the macro yields a boolean verdict; false when it yields a list.
+	ReturnsBool *bool `form:"returnsBool,omitempty" json:"returnsBool,omitempty" xml:"returnsBool,omitempty"`
 }
 
 // RiskPolicyBypassRequestResponseBody is used to define fields on response
@@ -9510,33 +9564,49 @@ func NewListRiskCategoriesGatewayError(body *ListRiskCategoriesGatewayErrorRespo
 	return v
 }
 
-// NewGetDetectionSchemaDetectionSchemaResultOK builds a "risk" service
-// "getDetectionSchema" endpoint result from a HTTP "OK" response.
-func NewGetDetectionSchemaDetectionSchemaResultOK(body *GetDetectionSchemaResponseBody) *risk.DetectionSchemaResult {
-	v := &risk.DetectionSchemaResult{}
-	v.Variables = make([]*risk.DetectionSchemaVariable, len(body.Variables))
+// NewGetDetectionDescriptorDetectionDescriptorResultOK builds a "risk" service
+// "getDetectionDescriptor" endpoint result from a HTTP "OK" response.
+func NewGetDetectionDescriptorDetectionDescriptorResultOK(body *GetDetectionDescriptorResponseBody) *risk.DetectionDescriptorResult {
+	v := &risk.DetectionDescriptorResult{}
+	v.Types = make([]*risk.DetectionDescriptorType, len(body.Types))
+	for i, val := range body.Types {
+		if val == nil {
+			v.Types[i] = nil
+			continue
+		}
+		v.Types[i] = unmarshalDetectionDescriptorTypeResponseBodyToRiskDetectionDescriptorType(val)
+	}
+	v.Variables = make([]*risk.DetectionDescriptorVariable, len(body.Variables))
 	for i, val := range body.Variables {
 		if val == nil {
 			v.Variables[i] = nil
 			continue
 		}
-		v.Variables[i] = unmarshalDetectionSchemaVariableResponseBodyToRiskDetectionSchemaVariable(val)
+		v.Variables[i] = unmarshalDetectionDescriptorVariableResponseBodyToRiskDetectionDescriptorVariable(val)
 	}
-	v.Functions = make([]*risk.DetectionSchemaFunction, len(body.Functions))
+	v.Functions = make([]*risk.DetectionDescriptorFunction, len(body.Functions))
 	for i, val := range body.Functions {
 		if val == nil {
 			v.Functions[i] = nil
 			continue
 		}
-		v.Functions[i] = unmarshalDetectionSchemaFunctionResponseBodyToRiskDetectionSchemaFunction(val)
+		v.Functions[i] = unmarshalDetectionDescriptorFunctionResponseBodyToRiskDetectionDescriptorFunction(val)
+	}
+	v.Macros = make([]*risk.DetectionDescriptorMacro, len(body.Macros))
+	for i, val := range body.Macros {
+		if val == nil {
+			v.Macros[i] = nil
+			continue
+		}
+		v.Macros[i] = unmarshalDetectionDescriptorMacroResponseBodyToRiskDetectionDescriptorMacro(val)
 	}
 
 	return v
 }
 
-// NewGetDetectionSchemaUnauthorized builds a risk service getDetectionSchema
-// endpoint unauthorized error.
-func NewGetDetectionSchemaUnauthorized(body *GetDetectionSchemaUnauthorizedResponseBody) *goa.ServiceError {
+// NewGetDetectionDescriptorUnauthorized builds a risk service
+// getDetectionDescriptor endpoint unauthorized error.
+func NewGetDetectionDescriptorUnauthorized(body *GetDetectionDescriptorUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -9549,9 +9619,9 @@ func NewGetDetectionSchemaUnauthorized(body *GetDetectionSchemaUnauthorizedRespo
 	return v
 }
 
-// NewGetDetectionSchemaForbidden builds a risk service getDetectionSchema
-// endpoint forbidden error.
-func NewGetDetectionSchemaForbidden(body *GetDetectionSchemaForbiddenResponseBody) *goa.ServiceError {
+// NewGetDetectionDescriptorForbidden builds a risk service
+// getDetectionDescriptor endpoint forbidden error.
+func NewGetDetectionDescriptorForbidden(body *GetDetectionDescriptorForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -9564,9 +9634,9 @@ func NewGetDetectionSchemaForbidden(body *GetDetectionSchemaForbiddenResponseBod
 	return v
 }
 
-// NewGetDetectionSchemaBadRequest builds a risk service getDetectionSchema
-// endpoint bad_request error.
-func NewGetDetectionSchemaBadRequest(body *GetDetectionSchemaBadRequestResponseBody) *goa.ServiceError {
+// NewGetDetectionDescriptorBadRequest builds a risk service
+// getDetectionDescriptor endpoint bad_request error.
+func NewGetDetectionDescriptorBadRequest(body *GetDetectionDescriptorBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -9579,9 +9649,9 @@ func NewGetDetectionSchemaBadRequest(body *GetDetectionSchemaBadRequestResponseB
 	return v
 }
 
-// NewGetDetectionSchemaNotFound builds a risk service getDetectionSchema
-// endpoint not_found error.
-func NewGetDetectionSchemaNotFound(body *GetDetectionSchemaNotFoundResponseBody) *goa.ServiceError {
+// NewGetDetectionDescriptorNotFound builds a risk service
+// getDetectionDescriptor endpoint not_found error.
+func NewGetDetectionDescriptorNotFound(body *GetDetectionDescriptorNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -9594,9 +9664,9 @@ func NewGetDetectionSchemaNotFound(body *GetDetectionSchemaNotFoundResponseBody)
 	return v
 }
 
-// NewGetDetectionSchemaConflict builds a risk service getDetectionSchema
-// endpoint conflict error.
-func NewGetDetectionSchemaConflict(body *GetDetectionSchemaConflictResponseBody) *goa.ServiceError {
+// NewGetDetectionDescriptorConflict builds a risk service
+// getDetectionDescriptor endpoint conflict error.
+func NewGetDetectionDescriptorConflict(body *GetDetectionDescriptorConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -9609,9 +9679,9 @@ func NewGetDetectionSchemaConflict(body *GetDetectionSchemaConflictResponseBody)
 	return v
 }
 
-// NewGetDetectionSchemaUnsupportedMedia builds a risk service
-// getDetectionSchema endpoint unsupported_media error.
-func NewGetDetectionSchemaUnsupportedMedia(body *GetDetectionSchemaUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewGetDetectionDescriptorUnsupportedMedia builds a risk service
+// getDetectionDescriptor endpoint unsupported_media error.
+func NewGetDetectionDescriptorUnsupportedMedia(body *GetDetectionDescriptorUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -9624,9 +9694,9 @@ func NewGetDetectionSchemaUnsupportedMedia(body *GetDetectionSchemaUnsupportedMe
 	return v
 }
 
-// NewGetDetectionSchemaInvalid builds a risk service getDetectionSchema
-// endpoint invalid error.
-func NewGetDetectionSchemaInvalid(body *GetDetectionSchemaInvalidResponseBody) *goa.ServiceError {
+// NewGetDetectionDescriptorInvalid builds a risk service
+// getDetectionDescriptor endpoint invalid error.
+func NewGetDetectionDescriptorInvalid(body *GetDetectionDescriptorInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -9639,9 +9709,9 @@ func NewGetDetectionSchemaInvalid(body *GetDetectionSchemaInvalidResponseBody) *
 	return v
 }
 
-// NewGetDetectionSchemaInvariantViolation builds a risk service
-// getDetectionSchema endpoint invariant_violation error.
-func NewGetDetectionSchemaInvariantViolation(body *GetDetectionSchemaInvariantViolationResponseBody) *goa.ServiceError {
+// NewGetDetectionDescriptorInvariantViolation builds a risk service
+// getDetectionDescriptor endpoint invariant_violation error.
+func NewGetDetectionDescriptorInvariantViolation(body *GetDetectionDescriptorInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -9654,9 +9724,9 @@ func NewGetDetectionSchemaInvariantViolation(body *GetDetectionSchemaInvariantVi
 	return v
 }
 
-// NewGetDetectionSchemaUnexpected builds a risk service getDetectionSchema
-// endpoint unexpected error.
-func NewGetDetectionSchemaUnexpected(body *GetDetectionSchemaUnexpectedResponseBody) *goa.ServiceError {
+// NewGetDetectionDescriptorUnexpected builds a risk service
+// getDetectionDescriptor endpoint unexpected error.
+func NewGetDetectionDescriptorUnexpected(body *GetDetectionDescriptorUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -9669,9 +9739,9 @@ func NewGetDetectionSchemaUnexpected(body *GetDetectionSchemaUnexpectedResponseB
 	return v
 }
 
-// NewGetDetectionSchemaGatewayError builds a risk service getDetectionSchema
-// endpoint gateway_error error.
-func NewGetDetectionSchemaGatewayError(body *GetDetectionSchemaGatewayErrorResponseBody) *goa.ServiceError {
+// NewGetDetectionDescriptorGatewayError builds a risk service
+// getDetectionDescriptor endpoint gateway_error error.
+func NewGetDetectionDescriptorGatewayError(body *GetDetectionDescriptorGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13607,25 +13677,45 @@ func ValidateListRiskCategoriesResponseBody(body *ListRiskCategoriesResponseBody
 	return
 }
 
-// ValidateGetDetectionSchemaResponseBody runs the validations defined on
-// GetDetectionSchemaResponseBody
-func ValidateGetDetectionSchemaResponseBody(body *GetDetectionSchemaResponseBody) (err error) {
+// ValidateGetDetectionDescriptorResponseBody runs the validations defined on
+// GetDetectionDescriptorResponseBody
+func ValidateGetDetectionDescriptorResponseBody(body *GetDetectionDescriptorResponseBody) (err error) {
+	if body.Types == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("types", "body"))
+	}
 	if body.Variables == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("variables", "body"))
 	}
 	if body.Functions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("functions", "body"))
 	}
+	if body.Macros == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("macros", "body"))
+	}
+	for _, e := range body.Types {
+		if e != nil {
+			if err2 := ValidateDetectionDescriptorTypeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	for _, e := range body.Variables {
 		if e != nil {
-			if err2 := ValidateDetectionSchemaVariableResponseBody(e); err2 != nil {
+			if err2 := ValidateDetectionDescriptorVariableResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
 	}
 	for _, e := range body.Functions {
 		if e != nil {
-			if err2 := ValidateDetectionSchemaFunctionResponseBody(e); err2 != nil {
+			if err2 := ValidateDetectionDescriptorFunctionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Macros {
+		if e != nil {
+			if err2 := ValidateDetectionDescriptorMacroResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -16689,9 +16779,9 @@ func ValidateListRiskCategoriesGatewayErrorResponseBody(body *ListRiskCategories
 	return
 }
 
-// ValidateGetDetectionSchemaUnauthorizedResponseBody runs the validations
-// defined on getDetectionSchema_unauthorized_response_body
-func ValidateGetDetectionSchemaUnauthorizedResponseBody(body *GetDetectionSchemaUnauthorizedResponseBody) (err error) {
+// ValidateGetDetectionDescriptorUnauthorizedResponseBody runs the validations
+// defined on getDetectionDescriptor_unauthorized_response_body
+func ValidateGetDetectionDescriptorUnauthorizedResponseBody(body *GetDetectionDescriptorUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16713,9 +16803,9 @@ func ValidateGetDetectionSchemaUnauthorizedResponseBody(body *GetDetectionSchema
 	return
 }
 
-// ValidateGetDetectionSchemaForbiddenResponseBody runs the validations defined
-// on getDetectionSchema_forbidden_response_body
-func ValidateGetDetectionSchemaForbiddenResponseBody(body *GetDetectionSchemaForbiddenResponseBody) (err error) {
+// ValidateGetDetectionDescriptorForbiddenResponseBody runs the validations
+// defined on getDetectionDescriptor_forbidden_response_body
+func ValidateGetDetectionDescriptorForbiddenResponseBody(body *GetDetectionDescriptorForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16737,9 +16827,9 @@ func ValidateGetDetectionSchemaForbiddenResponseBody(body *GetDetectionSchemaFor
 	return
 }
 
-// ValidateGetDetectionSchemaBadRequestResponseBody runs the validations
-// defined on getDetectionSchema_bad_request_response_body
-func ValidateGetDetectionSchemaBadRequestResponseBody(body *GetDetectionSchemaBadRequestResponseBody) (err error) {
+// ValidateGetDetectionDescriptorBadRequestResponseBody runs the validations
+// defined on getDetectionDescriptor_bad_request_response_body
+func ValidateGetDetectionDescriptorBadRequestResponseBody(body *GetDetectionDescriptorBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16761,9 +16851,9 @@ func ValidateGetDetectionSchemaBadRequestResponseBody(body *GetDetectionSchemaBa
 	return
 }
 
-// ValidateGetDetectionSchemaNotFoundResponseBody runs the validations defined
-// on getDetectionSchema_not_found_response_body
-func ValidateGetDetectionSchemaNotFoundResponseBody(body *GetDetectionSchemaNotFoundResponseBody) (err error) {
+// ValidateGetDetectionDescriptorNotFoundResponseBody runs the validations
+// defined on getDetectionDescriptor_not_found_response_body
+func ValidateGetDetectionDescriptorNotFoundResponseBody(body *GetDetectionDescriptorNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16785,9 +16875,9 @@ func ValidateGetDetectionSchemaNotFoundResponseBody(body *GetDetectionSchemaNotF
 	return
 }
 
-// ValidateGetDetectionSchemaConflictResponseBody runs the validations defined
-// on getDetectionSchema_conflict_response_body
-func ValidateGetDetectionSchemaConflictResponseBody(body *GetDetectionSchemaConflictResponseBody) (err error) {
+// ValidateGetDetectionDescriptorConflictResponseBody runs the validations
+// defined on getDetectionDescriptor_conflict_response_body
+func ValidateGetDetectionDescriptorConflictResponseBody(body *GetDetectionDescriptorConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16809,9 +16899,9 @@ func ValidateGetDetectionSchemaConflictResponseBody(body *GetDetectionSchemaConf
 	return
 }
 
-// ValidateGetDetectionSchemaUnsupportedMediaResponseBody runs the validations
-// defined on getDetectionSchema_unsupported_media_response_body
-func ValidateGetDetectionSchemaUnsupportedMediaResponseBody(body *GetDetectionSchemaUnsupportedMediaResponseBody) (err error) {
+// ValidateGetDetectionDescriptorUnsupportedMediaResponseBody runs the
+// validations defined on getDetectionDescriptor_unsupported_media_response_body
+func ValidateGetDetectionDescriptorUnsupportedMediaResponseBody(body *GetDetectionDescriptorUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16833,9 +16923,9 @@ func ValidateGetDetectionSchemaUnsupportedMediaResponseBody(body *GetDetectionSc
 	return
 }
 
-// ValidateGetDetectionSchemaInvalidResponseBody runs the validations defined
-// on getDetectionSchema_invalid_response_body
-func ValidateGetDetectionSchemaInvalidResponseBody(body *GetDetectionSchemaInvalidResponseBody) (err error) {
+// ValidateGetDetectionDescriptorInvalidResponseBody runs the validations
+// defined on getDetectionDescriptor_invalid_response_body
+func ValidateGetDetectionDescriptorInvalidResponseBody(body *GetDetectionDescriptorInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16857,9 +16947,10 @@ func ValidateGetDetectionSchemaInvalidResponseBody(body *GetDetectionSchemaInval
 	return
 }
 
-// ValidateGetDetectionSchemaInvariantViolationResponseBody runs the
-// validations defined on getDetectionSchema_invariant_violation_response_body
-func ValidateGetDetectionSchemaInvariantViolationResponseBody(body *GetDetectionSchemaInvariantViolationResponseBody) (err error) {
+// ValidateGetDetectionDescriptorInvariantViolationResponseBody runs the
+// validations defined on
+// getDetectionDescriptor_invariant_violation_response_body
+func ValidateGetDetectionDescriptorInvariantViolationResponseBody(body *GetDetectionDescriptorInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16881,9 +16972,9 @@ func ValidateGetDetectionSchemaInvariantViolationResponseBody(body *GetDetection
 	return
 }
 
-// ValidateGetDetectionSchemaUnexpectedResponseBody runs the validations
-// defined on getDetectionSchema_unexpected_response_body
-func ValidateGetDetectionSchemaUnexpectedResponseBody(body *GetDetectionSchemaUnexpectedResponseBody) (err error) {
+// ValidateGetDetectionDescriptorUnexpectedResponseBody runs the validations
+// defined on getDetectionDescriptor_unexpected_response_body
+func ValidateGetDetectionDescriptorUnexpectedResponseBody(body *GetDetectionDescriptorUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -16905,9 +16996,9 @@ func ValidateGetDetectionSchemaUnexpectedResponseBody(body *GetDetectionSchemaUn
 	return
 }
 
-// ValidateGetDetectionSchemaGatewayErrorResponseBody runs the validations
-// defined on getDetectionSchema_gateway_error_response_body
-func ValidateGetDetectionSchemaGatewayErrorResponseBody(body *GetDetectionSchemaGatewayErrorResponseBody) (err error) {
+// ValidateGetDetectionDescriptorGatewayErrorResponseBody runs the validations
+// defined on getDetectionDescriptor_gateway_error_response_body
+func ValidateGetDetectionDescriptorGatewayErrorResponseBody(body *GetDetectionDescriptorGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -22308,21 +22399,24 @@ func ValidateRiskCategoryDefinitionResponseBody(body *RiskCategoryDefinitionResp
 	return
 }
 
-// ValidateDetectionSchemaVariableResponseBody runs the validations defined on
-// DetectionSchemaVariableResponseBody
-func ValidateDetectionSchemaVariableResponseBody(body *DetectionSchemaVariableResponseBody) (err error) {
+// ValidateDetectionDescriptorTypeResponseBody runs the validations defined on
+// DetectionDescriptorTypeResponseBody
+func ValidateDetectionDescriptorTypeResponseBody(body *DetectionDescriptorTypeResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.Type == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	if body.Opaque == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("opaque", "body"))
+	}
+	if body.DisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("displayName", "body"))
 	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
 	for _, e := range body.Fields {
 		if e != nil {
-			if err2 := ValidateDetectionSchemaFieldResponseBody(e); err2 != nil {
+			if err2 := ValidateDetectionDescriptorFieldResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -22330,9 +22424,9 @@ func ValidateDetectionSchemaVariableResponseBody(body *DetectionSchemaVariableRe
 	return
 }
 
-// ValidateDetectionSchemaFieldResponseBody runs the validations defined on
-// DetectionSchemaFieldResponseBody
-func ValidateDetectionSchemaFieldResponseBody(body *DetectionSchemaFieldResponseBody) (err error) {
+// ValidateDetectionDescriptorFieldResponseBody runs the validations defined on
+// DetectionDescriptorFieldResponseBody
+func ValidateDetectionDescriptorFieldResponseBody(body *DetectionDescriptorFieldResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -22345,9 +22439,73 @@ func ValidateDetectionSchemaFieldResponseBody(body *DetectionSchemaFieldResponse
 	return
 }
 
-// ValidateDetectionSchemaFunctionResponseBody runs the validations defined on
-// DetectionSchemaFunctionResponseBody
-func ValidateDetectionSchemaFunctionResponseBody(body *DetectionSchemaFunctionResponseBody) (err error) {
+// ValidateDetectionDescriptorVariableResponseBody runs the validations defined
+// on DetectionDescriptorVariableResponseBody
+func ValidateDetectionDescriptorVariableResponseBody(body *DetectionDescriptorVariableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	if body.DisplayType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("displayType", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	return
+}
+
+// ValidateDetectionDescriptorFunctionResponseBody runs the validations defined
+// on DetectionDescriptorFunctionResponseBody
+func ValidateDetectionDescriptorFunctionResponseBody(body *DetectionDescriptorFunctionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.OverloadID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("overloadId", "body"))
+	}
+	if body.Member == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("member", "body"))
+	}
+	if body.ReceiverType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("receiverType", "body"))
+	}
+	if body.ReturnType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("returnType", "body"))
+	}
+	if body.Signature == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signature", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	for _, e := range body.Params {
+		if e != nil {
+			if err2 := ValidateDetectionDescriptorParamResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateDetectionDescriptorParamResponseBody runs the validations defined on
+// DetectionDescriptorParamResponseBody
+func ValidateDetectionDescriptorParamResponseBody(body *DetectionDescriptorParamResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	return
+}
+
+// ValidateDetectionDescriptorMacroResponseBody runs the validations defined on
+// DetectionDescriptorMacroResponseBody
+func ValidateDetectionDescriptorMacroResponseBody(body *DetectionDescriptorMacroResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -22356,6 +22514,9 @@ func ValidateDetectionSchemaFunctionResponseBody(body *DetectionSchemaFunctionRe
 	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.ReturnsBool == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("returnsBool", "body"))
 	}
 	return
 }

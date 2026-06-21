@@ -37,9 +37,14 @@ export type CelSchemaItem = {
   // complete a comprehension's bound variable (tools.exists(t, t.name…)).
   fields?: CelSchemaItem[];
 };
+// A CEL macro. `member` is true for the list macros invoked after a dot
+// (tools.exists(...)); false for the global `has(...)`, which is named at the
+// top level like a function call.
+export type CelMacroItem = CelSchemaItem & { member: boolean };
 export type CelSchema = {
   variables: CelSchemaItem[];
   functions: CelSchemaItem[];
+  macros: CelMacroItem[];
 };
 
 // Registration state and the active completion schema live on globalThis, not in
@@ -60,7 +65,7 @@ function celRuntime(): CelRuntime {
   if (!holder.__celRuntime) {
     holder.__celRuntime = {
       registered: false,
-      schema: { variables: [], functions: [] },
+      schema: { variables: [], functions: [], macros: [] },
     };
   }
   return holder.__celRuntime;
@@ -75,19 +80,27 @@ const FIELD_WORDS = [
   "type",
 ];
 const MATCHER_WORDS = [
-  "match",
-  "includes",
-  "eq",
-  "prefix",
-  "suffix",
-  "glob",
+  "matchRegex",
+  "matchText",
+  "matchExact",
+  "matchPrefix",
+  "matchSuffix",
+  "matchGlob",
   "present",
   "get",
 ];
 // List macros CEL exposes on `tools` (and other lists).
-const MACRO_WORDS = ["exists", "exists_one", "all", "filter", "map", "size"];
-// The comprehension macros that bind an iteration variable over a list element.
-const COMPREHENSION_MACROS = ["exists", "exists_one", "all", "filter", "map"];
+// Highlighted as built-in macro/function keywords. Completion offerings come
+// from the schema; this list only drives syntax coloring.
+const MACRO_WORDS = [
+  "has",
+  "exists",
+  "exists_one",
+  "all",
+  "filter",
+  "map",
+  "size",
+];
 
 // The resolved type of an access chain, enough to decide what completes after a
 // dot: a list offers macros, an object offers its member fields, a field offers
@@ -174,17 +187,19 @@ function registerCelLanguage(m: typeof Monaco): void {
   // Transparent-background themes so the editor blends into the surrounding
   // input chrome (the container paints `dark:bg-input/30`) instead of showing
   // Monaco's opaque IDE background, which reads as a foreign element.
+  // focusBorder is transparent so Monaco doesn't paint its default blue focus
+  // ring inside our card; the bordered container is the only frame we want.
   m.editor.defineTheme("cel-dark", {
     base: "vs-dark",
     inherit: true,
     rules: [],
-    colors: { "editor.background": "#00000000" },
+    colors: { "editor.background": "#00000000", focusBorder: "#00000000" },
   });
   m.editor.defineTheme("cel-light", {
     base: "vs",
     inherit: true,
     rules: [],
-    colors: { "editor.background": "#00000000" },
+    colors: { "editor.background": "#00000000", focusBorder: "#00000000" },
   });
 
   m.languages.setMonarchTokensProvider(CEL_LANGUAGE_ID, {
@@ -252,7 +267,7 @@ function registerCelLanguage(m: typeof Monaco): void {
       // Text from line start to the cursor — enough lookbehind to tell whether
       // we're after a `.` and, if so, what the receiver of that dot is.
       const upto = model.getValueInRange({
-        startLineNumber: position.lineNumber,
+        startLineNumber: 1,
         startColumn: 1,
         endLineNumber: position.lineNumber,
         endColumn: position.column,
@@ -275,19 +290,22 @@ function registerCelLanguage(m: typeof Monaco): void {
           };
         }
 
-        // A list (`tools.`) → the comprehension macros that iterate it.
+        // A list (`tools.`) → the member macros that iterate it, sourced from
+        // the schema so the set can't drift from the engine.
         if (recv.kind === "list") {
           return {
-            suggestions: COMPREHENSION_MACROS.map((name) => ({
-              label: name,
-              kind: monaco.languages.CompletionItemKind.Method,
-              insertText: `${name}(\${1:t}, $2)`,
-              insertTextRules:
-                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-              detail: `${name}(var, predicate)`,
-              documentation: "Iterate the list, binding each element to var.",
-              range,
-            })),
+            suggestions: schema.macros
+              .filter((m) => m.member)
+              .map((m) => ({
+                label: m.name,
+                kind: monaco.languages.CompletionItemKind.Method,
+                insertText: `${m.name}(\${1:t}, $2)`,
+                insertTextRules:
+                  monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                detail: m.detail,
+                documentation: m.doc,
+                range,
+              })),
           };
         }
 
@@ -306,8 +324,10 @@ function registerCelLanguage(m: typeof Monaco): void {
         };
       }
 
-      // Not after a dot: name a top-level variable, an in-scope bind variable,
-      // or insert the ready-made tool-iteration snippet.
+      // Not after a dot: name a top-level variable or an in-scope bind variable.
+      // The list member macros (exists/all/...) are intentionally not offered
+      // here — they surface after `tools.` like every other member. Global
+      // macros that read like a call (has(...)) do belong at this position.
       const suggestions: Monaco.languages.CompletionItem[] =
         schema.variables.map((v) => ({
           label: v.name,
@@ -327,17 +347,18 @@ function registerCelLanguage(m: typeof Monaco): void {
           range,
         });
       }
-      // A ready-made iteration over tool calls — the most common tool predicate.
-      suggestions.push({
-        label: "tools.exists",
-        kind: monaco.languages.CompletionItemKind.Snippet,
-        insertText: "tools.exists(t, $1)",
-        insertTextRules:
-          monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-        detail: "iterate tool calls",
-        documentation: "True when any tool call matches the predicate.",
-        range,
-      });
+      for (const m of schema.macros.filter((x) => !x.member)) {
+        suggestions.push({
+          label: m.name,
+          kind: monaco.languages.CompletionItemKind.Method,
+          insertText: `${m.name}($1)`,
+          insertTextRules:
+            monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          detail: m.detail,
+          documentation: m.doc,
+          range,
+        });
+      }
       return { suggestions };
     },
   });
@@ -357,6 +378,7 @@ export function CelMonacoEditor({
   onChange,
   schema,
   errorMessage,
+  errorRange,
   disabled,
   className,
 }: {
@@ -364,6 +386,9 @@ export function CelMonacoEditor({
   onChange: (value: string) => void;
   schema?: CelSchema;
   errorMessage?: string | null;
+  // Character offset range of the error within the expression; when present the
+  // marker underlines just that span instead of the whole expression.
+  errorRange?: { start: number; end: number } | null;
   disabled?: boolean;
   className?: string;
 }): JSX.Element {
@@ -386,21 +411,32 @@ export function CelMonacoEditor({
     const model = editor.getModel();
     if (!model) return;
     if (errorMessage) {
+      // Underline the offending span when the checker gave us a range; else fall
+      // back to the whole expression.
+      let start = { lineNumber: 1, column: 1 };
       const lastLine = model.getLineCount();
+      let end = {
+        lineNumber: lastLine,
+        column: model.getLineMaxColumn(lastLine),
+      };
+      if (errorRange && errorRange.end > errorRange.start) {
+        start = model.getPositionAt(errorRange.start);
+        end = model.getPositionAt(errorRange.end);
+      }
       m.editor.setModelMarkers(model, CEL_LANGUAGE_ID, [
         {
           severity: m.MarkerSeverity.Error,
           message: errorMessage,
-          startLineNumber: 1,
-          startColumn: 1,
-          endLineNumber: lastLine,
-          endColumn: model.getLineMaxColumn(lastLine),
+          startLineNumber: start.lineNumber,
+          startColumn: start.column,
+          endLineNumber: end.lineNumber,
+          endColumn: end.column,
         },
       ]);
     } else {
       m.editor.setModelMarkers(model, CEL_LANGUAGE_ID, []);
     }
-  }, [errorMessage, value]);
+  }, [errorMessage, errorRange, value]);
 
   const handleMount: OnMount = (editor, m) => {
     editorRef.current = editor;

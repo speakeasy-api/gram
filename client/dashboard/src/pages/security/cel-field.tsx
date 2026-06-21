@@ -4,11 +4,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import { useRiskDetectionSchema } from "@gram/client/react-query";
+import { useRiskDetectionDescriptor } from "@gram/client/react-query";
 import { Check, ChevronRight, CircleAlert, Loader2 } from "lucide-react";
 import { Suspense, useMemo, useState, type JSX } from "react";
 import { useCelStatus, type CelStatus } from "./use-cel-status";
-import type { CelSchema } from "./cel-monaco-editor";
+import { descriptorToCelSchema } from "./cel-env";
 import CelMonacoEditorLazy from "./cel-monaco-editor.lazy";
 
 /** A named, insertable CEL snippet shown beneath the field. */
@@ -91,11 +91,11 @@ function CelStatusLine({ status }: { status: CelStatus }): JSX.Element | null {
   }
 }
 
-/** Collapsible reference listing the fields and matcher functions an author may
- *  use, sourced from the backend's `getDetectionSchema` so it never drifts from
- *  what the engine accepts. */
+/** Collapsible reference listing the fields, matcher functions, and macros an
+ *  author may use, sourced from the backend's `getDetectionDescriptor` — the
+ *  same source the engine compiles from — so it never drifts. */
 export function CelReference(): JSX.Element {
-  const { data } = useRiskDetectionSchema();
+  const { data } = useRiskDetectionDescriptor();
   const [open, setOpen] = useState(false);
 
   return (
@@ -111,7 +111,7 @@ export function CelReference(): JSX.Element {
           title="Fields"
           items={(data?.variables ?? []).map((v) => ({
             term: v.name,
-            note: `${v.type} — ${v.description}`,
+            note: `${v.displayType} — ${v.description}`,
           }))}
         />
         <ReferenceGroup
@@ -119,6 +119,13 @@ export function CelReference(): JSX.Element {
           items={(data?.functions ?? []).map((f) => ({
             term: f.signature,
             note: f.description,
+          }))}
+        />
+        <ReferenceGroup
+          title="Macros"
+          items={(data?.macros ?? []).map((m) => ({
+            term: m.signature,
+            note: m.description,
           }))}
         />
       </CollapsibleContent>
@@ -167,31 +174,16 @@ export function CelExpressionField({
   disabled?: boolean;
 }): JSX.Element {
   const status = useCelStatus(value);
-  const { data } = useRiskDetectionSchema();
+  const { data } = useRiskDetectionDescriptor();
 
-  // Map the backend editor schema into the Monaco completion shape. Memoized so
-  // the editor's completion-schema effect only fires when the schema changes.
-  const celSchema = useMemo<CelSchema>(
-    () => ({
-      variables: (data?.variables ?? []).map((v) => ({
-        name: v.name,
-        detail: v.type,
-        doc: v.description,
-        // Member fields of each element when the variable is a list/object
-        // (e.g. a `tools` element's name/server/function/args) — drives
-        // completion of the macro bind variable in tools.exists(t, t.name…).
-        fields: (v.fields ?? []).map((f) => ({
-          name: f.name,
-          detail: f.type,
-          doc: f.description,
-        })),
-      })),
-      functions: (data?.functions ?? []).map((f) => ({
-        name: f.name,
-        detail: f.signature,
-        doc: f.description,
-      })),
-    }),
+  // Project the descriptor into the Monaco completion shape (the same descriptor
+  // that drives validation). Memoized so the editor's completion-schema effect
+  // only fires when the descriptor changes.
+  const celSchema = useMemo(
+    () =>
+      data
+        ? descriptorToCelSchema(data)
+        : { variables: [], functions: [], macros: [] },
     [data],
   );
 
@@ -211,6 +203,7 @@ export function CelExpressionField({
               ? formatCelError(status.message).message
               : null
           }
+          errorRange={status.kind === "error" ? (status.range ?? null) : null}
           disabled={disabled}
         />
       </Suspense>

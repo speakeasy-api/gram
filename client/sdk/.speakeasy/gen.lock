@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: c50328a54bd6f2b9d2c7c189532a3d46
+  docChecksum: 059e83760fc0dd44dfd66104e7fdb986
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -288,14 +288,20 @@ trackedFiles:
     last_write_checksum: sha1:9b6481e8af0916f6e44a3dc2be0aafc40a9a381f
   docs/models/components/deploymentsummary.md:
     last_write_checksum: sha1:5d4ab2325f17cf618cafef456b8e52dd33d4da9a
-  docs/models/components/detectionschemafield.md:
-    last_write_checksum: sha1:39fff0c816fb25735b5eda303db719fe359381c2
-  docs/models/components/detectionschemafunction.md:
-    last_write_checksum: sha1:5e5c51aa01e6775f6809636fae0e933ff728e95a
-  docs/models/components/detectionschemaresult.md:
-    last_write_checksum: sha1:ad3792ed9a9092921bf8205456aa75207fc9f33f
-  docs/models/components/detectionschemavariable.md:
-    last_write_checksum: sha1:c099b396a5562c505def552dc5ad6e29bbebc677
+  docs/models/components/detectiondescriptorfield.md:
+    last_write_checksum: sha1:110584d0dc8d9cfb34758229e25348f8d4c7968d
+  docs/models/components/detectiondescriptorfunction.md:
+    last_write_checksum: sha1:0b115f23de45c92c5c09889f5c088039f026e3fd
+  docs/models/components/detectiondescriptormacro.md:
+    last_write_checksum: sha1:ef8ac30b39158e0dc8633356cccc797bc690f1e8
+  docs/models/components/detectiondescriptorparam.md:
+    last_write_checksum: sha1:6a6fc0779801c6ca13a07520158bde8adfbafe47
+  docs/models/components/detectiondescriptorresult.md:
+    last_write_checksum: sha1:b943cd074cb21dbb3f5d0633dae145755e5a5941
+  docs/models/components/detectiondescriptortype.md:
+    last_write_checksum: sha1:0f5adc4fa3b6af3b9eaddb3e69d059880b1a063d
+  docs/models/components/detectiondescriptorvariable.md:
+    last_write_checksum: sha1:e557f2f0798dca69f3e2708f5e76931c991d7553
   docs/models/components/dimension.md:
     last_write_checksum: sha1:e76f6a177091590e04ee95da19fe66fff995874b
   docs/models/components/discoverprotectedresourcemetadatarequestbody.md:
@@ -1996,14 +2002,14 @@ trackedFiles:
     last_write_checksum: sha1:3b84fbf52a86136b4906f7b9627755540d18f350
   docs/models/operations/getdeploymentsecurityoption2.md:
     last_write_checksum: sha1:faf3a1b6e40da2659d267acd8dab62386a71d844
-  docs/models/operations/getdetectionschemarequest.md:
-    last_write_checksum: sha1:0ccc648b2c876b13ea4e44d0791567dbce47a618
-  docs/models/operations/getdetectionschemasecurity.md:
-    last_write_checksum: sha1:cfaead0caaeabbd1bd655670e082a0c7980bca10
-  docs/models/operations/getdetectionschemasecurityoption1.md:
-    last_write_checksum: sha1:839f53ef38c4c1ec45af11767c39dd7a699a1d0a
-  docs/models/operations/getdetectionschemasecurityoption2.md:
-    last_write_checksum: sha1:04a273f2b6a4cb6fd5844061ce3913418976f64e
+  docs/models/operations/getdetectiondescriptorrequest.md:
+    last_write_checksum: sha1:6c6155c8958fa0ff1002f7a5a91c917968ba94e6
+  docs/models/operations/getdetectiondescriptorsecurity.md:
+    last_write_checksum: sha1:a2ef88de91519d18120a5cc3275ac23b2b10515a
+  docs/models/operations/getdetectiondescriptorsecurityoption1.md:
+    last_write_checksum: sha1:be4a3ad1dc71c80876a1fa36a1a3af2cd6443bd3
+  docs/models/operations/getdetectiondescriptorsecurityoption2.md:
+    last_write_checksum: sha1:9a8094316857b5c68b06177f9412bb102e65f69c
   docs/models/operations/getdomainrequest.md:
     last_write_checksum: sha1:7d0708fe31dfa77ba5c550b7245c428e2680ade6
   docs/models/operations/getdomainsecurity.md:
@@ -3420,8 +3426,8 @@ trackedFiles:
     last_write_checksum: sha1:c08f8de30e805c81701c7107a4ff30c9b0d8d90d
   docs/sdks/deployments/README.md:
     last_write_checksum: sha1:9fa17d59c28cf90b83f4a66f2b8f26e16c1bbef4
-  docs/sdks/detectionschema/README.md:
-    last_write_checksum: sha1:6ba6b124f8fcb3a15ac58072e53ca7b742b8f3c0
+  docs/sdks/detectiondescriptor/README.md:
+    last_write_checksum: sha1:07a2f67827d69329685b361272379021befe642f
   docs/sdks/domains/README.md:
     last_write_checksum: sha1:3353bdcad0ce9696b90ea70f68e5c1c31d5df6d0
   docs/sdks/environments/README.md:
@@ -3978,8 +3984,8 @@ trackedFiles:
     last_write_checksum: sha1:2fb2f79eb6f6c452106eeb558951518cf32d4b59
   src/funcs/riskCustomRulesUpdate.ts:
     last_write_checksum: sha1:64fdad46266de792afd338bd3f8690cd66982ea6
-  src/funcs/riskDetectionSchemaGet.ts:
-    last_write_checksum: sha1:fb12eddce15ae9193f46a51692990520873d5001
+  src/funcs/riskDetectionDescriptorGet.ts:
+    last_write_checksum: sha1:78fc7b5c19625f115d5cd30d6edff3beec51ee66
   src/funcs/riskExclusionsCreate.ts:
     last_write_checksum: sha1:cf5dad9b5c1de70878f36835fa86b8cddb7fc8f2
   src/funcs/riskExclusionsDelete.ts:
@@ -4401,14 +4407,20 @@ trackedFiles:
   src/models/components/deploymentsummary.ts:
     last_write_checksum: sha1:3f891f6011b55d6dcc85274122288babb19d8de4
     pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
-  src/models/components/detectionschemafield.ts:
-    last_write_checksum: sha1:d66cc9f59a78fad371e5000bb66560f678703714
-  src/models/components/detectionschemafunction.ts:
-    last_write_checksum: sha1:48a7090bd744619addf42eec06207bf1b9e47dcf
-  src/models/components/detectionschemaresult.ts:
-    last_write_checksum: sha1:ec889f99fea71f09bb4ddfeba707096a6b5bc6f4
-  src/models/components/detectionschemavariable.ts:
-    last_write_checksum: sha1:2223dab37ddd36ab1b89debfdaeaa5f6620941a1
+  src/models/components/detectiondescriptorfield.ts:
+    last_write_checksum: sha1:1f029c21fcfc9421a99d0eba69cf9e1861b84117
+  src/models/components/detectiondescriptorfunction.ts:
+    last_write_checksum: sha1:4e1f1499c99440856567393c4ff5533db9de707e
+  src/models/components/detectiondescriptormacro.ts:
+    last_write_checksum: sha1:f0addc61dfee46da57e5362cadfee083ab438fde
+  src/models/components/detectiondescriptorparam.ts:
+    last_write_checksum: sha1:6a08f568f35456c52a49fbc448a83f4c60d5ce2f
+  src/models/components/detectiondescriptorresult.ts:
+    last_write_checksum: sha1:ac4f345f6499bb7d897a228b1f27a2498b8a62e0
+  src/models/components/detectiondescriptortype.ts:
+    last_write_checksum: sha1:b8e0cdb8a3a4e3f0a3510a7d8a20df4320b70e49
+  src/models/components/detectiondescriptorvariable.ts:
+    last_write_checksum: sha1:aa0feec6f7ac0b266fb97bce1a41cb34a6dece29
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts:
     last_write_checksum: sha1:1f8f8a7840c2951d4102a9b562ddc580e9385574
   src/models/components/discoverremotesessionissuerrequestbody.ts:
@@ -4535,7 +4547,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:51c76278a8b1cb739aa1cb6be5e9247eb7aca6fc
+    last_write_checksum: sha1:97eb8b96caea6e210d599bf643257ec2f596d626
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -5462,8 +5474,8 @@ trackedFiles:
     last_write_checksum: sha1:f7394e1266aa1c27965c489f1328b0cf0acbf10c
   src/models/operations/getdeploymentlogs.ts:
     last_write_checksum: sha1:d3b594dd38ba4676b0e7effec94570346b73745a
-  src/models/operations/getdetectionschema.ts:
-    last_write_checksum: sha1:f3cb4e413b57ec10aa4c0fd63098b58e87653f46
+  src/models/operations/getdetectiondescriptor.ts:
+    last_write_checksum: sha1:5417bd681d407fc28dd48dae9b25bbd0a7956998
   src/models/operations/getdomain.ts:
     last_write_checksum: sha1:8cb7090ee0a4ed648aa63eb10d10687100380158
   src/models/operations/getemployeedataflowgraph.ts:
@@ -5570,7 +5582,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:6308d663590678a7ba47a9d1d92c44c93a09c0f7
+    last_write_checksum: sha1:4b7d3627b0d4391204d37a5b37e683e2b64c9f7b
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -6246,7 +6258,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:bc67f717d25cf6351c1db81a6f4279c1f66f094e
+    last_write_checksum: sha1:88c883f0cbd6700684e71aa59a544f8e961b209c
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -6584,10 +6596,10 @@ trackedFiles:
     last_write_checksum: sha1:93be8c271b64349cb3bbd36f5f86c3c46af70f79
   src/react-query/riskDenyPolicyBypassRequest.ts:
     last_write_checksum: sha1:78ece56d837b17f4154647934e2e2a9a76692409
-  src/react-query/riskDetectionSchema.core.ts:
-    last_write_checksum: sha1:e14263e29abc8eafde4b1553868931f10377a623
-  src/react-query/riskDetectionSchema.ts:
-    last_write_checksum: sha1:036e538412861ce212311d2ff9ff5687443eb63a
+  src/react-query/riskDetectionDescriptor.core.ts:
+    last_write_checksum: sha1:a0be9f93c7b60d67e05bdb1fba8bc6983f82e551
+  src/react-query/riskDetectionDescriptor.ts:
+    last_write_checksum: sha1:37236e5c19362653a09ab9bf0cc32dbfe49a24c3
   src/react-query/riskGetCustomDetectionRule.core.ts:
     last_write_checksum: sha1:73e03bc4843dea65139efab5f8dac55d657f8d56
   src/react-query/riskGetCustomDetectionRule.ts:
@@ -6888,8 +6900,8 @@ trackedFiles:
     last_write_checksum: sha1:d9fdb64a03817c3149b8db6405e4b1bdc259ebb4
   src/sdk/deployments.ts:
     last_write_checksum: sha1:3b3483447b48ea925a3930f46b88967852ddbb36
-  src/sdk/detectionschema.ts:
-    last_write_checksum: sha1:0173e07723cb18d49db4a6f24876495f2ceaf21f
+  src/sdk/detectiondescriptor.ts:
+    last_write_checksum: sha1:999e5a9e4d06dc2b7938eafbb5e4048c9179c4c2
   src/sdk/domains.ts:
     last_write_checksum: sha1:387025fbf83d2fb51edfa083331b5a41c8dee45c
   src/sdk/environments.ts:
@@ -6951,7 +6963,7 @@ trackedFiles:
   src/sdk/results.ts:
     last_write_checksum: sha1:220552d21499d1871f15ca050009d2ec7646bbad
   src/sdk/risk.ts:
-    last_write_checksum: sha1:fea3a36d2a9a5836886e2c3a573e96edf996dd68
+    last_write_checksum: sha1:c9b7e60f28456820a2013b89c47cce0e6a299f7a
   src/sdk/rules.ts:
     last_write_checksum: sha1:c09a7e791d89ef5b985c765b533bf61c1b6b0e9d
   src/sdk/sdk.ts:
@@ -10533,7 +10545,7 @@ examples:
     speakeasy-default-get-detection-schema:
       responses:
         "200":
-          application/json: {"functions": [], "variables": [{"description": "rare roughly fail ack", "name": "<value>", "type": "<value>"}]}
+          application/json: {"functions": [], "macros": [], "variables": [{"description": "rare roughly fail ack", "name": "<value>", "type": "<value>"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -10550,5 +10562,14 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getDetectionDescriptor:
+    speakeasy-default-get-detection-descriptor:
+      responses:
+        "200":
+          application/json: {"functions": [{"description": "amid aw insert strait regarding quicker", "member": true, "name": "<value>", "overloadId": "<id>", "receiverType": "<value>", "returnType": "<value>", "signature": "<value>"}], "macros": [], "types": [], "variables": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

@@ -547,13 +547,17 @@ type ListRiskCategoriesResponseBody struct {
 	Categories []*RiskCategoryDefinitionResponseBody `form:"categories" json:"categories" xml:"categories"`
 }
 
-// GetDetectionSchemaResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body.
-type GetDetectionSchemaResponseBody struct {
+// GetDetectionDescriptorResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body.
+type GetDetectionDescriptorResponseBody struct {
+	// Declared CEL types (the opaque 'field' and the 'tool' object type).
+	Types []*DetectionDescriptorTypeResponseBody `form:"types" json:"types" xml:"types"`
 	// Variables an author may reference.
-	Variables []*DetectionSchemaVariableResponseBody `form:"variables" json:"variables" xml:"variables"`
-	// Matcher and helper functions available.
-	Functions []*DetectionSchemaFunctionResponseBody `form:"functions" json:"functions" xml:"functions"`
+	Variables []*DetectionDescriptorVariableResponseBody `form:"variables" json:"variables" xml:"variables"`
+	// Function overloads with precise receiver/param/return types.
+	Functions []*DetectionDescriptorFunctionResponseBody `form:"functions" json:"functions" xml:"functions"`
+	// Standard CEL macros (exists/all/has/map/...).
+	Macros []*DetectionDescriptorMacroResponseBody `form:"macros" json:"macros" xml:"macros"`
 }
 
 // CompileCelResponseBody is the type of the "risk" service "compileCel"
@@ -2778,10 +2782,67 @@ type ListRiskCategoriesGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetDetectionSchemaUnauthorizedResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "unauthorized"
+// GetDetectionDescriptorUnauthorizedResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetDetectionDescriptorUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorForbiddenResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "forbidden" error.
+type GetDetectionDescriptorForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorBadRequestResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "bad_request" error.
+type GetDetectionDescriptorBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorNotFoundResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body for the "not_found"
 // error.
-type GetDetectionSchemaUnauthorizedResponseBody struct {
+type GetDetectionDescriptorNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2797,9 +2858,10 @@ type GetDetectionSchemaUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetDetectionSchemaForbiddenResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "forbidden" error.
-type GetDetectionSchemaForbiddenResponseBody struct {
+// GetDetectionDescriptorConflictResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body for the "conflict"
+// error.
+type GetDetectionDescriptorConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2815,64 +2877,10 @@ type GetDetectionSchemaForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetDetectionSchemaBadRequestResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "bad_request" error.
-type GetDetectionSchemaBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetDetectionSchemaNotFoundResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "not_found" error.
-type GetDetectionSchemaNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetDetectionSchemaConflictResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "conflict" error.
-type GetDetectionSchemaConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetDetectionSchemaUnsupportedMediaResponseBody is the type of the "risk"
-// service "getDetectionSchema" endpoint HTTP response body for the
+// GetDetectionDescriptorUnsupportedMediaResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
 // "unsupported_media" error.
-type GetDetectionSchemaUnsupportedMediaResponseBody struct {
+type GetDetectionDescriptorUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2888,9 +2896,9 @@ type GetDetectionSchemaUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetDetectionSchemaInvalidResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "invalid" error.
-type GetDetectionSchemaInvalidResponseBody struct {
+// GetDetectionDescriptorInvalidResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body for the "invalid" error.
+type GetDetectionDescriptorInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2906,10 +2914,10 @@ type GetDetectionSchemaInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetDetectionSchemaInvariantViolationResponseBody is the type of the "risk"
-// service "getDetectionSchema" endpoint HTTP response body for the
+// GetDetectionDescriptorInvariantViolationResponseBody is the type of the
+// "risk" service "getDetectionDescriptor" endpoint HTTP response body for the
 // "invariant_violation" error.
-type GetDetectionSchemaInvariantViolationResponseBody struct {
+type GetDetectionDescriptorInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2925,9 +2933,10 @@ type GetDetectionSchemaInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetDetectionSchemaUnexpectedResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "unexpected" error.
-type GetDetectionSchemaUnexpectedResponseBody struct {
+// GetDetectionDescriptorUnexpectedResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "unexpected" error.
+type GetDetectionDescriptorUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2943,10 +2952,10 @@ type GetDetectionSchemaUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetDetectionSchemaGatewayErrorResponseBody is the type of the "risk" service
-// "getDetectionSchema" endpoint HTTP response body for the "gateway_error"
-// error.
-type GetDetectionSchemaGatewayErrorResponseBody struct {
+// GetDetectionDescriptorGatewayErrorResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetDetectionDescriptorGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -7176,42 +7185,87 @@ type RiskCategoryDefinitionResponseBody struct {
 	RuleIDPrefix string `form:"rule_id_prefix" json:"rule_id_prefix" xml:"rule_id_prefix"`
 }
 
-// DetectionSchemaVariableResponseBody is used to define fields on response
+// DetectionDescriptorTypeResponseBody is used to define fields on response
 // body types.
-type DetectionSchemaVariableResponseBody struct {
+type DetectionDescriptorTypeResponseBody struct {
+	// Engine type name (e.g. 'field', 'celenv.celTool').
+	Name string `form:"name" json:"name" xml:"name"`
+	// True when the type has no readable members, only receiver methods (e.g.
+	// 'field').
+	Opaque bool `form:"opaque" json:"opaque" xml:"opaque"`
+	// Typed members of a non-opaque object type. Empty when opaque.
+	Fields []*DetectionDescriptorFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
+	// Short human label for the editor (e.g. 'field', 'tool').
+	DisplayName string `form:"displayName" json:"displayName" xml:"displayName"`
+	// Plain-English description of the type.
+	Description string `form:"description" json:"description" xml:"description"`
+}
+
+// DetectionDescriptorFieldResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorFieldResponseBody struct {
+	// Member name as written after a dot (e.g. 'name', 'args').
+	Name string `form:"name" json:"name" xml:"name"`
+	// Machine type-string of the member (e.g. 'field').
+	Type string `form:"type" json:"type" xml:"type"`
+	// Plain-English description of the member.
+	Description string `form:"description" json:"description" xml:"description"`
+}
+
+// DetectionDescriptorVariableResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorVariableResponseBody struct {
 	// Variable name as written in CEL (e.g. 'content', 'tools').
 	Name string `form:"name" json:"name" xml:"name"`
-	// Descriptive type tag for the editor (e.g. 'field', 'list(tool)', 'string').
+	// Machine type-string (e.g. 'field', 'string', 'list<celenv.celTool>').
 	Type string `form:"type" json:"type" xml:"type"`
-	// Plain-English description of what the variable holds.
-	Description string `form:"description" json:"description" xml:"description"`
-	// Member fields on each element when this variable is an object or list of
-	// objects (e.g. a 'tools' element's name/server/function/args). Empty for
-	// scalar variables.
-	Fields []*DetectionSchemaFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
-}
-
-// DetectionSchemaFieldResponseBody is used to define fields on response body
-// types.
-type DetectionSchemaFieldResponseBody struct {
-	// Field name as written in CEL after the bind variable (e.g. 'name', 'server').
-	Name string `form:"name" json:"name" xml:"name"`
-	// Descriptive type tag for the editor (e.g. 'field').
-	Type string `form:"type" json:"type" xml:"type"`
-	// Plain-English description of what the field holds.
+	// Human type tag for the editor (e.g. 'field', 'list(tool)').
+	DisplayType string `form:"displayType" json:"displayType" xml:"displayType"`
+	// Plain-English description of the variable.
 	Description string `form:"description" json:"description" xml:"description"`
 }
 
-// DetectionSchemaFunctionResponseBody is used to define fields on response
+// DetectionDescriptorFunctionResponseBody is used to define fields on response
 // body types.
-type DetectionSchemaFunctionResponseBody struct {
-	// Function name (e.g. 'match', 'includes', 'get').
+type DetectionDescriptorFunctionResponseBody struct {
+	// Function name (e.g. 'match', 'get').
 	Name string `form:"name" json:"name" xml:"name"`
-	// Human-readable call signature (e.g. 'field.match(pattern: string) -> bool').
+	// Stable overload identifier (also the engine binding key).
+	OverloadID string `form:"overloadId" json:"overloadId" xml:"overloadId"`
+	// True for receiver-style calls (x.fn(...)); false for global calls.
+	Member bool `form:"member" json:"member" xml:"member"`
+	// Machine type-string of the receiver when member is true.
+	ReceiverType string `form:"receiverType" json:"receiverType" xml:"receiverType"`
+	// Non-receiver parameters in order.
+	Params []*DetectionDescriptorParamResponseBody `form:"params,omitempty" json:"params,omitempty" xml:"params,omitempty"`
+	// Machine type-string of the result (e.g. 'bool', 'field').
+	ReturnType string `form:"returnType" json:"returnType" xml:"returnType"`
+	// Human-readable call signature.
 	Signature string `form:"signature" json:"signature" xml:"signature"`
-	// Plain-English description of the matcher's behaviour, including span
-	// granularity.
+	// Plain-English description of the overload.
 	Description string `form:"description" json:"description" xml:"description"`
+}
+
+// DetectionDescriptorParamResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorParamResponseBody struct {
+	// Parameter name (e.g. 'pattern', 'path').
+	Name string `form:"name" json:"name" xml:"name"`
+	// Machine type-string of the parameter (e.g. 'string').
+	Type string `form:"type" json:"type" xml:"type"`
+}
+
+// DetectionDescriptorMacroResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorMacroResponseBody struct {
+	// Macro name (e.g. 'exists', 'has', 'map').
+	Name string `form:"name" json:"name" xml:"name"`
+	// Human-readable call signature.
+	Signature string `form:"signature" json:"signature" xml:"signature"`
+	// Plain-English description of the macro's behaviour.
+	Description string `form:"description" json:"description" xml:"description"`
+	// True when the macro yields a boolean verdict; false when it yields a list.
+	ReturnsBool bool `form:"returnsBool" json:"returnsBool" xml:"returnsBool"`
 }
 
 // RiskPolicyBypassRequestResponseBody is used to define fields on response
@@ -7727,33 +7781,57 @@ func NewListRiskCategoriesResponseBody(res *risk.RiskCategoriesResult) *ListRisk
 	return body
 }
 
-// NewGetDetectionSchemaResponseBody builds the HTTP response body from the
-// result of the "getDetectionSchema" endpoint of the "risk" service.
-func NewGetDetectionSchemaResponseBody(res *risk.DetectionSchemaResult) *GetDetectionSchemaResponseBody {
-	body := &GetDetectionSchemaResponseBody{}
+// NewGetDetectionDescriptorResponseBody builds the HTTP response body from the
+// result of the "getDetectionDescriptor" endpoint of the "risk" service.
+func NewGetDetectionDescriptorResponseBody(res *risk.DetectionDescriptorResult) *GetDetectionDescriptorResponseBody {
+	body := &GetDetectionDescriptorResponseBody{}
+	if res.Types != nil {
+		body.Types = make([]*DetectionDescriptorTypeResponseBody, len(res.Types))
+		for i, val := range res.Types {
+			if val == nil {
+				body.Types[i] = nil
+				continue
+			}
+			body.Types[i] = marshalRiskDetectionDescriptorTypeToDetectionDescriptorTypeResponseBody(val)
+		}
+	} else {
+		body.Types = []*DetectionDescriptorTypeResponseBody{}
+	}
 	if res.Variables != nil {
-		body.Variables = make([]*DetectionSchemaVariableResponseBody, len(res.Variables))
+		body.Variables = make([]*DetectionDescriptorVariableResponseBody, len(res.Variables))
 		for i, val := range res.Variables {
 			if val == nil {
 				body.Variables[i] = nil
 				continue
 			}
-			body.Variables[i] = marshalRiskDetectionSchemaVariableToDetectionSchemaVariableResponseBody(val)
+			body.Variables[i] = marshalRiskDetectionDescriptorVariableToDetectionDescriptorVariableResponseBody(val)
 		}
 	} else {
-		body.Variables = []*DetectionSchemaVariableResponseBody{}
+		body.Variables = []*DetectionDescriptorVariableResponseBody{}
 	}
 	if res.Functions != nil {
-		body.Functions = make([]*DetectionSchemaFunctionResponseBody, len(res.Functions))
+		body.Functions = make([]*DetectionDescriptorFunctionResponseBody, len(res.Functions))
 		for i, val := range res.Functions {
 			if val == nil {
 				body.Functions[i] = nil
 				continue
 			}
-			body.Functions[i] = marshalRiskDetectionSchemaFunctionToDetectionSchemaFunctionResponseBody(val)
+			body.Functions[i] = marshalRiskDetectionDescriptorFunctionToDetectionDescriptorFunctionResponseBody(val)
 		}
 	} else {
-		body.Functions = []*DetectionSchemaFunctionResponseBody{}
+		body.Functions = []*DetectionDescriptorFunctionResponseBody{}
+	}
+	if res.Macros != nil {
+		body.Macros = make([]*DetectionDescriptorMacroResponseBody, len(res.Macros))
+		for i, val := range res.Macros {
+			if val == nil {
+				body.Macros[i] = nil
+				continue
+			}
+			body.Macros[i] = marshalRiskDetectionDescriptorMacroToDetectionDescriptorMacroResponseBody(val)
+		}
+	} else {
+		body.Macros = []*DetectionDescriptorMacroResponseBody{}
 	}
 	return body
 }
@@ -9606,81 +9684,11 @@ func NewListRiskCategoriesGatewayErrorResponseBody(res *goa.ServiceError) *ListR
 	return body
 }
 
-// NewGetDetectionSchemaUnauthorizedResponseBody builds the HTTP response body
-// from the result of the "getDetectionSchema" endpoint of the "risk" service.
-func NewGetDetectionSchemaUnauthorizedResponseBody(res *goa.ServiceError) *GetDetectionSchemaUnauthorizedResponseBody {
-	body := &GetDetectionSchemaUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetDetectionSchemaForbiddenResponseBody builds the HTTP response body
-// from the result of the "getDetectionSchema" endpoint of the "risk" service.
-func NewGetDetectionSchemaForbiddenResponseBody(res *goa.ServiceError) *GetDetectionSchemaForbiddenResponseBody {
-	body := &GetDetectionSchemaForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetDetectionSchemaBadRequestResponseBody builds the HTTP response body
-// from the result of the "getDetectionSchema" endpoint of the "risk" service.
-func NewGetDetectionSchemaBadRequestResponseBody(res *goa.ServiceError) *GetDetectionSchemaBadRequestResponseBody {
-	body := &GetDetectionSchemaBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetDetectionSchemaNotFoundResponseBody builds the HTTP response body from
-// the result of the "getDetectionSchema" endpoint of the "risk" service.
-func NewGetDetectionSchemaNotFoundResponseBody(res *goa.ServiceError) *GetDetectionSchemaNotFoundResponseBody {
-	body := &GetDetectionSchemaNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetDetectionSchemaConflictResponseBody builds the HTTP response body from
-// the result of the "getDetectionSchema" endpoint of the "risk" service.
-func NewGetDetectionSchemaConflictResponseBody(res *goa.ServiceError) *GetDetectionSchemaConflictResponseBody {
-	body := &GetDetectionSchemaConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetDetectionSchemaUnsupportedMediaResponseBody builds the HTTP response
-// body from the result of the "getDetectionSchema" endpoint of the "risk"
+// NewGetDetectionDescriptorUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getDetectionDescriptor" endpoint of the "risk"
 // service.
-func NewGetDetectionSchemaUnsupportedMediaResponseBody(res *goa.ServiceError) *GetDetectionSchemaUnsupportedMediaResponseBody {
-	body := &GetDetectionSchemaUnsupportedMediaResponseBody{
+func NewGetDetectionDescriptorUnauthorizedResponseBody(res *goa.ServiceError) *GetDetectionDescriptorUnauthorizedResponseBody {
+	body := &GetDetectionDescriptorUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -9691,25 +9699,11 @@ func NewGetDetectionSchemaUnsupportedMediaResponseBody(res *goa.ServiceError) *G
 	return body
 }
 
-// NewGetDetectionSchemaInvalidResponseBody builds the HTTP response body from
-// the result of the "getDetectionSchema" endpoint of the "risk" service.
-func NewGetDetectionSchemaInvalidResponseBody(res *goa.ServiceError) *GetDetectionSchemaInvalidResponseBody {
-	body := &GetDetectionSchemaInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetDetectionSchemaInvariantViolationResponseBody builds the HTTP response
-// body from the result of the "getDetectionSchema" endpoint of the "risk"
+// NewGetDetectionDescriptorForbiddenResponseBody builds the HTTP response body
+// from the result of the "getDetectionDescriptor" endpoint of the "risk"
 // service.
-func NewGetDetectionSchemaInvariantViolationResponseBody(res *goa.ServiceError) *GetDetectionSchemaInvariantViolationResponseBody {
-	body := &GetDetectionSchemaInvariantViolationResponseBody{
+func NewGetDetectionDescriptorForbiddenResponseBody(res *goa.ServiceError) *GetDetectionDescriptorForbiddenResponseBody {
+	body := &GetDetectionDescriptorForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -9720,10 +9714,11 @@ func NewGetDetectionSchemaInvariantViolationResponseBody(res *goa.ServiceError) 
 	return body
 }
 
-// NewGetDetectionSchemaUnexpectedResponseBody builds the HTTP response body
-// from the result of the "getDetectionSchema" endpoint of the "risk" service.
-func NewGetDetectionSchemaUnexpectedResponseBody(res *goa.ServiceError) *GetDetectionSchemaUnexpectedResponseBody {
-	body := &GetDetectionSchemaUnexpectedResponseBody{
+// NewGetDetectionDescriptorBadRequestResponseBody builds the HTTP response
+// body from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorBadRequestResponseBody(res *goa.ServiceError) *GetDetectionDescriptorBadRequestResponseBody {
+	body := &GetDetectionDescriptorBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -9734,10 +9729,101 @@ func NewGetDetectionSchemaUnexpectedResponseBody(res *goa.ServiceError) *GetDete
 	return body
 }
 
-// NewGetDetectionSchemaGatewayErrorResponseBody builds the HTTP response body
-// from the result of the "getDetectionSchema" endpoint of the "risk" service.
-func NewGetDetectionSchemaGatewayErrorResponseBody(res *goa.ServiceError) *GetDetectionSchemaGatewayErrorResponseBody {
-	body := &GetDetectionSchemaGatewayErrorResponseBody{
+// NewGetDetectionDescriptorNotFoundResponseBody builds the HTTP response body
+// from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorNotFoundResponseBody(res *goa.ServiceError) *GetDetectionDescriptorNotFoundResponseBody {
+	body := &GetDetectionDescriptorNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorConflictResponseBody builds the HTTP response body
+// from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorConflictResponseBody(res *goa.ServiceError) *GetDetectionDescriptorConflictResponseBody {
+	body := &GetDetectionDescriptorConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getDetectionDescriptor" endpoint of
+// the "risk" service.
+func NewGetDetectionDescriptorUnsupportedMediaResponseBody(res *goa.ServiceError) *GetDetectionDescriptorUnsupportedMediaResponseBody {
+	body := &GetDetectionDescriptorUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorInvalidResponseBody builds the HTTP response body
+// from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorInvalidResponseBody(res *goa.ServiceError) *GetDetectionDescriptorInvalidResponseBody {
+	body := &GetDetectionDescriptorInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getDetectionDescriptor" endpoint of
+// the "risk" service.
+func NewGetDetectionDescriptorInvariantViolationResponseBody(res *goa.ServiceError) *GetDetectionDescriptorInvariantViolationResponseBody {
+	body := &GetDetectionDescriptorInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorUnexpectedResponseBody(res *goa.ServiceError) *GetDetectionDescriptorUnexpectedResponseBody {
+	body := &GetDetectionDescriptorUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorGatewayErrorResponseBody(res *goa.ServiceError) *GetDetectionDescriptorGatewayErrorResponseBody {
+	body := &GetDetectionDescriptorGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -13082,10 +13168,10 @@ func NewListRiskCategoriesPayload(apikeyToken *string, sessionToken *string, pro
 	return v
 }
 
-// NewGetDetectionSchemaPayload builds a risk service getDetectionSchema
-// endpoint payload.
-func NewGetDetectionSchemaPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetDetectionSchemaPayload {
-	v := &risk.GetDetectionSchemaPayload{}
+// NewGetDetectionDescriptorPayload builds a risk service
+// getDetectionDescriptor endpoint payload.
+func NewGetDetectionDescriptorPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetDetectionDescriptorPayload {
+	v := &risk.GetDetectionDescriptorPayload{}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

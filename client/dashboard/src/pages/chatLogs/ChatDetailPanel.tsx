@@ -1213,7 +1213,7 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
     for (const r of results) {
       const spans = spansOf(r);
       const key = `${r.source}|${r.ruleId ?? ""}|${spans
-        .map((s) => `${s.field ?? ""}:${s.match}`)
+        .map((s) => `${s.field ?? ""}:${s.path ?? ""}:${s.match}`)
         .join("|")}`;
       const hit = grouped.get(key);
       if (hit) {

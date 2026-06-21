@@ -8,23 +8,24 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { riskDetectionSchemaGet } from "../funcs/riskDetectionSchemaGet.js";
+import { riskDetectionDescriptorGet } from "../funcs/riskDetectionDescriptorGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskDetectionSchemaQueryData = components.DetectionSchemaResult;
+export type RiskDetectionDescriptorQueryData =
+  components.DetectionDescriptorResult;
 
-export function prefetchRiskDetectionSchema(
+export function prefetchRiskDetectionDescriptor(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetDetectionSchemaRequest | undefined,
-  security?: operations.GetDetectionSchemaSecurity | undefined,
+  request?: operations.GetDetectionDescriptorRequest | undefined,
+  security?: operations.GetDetectionDescriptorSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildRiskDetectionSchemaQuery(
+    ...buildRiskDetectionDescriptorQuery(
       client$,
       request,
       security,
@@ -33,26 +34,26 @@ export function prefetchRiskDetectionSchema(
   });
 }
 
-export function buildRiskDetectionSchemaQuery(
+export function buildRiskDetectionDescriptorQuery(
   client$: GramCore,
-  request?: operations.GetDetectionSchemaRequest | undefined,
-  security?: operations.GetDetectionSchemaSecurity | undefined,
+  request?: operations.GetDetectionDescriptorRequest | undefined,
+  security?: operations.GetDetectionDescriptorSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<RiskDetectionSchemaQueryData>;
+  ) => Promise<RiskDetectionDescriptorQueryData>;
 } {
   return {
-    queryKey: queryKeyRiskDetectionSchema({
+    queryKey: queryKeyRiskDetectionDescriptor({
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
     }),
-    queryFn: async function riskDetectionSchemaQueryFn(
+    queryFn: async function riskDetectionDescriptorQueryFn(
       ctx,
-    ): Promise<RiskDetectionSchemaQueryData> {
+    ): Promise<RiskDetectionDescriptorQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -64,7 +65,7 @@ export function buildRiskDetectionSchemaQuery(
         signal: sig,
       };
 
-      return unwrapAsync(riskDetectionSchemaGet(
+      return unwrapAsync(riskDetectionDescriptorGet(
         client$,
         request,
         security,
@@ -74,12 +75,12 @@ export function buildRiskDetectionSchemaQuery(
   };
 }
 
-export function queryKeyRiskDetectionSchema(
+export function queryKeyRiskDetectionDescriptor(
   parameters: {
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "detectionSchema", "get", parameters];
+  return ["@gram/client", "detectionDescriptor", "get", parameters];
 }

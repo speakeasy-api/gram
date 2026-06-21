@@ -1410,46 +1410,77 @@ func (s *Service) ListRiskCategories(ctx context.Context, payload *gen.ListRiskC
 	return &gen.RiskCategoriesResult{Categories: out}, nil
 }
 
-// GetDetectionSchema returns the CEL expression environment (variables and
-// matcher functions) for the dashboard's detection-rule and policy-scope
-// editors. It is derived from celenv.Describe(), so the editor's autocomplete
-// and signature help cannot drift from what the backend actually compiles.
-func (s *Service) GetDetectionSchema(ctx context.Context, payload *gen.GetDetectionSchemaPayload) (*gen.DetectionSchemaResult, error) {
+// GetDetectionDescriptor returns the machine-readable CEL environment descriptor
+// the dashboard's client-side type-checker is configured from. It is a direct
+// projection of celenv.Descriptor() — the same source buildEnv compiles — so the
+// editor's instant validation and completion stay faithful to the engine.
+// Compilation remains server-authoritative on save (see CompileCel).
+func (s *Service) GetDetectionDescriptor(ctx context.Context, payload *gen.GetDetectionDescriptorPayload) (*gen.DetectionDescriptorResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	schema := celenv.Describe()
-	vars := make([]*gen.DetectionSchemaVariable, 0, len(schema.Variables))
-	for _, v := range schema.Variables {
-		var fields []*gen.DetectionSchemaField
-		if len(v.Fields) > 0 {
-			fields = make([]*gen.DetectionSchemaField, 0, len(v.Fields))
-			for _, f := range v.Fields {
-				fields = append(fields, &gen.DetectionSchemaField{
-					Name:        f.Name,
-					Type:        f.Type,
-					Description: f.Description,
-				})
-			}
+	desc := celenv.Descriptor()
+
+	types := make([]*gen.DetectionDescriptorType, 0, len(desc.Types))
+	for _, t := range desc.Types {
+		fields := make([]*gen.DetectionDescriptorField, 0, len(t.Fields))
+		for _, f := range t.Fields {
+			fields = append(fields, &gen.DetectionDescriptorField{
+				Name:        f.Name,
+				Type:        f.Type,
+				Description: f.Description,
+			})
 		}
-		vars = append(vars, &gen.DetectionSchemaVariable{
+		types = append(types, &gen.DetectionDescriptorType{
+			Name:        t.Name,
+			Opaque:      t.Opaque,
+			Fields:      fields,
+			DisplayName: t.DisplayName,
+			Description: t.Description,
+		})
+	}
+
+	vars := make([]*gen.DetectionDescriptorVariable, 0, len(desc.Variables))
+	for _, v := range desc.Variables {
+		vars = append(vars, &gen.DetectionDescriptorVariable{
 			Name:        v.Name,
 			Type:        v.Type,
+			DisplayType: v.DisplayType,
 			Description: v.Description,
-			Fields:      fields,
 		})
 	}
-	fns := make([]*gen.DetectionSchemaFunction, 0, len(schema.Functions))
-	for _, f := range schema.Functions {
-		fns = append(fns, &gen.DetectionSchemaFunction{
-			Name:        f.Name,
-			Signature:   f.Signature,
-			Description: f.Description,
+
+	fns := make([]*gen.DetectionDescriptorFunction, 0, len(desc.Functions))
+	for _, f := range desc.Functions {
+		params := make([]*gen.DetectionDescriptorParam, 0, len(f.Params))
+		for _, p := range f.Params {
+			params = append(params, &gen.DetectionDescriptorParam{Name: p.Name, Type: p.Type})
+		}
+		fns = append(fns, &gen.DetectionDescriptorFunction{
+			Name:         f.Name,
+			OverloadID:   f.OverloadID,
+			Member:       f.Member,
+			ReceiverType: f.ReceiverType,
+			Params:       params,
+			ReturnType:   f.ReturnType,
+			Signature:    f.Signature,
+			Description:  f.Description,
 		})
 	}
-	return &gen.DetectionSchemaResult{Variables: vars, Functions: fns}, nil
+
+	macros := make([]*gen.DetectionDescriptorMacro, 0, len(desc.Macros))
+	for _, m := range desc.Macros {
+		macros = append(macros, &gen.DetectionDescriptorMacro{
+			Name:        m.Name,
+			Signature:   m.Signature,
+			Description: m.Description,
+			ReturnsBool: m.ReturnsBool,
+		})
+	}
+
+	return &gen.DetectionDescriptorResult{Types: types, Variables: vars, Functions: fns, Macros: macros}, nil
 }
 
 // CompileCel compiles a single CEL expression without evaluating it, so the
@@ -2032,31 +2063,31 @@ Fields:
 - "detection_cel": a CEL boolean expression that evaluates to true when a message matches.
 
 CEL environment for "detection_cel":
-- Message body fields (each auto-scoped to the right message type — reference them directly, no need to check "type"):
+- Message body fields (each auto-scoped to the right message type — reference them directly, no need to check "kind"):
   - content   — the message's raw text body, any message type.
   - prompt    — the body of a user message (empty otherwise).
   - assistant — the body of an assistant message (empty otherwise).
   - output    — the body of a tool response, i.e. the tool's output (empty otherwise).
 - tools — the tool calls on a tool-request message. Iterate with tools.exists(t, <predicate on t>). Each t has correlated fields: t.name (raw tool-call name, e.g. mcp__mise__run_task), t.server (MCP server name, "" for native tools like Bash), t.function (bare function name, e.g. run_task), t.args (the raw tool arguments JSON).
-- type — message type string (user_message, assistant_message, tool_request, tool_response). Usually unnecessary because the body fields are already auto-scoped.
+- kind — message type string (user_message, assistant_message, tool_request, tool_response). Usually unnecessary because the body fields are already auto-scoped.
 
 Matchers (call as a method on a field; all return bool):
-- field.match(pattern)    — RE2 regex match. Use for secret/PII/text patterns.
-- field.includes(substr)  — case-insensitive substring.
-- field.eq(value)         — exact equality ("" matches native tools for t.server).
-- field.prefix(s) / field.suffix(s) — prefix / suffix match.
-- field.glob(pattern)     — glob over the whole value (e.g. *_exec, shell:*).
-- field.present()         — the field has a non-empty value.
-- field.get(path)         — drill into a field's JSON at a gjson path (command, payload.sql, items.0.ssn) and return a sub-field the matchers compose over. Use on t.args to inspect tool arguments.
+- field.matchRegex(pattern)  — RE2 regex match. Use for secret/PII/text patterns.
+- field.matchText(substr)    — case-insensitive substring.
+- field.matchExact(value)    — exact equality ("" matches native tools for t.server).
+- field.matchPrefix(s) / field.matchSuffix(s) — prefix / suffix match.
+- field.matchGlob(pattern)   — glob over the whole value (e.g. *_exec, shell:*).
+- field.present()            — the field has a non-empty value.
+- field.get(path)            — drill into a field's JSON at a gjson path (command, payload.sql, items.0.ssn) and return a sub-field the matchers compose over. Use on t.args to inspect tool arguments.
 
 Compose with && (and), || (or), ! (not), and parentheses.
 
 Examples:
-- prompt.includes("password")
-- content.match("sk-[A-Za-z0-9]{32}")
-- tools.exists(t, t.server.eq("shell"))
-- tools.exists(t, t.function.glob("*_exec"))
-- tools.exists(t, t.function.match("bash") && t.args.get("command").match("DROP TABLE"))
+- prompt.matchText("password")
+- content.matchRegex("sk-[A-Za-z0-9]{32}")
+- tools.exists(t, t.server.matchExact("shell"))
+- tools.exists(t, t.function.matchGlob("*_exec"))
+- tools.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("DROP TABLE"))
 - output.get("error").present()
 
 Output ONLY the JSON object. No prose, no markdown fences.`

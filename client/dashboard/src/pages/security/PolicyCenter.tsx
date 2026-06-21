@@ -853,15 +853,15 @@ function promptPolicyName(prompt: string): string {
 const SCOPE_INCLUDE_CEL_EXAMPLES: { label: string; expr: string }[] = [
   {
     label: "Only a GitHub server",
-    expr: 'tools.exists(t, t.server.eq("github"))',
+    expr: 'tools.exists(t, t.server.matchExact("github"))',
   },
   {
     label: "Production prompts",
-    expr: 'prompt.includes("production")',
+    expr: 'prompt.matchText("production")',
   },
   {
     label: "Delete-style tools",
-    expr: 'tools.exists(t, t.function.glob("*delete*"))',
+    expr: 'tools.exists(t, t.function.matchGlob("*delete*"))',
   },
 ];
 
@@ -870,11 +870,11 @@ const SCOPE_INCLUDE_CEL_EXAMPLES: { label: string; expr: string }[] = [
 const SCOPE_EXEMPT_CEL_EXAMPLES: { label: string; expr: string }[] = [
   {
     label: "Read-only tools",
-    expr: 'tools.exists(t, t.function.glob("*get*") || t.function.glob("*list*"))',
+    expr: 'tools.exists(t, t.function.matchGlob("*get*") || t.function.matchGlob("*list*"))',
   },
   {
     label: "A safelisted server",
-    expr: 'tools.exists(t, t.server.eq("internal-docs"))',
+    expr: 'tools.exists(t, t.server.matchExact("internal-docs"))',
   },
 ];
 
@@ -1586,11 +1586,18 @@ function PolicyCenterContent() {
     scopeMode === "messageTypes"
       ? selectedMessageTypes.size === 0
       : scopeIncludeCel.trim() === "";
+  // A standard policy needs at least one detector that will actually run: a
+  // custom rule, or a selected category with at least one of its rules enabled.
+  const hasEnabledDetector =
+    selectedCustomRuleIds.size > 0 ||
+    [...selectedCategories].some((c) =>
+      DETECTION_RULES[c]?.some((r) => !r.hidden && !disabledRules.has(r.id)),
+    );
   const continueDisabled =
     (wizardStep === 0 &&
       (formPolicyKind === "prompt"
         ? !formPromptInstruction.trim()
-        : selectedCategories.size === 0 && selectedCustomRuleIds.size === 0)) ||
+        : !hasEnabledDetector)) ||
     (wizardStep === 1 && scopeMissing);
   // Block save while a scope expression that will be sent fails to compile.
   const applicationInvalid =
@@ -1600,9 +1607,7 @@ function PolicyCenterContent() {
     (formPolicyKind === "prompt" && !formPromptInstruction.trim()) ||
     // A standard policy needs at least one detector or custom rule (the step-0
     // gate, re-checked here since free-jump can skip it).
-    (isRiskWizard &&
-      selectedCategories.size === 0 &&
-      selectedCustomRuleIds.size === 0) ||
+    (isRiskWizard && !hasEnabledDetector) ||
     (!formAutoName && !formName.trim()) ||
     scopeMissing ||
     applicationInvalid ||

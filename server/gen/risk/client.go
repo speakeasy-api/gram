@@ -26,7 +26,7 @@ type Client struct {
 	ListRiskResultsByChatEndpoint          goa.Endpoint
 	GetRiskOverviewEndpoint                goa.Endpoint
 	ListRiskCategoriesEndpoint             goa.Endpoint
-	GetDetectionSchemaEndpoint             goa.Endpoint
+	GetDetectionDescriptorEndpoint         goa.Endpoint
 	CompileCelEndpoint                     goa.Endpoint
 	GetRiskUserBreakdownEndpoint           goa.Endpoint
 	GetRiskRuleBreakdownEndpoint           goa.Endpoint
@@ -51,7 +51,7 @@ type Client struct {
 }
 
 // NewClient initializes a "risk" service client given the endpoints.
-func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, getRiskOverview, listRiskCategories, getDetectionSchema, compileCel, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, createRiskPolicyBypassRequest, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, testDetectionRule goa.Endpoint) *Client {
+func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, getRiskOverview, listRiskCategories, getDetectionDescriptor, compileCel, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, createRiskPolicyBypassRequest, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, testDetectionRule goa.Endpoint) *Client {
 	return &Client{
 		CreateRiskPolicyEndpoint:               createRiskPolicy,
 		ListRiskPoliciesEndpoint:               listRiskPolicies,
@@ -63,7 +63,7 @@ func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPoli
 		ListRiskResultsByChatEndpoint:          listRiskResultsByChat,
 		GetRiskOverviewEndpoint:                getRiskOverview,
 		ListRiskCategoriesEndpoint:             listRiskCategories,
-		GetDetectionSchemaEndpoint:             getDetectionSchema,
+		GetDetectionDescriptorEndpoint:         getDetectionDescriptor,
 		CompileCelEndpoint:                     compileCel,
 		GetRiskUserBreakdownEndpoint:           getRiskUserBreakdown,
 		GetRiskRuleBreakdownEndpoint:           getRiskRuleBreakdown,
@@ -307,9 +307,9 @@ func (c *Client) ListRiskCategories(ctx context.Context, p *ListRiskCategoriesPa
 	return ires.(*RiskCategoriesResult), nil
 }
 
-// GetDetectionSchema calls the "getDetectionSchema" endpoint of the "risk"
-// service.
-// GetDetectionSchema may return the following errors:
+// GetDetectionDescriptor calls the "getDetectionDescriptor" endpoint of the
+// "risk" service.
+// GetDetectionDescriptor may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -321,13 +321,13 @@ func (c *Client) ListRiskCategories(ctx context.Context, p *ListRiskCategoriesPa
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) GetDetectionSchema(ctx context.Context, p *GetDetectionSchemaPayload) (res *DetectionSchemaResult, err error) {
+func (c *Client) GetDetectionDescriptor(ctx context.Context, p *GetDetectionDescriptorPayload) (res *DetectionDescriptorResult, err error) {
 	var ires any
-	ires, err = c.GetDetectionSchemaEndpoint(ctx, p)
+	ires, err = c.GetDetectionDescriptorEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*DetectionSchemaResult), nil
+	return ires.(*DetectionDescriptorResult), nil
 }
 
 // CompileCel calls the "compileCel" endpoint of the "risk" service.

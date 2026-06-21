@@ -2481,23 +2481,23 @@ func EncodeListRiskCategoriesError(encoder func(context.Context, http.ResponseWr
 	}
 }
 
-// EncodeGetDetectionSchemaResponse returns an encoder for responses returned
-// by the risk getDetectionSchema endpoint.
-func EncodeGetDetectionSchemaResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeGetDetectionDescriptorResponse returns an encoder for responses
+// returned by the risk getDetectionDescriptor endpoint.
+func EncodeGetDetectionDescriptorResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*risk.DetectionSchemaResult)
+		res, _ := v.(*risk.DetectionDescriptorResult)
 		enc := encoder(ctx, w)
-		body := NewGetDetectionSchemaResponseBody(res)
+		body := NewGetDetectionDescriptorResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeGetDetectionSchemaRequest returns a decoder for requests sent to the
-// risk getDetectionSchema endpoint.
-func DecodeGetDetectionSchemaRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*risk.GetDetectionSchemaPayload, error) {
-	return func(r *http.Request) (*risk.GetDetectionSchemaPayload, error) {
-		var payload *risk.GetDetectionSchemaPayload
+// DecodeGetDetectionDescriptorRequest returns a decoder for requests sent to
+// the risk getDetectionDescriptor endpoint.
+func DecodeGetDetectionDescriptorRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*risk.GetDetectionDescriptorPayload, error) {
+	return func(r *http.Request) (*risk.GetDetectionDescriptorPayload, error) {
+		var payload *risk.GetDetectionDescriptorPayload
 		var (
 			apikeyToken      *string
 			sessionToken     *string
@@ -2515,7 +2515,7 @@ func DecodeGetDetectionSchemaRequest(mux goahttp.Muxer, decoder func(*http.Reque
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewGetDetectionSchemaPayload(apikeyToken, sessionToken, projectSlugInput)
+		payload = NewGetDetectionDescriptorPayload(apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2542,9 +2542,9 @@ func DecodeGetDetectionSchemaRequest(mux goahttp.Muxer, decoder func(*http.Reque
 	}
 }
 
-// EncodeGetDetectionSchemaError returns an encoder for errors returned by the
-// getDetectionSchema risk endpoint.
-func EncodeGetDetectionSchemaError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeGetDetectionDescriptorError returns an encoder for errors returned by
+// the getDetectionDescriptor risk endpoint.
+func EncodeGetDetectionDescriptorError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -2561,7 +2561,7 @@ func EncodeGetDetectionSchemaError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetDetectionSchemaUnauthorizedResponseBody(res)
+				body = NewGetDetectionDescriptorUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -2575,7 +2575,7 @@ func EncodeGetDetectionSchemaError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetDetectionSchemaForbiddenResponseBody(res)
+				body = NewGetDetectionDescriptorForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -2589,7 +2589,7 @@ func EncodeGetDetectionSchemaError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetDetectionSchemaBadRequestResponseBody(res)
+				body = NewGetDetectionDescriptorBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -2603,7 +2603,7 @@ func EncodeGetDetectionSchemaError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetDetectionSchemaNotFoundResponseBody(res)
+				body = NewGetDetectionDescriptorNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -2617,7 +2617,7 @@ func EncodeGetDetectionSchemaError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetDetectionSchemaConflictResponseBody(res)
+				body = NewGetDetectionDescriptorConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -2631,7 +2631,7 @@ func EncodeGetDetectionSchemaError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetDetectionSchemaUnsupportedMediaResponseBody(res)
+				body = NewGetDetectionDescriptorUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -2645,7 +2645,7 @@ func EncodeGetDetectionSchemaError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetDetectionSchemaInvalidResponseBody(res)
+				body = NewGetDetectionDescriptorInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -2659,7 +2659,7 @@ func EncodeGetDetectionSchemaError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetDetectionSchemaInvariantViolationResponseBody(res)
+				body = NewGetDetectionDescriptorInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2673,7 +2673,7 @@ func EncodeGetDetectionSchemaError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetDetectionSchemaUnexpectedResponseBody(res)
+				body = NewGetDetectionDescriptorUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2687,7 +2687,7 @@ func EncodeGetDetectionSchemaError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetDetectionSchemaGatewayErrorResponseBody(res)
+				body = NewGetDetectionDescriptorGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -7899,37 +7899,38 @@ func marshalRiskRiskCategoryDefinitionToRiskCategoryDefinitionResponseBody(v *ri
 	return res
 }
 
-// marshalRiskDetectionSchemaVariableToDetectionSchemaVariableResponseBody
-// builds a value of type *DetectionSchemaVariableResponseBody from a value of
-// type *risk.DetectionSchemaVariable.
-func marshalRiskDetectionSchemaVariableToDetectionSchemaVariableResponseBody(v *risk.DetectionSchemaVariable) *DetectionSchemaVariableResponseBody {
-	res := &DetectionSchemaVariableResponseBody{
+// marshalRiskDetectionDescriptorTypeToDetectionDescriptorTypeResponseBody
+// builds a value of type *DetectionDescriptorTypeResponseBody from a value of
+// type *risk.DetectionDescriptorType.
+func marshalRiskDetectionDescriptorTypeToDetectionDescriptorTypeResponseBody(v *risk.DetectionDescriptorType) *DetectionDescriptorTypeResponseBody {
+	res := &DetectionDescriptorTypeResponseBody{
 		Name:        v.Name,
-		Type:        v.Type,
+		Opaque:      v.Opaque,
+		DisplayName: v.DisplayName,
 		Description: v.Description,
 	}
 	if v.Fields != nil {
-		res.Fields = make([]*DetectionSchemaFieldResponseBody, len(v.Fields))
+		res.Fields = make([]*DetectionDescriptorFieldResponseBody, len(v.Fields))
 		for i, val := range v.Fields {
 			if val == nil {
 				res.Fields[i] = nil
 				continue
 			}
-			res.Fields[i] = marshalRiskDetectionSchemaFieldToDetectionSchemaFieldResponseBody(val)
+			res.Fields[i] = marshalRiskDetectionDescriptorFieldToDetectionDescriptorFieldResponseBody(val)
 		}
 	}
 
 	return res
 }
 
-// marshalRiskDetectionSchemaFieldToDetectionSchemaFieldResponseBody builds a
-// value of type *DetectionSchemaFieldResponseBody from a value of type
-// *risk.DetectionSchemaField.
-func marshalRiskDetectionSchemaFieldToDetectionSchemaFieldResponseBody(v *risk.DetectionSchemaField) *DetectionSchemaFieldResponseBody {
+// marshalRiskDetectionDescriptorFieldToDetectionDescriptorFieldResponseBody
+// builds a value of type *DetectionDescriptorFieldResponseBody from a value of
+// type *risk.DetectionDescriptorField.
+func marshalRiskDetectionDescriptorFieldToDetectionDescriptorFieldResponseBody(v *risk.DetectionDescriptorField) *DetectionDescriptorFieldResponseBody {
 	if v == nil {
 		return nil
 	}
-	res := &DetectionSchemaFieldResponseBody{
+	res := &DetectionDescriptorFieldResponseBody{
 		Name:        v.Name,
 		Type:        v.Type,
 		Description: v.Description,
@@ -7938,14 +7939,71 @@ func marshalRiskDetectionSchemaFieldToDetectionSchemaFieldResponseBody(v *risk.D
 	return res
 }
 
-// marshalRiskDetectionSchemaFunctionToDetectionSchemaFunctionResponseBody
-// builds a value of type *DetectionSchemaFunctionResponseBody from a value of
-// type *risk.DetectionSchemaFunction.
-func marshalRiskDetectionSchemaFunctionToDetectionSchemaFunctionResponseBody(v *risk.DetectionSchemaFunction) *DetectionSchemaFunctionResponseBody {
-	res := &DetectionSchemaFunctionResponseBody{
+// marshalRiskDetectionDescriptorVariableToDetectionDescriptorVariableResponseBody
+// builds a value of type *DetectionDescriptorVariableResponseBody from a value
+// of type *risk.DetectionDescriptorVariable.
+func marshalRiskDetectionDescriptorVariableToDetectionDescriptorVariableResponseBody(v *risk.DetectionDescriptorVariable) *DetectionDescriptorVariableResponseBody {
+	res := &DetectionDescriptorVariableResponseBody{
+		Name:        v.Name,
+		Type:        v.Type,
+		DisplayType: v.DisplayType,
+		Description: v.Description,
+	}
+
+	return res
+}
+
+// marshalRiskDetectionDescriptorFunctionToDetectionDescriptorFunctionResponseBody
+// builds a value of type *DetectionDescriptorFunctionResponseBody from a value
+// of type *risk.DetectionDescriptorFunction.
+func marshalRiskDetectionDescriptorFunctionToDetectionDescriptorFunctionResponseBody(v *risk.DetectionDescriptorFunction) *DetectionDescriptorFunctionResponseBody {
+	res := &DetectionDescriptorFunctionResponseBody{
+		Name:         v.Name,
+		OverloadID:   v.OverloadID,
+		Member:       v.Member,
+		ReceiverType: v.ReceiverType,
+		ReturnType:   v.ReturnType,
+		Signature:    v.Signature,
+		Description:  v.Description,
+	}
+	if v.Params != nil {
+		res.Params = make([]*DetectionDescriptorParamResponseBody, len(v.Params))
+		for i, val := range v.Params {
+			if val == nil {
+				res.Params[i] = nil
+				continue
+			}
+			res.Params[i] = marshalRiskDetectionDescriptorParamToDetectionDescriptorParamResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalRiskDetectionDescriptorParamToDetectionDescriptorParamResponseBody
+// builds a value of type *DetectionDescriptorParamResponseBody from a value of
+// type *risk.DetectionDescriptorParam.
+func marshalRiskDetectionDescriptorParamToDetectionDescriptorParamResponseBody(v *risk.DetectionDescriptorParam) *DetectionDescriptorParamResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &DetectionDescriptorParamResponseBody{
+		Name: v.Name,
+		Type: v.Type,
+	}
+
+	return res
+}
+
+// marshalRiskDetectionDescriptorMacroToDetectionDescriptorMacroResponseBody
+// builds a value of type *DetectionDescriptorMacroResponseBody from a value of
+// type *risk.DetectionDescriptorMacro.
+func marshalRiskDetectionDescriptorMacroToDetectionDescriptorMacroResponseBody(v *risk.DetectionDescriptorMacro) *DetectionDescriptorMacroResponseBody {
+	res := &DetectionDescriptorMacroResponseBody{
 		Name:        v.Name,
 		Signature:   v.Signature,
 		Description: v.Description,
+		ReturnsBool: v.ReturnsBool,
 	}
 
 	return res

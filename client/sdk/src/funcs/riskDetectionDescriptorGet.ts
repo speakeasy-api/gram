@@ -28,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getDetectionSchema risk
+ * getDetectionDescriptor risk
  *
  * @remarks
- * Return the CEL expression environment for the detection-rule and policy-scope editors: the variables an author may reference (content, prompt, tools, ...) and the matcher functions available (match, includes, get, ...). The dashboard uses this for autocomplete and signature help so the editor cannot drift from what the backend accepts. Compilation and validation remain server-authoritative on the rule/policy save path.
+ * Return the machine-readable CEL environment descriptor for the detection-rule and policy-scope editors: the precise types, variables, function overloads (with receiver/param/return types), and macros. The dashboard configures a client-side CEL type-checker from this so it can validate and complete expressions instantly without a round-trip, while staying faithful to the backend engine. Compilation and validation remain server-authoritative on the rule/policy save path.
  */
-export function riskDetectionSchemaGet(
+export function riskDetectionDescriptorGet(
   client: GramCore,
-  request?: operations.GetDetectionSchemaRequest | undefined,
-  security?: operations.GetDetectionSchemaSecurity | undefined,
+  request?: operations.GetDetectionDescriptorRequest | undefined,
+  security?: operations.GetDetectionDescriptorSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.DetectionSchemaResult,
+    components.DetectionDescriptorResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +62,13 @@ export function riskDetectionSchemaGet(
 
 async function $do(
   client: GramCore,
-  request?: operations.GetDetectionSchemaRequest | undefined,
-  security?: operations.GetDetectionSchemaSecurity | undefined,
+  request?: operations.GetDetectionDescriptorRequest | undefined,
+  security?: operations.GetDetectionDescriptorSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.DetectionSchemaResult,
+      components.DetectionDescriptorResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -86,7 +86,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        z.optional(operations.GetDetectionSchemaRequest$outboundSchema),
+        z.optional(operations.GetDetectionDescriptorRequest$outboundSchema),
         value,
       ),
     "Input validation failed",
@@ -97,7 +97,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.detectionSchema")();
+  const path = pathToFunc("/rpc/risk.detectionDescriptor")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
@@ -145,7 +145,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getDetectionSchema",
+    operationID: "getDetectionDescriptor",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -200,7 +200,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.DetectionSchemaResult,
+    components.DetectionDescriptorResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -211,7 +211,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.DetectionSchemaResult$inboundSchema),
+    M.json(200, components.DetectionDescriptorResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

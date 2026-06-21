@@ -34,7 +34,7 @@ func TestScanCELRules_CorrelatedToolRule(t *testing.T) {
 		RuleID:       "custom.bash_drop",
 		Title:        "bash drop table",
 		Description:  "destructive SQL via a bash tool",
-		DetectionCel: `tools.exists(t, t.function.match("bash") && t.args.get("command").match("DROP TABLE"))`,
+		DetectionCel: `tools.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("DROP TABLE"))`,
 	})
 
 	view := MessageView{
@@ -61,7 +61,7 @@ func TestScanCELRules_CorrelationDoesNotCrossTools(t *testing.T) {
 	t.Parallel()
 	rules := celRules(t, CustomDetectionRule{
 		RuleID:       "custom.bash_drop",
-		DetectionCel: `tools.exists(t, t.function.match("bash") && t.args.get("command").match("DROP TABLE"))`,
+		DetectionCel: `tools.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("DROP TABLE"))`,
 	})
 
 	view := MessageView{
@@ -80,7 +80,7 @@ func TestScanCELRules_ContentRule(t *testing.T) {
 	t.Parallel()
 	rules := celRules(t, CustomDetectionRule{
 		RuleID:       "custom.secret",
-		DetectionCel: `content.match("secret")`,
+		DetectionCel: `content.matchRegex("secret")`,
 	})
 
 	findings := scanCEL(t, MessageView{Type: message.User, Content: "the secret is a secret"}, rules)
@@ -89,7 +89,7 @@ func TestScanCELRules_ContentRule(t *testing.T) {
 	require.Equal(t, 16, findings[1].StartPos)
 }
 
-// Legacy regex rules (no detection_cel) evaluate as content.match(regex).
+// Legacy regex rules (no detection_cel) evaluate as content.matchRegex(regex).
 func TestScanCELRules_LegacyRegexFallback(t *testing.T) {
 	t.Parallel()
 	rules := celRules(t, CustomDetectionRule{

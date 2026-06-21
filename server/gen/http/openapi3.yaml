@@ -23838,10 +23838,10 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskDenyPolicyBypassRequest
                 type: mutation
-    /rpc/risk.detectionSchema:
+    /rpc/risk.detectionDescriptor:
         get:
-            description: 'Return the CEL expression environment for the detection-rule and policy-scope editors: the variables an author may reference (content, prompt, tools, ...) and the matcher functions available (match, includes, get, ...). The dashboard uses this for autocomplete and signature help so the editor cannot drift from what the backend accepts. Compilation and validation remain server-authoritative on the rule/policy save path.'
-            operationId: getDetectionSchema
+            description: 'Return the machine-readable CEL environment descriptor for the detection-rule and policy-scope editors: the precise types, variables, function overloads (with receiver/param/return types), and macros. The dashboard configures a client-side CEL type-checker from this so it can validate and complete expressions instantly without a round-trip, while staying faithful to the backend engine. Compilation and validation remain server-authoritative on the rule/policy save path.'
+            operationId: getDetectionDescriptor
             parameters:
                 - allowEmptyValue: true
                   description: API Key header
@@ -23869,7 +23869,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/DetectionSchemaResult'
+                                $ref: '#/components/schemas/DetectionDescriptorResult'
                     description: OK response.
                 "400":
                     content:
@@ -23930,13 +23930,13 @@ paths:
                   project_slug_header_Gram-Project: []
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-            summary: getDetectionSchema risk
+            summary: getDetectionDescriptor risk
             tags:
                 - risk
-            x-speakeasy-group: risk.detectionSchema
+            x-speakeasy-group: risk.detectionDescriptor
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
-                name: RiskDetectionSchema
+                name: RiskDetectionDescriptor
     /rpc/risk.listExclusions:
         get:
             description: List risk exclusions for the current project. Optionally filter to a single policy.
@@ -37302,78 +37302,170 @@ components:
                 - functions_tool_count
                 - external_mcp_asset_count
                 - external_mcp_tool_count
-        DetectionSchemaField:
+        DetectionDescriptorField:
             type: object
             properties:
                 description:
                     type: string
-                    description: Plain-English description of what the field holds.
+                    description: Plain-English description of the member.
                 name:
                     type: string
-                    description: Field name as written in CEL after the bind variable (e.g. 'name', 'server').
+                    description: Member name as written after a dot (e.g. 'name', 'args').
                 type:
                     type: string
-                    description: Descriptive type tag for the editor (e.g. 'field').
-            description: One member field available on an object-typed variable's element (e.g. 'name' on a 'tool').
+                    description: Machine type-string of the member (e.g. 'field').
+            description: One typed member of an object type (e.g. 'args' on a 'tool').
             required:
                 - name
                 - type
                 - description
-        DetectionSchemaFunction:
+        DetectionDescriptorFunction:
             type: object
             properties:
                 description:
                     type: string
-                    description: Plain-English description of the matcher's behaviour, including span granularity.
+                    description: Plain-English description of the overload.
+                member:
+                    type: boolean
+                    description: True for receiver-style calls (x.fn(...)); false for global calls.
                 name:
                     type: string
-                    description: Function name (e.g. 'match', 'includes', 'get').
+                    description: Function name (e.g. 'match', 'get').
+                overloadId:
+                    type: string
+                    description: Stable overload identifier (also the engine binding key).
+                params:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DetectionDescriptorParam'
+                    description: Non-receiver parameters in order.
+                receiverType:
+                    type: string
+                    description: Machine type-string of the receiver when member is true.
+                returnType:
+                    type: string
+                    description: Machine type-string of the result (e.g. 'bool', 'field').
                 signature:
                     type: string
-                    description: 'Human-readable call signature (e.g. ''field.match(pattern: string) -> bool'').'
-            description: One matcher/helper function available in a detection or scope CEL expression.
+                    description: Human-readable call signature.
+            description: One function overload with the precise types the checker resolves against.
+            required:
+                - name
+                - overloadId
+                - member
+                - receiverType
+                - returnType
+                - signature
+                - description
+        DetectionDescriptorMacro:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Plain-English description of the macro's behaviour.
+                name:
+                    type: string
+                    description: Macro name (e.g. 'exists', 'has', 'map').
+                returnsBool:
+                    type: boolean
+                    description: True when the macro yields a boolean verdict; false when it yields a list.
+                signature:
+                    type: string
+                    description: Human-readable call signature.
+            description: One CEL macro. Macros are built into both engines (not declared), listed here for completion and documentation only.
             required:
                 - name
                 - signature
                 - description
-        DetectionSchemaResult:
+                - returnsBool
+        DetectionDescriptorParam:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: Parameter name (e.g. 'pattern', 'path').
+                type:
+                    type: string
+                    description: Machine type-string of the parameter (e.g. 'string').
+            description: One non-receiver argument of a function overload.
+            required:
+                - name
+                - type
+        DetectionDescriptorResult:
             type: object
             properties:
                 functions:
                     type: array
                     items:
-                        $ref: '#/components/schemas/DetectionSchemaFunction'
-                    description: Matcher and helper functions available.
+                        $ref: '#/components/schemas/DetectionDescriptorFunction'
+                    description: Function overloads with precise receiver/param/return types.
+                macros:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DetectionDescriptorMacro'
+                    description: Standard CEL macros (exists/all/has/map/...).
+                types:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DetectionDescriptorType'
+                    description: Declared CEL types (the opaque 'field' and the 'tool' object type).
                 variables:
                     type: array
                     items:
-                        $ref: '#/components/schemas/DetectionSchemaVariable'
+                        $ref: '#/components/schemas/DetectionDescriptorVariable'
                     description: Variables an author may reference.
-            description: 'The CEL expression environment for the detection-rule and policy-scope editors: author-visible variables and matcher functions.'
+            description: 'The machine-readable CEL environment descriptor: types, variables, function overloads, and macros. The single source the Go engine is built from and the client-side type-checker is configured from.'
             required:
+                - types
                 - variables
                 - functions
-        DetectionSchemaVariable:
+                - macros
+        DetectionDescriptorType:
             type: object
             properties:
                 description:
                     type: string
-                    description: Plain-English description of what the variable holds.
+                    description: Plain-English description of the type.
+                displayName:
+                    type: string
+                    description: Short human label for the editor (e.g. 'field', 'tool').
                 fields:
                     type: array
                     items:
-                        $ref: '#/components/schemas/DetectionSchemaField'
-                    description: Member fields on each element when this variable is an object or list of objects (e.g. a 'tools' element's name/server/function/args). Empty for scalar variables.
+                        $ref: '#/components/schemas/DetectionDescriptorField'
+                    description: Typed members of a non-opaque object type. Empty when opaque.
+                name:
+                    type: string
+                    description: Engine type name (e.g. 'field', 'celenv.celTool').
+                opaque:
+                    type: boolean
+                    description: True when the type has no readable members, only receiver methods (e.g. 'field').
+            description: One CEL type. Registered identically in the Go engine and the client checker under 'name'.
+            required:
+                - name
+                - opaque
+                - displayName
+                - description
+        DetectionDescriptorVariable:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Plain-English description of the variable.
+                displayType:
+                    type: string
+                    description: Human type tag for the editor (e.g. 'field', 'list(tool)').
                 name:
                     type: string
                     description: Variable name as written in CEL (e.g. 'content', 'tools').
                 type:
                     type: string
-                    description: Descriptive type tag for the editor (e.g. 'field', 'list(tool)', 'string').
-            description: One variable an author may reference in a detection or scope CEL expression.
+                    description: Machine type-string (e.g. 'field', 'string', 'list<celenv.celTool>').
+            description: One author-visible variable, with the machine type the checker consumes and a human display tag.
             required:
                 - name
                 - type
+                - displayType
                 - description
         DiscoverProtectedResourceMetadataRequestBody:
             type: object

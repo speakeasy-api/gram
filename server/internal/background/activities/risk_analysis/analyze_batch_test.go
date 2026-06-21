@@ -583,7 +583,7 @@ func TestAnalyzeBatch_CustomDetectionRuleFinding(t *testing.T) {
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
-	td = seedCustomRulePolicySelection(t, conn, td, "custom.acme_token", `content.match("ACME-[A-Z0-9]{8}")`)
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.acme_token", `content.matchRegex("ACME-[A-Z0-9]{8}")`)
 
 	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
 		ChatID:    td.chatID,
@@ -648,7 +648,7 @@ func TestAnalyzeBatch_CustomDetectionRuleMatchConfigToolServer(t *testing.T) {
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
-	td = seedCustomRulePolicySelection(t, conn, td, "custom.mise_tool", `tools.exists(t, t.server.eq("mise"))`)
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.mise_tool", `tools.exists(t, t.server.matchExact("mise"))`)
 
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "mcp__mise__run_task", map[string]any{"task": "build"})
 

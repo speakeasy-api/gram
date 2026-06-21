@@ -157,7 +157,7 @@ export type CustomDetectionRule = {
   title: string;
   description: string;
   /** Legacy single regex pattern (read-only). Pre-CEL rules surface it via
-   *  effectiveDetectionCel() as content.match("<regex>") so editing migrates
+   *  effectiveDetectionCel() as content.matchRegex("<regex>") so editing migrates
    *  them forward to CEL on save. */
   regex: string;
   /** CEL detection predicate. Empty for legacy regex-only rules. */
@@ -201,11 +201,12 @@ function mapCustomDetectionRule(rule: {
 }
 
 /** The CEL expression to seed the editor with: the rule's detection_cel when
- *  set, otherwise a content.match("<regex>") translation of a legacy regex rule
+ *  set, otherwise a content.matchRegex("<regex>") translation of a legacy regex rule
  *  (so editing migrates it forward to CEL on save), otherwise empty. */
 export function effectiveDetectionCel(rule: CustomDetectionRule): string {
   if (rule.detectionCel.trim()) return rule.detectionCel;
-  if (rule.regex.trim()) return `content.match(${JSON.stringify(rule.regex)})`;
+  if (rule.regex.trim())
+    return `content.matchRegex(${JSON.stringify(rule.regex)})`;
   return "";
 }
 
@@ -310,14 +311,17 @@ export function validateCustomRuleId(
 
 /** Example detection CEL snippets offered beneath the rule editor field. */
 export const DETECTION_CEL_EXAMPLES: { label: string; expr: string }[] = [
-  { label: "Secret in content", expr: 'content.match("sk-[A-Za-z0-9]{32}")' },
+  {
+    label: "Secret in content",
+    expr: 'content.matchRegex("sk-[A-Za-z0-9]{32}")',
+  },
   {
     label: "Password in prompt",
-    expr: 'prompt.includes("password")',
+    expr: 'prompt.matchText("password")',
   },
   {
     label: "Destructive shell",
-    expr: 'tools.exists(t, t.function.match("bash") && t.args.get("command").match("rm -rf"))',
+    expr: 'tools.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("rm -rf"))',
   },
   {
     label: "Tool error output",

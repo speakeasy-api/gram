@@ -26,7 +26,7 @@ type Endpoints struct {
 	ListRiskResultsByChat          goa.Endpoint
 	GetRiskOverview                goa.Endpoint
 	ListRiskCategories             goa.Endpoint
-	GetDetectionSchema             goa.Endpoint
+	GetDetectionDescriptor         goa.Endpoint
 	CompileCel                     goa.Endpoint
 	GetRiskUserBreakdown           goa.Endpoint
 	GetRiskRuleBreakdown           goa.Endpoint
@@ -65,7 +65,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListRiskResultsByChat:          NewListRiskResultsByChatEndpoint(s, a.APIKeyAuth),
 		GetRiskOverview:                NewGetRiskOverviewEndpoint(s, a.APIKeyAuth),
 		ListRiskCategories:             NewListRiskCategoriesEndpoint(s, a.APIKeyAuth),
-		GetDetectionSchema:             NewGetDetectionSchemaEndpoint(s, a.APIKeyAuth),
+		GetDetectionDescriptor:         NewGetDetectionDescriptorEndpoint(s, a.APIKeyAuth),
 		CompileCel:                     NewCompileCelEndpoint(s, a.APIKeyAuth),
 		GetRiskUserBreakdown:           NewGetRiskUserBreakdownEndpoint(s, a.APIKeyAuth),
 		GetRiskRuleBreakdown:           NewGetRiskRuleBreakdownEndpoint(s, a.APIKeyAuth),
@@ -102,7 +102,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListRiskResultsByChat = m(e.ListRiskResultsByChat)
 	e.GetRiskOverview = m(e.GetRiskOverview)
 	e.ListRiskCategories = m(e.ListRiskCategories)
-	e.GetDetectionSchema = m(e.GetDetectionSchema)
+	e.GetDetectionDescriptor = m(e.GetDetectionDescriptor)
 	e.CompileCel = m(e.CompileCel)
 	e.GetRiskUserBreakdown = m(e.GetRiskUserBreakdown)
 	e.GetRiskRuleBreakdown = m(e.GetRiskRuleBreakdown)
@@ -716,11 +716,11 @@ func NewListRiskCategoriesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 	}
 }
 
-// NewGetDetectionSchemaEndpoint returns an endpoint function that calls the
-// method "getDetectionSchema" of service "risk".
-func NewGetDetectionSchemaEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewGetDetectionDescriptorEndpoint returns an endpoint function that calls
+// the method "getDetectionDescriptor" of service "risk".
+func NewGetDetectionDescriptorEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetDetectionSchemaPayload)
+		p := req.(*GetDetectionDescriptorPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
@@ -771,7 +771,7 @@ func NewGetDetectionSchemaEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 		if err != nil {
 			return nil, err
 		}
-		return s.GetDetectionSchema(ctx, p)
+		return s.GetDetectionDescriptor(ctx, p)
 	}
 }
 

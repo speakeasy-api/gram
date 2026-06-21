@@ -754,28 +754,28 @@ func BuildListRiskCategoriesPayload(riskListRiskCategoriesApikeyToken string, ri
 	return v, nil
 }
 
-// BuildGetDetectionSchemaPayload builds the payload for the risk
-// getDetectionSchema endpoint from CLI flags.
-func BuildGetDetectionSchemaPayload(riskGetDetectionSchemaApikeyToken string, riskGetDetectionSchemaSessionToken string, riskGetDetectionSchemaProjectSlugInput string) (*risk.GetDetectionSchemaPayload, error) {
+// BuildGetDetectionDescriptorPayload builds the payload for the risk
+// getDetectionDescriptor endpoint from CLI flags.
+func BuildGetDetectionDescriptorPayload(riskGetDetectionDescriptorApikeyToken string, riskGetDetectionDescriptorSessionToken string, riskGetDetectionDescriptorProjectSlugInput string) (*risk.GetDetectionDescriptorPayload, error) {
 	var apikeyToken *string
 	{
-		if riskGetDetectionSchemaApikeyToken != "" {
-			apikeyToken = &riskGetDetectionSchemaApikeyToken
+		if riskGetDetectionDescriptorApikeyToken != "" {
+			apikeyToken = &riskGetDetectionDescriptorApikeyToken
 		}
 	}
 	var sessionToken *string
 	{
-		if riskGetDetectionSchemaSessionToken != "" {
-			sessionToken = &riskGetDetectionSchemaSessionToken
+		if riskGetDetectionDescriptorSessionToken != "" {
+			sessionToken = &riskGetDetectionDescriptorSessionToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if riskGetDetectionSchemaProjectSlugInput != "" {
-			projectSlugInput = &riskGetDetectionSchemaProjectSlugInput
+		if riskGetDetectionDescriptorProjectSlugInput != "" {
+			projectSlugInput = &riskGetDetectionDescriptorProjectSlugInput
 		}
 	}
-	v := &risk.GetDetectionSchemaPayload{}
+	v := &risk.GetDetectionDescriptorPayload{}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
