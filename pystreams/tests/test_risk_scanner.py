@@ -1,4 +1,14 @@
-from pystreams.risk.scanner import Recognized, ThreadScanner
+from concurrent.futures import Future, ProcessPoolExecutor
+from typing import cast
+
+import pytest
+
+from pystreams.risk.scanner import (
+    Detection,
+    ProcessPoolScanner,
+    Recognized,
+    ThreadScanner,
+)
 
 
 class _Result:
@@ -132,3 +142,62 @@ async def test_none_entities_forwarded_to_analyzer():
 
     # None tells Presidio to scan every type; it is forwarded unchanged.
     assert analyzer.calls == [("a@b.com", None)]
+
+
+class _StuckExecutor:
+    """Executor stand-in whose submitted futures never complete.
+
+    Lets the ProcessPoolScanner timeout path be tested without spawning real
+    worker processes or loading the spaCy model: ``scan`` submits, then waits on a
+    future that is never resolved, so the anyio ``fail_after`` deadline must fire.
+    """
+
+    def __init__(self):
+        self.submitted: list[Future] = []
+
+    def submit(self, fn, *args):
+        future: Future = Future()
+        self.submitted.append(future)
+        return future
+
+
+class _ImmediateExecutor:
+    """Executor stand-in whose futures are already resolved to a canned value."""
+
+    def __init__(self, result: list[Detection]):
+        self._result = result
+
+    def submit(self, fn, *args):
+        future: Future = Future()
+        future.set_result(self._result)
+        return future
+
+
+async def test_pool_scan_times_out_via_anyio_deadline():
+    executor = _StuckExecutor()
+    scanner = ProcessPoolScanner(cast(ProcessPoolExecutor, executor), scan_timeout=0.05)
+
+    # The scan never completes, so the anyio fail_after deadline must raise.
+    with pytest.raises(TimeoutError):
+        await scanner.scan("anything", None)
+
+    # On timeout the future is cancelled, so a still-queued scan is pulled rather
+    # than left to run with nobody awaiting it (and the abandoned wait unblocks).
+    (future,) = executor.submitted
+    assert future.cancelled()
+
+
+async def test_pool_scan_without_timeout_returns_result():
+    detection = Detection(
+        entity_type="EMAIL_ADDRESS",
+        match="a@b.com",
+        start_pos=0,
+        end_pos=7,
+        confidence=0.5,
+    )
+    scanner = ProcessPoolScanner(
+        cast(ProcessPoolExecutor, _ImmediateExecutor([detection])), scan_timeout=None
+    )
+
+    # scan_timeout=None disables the deadline; the result passes straight through.
+    assert await scanner.scan("a@b.com", None) == [detection]

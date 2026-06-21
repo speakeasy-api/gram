@@ -28,4 +28,26 @@ def presidio_options() -> Sequence[click.Option]:
                 "spaCy model, so keep this small (2-4)."
             ),
         ),
+        click.Option(
+            ["--scan-max-tasks-per-child"],
+            type=int,
+            default=1000,
+            envvar="GRAM_PYSTREAMS_SCAN_MAX_TASKS_PER_CHILD",
+            help=(
+                "Recycle a scan-pool worker after this many scans to bound memory "
+                "drift (like gunicorn --max-requests). <=0 disables recycling. "
+                "Only applies when --scan-workers > 0."
+            ),
+        ),
+        click.Option(
+            ["--scan-timeout"],
+            type=float,
+            default=30.0,
+            envvar="GRAM_PYSTREAMS_SCAN_TIMEOUT",
+            help=(
+                "Seconds a single scan may run before it is treated as a failure "
+                "(like gunicorn --timeout). <=0 disables the bound. Only applies "
+                "when --scan-workers > 0."
+            ),
+        ),
     ]

@@ -27,16 +27,16 @@ Two scanners are provided:
 
 from __future__ import annotations
 
-import asyncio
 import multiprocessing
 import os
 import time
 from collections.abc import Sequence
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, TypeVar
 
 import anyio
+from anyio import to_thread
 from asyncer import asyncify
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
@@ -48,6 +48,8 @@ from pystreams.risk import presidiofp
 # it explicitly ties the scanner to the model we actually ship and stops a future
 # Presidio default change from silently reaching for a model we don't package.
 SPACY_MODEL = "en_core_web_lg"
+
+_T = TypeVar("_T")
 
 
 @dataclass(frozen=True)
@@ -142,38 +144,90 @@ class ProcessPoolScanner:
     Workers return only the final :class:`Detection` list (already
     false-positive-filtered, byte offsets resolved), which is small and picklable;
     the heavy text and the analyzer never cross the process boundary per message.
+
+    Two lifecycle knobs borrow from gunicorn's pre-fork model (the same shape the
+    official Presidio image uses to scale):
+
+    - ``max_tasks_per_child`` recycles a worker after it has run that many scans
+      (gunicorn's ``--max-requests``), bounding spaCy/numpy memory drift over a
+      long-lived worker. ``None``/<=0 disables recycling.
+    - ``scan_timeout`` bounds how long a single scan may take before it is treated
+      as a failure (gunicorn's ``--timeout``). The worker cannot be interrupted
+      mid-scan, but the executor stops routing to it, ``max_tasks_per_child``
+      recycles it once the doomed scan finishes, and meanwhile the other workers
+      keep serving — a single pathological message removes one worker from
+      rotation rather than stalling the consumer. ``None``/<=0 disables the bound.
+
+    Everything that touches the executor is bridged through anyio's threading and
+    cancellation primitives (``to_thread.run_sync`` + ``fail_after``) rather than
+    the asyncio loop directly, so the scanner runs unchanged on either anyio
+    backend (asyncio or trio).
     """
 
-    def __init__(self, executor: ProcessPoolExecutor):
+    def __init__(
+        self, executor: ProcessPoolExecutor, *, scan_timeout: float | None = 30.0
+    ):
         self._executor = executor
+        self._scan_timeout = scan_timeout if scan_timeout and scan_timeout > 0 else None
 
     @classmethod
-    async def create(cls, *, max_workers: int = 4) -> ProcessPoolScanner:
+    async def create(
+        cls,
+        *,
+        max_workers: int = 4,
+        max_tasks_per_child: int | None = 1000,
+        scan_timeout: float | None = 30.0,
+    ) -> ProcessPoolScanner:
         """Build the pool and eagerly warm every worker's analyzer.
 
         ``forkserver`` is chosen explicitly so the start method does not depend on
-        the platform default. The warmup forces each worker to spawn and load its
-        model up front, so the first real scans don't pay model-load latency.
+        the platform default (and so ``max_tasks_per_child`` is usable — it is not
+        supported with the ``fork`` start method). The warmup forces each worker to
+        spawn and load its model up front, so the first real scans don't pay
+        model-load latency.
         """
         executor = ProcessPoolExecutor(
             max_workers=max_workers,
             mp_context=multiprocessing.get_context("forkserver"),
             initializer=_worker_init,
+            # <=0 (or None) means "live as long as the pool" — disable recycling.
+            max_tasks_per_child=(
+                max_tasks_per_child
+                if max_tasks_per_child and max_tasks_per_child > 0
+                else None
+            ),
         )
-        loop = asyncio.get_running_loop()
+        scanner = cls(executor, scan_timeout=scan_timeout)
         # One warmup task per worker, run concurrently; each does a real scan and
         # then briefly sleeps so the tasks can't all be served by one worker —
         # forcing the pool to spawn (and initialize) every worker before traffic.
-        await asyncio.gather(
-            *(loop.run_in_executor(executor, _worker_warm) for _ in range(max_workers))
-        )
-        return cls(executor)
+        async with anyio.create_task_group() as tg:
+            for _ in range(max_workers):
+                tg.start_soon(scanner._warm_one)
+        return scanner
 
     async def scan(self, content: str, entities: list[str] | None) -> list[Detection]:
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            self._executor, _worker_scan, content, entities
-        )
+        future = self._executor.submit(_worker_scan, content, entities)
+        if self._scan_timeout is None:
+            return await self._await_result(future)
+        try:
+            with anyio.fail_after(self._scan_timeout):
+                return await self._await_result(future)
+        except TimeoutError:
+            # Pull it from the executor queue if it hasn't started; a no-op once a
+            # worker has picked it up (the scan can't be interrupted, but the wait
+            # is over and the worker will be recycled per max_tasks_per_child).
+            future.cancel()
+            raise
+
+    async def _warm_one(self) -> None:
+        await self._await_result(self._executor.submit(_worker_warm))
+
+    async def _await_result(self, future: Future[_T]) -> _T:
+        # Bridge a concurrent.futures future to anyio without binding to asyncio's
+        # loop: a worker thread blocks on result() and the await is cancellable
+        # (abandon_on_cancel) so fail_after can fire without waiting the scan out.
+        return await to_thread.run_sync(future.result, abandon_on_cancel=True)
 
     async def aclose(self) -> None:
         # Wait for in-flight scans so a shutdown doesn't drop a message mid-scan.

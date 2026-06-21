@@ -62,6 +62,8 @@ async def multi(
     # Presidio options
     max_scan_concurrency: int | None,
     scan_workers: int,
+    scan_max_tasks_per_child: int,
+    scan_timeout: float,
 ):
     logging.configure_logging(
         pretty_log=pretty_log,
@@ -111,8 +113,17 @@ async def multi(
         # models, so the in-process analyzer is only built for the threaded path.
         presidio_scanner: Scanner
         if scan_workers > 0:
-            logger.info("starting presidio scan pool", workers=scan_workers)
-            presidio_scanner = await ProcessPoolScanner.create(max_workers=scan_workers)
+            logger.info(
+                "starting presidio scan pool",
+                workers=scan_workers,
+                max_tasks_per_child=scan_max_tasks_per_child,
+                scan_timeout=scan_timeout,
+            )
+            presidio_scanner = await ProcessPoolScanner.create(
+                max_workers=scan_workers,
+                max_tasks_per_child=scan_max_tasks_per_child,
+                scan_timeout=scan_timeout,
+            )
         else:
             analyzer = await build_default_analyzer()
             # Concurrent Presidio scans are GIL-bound, so the scanner caps them at a
