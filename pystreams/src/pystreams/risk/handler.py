@@ -222,10 +222,19 @@ class PresidioHandler:
         # Log entity *types* and counts only — never the matched values or the
         # scanned content — so the line is safe to retain while still being
         # traceable back to the originating request.
+        #
+        # Emitted at debug, not info: this fires once per detection-bearing
+        # message, and rendering it (JSON-encoding the event dict) runs on the
+        # event-loop thread holding the GIL — the per-message loop work that
+        # dominates ACK latency under burst. At the default info level the
+        # filtering bound logger short-circuits ``adebug`` to a no-op before any
+        # rendering, so the line costs nothing in production yet stays available
+        # when debugging. The async ``adebug`` keeps that render off the event
+        # loop on the occasions debug *is* enabled.
         entity_types: dict[str, int] = {}
         for d in detected:
             entity_types[d.entity_type] = entity_types.get(d.entity_type, 0) + 1
-        self.logger.info(
+        await self.logger.adebug(
             "presidio scan detected entities",
             request_id=message.request_id,
             reply_urn=message.reply_urn,
