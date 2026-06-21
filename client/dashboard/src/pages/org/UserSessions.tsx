@@ -255,8 +255,9 @@ function UserSessionsInner(): JSX.Element {
     <Page.Section>
       <Page.Section.Title>MCP Connections</Page.Section.Title>
       <Page.Section.Description>
-        Sessions clients hold into this project&apos;s MCP servers, established
-        via OAuth. Revoke a session to immediately cut off access.
+        View and manage active connections agents have established with your MCP
+        servers, established via OAuth. Revoke a connection to immediately cut
+        off access.
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="space-y-4">
