@@ -30,6 +30,7 @@ a flame graph over the running process shows where the scan time goes.
 
 from __future__ import annotations
 
+import math
 import os
 import time
 from functools import partial
@@ -99,13 +100,18 @@ def _build_message(
 
 
 def _percentile(sorted_values: list[float], pct: float) -> float:
-    """Nearest-rank percentile of an already-sorted, non-empty list."""
+    """Nearest-rank percentile of an already-sorted, non-empty list.
+
+    Nearest-rank: the ``ceil(pct/100 * N)``-th value (1-indexed), clamped into
+    range. ``ceil`` (not ``round``) is what makes it nearest-rank — ``round`` can
+    pick a lower rank when ``pct/100 * N`` has a fractional part below .5, slightly
+    under-reporting high percentiles.
+    """
     if not sorted_values:
         return 0.0
-    rank = max(
-        0, min(len(sorted_values) - 1, round(pct / 100 * len(sorted_values)) - 1)
-    )
-    return sorted_values[rank]
+    rank = math.ceil(pct / 100 * len(sorted_values))
+    idx = min(max(rank, 1), len(sorted_values)) - 1
+    return sorted_values[idx]
 
 
 async def _publish_all(
@@ -126,6 +132,7 @@ async def _publish_all(
     durations: list[float] = []
     indices = iter(range(count))
 
+    # concurrency is validated at the CLI boundary (IntRange min=1), so it is >= 1.
     async def worker() -> None:
         for index in indices:
             message = _build_message(index, pii, entities)
@@ -136,7 +143,7 @@ async def _publish_all(
             durations.append((time.perf_counter() - started) * 1000)
 
     async with anyio.create_task_group() as tg:
-        for _ in range(max(1, concurrency)):
+        for _ in range(concurrency):
             tg.start_soon(worker)
 
     return durations
@@ -222,21 +229,26 @@ async def run(
         *flags_gcp.pubsub_options(),
         click.Option(
             ["--count"],
-            type=int,
+            # Validate at the boundary: a non-positive count is a misconfiguration,
+            # not a run with zero messages silently coerced away.
+            type=click.IntRange(min=1),
             default=200,
             show_default=True,
             help="Total messages to publish.",
         ),
         click.Option(
             ["--concurrency"],
-            type=int,
+            # min=1 rejects bad input here rather than silently coercing to a single
+            # worker downstream, which would mask the misconfiguration and skew the
+            # load-test results.
+            type=click.IntRange(min=1),
             default=50,
             show_default=True,
             help="Maximum publishes in flight at once.",
         ),
         click.Option(
             ["--pii"],
-            type=int,
+            type=click.IntRange(min=1),
             default=4,
             show_default=True,
             help="Approximate detectable PII entities per message (drives both "
