@@ -341,6 +341,39 @@ async def test_publish_failure_is_swallowed_and_logged():
     assert summary["published_count"] == 0
 
 
+class _SyncBoomPublisher:
+    """Publisher whose ``publish`` raises synchronously (a misconfigured client)."""
+
+    def publish(self, message: finding_pb2.Finding) -> _FakeResult:
+        # The match carries the value, to prove a sync failure doesn't leak it.
+        raise RuntimeError(message.match)
+
+
+async def test_sync_publish_failure_is_swallowed_and_logged():
+    secret = "a@b.com"
+    analyzer = FakeAnalyzer({secret: [_Result("EMAIL_ADDRESS", start=0, end=7)]})
+    handler = PresidioHandler(
+        structlog.get_logger(), _SyncBoomPublisher(), analyzer=analyzer
+    )
+
+    # A synchronous publish failure must be treated like an async one: logged as a
+    # publish failure and skipped, never escaping to nack/redeliver the message
+    # (which would duplicate findings) and never mislabeled as a scan failure.
+    with capture_logs() as logs:
+        await handler.handle(_message(secret, request_id="req-1"), _meta())
+
+    publish_errors = [e for e in logs if e["event"] == "failed to publish risk finding"]
+    (err,) = publish_errors
+    assert err["rule_id"] == "pii.email_address"
+    assert err["error_type"] == "RuntimeError"
+    assert secret not in repr(err)
+    # Not reported as a scan failure...
+    assert not [e for e in logs if e["event"] == "presidio scan failed"]
+    # ...and the summary still lands, reporting zero published.
+    summary = next(e for e in logs if e["event"] == "presidio scan detected entities")
+    assert summary["published_count"] == 0
+
+
 async def test_does_not_leak_content_or_values_to_logs():
     secret = "my ssn is 123-45-6789"
     analyzer = FakeAnalyzer({secret: [_Result("US_SSN", start=10, end=21, score=0.99)]})

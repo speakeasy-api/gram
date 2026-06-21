@@ -195,7 +195,7 @@ class PresidioHandler:
             _PendingPublish(
                 entity_type=d.entity_type,
                 rule_id=d.rule_id,
-                result=self.publisher.publish(
+                result=self._publish(
                     finding_pb2.Finding(
                         # A UUIDv7 per finding: globally unique with a time-ordered
                         # prefix, so findings sort by creation in storage.
@@ -220,6 +220,21 @@ class PresidioHandler:
             )
             for d in detections
         ]
+
+    def _publish(self, finding: finding_pb2.Finding) -> PublishResult:
+        """Fire one publish, deferring a synchronous failure to its result.
+
+        ``publish`` normally returns a future, but a synchronous raise (e.g. a
+        misconfigured client) would otherwise propagate out of ``_scan_and_publish``
+        and be reported as a *scan* failure, aborting the message's remaining
+        findings. Capturing it as a :class:`_FailedPublish` keeps per-finding
+        failure handling uniform whether ``publish`` raises now or the commit fails
+        later — both are logged and skipped by ``_collect``.
+        """
+        try:
+            return self.publisher.publish(finding)
+        except Exception as exc:
+            return _FailedPublish(exc)
 
     async def _collect(
         self,
@@ -378,3 +393,22 @@ class _PendingPublish:
     entity_type: str
     rule_id: str
     result: PublishResult
+
+
+@dataclass(frozen=True)
+class _FailedPublish:
+    """A :class:`PublishResult` standing in for a publish that raised synchronously.
+
+    ``Publisher.publish`` returns a future, but it can still raise *synchronously*
+    (e.g. a misconfigured client). Capturing that as a result whose ``get`` re-raises
+    routes it through ``_collect``'s normal publish-failure path — logged and
+    skipped — exactly like an async commit failure. So one finding's failure
+    neither aborts the message's other publishes nor lets the error escape the
+    handler and nack the message (which would redeliver and duplicate the findings
+    that already landed).
+    """
+
+    exc: Exception
+
+    async def get(self) -> str:
+        raise self.exc
