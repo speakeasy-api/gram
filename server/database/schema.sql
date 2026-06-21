@@ -2043,6 +2043,16 @@ CREATE TABLE IF NOT EXISTS assistant_memories (
   tags             TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   origin_thread_id uuid,
   origin_chat_id   uuid,
+  -- Provenance of the memory for tracing ("why is the assistant remembering
+  -- this?"): the origin thread's source surface (slack|cron|wake|dashboard),
+  -- the external user who said it, the thread's correlation id (which encodes
+  -- the source conversation uniformly across surfaces), and when it was
+  -- recorded. Nullable because provenance is best-effort and rows written
+  -- before these columns existed have none.
+  source_kind           TEXT,
+  source_user_id        TEXT,
+  source_correlation_id TEXT,
+  source_timestamp      timestamptz,
   created_at       timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at       timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_access      timestamptz NOT NULL DEFAULT clock_timestamp(),
