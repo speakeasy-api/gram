@@ -29,8 +29,9 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+import signal
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import partial
@@ -252,7 +253,7 @@ class ProcessPoolScanner(_AsyncCloseable):
         return scanner
 
     async def scan(self, content: str, entities: list[str] | None) -> list[Detection]:
-        future = self._executor.submit(_worker_scan, content, entities)
+        future = await self._submit(_worker_scan, content, entities)
         if self._scan_timeout is None:
             return await self._await_result(future)
         try:
@@ -266,7 +267,20 @@ class ProcessPoolScanner(_AsyncCloseable):
             raise
 
     async def _warm_one(self) -> None:
-        await self._await_result(self._executor.submit(_worker_warm))
+        await self._await_result(await self._submit(_worker_warm))
+
+    async def _submit(self, fn: Callable[..., _T], /, *args: object) -> Future[_T]:
+        # ``submit`` looks cheap, but it lazily spawns the worker/forkserver
+        # processes synchronously — on the pool's first use and again whenever
+        # ``max_tasks_per_child`` recycles a worker. That spawn is real blocking
+        # I/O (hundreds of ms at warmup), so bridge it through a worker thread like
+        # the result wait below; the executor is never touched from the loop.
+        def submit() -> Future[_T]:
+            return self._executor.submit(fn, *args)
+
+        return await asyncify(
+            submit, abandon_on_cancel=True, limiter=self._wait_limiter
+        )()
 
     async def _await_result(self, future: Future[_T]) -> _T:
         # Bridge a concurrent.futures future to anyio without binding to asyncio's
@@ -308,6 +322,12 @@ _WORKER_ANALYZER: Analyzer | None = None
 def _worker_init() -> None:
     """Pool initializer: build this worker's analyzer once, up front."""
     global _WORKER_ANALYZER
+    # A terminal delivers SIGINT (Ctrl-C) to the whole process group, so each
+    # worker would otherwise take the signal mid-``call_queue.get`` and dump a
+    # KeyboardInterrupt traceback. Ignore it here and let the parent own shutdown:
+    # its signal handler cancels the task group and ``aclose`` drains and reaps the
+    # pool, so the workers exit cleanly via the executor rather than the signal.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     _WORKER_ANALYZER = _build_analyzer()
 
 
