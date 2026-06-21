@@ -81,7 +81,7 @@ type DesiredSubscription struct {
 	ProtoMessage        string
 }
 
-func discoverPubSubFromDescriptor(descriptorBytes []byte) ([]DesiredTopic, []DesiredSubscription, error) {
+func DiscoverPubSub(descriptorBytes []byte) ([]DesiredTopic, []DesiredSubscription, error) {
 	var descriptorSet descriptorpb.FileDescriptorSet
 
 	if err := proto.Unmarshal(descriptorBytes, &descriptorSet); err != nil {

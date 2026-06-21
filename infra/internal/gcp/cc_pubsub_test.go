@@ -204,7 +204,7 @@ func TestDiscoverPubSub_DeprecatedOption(t *testing.T) {
 	raw, err := proto.Marshal(set)
 	require.NoError(t, err)
 
-	topics, subs, err := discoverPubSubFromDescriptor(raw)
+	topics, subs, err := DiscoverPubSub(raw)
 	require.NoError(t, err)
 
 	topicsByName := map[string]DesiredTopic{}
