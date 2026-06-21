@@ -7,6 +7,7 @@ from typing import Protocol
 import structlog
 from asyncer import asyncify
 from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
+from gram_infra.pubsub import PublishResult
 from gram_infra.pubsub.subscriber import MessageMetadata
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
@@ -88,10 +89,12 @@ class FindingPublisher(Protocol):
 
     Narrowing to a protocol keeps publishing injectable — tests supply a fake
     that captures findings instead of talking to Pub/Sub. The real
-    ``Publisher[finding_pb2.Finding]`` satisfies it structurally.
+    ``Publisher[finding_pb2.Finding]`` satisfies it structurally: ``publish``
+    returns immediately with a :class:`~gram_infra.pubsub.PublishResult` whose
+    ``get`` is awaited to confirm the commit.
     """
 
-    async def publish(self, message: finding_pb2.Finding) -> str: ...
+    def publish(self, message: finding_pb2.Finding) -> PublishResult: ...
 
 
 # Generic, source-agnostic description stamped on every published finding. The
@@ -206,48 +209,75 @@ class PresidioHandler:
         detected: Sequence[_Detection],
         created_at: str,
     ) -> int:
-        """Publish one Finding per detection; return how many were published.
+        """Publish one Finding per detection concurrently; return how many landed.
+
+        A message's findings are independent, so all publishes are fired up front
+        — ``publish`` returns a future without waiting, and the client batches the
+        sends — and only then are their commits collected. In series a message
+        with N detections would pay N Pub/Sub round-trips back to back, and that
+        serial publish is a large part of the per-message ACK latency; firing them
+        together collapses it toward a single round-trip while the collect loop
+        just gathers results that are already in flight.
 
         A publish failure is logged and skipped rather than raised: nacking the
         message would redeliver it and re-publish the findings that already
         landed, duplicating them (there is no dedup downstream).
         """
-        published = 0
-        for d in detected:
-            finding = finding_pb2.Finding(
-                # A UUIDv7 per finding: globally unique with a time-ordered
-                # prefix, so findings sort by creation in storage.
-                id=str(uuid.uuid7()),
-                request_id=message.request_id,
-                chat_message_id=message.chat_message_id,
-                project_id=message.project_id,
-                organization_id=message.organization_id,
-                risk_policy_id=message.risk_policy_id,
-                risk_policy_version=message.risk_policy_version,
-                created_at=created_at,
-                rule_id=d.rule_id,
-                description=_FINDING_DESCRIPTION,
-                match=d.match,
-                start_pos=d.start_pos,
-                end_pos=d.end_pos,
-                tags=["pii"],
-                source=SOURCE_PRESIDIO,
-                confidence=d.confidence,
+        # Fire every publish first so they commit concurrently on the client's
+        # batcher; keep each finding's rule_id alongside its result for logging.
+        pending = [
+            (
+                d.rule_id,
+                self.publisher.publish(self._build_finding(message, d, created_at)),
             )
+            for d in detected
+        ]
+
+        published = 0
+        for rule_id, result in pending:
             try:
-                await self.publisher.publish(finding)
+                await result.get()
             except Exception as exc:
                 # Never echo the finding (it carries the matched value); log the
                 # request, rule id, and exception type only.
                 self.logger.error(
                     "failed to publish risk finding",
                     request_id=message.request_id,
-                    rule_id=finding.rule_id,
+                    rule_id=rule_id,
                     error_type=type(exc).__name__,
                 )
                 continue
             published += 1
+
         return published
+
+    def _build_finding(
+        self,
+        message: presidio_analysis_pb2.PresidioAnalysis,
+        d: _Detection,
+        created_at: str,
+    ) -> finding_pb2.Finding:
+        """Assemble a Finding from a detection plus the originating message."""
+        return finding_pb2.Finding(
+            # A UUIDv7 per finding: globally unique with a time-ordered prefix, so
+            # findings sort by creation in storage.
+            id=str(uuid.uuid7()),
+            request_id=message.request_id,
+            chat_message_id=message.chat_message_id,
+            project_id=message.project_id,
+            organization_id=message.organization_id,
+            risk_policy_id=message.risk_policy_id,
+            risk_policy_version=message.risk_policy_version,
+            created_at=created_at,
+            rule_id=d.rule_id,
+            description=_FINDING_DESCRIPTION,
+            match=d.match,
+            start_pos=d.start_pos,
+            end_pos=d.end_pos,
+            tags=["pii"],
+            source=SOURCE_PRESIDIO,
+            confidence=d.confidence,
+        )
 
     def _scan(self, content: str, entities: list[str] | None) -> list[_Detection]:
         """Analyze the content and return the real (non-false-positive) matches.

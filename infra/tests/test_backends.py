@@ -238,7 +238,7 @@ def test_publish_awaits_future_on_backend(backend) -> None:
     )
 
     async def scenario() -> Any:
-        return await publisher.publish(ping_pb2.Message(id="x", type="t"))
+        return await publisher.publish(ping_pb2.Message(id="x", type="t")).get()
 
     result = anyio.run(scenario, backend=backend)
 
@@ -268,7 +268,7 @@ def test_publish_handles_already_resolved_future(backend) -> None:
     )
 
     async def scenario() -> Any:
-        return await publisher.publish(ping_pb2.Message(id="x", type="t"))
+        return await publisher.publish(ping_pb2.Message(id="x", type="t")).get()
 
     assert anyio.run(scenario, backend=backend) == "immediate-msg-id"
 
@@ -291,7 +291,7 @@ def test_publish_raises_publish_error(backend) -> None:
     )
 
     async def scenario() -> Any:
-        return await publisher.publish(ping_pb2.Message(id="x", type="t"))
+        return await publisher.publish(ping_pb2.Message(id="x", type="t")).get()
 
     with pytest.raises(RuntimeError, match="send failed"):
         anyio.run(scenario, backend=backend)
@@ -481,7 +481,7 @@ def test_publish_registers_future_with_broker_drain() -> None:
     publisher = Publisher(handle, TOPIC_PROTO)
 
     async def scenario() -> None:
-        await publisher.publish(ping_pb2.Message(id="x", type="t"))
+        await publisher.publish(ping_pb2.Message(id="x", type="t")).get()
 
     anyio.run(scenario)
 

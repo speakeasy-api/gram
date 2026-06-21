@@ -43,15 +43,25 @@ class FakeAnalyzer:
         return self.detections.get(text, [])
 
 
+class _FakeResult:
+    """A PublishResult whose ``get`` returns a canned message id."""
+
+    def __init__(self, message_id: str):
+        self._id = message_id
+
+    async def get(self) -> str:
+        return self._id
+
+
 class FakePublisher:
     """Captures published findings instead of sending them to Pub/Sub."""
 
     def __init__(self):
         self.published: list[finding_pb2.Finding] = []
 
-    async def publish(self, message: finding_pb2.Finding) -> str:
+    def publish(self, message: finding_pb2.Finding) -> _FakeResult:
         self.published.append(message)
-        return f"id-{len(self.published)}"
+        return _FakeResult(f"id-{len(self.published)}")
 
 
 def _meta(delivery_attempt: int = 1) -> MessageMetadata:
@@ -289,11 +299,22 @@ async def test_scan_failure_is_swallowed_and_logged():
     assert "123-45-6789" not in repr(entry)
 
 
-class _BoomPublisher:
-    """Publisher whose ``publish`` always raises, simulating a Pub/Sub failure."""
+class _BoomResult:
+    """A PublishResult whose ``get`` raises, simulating a Pub/Sub commit failure."""
 
-    async def publish(self, message: finding_pb2.Finding) -> str:
-        raise RuntimeError(message.match)  # carries the value to prove it isn't logged
+    def __init__(self, match: str):
+        self._match = match
+
+    async def get(self) -> str:
+        # The match carries the value, to prove it isn't logged on failure.
+        raise RuntimeError(self._match)
+
+
+class _BoomPublisher:
+    """Publisher whose publishes all fail when their result is awaited."""
+
+    def publish(self, message: finding_pb2.Finding) -> _BoomResult:
+        return _BoomResult(message.match)
 
 
 async def test_publish_failure_is_swallowed_and_logged():
