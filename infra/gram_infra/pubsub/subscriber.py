@@ -193,44 +193,48 @@ class _PortalScheduler(Scheduler):
         Fire-and-forget: ``start_task_soon`` does not park the library's single
         dispatch thread on an event-loop round trip per message (``portal.call``
         would serialize intake at one loop-latency apiece while the library holds
-        its pause/resume lock). ``start_task_soon`` is also the lightest hop the
-        backend-agnostic portal API offers — there is no cheaper "run this sync
-        callable on the loop thread" primitive that works under both asyncio and
-        trio, so the returned future is simply discarded.
-
-        ``_enqueue`` is the sole nack authority once a message is on the loop: it
-        nacks if intake is closed or the send fails, so no per-message completion
-        callback is needed here. The only disposition ``_enqueue`` can never reach
-        is the one handled below — ``start_task_soon`` itself failing because the
-        portal is gone or being cancelled during teardown — which is nacked
-        directly. (A message whose ``_enqueue`` is scheduled but cancelled before
-        it runs, the exact-instant Ctrl-C race, is recovered by Pub/Sub's
-        ack-deadline redelivery rather than tracked per message.)
+        its pause/resume lock). If the enqueue cannot run — the portal is gone or
+        the task is cancelled during teardown — the message is nacked so the
+        broker redelivers it immediately rather than leaving it leased until its
+        ack deadline lapses.
         """
         message = args[0] if args else None
         if message is None:
             return
         try:
-            self._portal.start_task_soon(self._enqueue, message)
+            future = self._portal.start_task_soon(self._enqueue, message)
         except BaseException:
-            # The portal is already stopped (RuntimeError) or going away
-            # (CancelledError). Nack so the broker redelivers; raising here would
-            # only crash the library's background dispatch thread.
+            # The portal is already stopped (RuntimeError) or going away. Nack so
+            # the broker redelivers; raising here would only crash the library's
+            # background dispatch thread.
             message.nack()
+            return
+
+        def _nack_on_failure(f) -> None:
+            # ``_enqueue`` nacks the cases it can reach (closed/broken stream); this
+            # covers the one it can't — the scheduled task being cancelled before it
+            # ever runs during a teardown race — so that message is redelivered
+            # immediately too rather than waiting out its ack deadline.
+            try:
+                failed = f.cancelled() or f.exception() is not None
+            except BaseException:
+                failed = True
+            if failed:
+                message.nack()
+
+        future.add_done_callback(_nack_on_failure)
 
     def _enqueue(self, message) -> None:
         # Runs on the event loop via the portal. Checkpoint-free, so the
         # closed-check and the send are atomic with respect to ``close()`` — no
         # TOCTOU window in which a message lands on a stream that teardown has
-        # already drained. As the sole nack authority for a delivered message, it
-        # nacks on *any* send failure (a teardown race closing the stream, or
-        # anything unexpected) so the message is never left neither sent nor nacked.
+        # already drained.
         if self._closed:
             message.nack()
             return
         try:
             self._send.send_nowait(message)  # unbounded buffer: never blocks
-        except Exception:
+        except anyio.ClosedResourceError, anyio.BrokenResourceError:
             message.nack()
 
     def track_handler(self) -> None:
