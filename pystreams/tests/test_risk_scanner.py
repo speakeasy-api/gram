@@ -201,3 +201,35 @@ async def test_pool_scan_without_timeout_returns_result():
 
     # scan_timeout=None disables the deadline; the result passes straight through.
     assert await scanner.scan("a@b.com", None) == [detection]
+
+
+class _WarmupFailExecutor:
+    """Executor stand-in whose every task fails, to drive the warmup-error path.
+
+    Records shutdown so the test can assert the pool is reaped when warmup raises.
+    """
+
+    def __init__(self, **kwargs):
+        self.shutdowns: list[tuple[bool, bool]] = []
+
+    def submit(self, fn, *args):
+        future: Future = Future()
+        future.set_exception(RuntimeError("warmup boom"))
+        return future
+
+    def shutdown(self, wait=True, cancel_futures=False):
+        self.shutdowns.append((wait, cancel_futures))
+
+
+async def test_pool_create_reaps_workers_when_warmup_fails(monkeypatch):
+    executor = _WarmupFailExecutor()
+    monkeypatch.setattr(
+        "pystreams.risk.scanner.ProcessPoolExecutor", lambda **kw: executor
+    )
+
+    # Warmup raises -> create must shut the executor down before propagating, so a
+    # failed create can't leak the workers it already spawned.
+    with pytest.raises(BaseExceptionGroup, match="unhandled errors"):
+        await ProcessPoolScanner.create(max_workers=2)
+
+    assert executor.shutdowns, "executor was not shut down on warmup failure"

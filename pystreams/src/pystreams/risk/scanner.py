@@ -33,6 +33,8 @@ import time
 from collections.abc import Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
 from dataclasses import dataclass
+from functools import partial
+from itertools import accumulate
 from typing import Protocol, TypeVar
 
 import anyio
@@ -161,14 +163,25 @@ class ProcessPoolScanner:
     Everything that touches the executor is bridged through anyio's threading and
     cancellation primitives (``to_thread.run_sync`` + ``fail_after``) rather than
     the asyncio loop directly, so the scanner runs unchanged on either anyio
-    backend (asyncio or trio).
+    backend (asyncio or trio). The bridge uses a dedicated thread limiter sized to
+    the worker count, so blocking on pool results never draws down anyio's shared
+    default thread pool (used by the publish hop and the in-process scanner) — only
+    ``max_workers`` scans run at once, so that many result-waits is the ceiling.
     """
 
     def __init__(
-        self, executor: ProcessPoolExecutor, *, scan_timeout: float | None = 30.0
+        self,
+        executor: ProcessPoolExecutor,
+        *,
+        scan_timeout: float | None = 30.0,
+        wait_limiter: anyio.CapacityLimiter | None = None,
     ):
         self._executor = executor
         self._scan_timeout = scan_timeout if scan_timeout and scan_timeout > 0 else None
+        # Dedicated limiter for the result-wait threads (see class docstring). None
+        # falls back to anyio's default limiter — fine for the single-scan tests,
+        # but ``create`` always supplies one for the real, concurrent path.
+        self._wait_limiter = wait_limiter
 
     @classmethod
     async def create(
@@ -197,13 +210,23 @@ class ProcessPoolScanner:
                 else None
             ),
         )
-        scanner = cls(executor, scan_timeout=scan_timeout)
+        scanner = cls(
+            executor,
+            scan_timeout=scan_timeout,
+            wait_limiter=anyio.CapacityLimiter(max_workers),
+        )
         # One warmup task per worker, run concurrently; each does a real scan and
         # then briefly sleeps so the tasks can't all be served by one worker —
         # forcing the pool to spawn (and initialize) every worker before traffic.
-        async with anyio.create_task_group() as tg:
-            for _ in range(max_workers):
-                tg.start_soon(scanner._warm_one)
+        try:
+            async with anyio.create_task_group() as tg:
+                for _ in range(max_workers):
+                    tg.start_soon(scanner._warm_one)
+        except BaseException:
+            # Warmup failed or was cancelled after spawning some workers; reap them
+            # (aclose is bounded) so a failed create doesn't leak processes.
+            await scanner.aclose()
+            raise
         return scanner
 
     async def scan(self, content: str, entities: list[str] | None) -> list[Detection]:
@@ -227,11 +250,27 @@ class ProcessPoolScanner:
         # Bridge a concurrent.futures future to anyio without binding to asyncio's
         # loop: a worker thread blocks on result() and the await is cancellable
         # (abandon_on_cancel) so fail_after can fire without waiting the scan out.
-        return await to_thread.run_sync(future.result, abandon_on_cancel=True)
+        # The dedicated limiter keeps these waits off anyio's shared thread pool.
+        return await to_thread.run_sync(
+            future.result, abandon_on_cancel=True, limiter=self._wait_limiter
+        )
 
-    async def aclose(self) -> None:
-        # Wait for in-flight scans so a shutdown doesn't drop a message mid-scan.
-        await asyncify(self._executor.shutdown)(wait=True)
+    async def aclose(self, *, grace_period: float = 10.0) -> None:
+        """Shut the pool down, bounded so a stalled scan can't hang teardown.
+
+        Cancels queued scans and waits up to ``grace_period`` seconds for in-flight
+        ones (which can't be interrupted mid-scan) to finish; past the deadline the
+        worker processes are killed so the surrounding teardown (e.g. the broker's
+        publish flush) is never blocked indefinitely.
+        """
+        with anyio.move_on_after(grace_period) as scope:
+            await to_thread.run_sync(
+                partial(self._executor.shutdown, wait=True, cancel_futures=True),
+                abandon_on_cancel=True,
+            )
+        if scope.cancelled_caught:
+            for proc in list(getattr(self._executor, "_processes", {}).values()):
+                proc.kill()
 
 
 # --- Worker-process state and entry points -------------------------------------
@@ -283,9 +322,23 @@ def _scan_to_detections(
     embedded ASN database), and the byte-offset conversion all stay off the event
     loop wherever it runs.
     """
+    results = analyzer.analyze(text=content, entities=entities, language="en")
+    if not results:
+        return []
+    # Presidio reports character offsets, but the Finding schema carries UTF-8 byte
+    # positions. Precompute the cumulative byte offset at every character boundary
+    # once (``byte_at[i]`` == bytes in ``content[:i]``) so each match's char->byte
+    # conversion is an O(1) lookup. Re-encoding ``content[:offset]`` per match (as a
+    # naive conversion does) is O(matches x length) — quadratic on a large message
+    # with many hits.
+    byte_at = list(accumulate((len(c.encode("utf-8")) for c in content), initial=0))
+    n = len(content)
     detections: list[Detection] = []
-    for r in analyzer.analyze(text=content, entities=entities, language="en"):
-        start_byte, end_byte, match = _byte_span(content, r.start, r.end)
+    for r in results:
+        # Clamp to the content's bounds to guard against an out-of-range span.
+        start = max(0, min(r.start, n))
+        end = max(start, min(r.end, n))
+        match = content[start:end]
         # Drop catalog false positives (reserved/placeholder IPs and emails,
         # cloud/CDN ASN attribution) before they ever reach the handler.
         if presidiofp.reason(r.entity_type, match):
@@ -294,8 +347,8 @@ def _scan_to_detections(
             Detection(
                 entity_type=r.entity_type,
                 match=match,
-                start_pos=start_byte,
-                end_pos=end_byte,
+                start_pos=byte_at[start],
+                end_pos=byte_at[end],
                 confidence=r.score,
             )
         )
@@ -320,21 +373,6 @@ def _build_analyzer() -> AnalyzerEngine:
 async def build_default_analyzer() -> AnalyzerEngine:
     """Construct an AnalyzerEngine off the event loop (model load is blocking)."""
     return await asyncify(_build_analyzer)()
-
-
-def _byte_span(content: str, start: int, end: int) -> tuple[int, int, str]:
-    """Clamp a Presidio character span and convert it to UTF-8 byte offsets.
-
-    Presidio reports character (code point) offsets, but the Finding schema
-    carries byte positions. Offsets are clamped to the content's bounds first to
-    guard against an out-of-range span. Returns ``(start_byte, end_byte, match)``.
-    """
-    n = len(content)
-    start = max(0, min(start, n))
-    end = max(start, min(end, n))
-    start_byte = len(content[:start].encode("utf-8"))
-    end_byte = len(content[:end].encode("utf-8"))
-    return start_byte, end_byte, content[start:end]
 
 
 class Recognized(Protocol):
