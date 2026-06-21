@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
@@ -31,6 +33,42 @@ type recallEntry struct {
 	Score     float64  `json:"score"`
 	Tags      []string `json:"tags"`
 	CreatedAt string   `json:"created_at"`
+	// Source is a compact provenance line for tracing where the memory was
+	// written, e.g. "from slack user U123 (slack:T123:C456:789.012),
+	// 2026-06-12". The parenthesised value is the origin thread's correlation
+	// id, which encodes the source conversation uniformly across surfaces. It
+	// records the conversational context of the write — not necessarily the
+	// true origin of the fact, which the assistant may have picked up
+	// elsewhere mid-turn. Absent when the memory has no recorded provenance.
+	Source *string `json:"source,omitempty"`
+}
+
+// formatSource renders provenance as a compact attribution line: the source
+// kind, the speaking user when one exists (slack/dashboard), the origin
+// thread's correlation id in parentheses, and the write date. For automated
+// surfaces: "from cron (cron:0d9e...), 2026-06-12".
+func formatSource(r memory.RecallResult) *string {
+	if r.SourceKind == nil {
+		return nil
+	}
+	var b strings.Builder
+	b.WriteString("from ")
+	b.WriteString(*r.SourceKind)
+	if r.SourceUserID != nil {
+		b.WriteString(" user ")
+		b.WriteString(*r.SourceUserID)
+	}
+	if r.SourceCorrelationID != nil {
+		b.WriteString(" (")
+		b.WriteString(*r.SourceCorrelationID)
+		b.WriteString(")")
+	}
+	if r.SourceTimestamp != nil {
+		b.WriteString(", ")
+		b.WriteString(r.SourceTimestamp.UTC().Format(time.DateOnly))
+	}
+	s := b.String()
+	return &s
 }
 
 // RecallTool implements gram://memory/recall.
@@ -109,6 +147,7 @@ func (t *RecallTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload
 			Score:     r.Score,
 			Tags:      r.Tags,
 			CreatedAt: r.CreatedAt.UTC().Format(time.RFC3339Nano),
+			Source:    formatSource(r),
 		})
 	}
 

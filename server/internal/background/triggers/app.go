@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/threadsource"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -37,12 +38,12 @@ const (
 	StatusFired         = "fired"
 	StatusCancelled     = "cancelled"
 
-	DefinitionSlugSlack     = "slack"
+	DefinitionSlugSlack     = threadsource.KindSlack
 	DefinitionSlugLinear    = "linear"
 	DefinitionSlugGithub    = "github"
-	DefinitionSlugCron      = "cron"
-	DefinitionSlugWake      = "wake"
-	DefinitionSlugDashboard = "dashboard"
+	DefinitionSlugCron      = threadsource.KindCron
+	DefinitionSlugWake      = threadsource.KindWake
+	DefinitionSlugDashboard = threadsource.KindDashboard
 )
 
 var (

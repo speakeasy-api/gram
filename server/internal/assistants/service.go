@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/threadsource"
 )
 
 const (
@@ -42,12 +43,12 @@ const (
 	StatusActive = "active"
 	StatusPaused = "paused"
 
-	sourceKindSlack     = bgtriggers.DefinitionSlugSlack
+	sourceKindSlack     = threadsource.KindSlack
 	sourceKindLinear    = bgtriggers.DefinitionSlugLinear
 	sourceKindGithub    = bgtriggers.DefinitionSlugGithub
-	sourceKindCron      = bgtriggers.DefinitionSlugCron
-	sourceKindWake      = bgtriggers.DefinitionSlugWake
-	sourceKindDashboard = bgtriggers.DefinitionSlugDashboard
+	sourceKindCron      = threadsource.KindCron
+	sourceKindWake      = threadsource.KindWake
+	sourceKindDashboard = threadsource.KindDashboard
 	// sourceKindWarmup marks the event-less thread that eager-boots the
 	// runtime at assistant creation. It has no source adapter — adapters are
 	// only consulted while processing events, and this thread never has any.

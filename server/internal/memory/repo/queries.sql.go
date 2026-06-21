@@ -110,6 +110,35 @@ func (q *Queries) GetAssistantMemoryByID(ctx context.Context, arg GetAssistantMe
 	return i, err
 }
 
+const getAssistantThreadSourceForMemory = `-- name: GetAssistantThreadSourceForMemory :one
+SELECT source_kind, correlation_id, source_ref_json
+  FROM assistant_threads
+ WHERE id = $1
+   AND project_id = $2::uuid
+   AND deleted IS FALSE
+`
+
+type GetAssistantThreadSourceForMemoryParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetAssistantThreadSourceForMemoryRow struct {
+	SourceKind    string
+	CorrelationID string
+	SourceRefJson []byte
+}
+
+// Resolve the origin thread's source surface, correlation id and ref payload
+// so Remember can stamp provenance (which surface, who said it, in which
+// conversation) onto the memory row for tracing.
+func (q *Queries) GetAssistantThreadSourceForMemory(ctx context.Context, arg GetAssistantThreadSourceForMemoryParams) (GetAssistantThreadSourceForMemoryRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantThreadSourceForMemory, arg.ID, arg.ProjectID)
+	var i GetAssistantThreadSourceForMemoryRow
+	err := row.Scan(&i.SourceKind, &i.CorrelationID, &i.SourceRefJson)
+	return i, err
+}
+
 const getNearestActiveAssistantMemory = `-- name: GetNearestActiveAssistantMemory :one
 SELECT
     id,
@@ -153,7 +182,11 @@ INSERT INTO assistant_memories (
   tags,
   origin_thread_id,
   origin_chat_id,
-  supersedes_id
+  supersedes_id,
+  source_kind,
+  source_user_id,
+  source_correlation_id,
+  source_timestamp
 ) VALUES (
   $1::uuid,
   $2::uuid,
@@ -163,21 +196,29 @@ INSERT INTO assistant_memories (
   $6,
   $7,
   $8,
-  $9
+  $9,
+  $10,
+  $11,
+  $12,
+  $13
 )
 RETURNING id, created_at
 `
 
 type InsertAssistantMemoryParams struct {
-	AssistantID    uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	Content        string
-	Embedding      pgvector_go.HalfVector
-	Tags           []string
-	OriginThreadID uuid.NullUUID
-	OriginChatID   uuid.NullUUID
-	SupersedesID   uuid.NullUUID
+	AssistantID         uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	Content             string
+	Embedding           pgvector_go.HalfVector
+	Tags                []string
+	OriginThreadID      uuid.NullUUID
+	OriginChatID        uuid.NullUUID
+	SupersedesID        uuid.NullUUID
+	SourceKind          pgtype.Text
+	SourceUserID        pgtype.Text
+	SourceCorrelationID pgtype.Text
+	SourceTimestamp     pgtype.Timestamptz
 }
 
 type InsertAssistantMemoryRow struct {
@@ -196,6 +237,10 @@ func (q *Queries) InsertAssistantMemory(ctx context.Context, arg InsertAssistant
 		arg.OriginThreadID,
 		arg.OriginChatID,
 		arg.SupersedesID,
+		arg.SourceKind,
+		arg.SourceUserID,
+		arg.SourceCorrelationID,
+		arg.SourceTimestamp,
 	)
 	var i InsertAssistantMemoryRow
 	err := row.Scan(&i.ID, &i.CreatedAt)
@@ -322,6 +367,10 @@ SELECT
     tags,
     created_at,
     last_access,
+    source_kind,
+    source_user_id,
+    source_correlation_id,
+    source_timestamp,
     (1 - (embedding <=> $1))::float8 AS similarity
   FROM assistant_memories
  WHERE assistant_id = $2::uuid
@@ -340,12 +389,16 @@ type ListNearestAssistantMemoriesParams struct {
 }
 
 type ListNearestAssistantMemoriesRow struct {
-	ID         uuid.UUID
-	Content    string
-	Tags       []string
-	CreatedAt  pgtype.Timestamptz
-	LastAccess pgtype.Timestamptz
-	Similarity float64
+	ID                  uuid.UUID
+	Content             string
+	Tags                []string
+	CreatedAt           pgtype.Timestamptz
+	LastAccess          pgtype.Timestamptz
+	SourceKind          pgtype.Text
+	SourceUserID        pgtype.Text
+	SourceCorrelationID pgtype.Text
+	SourceTimestamp     pgtype.Timestamptz
+	Similarity          float64
 }
 
 // Top-K nearest active memories with an optional tag overlap filter. Caller
@@ -370,6 +423,10 @@ func (q *Queries) ListNearestAssistantMemories(ctx context.Context, arg ListNear
 			&i.Tags,
 			&i.CreatedAt,
 			&i.LastAccess,
+			&i.SourceKind,
+			&i.SourceUserID,
+			&i.SourceCorrelationID,
+			&i.SourceTimestamp,
 			&i.Similarity,
 		); err != nil {
 			return nil, err

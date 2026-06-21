@@ -45,15 +45,24 @@ func TestRecallTool_DefaultsLimitAndShapesResponse(t *testing.T) {
 	created := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
 	memID := uuid.New()
 
+	sourceKind := "slack"
+	sourceUser := "U123"
+	sourceCorrelation := "slack:T123:C456:789.012"
+	sourceTime := time.Date(2026, 6, 12, 9, 30, 0, 0, time.UTC)
+
 	fake := &fakeMemoryService{
 		recallResult: []memory.RecallResult{
 			{
-				ID:         memID,
-				Content:    "lorem",
-				Tags:       []string{"x"},
-				Score:      0.87,
-				Similarity: 0.95,
-				CreatedAt:  created,
+				ID:              memID,
+				Content:         "lorem",
+				Tags:            []string{"x"},
+				Score:           0.87,
+				Similarity:      0.95,
+				CreatedAt:       created,
+				SourceKind:          &sourceKind,
+				SourceUserID:        &sourceUser,
+				SourceCorrelationID: &sourceCorrelation,
+				SourceTimestamp:     &sourceTime,
 			},
 		},
 	}
@@ -93,6 +102,48 @@ func TestRecallTool_DefaultsLimitAndShapesResponse(t *testing.T) {
 	require.Equal(t, "lorem", resp[0].Content)
 	require.InDelta(t, 0.87, resp[0].Score, 1e-9)
 	require.Equal(t, []string{"x"}, resp[0].Tags)
+	require.NotNil(t, resp[0].Source)
+	require.Equal(t, "from slack user U123 (slack:T123:C456:789.012), 2026-06-12", *resp[0].Source)
+}
+
+func TestFormatSourceWithoutProvenanceIsNil(t *testing.T) {
+	t.Parallel()
+
+	require.Nil(t, formatSource(memory.RecallResult{
+		ID:                  uuid.New(),
+		Content:             "no provenance",
+		Tags:                nil,
+		Score:               0.5,
+		Similarity:          0.5,
+		CreatedAt:           time.Now(),
+		SourceKind:          nil,
+		SourceUserID:        nil,
+		SourceCorrelationID: nil,
+		SourceTimestamp:     nil,
+	}))
+}
+
+func TestFormatSourceCronHasNoSpeaker(t *testing.T) {
+	t.Parallel()
+
+	kind := "cron"
+	correlation := "cron:f0e9d8c7-0000-0000-0000-000000000001"
+	ts := time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC)
+
+	got := formatSource(memory.RecallResult{
+		ID:                  uuid.New(),
+		Content:             "automated fact",
+		Tags:                nil,
+		Score:               0.5,
+		Similarity:          0.5,
+		CreatedAt:           ts,
+		SourceKind:          &kind,
+		SourceUserID:        nil,
+		SourceCorrelationID: &correlation,
+		SourceTimestamp:     &ts,
+	})
+	require.NotNil(t, got)
+	require.Equal(t, "from cron (cron:f0e9d8c7-0000-0000-0000-000000000001), 2026-06-12", *got)
 }
 
 func TestRecallTool_HonorsExplicitLimit(t *testing.T) {

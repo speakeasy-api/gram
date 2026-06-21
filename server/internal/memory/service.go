@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/memory/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -204,6 +205,16 @@ type RecallResult struct {
 	Score      float64
 	Similarity float64
 	CreatedAt  time.Time
+
+	// Provenance of the memory write, for tracing which conversation it came
+	// from: the origin thread's source surface (threadsource.Kind*, an open
+	// enum), the external user who said it, the thread's correlation id, and
+	// when it was recorded. Nil when unknown (e.g. rows written before
+	// provenance existed or outside an assistant thread).
+	SourceKind          *string
+	SourceUserID        *string
+	SourceCorrelationID *string
+	SourceTimestamp     *time.Time
 }
 
 type ForgetCandidate struct {
@@ -366,21 +377,41 @@ func (s *MemoryService) Remember(
 		originThread = uuid.NullUUID{UUID: principal.ThreadID, Valid: true}
 	}
 
+	// Resolve provenance from the origin thread so the write can be traced
+	// back to the conversation it happened in. Best-effort: a missing or
+	// unreadable thread leaves provenance NULL rather than failing the write.
+	prov := provenance{Kind: nil, UserID: nil, CorrelationID: nil, Timestamp: nil}
+	if originThread.Valid {
+		threadSource, srcErr := txq.GetAssistantThreadSourceForMemory(ctx, repo.GetAssistantThreadSourceForMemoryParams{
+			ID:        originThread.UUID,
+			ProjectID: projectID,
+		})
+		if srcErr != nil {
+			s.logger.WarnContext(ctx, "resolve memory provenance from origin thread", attr.SlogError(srcErr))
+		} else {
+			prov = extractProvenance(threadSource.SourceKind, threadSource.CorrelationID, threadSource.SourceRefJson)
+		}
+	}
+
 	insertTags := tags
 	if insertTags == nil {
 		insertTags = []string{}
 	}
 
 	inserted, err := txq.InsertAssistantMemory(ctx, repo.InsertAssistantMemoryParams{
-		AssistantID:    assistantID,
-		ProjectID:      projectID,
-		OrganizationID: organizationID,
-		Content:        content,
-		Embedding:      embedding,
-		Tags:           insertTags,
-		OriginThreadID: originThread,
-		OriginChatID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		SupersedesID:   supersedesID,
+		AssistantID:     assistantID,
+		ProjectID:       projectID,
+		OrganizationID:  organizationID,
+		Content:         content,
+		Embedding:       embedding,
+		Tags:            insertTags,
+		OriginThreadID:  originThread,
+		OriginChatID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		SupersedesID:    supersedesID,
+		SourceKind:          conv.PtrToPGText(prov.Kind),
+		SourceUserID:        conv.PtrToPGText(prov.UserID),
+		SourceCorrelationID: conv.PtrToPGText(prov.CorrelationID),
+		SourceTimestamp:     conv.PtrToPGTimestamptz(prov.Timestamp),
 	})
 	if err != nil {
 		return zero, oops.E(oops.CodeUnexpected, err, "insert memory").LogError(ctx, s.logger)
@@ -512,13 +543,22 @@ func (s *MemoryService) Recall(
 		if row.LastAccess.Valid {
 			age = now.Sub(row.LastAccess.Time)
 		}
+		var sourceTimestamp *time.Time
+		if row.SourceTimestamp.Valid {
+			ts := row.SourceTimestamp.Time
+			sourceTimestamp = &ts
+		}
 		scored = append(scored, RecallResult{
-			ID:         row.ID,
-			Content:    row.Content,
-			Tags:       row.Tags,
-			Similarity: row.Similarity,
-			Score:      computeScore(row.Similarity, age, s.halfLife),
-			CreatedAt:  row.CreatedAt.Time,
+			ID:                  row.ID,
+			Content:             row.Content,
+			Tags:                row.Tags,
+			Similarity:          row.Similarity,
+			Score:               computeScore(row.Similarity, age, s.halfLife),
+			CreatedAt:           row.CreatedAt.Time,
+			SourceKind:          conv.FromPGText[string](row.SourceKind),
+			SourceUserID:        conv.FromPGText[string](row.SourceUserID),
+			SourceCorrelationID: conv.FromPGText[string](row.SourceCorrelationID),
+			SourceTimestamp:     sourceTimestamp,
 		})
 	}
 

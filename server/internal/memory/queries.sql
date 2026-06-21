@@ -13,7 +13,11 @@ INSERT INTO assistant_memories (
   tags,
   origin_thread_id,
   origin_chat_id,
-  supersedes_id
+  supersedes_id,
+  source_kind,
+  source_user_id,
+  source_correlation_id,
+  source_timestamp
 ) VALUES (
   @assistant_id::uuid,
   @project_id::uuid,
@@ -23,9 +27,23 @@ INSERT INTO assistant_memories (
   @tags,
   @origin_thread_id,
   @origin_chat_id,
-  @supersedes_id
+  @supersedes_id,
+  @source_kind,
+  @source_user_id,
+  @source_correlation_id,
+  @source_timestamp
 )
 RETURNING id, created_at;
+
+-- name: GetAssistantThreadSourceForMemory :one
+-- Resolve the origin thread's source surface, correlation id and ref payload
+-- so Remember can stamp provenance (which surface, who said it, in which
+-- conversation) onto the memory row for tracing.
+SELECT source_kind, correlation_id, source_ref_json
+  FROM assistant_threads
+ WHERE id = @id
+   AND project_id = @project_id::uuid
+   AND deleted IS FALSE;
 
 -- name: MarkAssistantMemorySuperseded :exec
 UPDATE assistant_memories
@@ -86,6 +104,10 @@ SELECT
     tags,
     created_at,
     last_access,
+    source_kind,
+    source_user_id,
+    source_correlation_id,
+    source_timestamp,
     (1 - (embedding <=> @query_embedding))::float8 AS similarity
   FROM assistant_memories
  WHERE assistant_id = @assistant_id::uuid
