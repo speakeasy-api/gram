@@ -34,7 +34,6 @@ from collections.abc import Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import partial
-from itertools import accumulate
 from typing import Protocol, TypeVar
 
 import anyio
@@ -325,34 +324,63 @@ def _scan_to_detections(
     results = analyzer.analyze(text=content, entities=entities, language="en")
     if not results:
         return []
-    # Presidio reports character offsets, but the Finding schema carries UTF-8 byte
-    # positions. Precompute the cumulative byte offset at every character boundary
-    # once (``byte_at[i]`` == bytes in ``content[:i]``) so each match's char->byte
-    # conversion is an O(1) lookup. Re-encoding ``content[:offset]`` per match (as a
-    # naive conversion does) is O(matches x length) — quadratic on a large message
-    # with many hits.
-    byte_at = list(accumulate((len(c.encode("utf-8")) for c in content), initial=0))
     n = len(content)
-    detections: list[Detection] = []
+    # Clamp each span to the content's bounds (guarding against an out-of-range
+    # span) and drop catalog false positives (reserved/placeholder IPs and emails,
+    # cloud/CDN ASN attribution) before they ever reach the handler. This pass
+    # works in character offsets, so a discarded match never costs byte conversion.
+    spans: list[tuple[Recognized, int, int, str]] = []
     for r in results:
-        # Clamp to the content's bounds to guard against an out-of-range span.
         start = max(0, min(r.start, n))
         end = max(start, min(r.end, n))
         match = content[start:end]
-        # Drop catalog false positives (reserved/placeholder IPs and emails,
-        # cloud/CDN ASN attribution) before they ever reach the handler.
         if presidiofp.reason(r.entity_type, match):
             continue
-        detections.append(
-            Detection(
-                entity_type=r.entity_type,
-                match=match,
-                start_pos=byte_at[start],
-                end_pos=byte_at[end],
-                confidence=r.score,
-            )
+        spans.append((r, start, end, match))
+    if not spans:
+        return []
+    # Presidio reports character offsets, but the Finding schema carries UTF-8 byte
+    # positions. Resolve a byte offset only for the boundaries we actually emit —
+    # at most two per surviving match — so memory stays O(matches) rather than the
+    # O(length) a full per-character prefix table costs on every scan, which would
+    # multiply across pool workers on large payloads.
+    byte_at = _byte_offsets(content, spans)
+    return [
+        Detection(
+            entity_type=r.entity_type,
+            match=match,
+            start_pos=byte_at[start],
+            end_pos=byte_at[end],
+            confidence=r.score,
         )
-    return detections
+        for r, start, end, match in spans
+    ]
+
+
+def _byte_offsets(
+    content: str, spans: list[tuple[Recognized, int, int, str]]
+) -> dict[int, int]:
+    """Map each span boundary's character offset to its UTF-8 byte offset.
+
+    ASCII text encodes one byte per character, so the offsets coincide and no
+    conversion is needed. Otherwise the string is walked once in offset order,
+    accumulating the byte position only at the boundaries we need: O(length) time
+    but O(matches) memory, versus the O(length) memory a full prefix table costs.
+    """
+    needed: set[int] = set()
+    for _, start, end, _ in spans:
+        needed.add(start)
+        needed.add(end)
+    if content.isascii():
+        return {pos: pos for pos in needed}
+    byte_at: dict[int, int] = {}
+    byte_pos = 0
+    char_pos = 0
+    for target in sorted(needed):
+        byte_pos += len(content[char_pos:target].encode("utf-8"))
+        char_pos = target
+        byte_at[target] = byte_pos
+    return byte_at
 
 
 def _build_analyzer() -> AnalyzerEngine:

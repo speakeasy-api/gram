@@ -92,6 +92,31 @@ async def test_byte_offsets_for_multibyte_content():
     assert detection.end_pos == 13
 
 
+async def test_byte_offsets_for_multiple_multibyte_matches():
+    # Two matches straddling separate multibyte runs exercise the single-pass
+    # offset walk: each '€' is 3 UTF-8 bytes, so byte offsets diverge from char
+    # offsets cumulatively and out of insertion order.
+    content = "€ a@b.com € c@d.com"
+    analyzer = FakeAnalyzer(
+        {
+            content: [
+                # Reversed vs. text order to confirm the walk doesn't assume sorted
+                # recognizer results.
+                _Result("EMAIL_ADDRESS", start=12, end=19, score=0.9),
+                _Result("EMAIL_ADDRESS", start=2, end=9, score=0.9),
+            ]
+        }
+    )
+
+    detections = await _scanner(analyzer).scan(content, None)
+
+    by_match = {d.match: d for d in detections}
+    assert by_match["a@b.com"].start_pos == 4  # 3-byte '€' + space
+    assert by_match["a@b.com"].end_pos == 11
+    assert by_match["c@d.com"].start_pos == 16  # second '€' adds two more bytes
+    assert by_match["c@d.com"].end_pos == 23
+
+
 async def test_false_positives_are_filtered():
     # "10.0.0.1" is RFC1918 space and is dropped; "a@b.com" is a real match.
     content = "10.0.0.1 and a@b.com"
