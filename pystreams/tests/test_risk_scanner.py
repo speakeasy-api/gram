@@ -1,6 +1,8 @@
+import threading
 from concurrent.futures import Future, ProcessPoolExecutor
 from typing import cast
 
+import anyio
 import pytest
 
 from pystreams.risk.scanner import (
@@ -283,3 +285,74 @@ async def test_pool_create_reaps_workers_when_warmup_fails(monkeypatch):
         await ProcessPoolScanner.create(max_workers=2)
 
     assert executor.shutdowns, "executor was not shut down on warmup failure"
+
+
+class _DeferredExecutor:
+    """Executor stand-in that withholds results until every scan is in flight.
+
+    Each ``submit`` (driven from a worker thread) captures the scanned content
+    beside the ``Future`` it returns and leaves it unresolved. Only once all
+    ``expected`` scans have submitted does the final one complete them all — in
+    reverse submission order, so completion order deliberately differs from caller
+    order. This proves each scan receives only its own result, without spawning
+    real workers or loading the spaCy model, and self-completes so the test needs
+    no event-loop polling.
+    """
+
+    def __init__(self, expected: int):
+        self._expected = expected
+        self._lock = threading.Lock()
+        self.pending: list[tuple[str, Future]] = []
+
+    def submit(self, fn, *args):
+        content = cast(str, args[0])
+        future: Future = Future()
+        with self._lock:
+            self.pending.append((content, future))
+            # The submit that completes the set resolves every future; the others
+            # have all appended by now, so iterating outside the lock is safe.
+            ready = list(self.pending) if len(self.pending) == self._expected else None
+        if ready is not None:
+            for queued_content, queued_future in reversed(ready):
+                queued_future.set_result([_email_detection(queued_content)])
+        return future
+
+
+def _email_detection(content: str) -> Detection:
+    """A detection whose ``match`` is the content, so a crossed result is visible."""
+    return Detection(
+        entity_type="EMAIL_ADDRESS",
+        match=content,
+        start_pos=0,
+        end_pos=len(content),
+        confidence=0.5,
+    )
+
+
+async def test_concurrent_scans_only_receive_their_own_results():
+    # Routing is by Future identity, not shared state: each scan awaits exactly the
+    # future its own submit returned. Drive many scans concurrently; the executor
+    # holds every result until all are in flight, then completes them in reverse
+    # order (so completion order differs from caller order) and we assert no caller
+    # ever sees another scan's result. A refactor that introduced a shared "last
+    # result" slot would cross wires here.
+    contents = [f"user{i}@host{i}.test" for i in range(8)]
+    executor = _DeferredExecutor(expected=len(contents))
+    scanner = ProcessPoolScanner(cast(ProcessPoolExecutor, executor), scan_timeout=None)
+
+    results: dict[str, list[Detection]] = {}
+
+    async def run(content: str) -> None:
+        results[content] = await scanner.scan(content, None)
+
+    # fail_after guards against a routing regression that wedges a caller forever.
+    with anyio.fail_after(5):
+        async with anyio.create_task_group() as tg:
+            for content in contents:
+                tg.start_soon(run, content)
+
+    assert set(results) == set(contents)
+    for content in contents:
+        (detection,) = results[content]
+        # The match echoes the submitted content; any mismatch is a crossed wire.
+        assert detection.match == content
