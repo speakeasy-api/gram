@@ -4,18 +4,18 @@
 //
 //   - Scope predicates: decide whether a message is in scope for a policy.
 //     EvalScope returns the boolean verdict.
-//     e.g. `tools.exists(t, t.server.eq("shell"))`
+//     e.g. `tools.exists(t, t.server.matchExact("shell"))`
 //
 //   - Detection matchers: the same boolean grammar, but EvalDetection also
 //     returns the SPANS that the matcher methods recorded — the substrings that
 //     matched, attributed to the field (tool call and JSON path) they matched
 //     in — so the dashboard can highlight them.
-//     e.g. `tools.exists(t, t.function.match("bash") &&
-//     t.args.get("command").match("DROP TABLE"))`
+//     e.g. `tools.exists(t, t.function.matchRegex("bash") &&
+//     t.args.get("command").matchRegex("DROP TABLE"))`
 //
 // Fields:
 //
-//	type       string                   message type (escape hatch; rarely needed)
+//	kind       string                   message type (escape hatch; rarely needed)
 //	content    field                    the raw body, any message type
 //	prompt     field                    the body of a user_message (else empty)
 //	assistant  field                    the body of an assistant_message (else empty)
@@ -23,14 +23,14 @@
 //	tools      list of tool             the calls on a tool_request; each tool has
 //	                                     .name .server .function .args fields
 //
-// Body fields are auto-scoped: `prompt.includes(x)` only matches user messages
-// because prompt is empty otherwise, so an explicit `type ==` check is usually
+// Body fields are auto-scoped: `prompt.matchText(x)` only matches user messages
+// because prompt is empty otherwise, so an explicit `kind ==` check is usually
 // unnecessary. tool_request calls are correlated: inside `tools.exists(t, ...)`,
 // `t.function` and `t.args` are bound to the SAME tool.
 //
 // JSON drill-down: any field's `.get(path)` returns a sub-field scoped to the
 // gjson value at path (`command`, `payload.sql`, `rows.0.ssn`), so every matcher
-// composes over it — `t.args.get("command").match(x)`, `output.get("error")`.
+// composes over it — `t.args.get("command").matchRegex(x)`, `output.get("error")`.
 //
 // Authoring stays natural: conditions combine with `&&`/`||`, exactly what a
 // guided query builder emits. Spans are captured as a side effect of the matcher
@@ -121,83 +121,69 @@ func New() (*Engine, error) {
 }
 
 func buildEnv() (*cel.Env, error) {
-	// field.method(string) -> bool
-	matcher := func(name, overload string, fn func(*fieldVal, string) bool) cel.EnvOption {
-		return cel.Function(name,
-			cel.MemberOverload(overload,
-				[]*cel.Type{fieldType, cel.StringType},
-				cel.BoolType,
-				cel.BinaryBinding(func(lhs, rhs ref.Val) ref.Val {
-					f, ok := lhs.(*fieldVal)
-					if !ok {
-						return types.NewErr("%s: receiver is not a field", name)
-					}
-					s, ok := rhs.(types.String)
-					if !ok {
-						return types.NewErr("%s: argument must be string", name)
-					}
-					return types.Bool(fn(f, string(s)))
-				}),
-			),
-		)
+	desc := Descriptor()
+
+	// Register celTool as an object type so `tools` elements have validated
+	// fields (name/server/function/args), each of the opaque field type. This
+	// reflection registration and the opaque fieldType are the two declarations
+	// that can't be pure data; the descriptor mirrors their shape (the celTool
+	// TypeDecl and the "field" TypeDecl) and the parity test asserts agreement.
+	opts := []cel.EnvOption{
+		ext.NativeTypes(reflect.TypeFor[celTool](), ext.ParseStructTags(true)),
 	}
 
-	env, err := cel.NewEnv(
-		// Register celTool as an object type so `tools` elements have validated
-		// fields (name/server/function/args), each of the opaque field type.
-		ext.NativeTypes(reflect.TypeFor[celTool](), ext.ParseStructTags(true)),
+	for _, v := range desc.Variables {
+		t, err := celType(v.Type)
+		if err != nil {
+			return nil, fmt.Errorf("variable %q: %w", v.Name, err)
+		}
+		opts = append(opts, cel.Variable(v.Name, t))
+	}
 
-		cel.Variable("type", cel.StringType),
-		cel.Variable("content", fieldType),
-		cel.Variable("prompt", fieldType),
-		cel.Variable("assistant", fieldType),
-		cel.Variable("output", fieldType),
-		cel.Variable("tools", cel.ListType(cel.ObjectType(toolTypeName))),
+	// Every declared overload must have a Go implementation in bindings; a
+	// missing key is a hard error so a declaration can't ship without behaviour.
+	// Method names avoid CEL's string built-ins (matches/contains/startsWith/
+	// endsWith), which cannot be re-overloaded onto a custom type.
+	for _, f := range desc.Functions {
+		b, ok := bindings[f.OverloadID]
+		if !ok {
+			return nil, fmt.Errorf("function %q: no binding for overload %q", f.Name, f.OverloadID)
+		}
+		ret, err := celType(f.ReturnType)
+		if err != nil {
+			return nil, fmt.Errorf("function %q return type: %w", f.Name, err)
+		}
+		args := make([]*cel.Type, 0, 1+len(f.Params))
+		if f.Member {
+			rt, err := celType(f.ReceiverType)
+			if err != nil {
+				return nil, fmt.Errorf("function %q receiver type: %w", f.Name, err)
+			}
+			args = append(args, rt)
+		}
+		for _, p := range f.Params {
+			pt, err := celType(p.Type)
+			if err != nil {
+				return nil, fmt.Errorf("function %q param %q: %w", f.Name, p.Name, err)
+			}
+			args = append(args, pt)
+		}
 
-		// Method names avoid CEL's string built-ins (matches/contains/
-		// startsWith/endsWith), which cannot be re-overloaded onto a custom type.
-		matcher("match", "field_match_string", (*fieldVal).match),
-		matcher("includes", "field_includes_string", (*fieldVal).includes),
-		matcher("eq", "field_eq_string", (*fieldVal).eq),
-		matcher("prefix", "field_prefix_string", (*fieldVal).prefix),
-		matcher("suffix", "field_suffix_string", (*fieldVal).suffix),
-		matcher("glob", "field_glob_string", (*fieldVal).globMatch),
+		var binding cel.OverloadOpt
+		switch {
+		case b.binary != nil:
+			binding = cel.BinaryBinding(b.binary)
+		case b.unary != nil:
+			binding = cel.UnaryBinding(b.unary)
+		default:
+			return nil, fmt.Errorf("function %q: empty binding for overload %q", f.Name, f.OverloadID)
+		}
 
-		// field.get(path) -> field: drill into the field's JSON value at a gjson
-		// path, returning a sub-field that the matchers compose over.
-		cel.Function("get",
-			cel.MemberOverload("field_get_string",
-				[]*cel.Type{fieldType, cel.StringType},
-				fieldType,
-				cel.BinaryBinding(func(lhs, rhs ref.Val) ref.Val {
-					f, ok := lhs.(*fieldVal)
-					if !ok {
-						return types.NewErr("get: receiver is not a field")
-					}
-					p, ok := rhs.(types.String)
-					if !ok {
-						return types.NewErr("get: path must be string")
-					}
-					return f.get(string(p))
-				}),
-			),
-		),
+		// All current overloads are member (receiver) overloads.
+		opts = append(opts, cel.Function(f.Name, cel.MemberOverload(f.OverloadID, args, ret, binding)))
+	}
 
-		// field.present() -> bool: true when the field has a non-empty value.
-		cel.Function("present",
-			cel.MemberOverload("field_present",
-				[]*cel.Type{fieldType},
-				cel.BoolType,
-				cel.UnaryBinding(func(v ref.Val) ref.Val {
-					f, ok := v.(*fieldVal)
-					if !ok {
-						return types.NewErr("present: receiver is not a field")
-					}
-					return types.Bool(f.present())
-				}),
-			),
-		),
-	)
+	env, err := cel.NewEnv(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("build cel env: %w", err)
 	}
@@ -278,7 +264,7 @@ func activation(msg Message, coll *collector) map[string]any {
 	}
 
 	return map[string]any{
-		"type":      msg.Type,
+		"kind":      msg.Type,
 		"content":   body("content", true),
 		"prompt":    body("prompt", msg.Type == message.User),
 		"assistant": body("assistant", msg.Type == message.Assistant),
@@ -358,13 +344,14 @@ func (f *fieldVal) record(v fieldValue, start, end int) {
 	})
 }
 
-// scan runs find over each underlying value, records a span for every
-// [start,end) hit it reports, and returns whether any value matched. The matcher
-// methods differ only in the hits they report, so they all delegate here.
-func (f *fieldVal) scan(find func(text string) [][]int) bool {
+func (f *fieldVal) matchRegex(pattern string) bool {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return false
+	}
 	matched := false
 	for _, v := range f.values {
-		for _, m := range find(v.text) {
+		for _, m := range re.FindAllStringIndex(v.text, -1) {
 			matched = true
 			f.record(v, m[0], m[1])
 		}
@@ -372,69 +359,84 @@ func (f *fieldVal) scan(find func(text string) [][]int) bool {
 	return matched
 }
 
-// whole reports a single span covering the value, for matchers that attribute
-// the entire value (eq/glob/present). nil when keep is false.
-func whole(text string, keep bool) [][]int {
-	if !keep {
-		return nil
-	}
-	return [][]int{{0, len(text)}}
-}
-
-func (f *fieldVal) match(pattern string) bool {
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return false
-	}
-	return f.scan(func(t string) [][]int { return re.FindAllStringIndex(t, -1) })
-}
-
-func (f *fieldVal) includes(sub string) bool {
+func (f *fieldVal) matchText(sub string) bool {
 	if sub == "" {
 		return false
 	}
-	// Case-insensitive substring via a quoted-literal regex so match offsets are
-	// computed against the original text (lowercasing a copy and reusing its
-	// offsets can be wrong, or panic, when a case-fold changes byte length).
+	// Case-insensitive substring via a quoted-literal regex, so match offsets are
+	// computed against the original text. Lowercasing a copy and reusing its
+	// offsets can be wrong, or panic, when a case-fold changes byte length.
 	re, err := regexp.Compile("(?i)" + regexp.QuoteMeta(sub))
 	if err != nil {
 		return false
 	}
-	return f.scan(func(t string) [][]int { return re.FindAllStringIndex(t, -1) })
-}
-
-func (f *fieldVal) eq(s string) bool {
-	return f.scan(func(t string) [][]int { return whole(t, t == s) })
-}
-
-func (f *fieldVal) prefix(p string) bool {
-	return f.scan(func(t string) [][]int {
-		if !strings.HasPrefix(t, p) {
-			return nil
+	matched := false
+	for _, v := range f.values {
+		for _, m := range re.FindAllStringIndex(v.text, -1) {
+			matched = true
+			f.record(v, m[0], m[1])
 		}
-		return [][]int{{0, len(p)}}
-	})
+	}
+	return matched
 }
 
-func (f *fieldVal) suffix(s string) bool {
-	return f.scan(func(t string) [][]int {
-		if !strings.HasSuffix(t, s) {
-			return nil
+func (f *fieldVal) matchExact(s string) bool {
+	matched := false
+	for _, v := range f.values {
+		if v.text == s {
+			matched = true
+			f.record(v, 0, len(v.text))
 		}
-		return [][]int{{len(t) - len(s), len(t)}}
-	})
+	}
+	return matched
 }
 
-func (f *fieldVal) globMatch(pattern string) bool {
+func (f *fieldVal) matchPrefix(p string) bool {
+	matched := false
+	for _, v := range f.values {
+		if strings.HasPrefix(v.text, p) {
+			matched = true
+			f.record(v, 0, len(p))
+		}
+	}
+	return matched
+}
+
+func (f *fieldVal) matchSuffix(s string) bool {
+	matched := false
+	for _, v := range f.values {
+		if strings.HasSuffix(v.text, s) {
+			matched = true
+			f.record(v, len(v.text)-len(s), len(v.text))
+		}
+	}
+	return matched
+}
+
+func (f *fieldVal) matchGlob(pattern string) bool {
 	g, err := glob.Compile(pattern)
 	if err != nil {
 		return false
 	}
-	return f.scan(func(t string) [][]int { return whole(t, g.Match(t)) })
+	matched := false
+	for _, v := range f.values {
+		if g.Match(v.text) {
+			matched = true
+			f.record(v, 0, len(v.text))
+		}
+	}
+	return matched
 }
 
 func (f *fieldVal) present() bool {
-	return f.scan(func(t string) [][]int { return whole(t, t != "") })
+	matched := false
+	for _, v := range f.values {
+		if v.text != "" {
+			matched = true
+			f.record(v, 0, len(v.text))
+		}
+	}
+	return matched
 }
 
 // normalizeJSONPath converts a leading $-rooted / bracket-indexed path into the
