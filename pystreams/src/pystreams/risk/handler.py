@@ -28,113 +28,10 @@ SPACY_MODEL = "en_core_web_lg"
 SOURCE_PRESIDIO = "presidio"
 
 
-async def build_default_analyzer() -> AnalyzerEngine:
-    """Construct an AnalyzerEngine backed by the explicitly selected spaCy model."""
-    provider = NlpEngineProvider(
-        nlp_configuration={
-            "nlp_engine_name": "spacy",
-            "models": [{"lang_code": "en", "model_name": SPACY_MODEL}],
-        }
-    )
-    nlp_engine = await asyncify(provider.create_engine)()
-    return AnalyzerEngine(nlp_engine=nlp_engine)
-
-
-def _canonical_rule_id(entity_type: str) -> str:
-    """Map a Presidio UPPER_SNAKE entity type to the canonical rule id.
-
-    Lowercases the entity name and prefixes it with ``pii.`` (e.g.
-    ``EMAIL_ADDRESS`` -> ``pii.email_address``) so the same finding gets the same
-    rule id regardless of which path produced it.
-    """
-    return "pii." + entity_type.lower()
-
-
-def _byte_span(content: str, start: int, end: int) -> tuple[int, int, str]:
-    """Clamp a Presidio character span and convert it to UTF-8 byte offsets.
-
-    Presidio reports character (code point) offsets, but the Finding schema
-    carries byte positions. Offsets are clamped to the content's bounds first to
-    guard against an out-of-range span. Returns ``(start_byte, end_byte, match)``.
-    """
-    n = len(content)
-    start = max(0, min(start, n))
-    end = max(start, min(end, n))
-    start_byte = len(content[:start].encode("utf-8"))
-    end_byte = len(content[:end].encode("utf-8"))
-    return start_byte, end_byte, content[start:end]
-
-
-class Recognized(Protocol):
-    """The slice of Presidio's ``RecognizerResult`` this handler consumes."""
-
-    entity_type: str
-    start: int  # Character offset (inclusive) of the match in the scanned text.
-    end: int  # Character offset (exclusive) of the match in the scanned text.
-    score: float  # Detection confidence, 0.0-1.0.
-
-
-class Analyzer(Protocol):
-    """The slice of ``AnalyzerEngine`` this handler depends on.
-
-    Narrowing to a protocol keeps the engine injectable — tests can supply a
-    lightweight fake instead of loading Presidio's NLP model.
-    """
-
-    def analyze(
-        self, *, text: str, entities: list[str] | None, language: str
-    ) -> Sequence[Recognized]: ...
-
-
-class FindingPublisher(Protocol):
-    """The slice of ``gram_infra.pubsub.Publisher`` this handler depends on.
-
-    Narrowing to a protocol keeps publishing injectable — tests supply a fake
-    that captures findings instead of talking to Pub/Sub. The real
-    ``Publisher[finding_pb2.Finding]`` satisfies it structurally: ``publish``
-    returns immediately with a :class:`~gram_infra.pubsub.PublishResult` whose
-    ``get`` is awaited to confirm the commit.
-    """
-
-    def publish(self, message: finding_pb2.Finding) -> PublishResult: ...
-
-
 # Generic, source-agnostic description stamped on every published finding. The
 # canonical rule_id carries the specific entity, so a consumer can resolve a
 # richer description from it.
 _FINDING_DESCRIPTION = "Identified potentially sensitive personal information."
-
-
-@dataclass(frozen=True)
-class _Detection:
-    """A real (non-false-positive) PII match, ready to become a Finding.
-
-    Produced off the event loop by ``_scan`` so the analyzer call, false-positive
-    classification (which may hit the embedded ASN database), and byte-offset
-    conversion all stay on the worker thread.
-    """
-
-    entity_type: str
-    rule_id: str
-    match: str
-    start_pos: int  # UTF-8 byte offset.
-    end_pos: int  # UTF-8 byte offset.
-    confidence: float
-
-
-@dataclass(frozen=True)
-class _PendingPublish:
-    """A finding whose publish has already been fired; ``result.get`` confirms it.
-
-    Built and fired off the event loop by ``_scan_and_publish`` so the proto
-    build + serialize never run on the loop thread. The entity type and rule id
-    ride along so the loop can assemble the summary log and per-finding error
-    context without re-deriving them from the detection.
-    """
-
-    entity_type: str
-    rule_id: str
-    result: PublishResult
 
 
 class PresidioHandler:
@@ -299,7 +196,26 @@ class PresidioHandler:
                 entity_type=d.entity_type,
                 rule_id=d.rule_id,
                 result=self.publisher.publish(
-                    self._build_finding(message, d, created_at)
+                    finding_pb2.Finding(
+                        # A UUIDv7 per finding: globally unique with a time-ordered
+                        # prefix, so findings sort by creation in storage.
+                        id=str(uuid.uuid7()),
+                        request_id=message.request_id,
+                        chat_message_id=message.chat_message_id,
+                        project_id=message.project_id,
+                        organization_id=message.organization_id,
+                        risk_policy_id=message.risk_policy_id,
+                        risk_policy_version=message.risk_policy_version,
+                        created_at=created_at,
+                        rule_id=d.rule_id,
+                        description=_FINDING_DESCRIPTION,
+                        match=d.match,
+                        start_pos=d.start_pos,
+                        end_pos=d.end_pos,
+                        tags=["pii"],
+                        source=SOURCE_PRESIDIO,
+                        confidence=d.confidence,
+                    )
                 ),
             )
             for d in detections
@@ -334,34 +250,6 @@ class PresidioHandler:
 
         return published
 
-    def _build_finding(
-        self,
-        message: presidio_analysis_pb2.PresidioAnalysis,
-        d: _Detection,
-        created_at: str,
-    ) -> finding_pb2.Finding:
-        """Assemble a Finding from a detection plus the originating message."""
-        return finding_pb2.Finding(
-            # A UUIDv7 per finding: globally unique with a time-ordered prefix, so
-            # findings sort by creation in storage.
-            id=str(uuid.uuid7()),
-            request_id=message.request_id,
-            chat_message_id=message.chat_message_id,
-            project_id=message.project_id,
-            organization_id=message.organization_id,
-            risk_policy_id=message.risk_policy_id,
-            risk_policy_version=message.risk_policy_version,
-            created_at=created_at,
-            rule_id=d.rule_id,
-            description=_FINDING_DESCRIPTION,
-            match=d.match,
-            start_pos=d.start_pos,
-            end_pos=d.end_pos,
-            tags=["pii"],
-            source=SOURCE_PRESIDIO,
-            confidence=d.confidence,
-        )
-
     def _scan(self, content: str, entities: list[str] | None) -> list[_Detection]:
         """Analyze the content and return the real (non-false-positive) matches.
 
@@ -387,3 +275,106 @@ class PresidioHandler:
                 )
             )
         return detections
+
+
+async def build_default_analyzer() -> AnalyzerEngine:
+    """Construct an AnalyzerEngine backed by the explicitly selected spaCy model."""
+    provider = NlpEngineProvider(
+        nlp_configuration={
+            "nlp_engine_name": "spacy",
+            "models": [{"lang_code": "en", "model_name": SPACY_MODEL}],
+        }
+    )
+    nlp_engine = await asyncify(provider.create_engine)()
+    return AnalyzerEngine(nlp_engine=nlp_engine)
+
+
+def _canonical_rule_id(entity_type: str) -> str:
+    """Map a Presidio UPPER_SNAKE entity type to the canonical rule id.
+
+    Lowercases the entity name and prefixes it with ``pii.`` (e.g.
+    ``EMAIL_ADDRESS`` -> ``pii.email_address``) so the same finding gets the same
+    rule id regardless of which path produced it.
+    """
+    return "pii." + entity_type.lower()
+
+
+def _byte_span(content: str, start: int, end: int) -> tuple[int, int, str]:
+    """Clamp a Presidio character span and convert it to UTF-8 byte offsets.
+
+    Presidio reports character (code point) offsets, but the Finding schema
+    carries byte positions. Offsets are clamped to the content's bounds first to
+    guard against an out-of-range span. Returns ``(start_byte, end_byte, match)``.
+    """
+    n = len(content)
+    start = max(0, min(start, n))
+    end = max(start, min(end, n))
+    start_byte = len(content[:start].encode("utf-8"))
+    end_byte = len(content[:end].encode("utf-8"))
+    return start_byte, end_byte, content[start:end]
+
+
+class Recognized(Protocol):
+    """The slice of Presidio's ``RecognizerResult`` this handler consumes."""
+
+    entity_type: str
+    start: int  # Character offset (inclusive) of the match in the scanned text.
+    end: int  # Character offset (exclusive) of the match in the scanned text.
+    score: float  # Detection confidence, 0.0-1.0.
+
+
+class Analyzer(Protocol):
+    """The slice of ``AnalyzerEngine`` this handler depends on.
+
+    Narrowing to a protocol keeps the engine injectable — tests can supply a
+    lightweight fake instead of loading Presidio's NLP model.
+    """
+
+    def analyze(
+        self, *, text: str, entities: list[str] | None, language: str
+    ) -> Sequence[Recognized]: ...
+
+
+class FindingPublisher(Protocol):
+    """The slice of ``gram_infra.pubsub.Publisher`` this handler depends on.
+
+    Narrowing to a protocol keeps publishing injectable — tests supply a fake
+    that captures findings instead of talking to Pub/Sub. The real
+    ``Publisher[finding_pb2.Finding]`` satisfies it structurally: ``publish``
+    returns immediately with a :class:`~gram_infra.pubsub.PublishResult` whose
+    ``get`` is awaited to confirm the commit.
+    """
+
+    def publish(self, message: finding_pb2.Finding) -> PublishResult: ...
+
+
+@dataclass(frozen=True)
+class _Detection:
+    """A real (non-false-positive) PII match, ready to become a Finding.
+
+    Produced off the event loop by ``_scan`` so the analyzer call, false-positive
+    classification (which may hit the embedded ASN database), and byte-offset
+    conversion all stay on the worker thread.
+    """
+
+    entity_type: str
+    rule_id: str
+    match: str
+    start_pos: int  # UTF-8 byte offset.
+    end_pos: int  # UTF-8 byte offset.
+    confidence: float
+
+
+@dataclass(frozen=True)
+class _PendingPublish:
+    """A finding whose publish has already been fired; ``result.get`` confirms it.
+
+    Built and fired off the event loop by ``_scan_and_publish`` so the proto
+    build + serialize never run on the loop thread. The entity type and rule id
+    ride along so the loop can assemble the summary log and per-finding error
+    context without re-deriving them from the detection.
+    """
+
+    entity_type: str
+    rule_id: str
+    result: PublishResult
