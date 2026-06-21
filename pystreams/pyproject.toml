@@ -32,6 +32,7 @@ dev = [
 
 [project.scripts]
 multi = "pystreams.cmd.multi:cli"
+presidio-load = "pystreams.cmd.presidio_load:cli"
 
 [build-system]
 requires = ["uv_build>=0.11.21,<0.12"]

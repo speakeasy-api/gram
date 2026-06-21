@@ -73,7 +73,7 @@ async def publish_forever(publisher: Publisher[ping_pb2.Message]) -> None:
             payload=b'{"msg":"Hello, World!"}',
         )
 
-        await publisher.publish(message)
+        await publisher.publish(message).get()
         await anyio.sleep(PUBLISH_INTERVAL_SECONDS)
 
 

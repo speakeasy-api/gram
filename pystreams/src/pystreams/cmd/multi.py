@@ -19,11 +19,12 @@ from pystreams import attr
 from pystreams.deps import logging
 from pystreams.deps.blocking import activate_blocking_detection
 from pystreams.deps.loop_lag import monitor_event_loop_lag
+from pystreams.deps.scanner import build_presidio_scanner
 from pystreams.health import HealthState, serve_control
 from pystreams.ping.handler import PingHandler
-from pystreams.risk.handler import PresidioHandler, build_default_analyzer
+from pystreams.risk.handler import PresidioHandler
 
-from . import flags_control, flags_gcp, flags_service
+from . import flags_control, flags_gcp, flags_presidio, flags_service
 from .receiver import ReceiverGroup
 
 
@@ -33,6 +34,7 @@ from .receiver import ReceiverGroup
         *flags_service.service_options(),
         *flags_control.server_options(),
         *flags_gcp.pubsub_options(),
+        *flags_presidio.presidio_options(),
     ],
 )
 def cli(**kwargs):
@@ -52,6 +54,11 @@ async def multi(
     # Control server options
     control_host: str,
     control_port: int,
+    # Presidio options
+    max_scan_concurrency: int | None,
+    scan_workers: int,
+    scan_max_tasks_per_child: int,
+    scan_timeout: float,
 ):
     logging.configure_logging(
         pretty_log=pretty_log,
@@ -93,9 +100,24 @@ async def multi(
         findings_publisher = await pubsub_publisher_for_message_async(
             broker, finding_pb2.Finding
         )
-        presidio_analyzer = await build_default_analyzer()
 
-        async with anyio.create_task_group() as tg:
+        # Build the scan strategy: a pool of worker processes (the default, with
+        # --scan-workers > 0) or the in-process thread scanner. The selection and
+        # its analyzer/concurrency wiring live in build_presidio_scanner.
+        presidio_scanner = await build_presidio_scanner(
+            scan_workers=scan_workers,
+            scan_max_tasks_per_child=scan_max_tasks_per_child,
+            scan_timeout=scan_timeout,
+            max_scan_concurrency=max_scan_concurrency,
+            logger=logger,
+        )
+
+        presidio_handler = PresidioHandler(logger, findings_publisher, presidio_scanner)
+
+        # The scanner is an async context manager: leaving the block releases it,
+        # draining in-flight scans and reaping the worker processes for the pool
+        # scanner (a no-op for the in-process one).
+        async with presidio_scanner, anyio.create_task_group() as tg:
             tg.start_soon(_shutdown_on_signal, tg.cancel_scope, health_state, logger)
             tg.start_soon(monitor_event_loop_lag)
             # Start the health server first (and wait until it is bound) so the
@@ -123,7 +145,7 @@ async def multi(
             await receivers.receive(
                 presidio_analysis_pb2.PresidioAnalysis,
                 presidio_analyzer_pb2.PresidioAnalyzer,
-                PresidioHandler(logger, findings_publisher, presidio_analyzer).handle,
+                presidio_handler.handle,
             )
 
             health_state.set_ready()

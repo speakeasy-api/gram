@@ -87,7 +87,7 @@ async def test_publish_subscribe_roundtrip() -> None:
         await asyncio.wait_for(
             publisher.publish(
                 ping_pb2.Message(id=unique_id, type="it", payload=payload)
-            ),
+            ).get(),
             timeout=30,
         )
         await asyncio.wait_for(done.wait(), timeout=30)

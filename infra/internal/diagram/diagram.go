@@ -24,7 +24,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -71,13 +70,20 @@ type scanConstraint struct {
 	regex   string
 }
 
-// testExclusionGlobs prune test files at scan time (ast-grep already honors
+// scanExclusionGlobs prune files at scan time (ast-grep already honors
 // .gitignore by default, so generated/ignored files never reach us).
-var testExclusionGlobs = []string{
+//
+// Beyond test files, this also drops the emulator-only load generator
+// (cmd/presidio_load.py): it constructs a PresidioAnalysis purely to publish
+// synthetic traffic at the local emulator for profiling, so treating it as a
+// production publisher of gram-risk-v1-presidio-analysis would misrepresent the
+// committed topology.
+var scanExclusionGlobs = []string{
 	"!**/*_test.go",
 	"!**/*_test.py",
 	"!**/test_*.py",
 	"!**/tests/**",
+	"!**/cmd/presidio_load.py",
 }
 
 // subscribeScans are static: subscriptions are registered at a single, specific
@@ -400,7 +406,7 @@ func runASTGrepRules(ctx context.Context, repoRoot, lang string, scans []scan) (
 	sort.Strings(dirs)
 
 	args := []string{"scan", "--inline-rules", strings.Join(rules, "---\n"), "--json=compact"}
-	for _, g := range testExclusionGlobs {
+	for _, g := range scanExclusionGlobs {
 		args = append(args, "--globs", g)
 	}
 	args = append(args, dirs...)
@@ -591,16 +597,16 @@ func shortHandler(expr string) string {
 
 // --- proto declaration locations ---------------------------------------------
 
-// protoLoc is where a proto message is declared: a repo-relative file path and a
-// 1-based line (0 when source info is unavailable).
+// protoLoc is where a proto message is declared: a repo-relative file path. Line
+// numbers are deliberately omitted — they shift on every unrelated proto edit and
+// churn the committed diagram.
 type protoLoc struct {
 	file string
-	line int
 }
 
-// protoLocations maps each proto message's full name to its declaration site by
-// walking the descriptor set's source-code info. It is how topic/subscription
-// marker messages are linked back to the `.proto` files they are declared in.
+// protoLocations maps each proto message's full name to the `.proto` file it is
+// declared in. It is how topic/subscription marker messages are linked back to
+// their source.
 func protoLocations(descriptors []byte) (map[string]protoLoc, error) {
 	var fds descriptorpb.FileDescriptorSet
 	if err := proto.Unmarshal(descriptors, &fds); err != nil {
@@ -610,40 +616,20 @@ func protoLocations(descriptors []byte) (map[string]protoLoc, error) {
 	out := map[string]protoLoc{}
 	for _, fd := range fds.GetFile() {
 		file := protoModuleRoot + fd.GetName()
-
-		// Index source spans by their descriptor path (e.g. [4, i] for the i-th
-		// top-level message); span[0] is the 0-based start line.
-		lineByPath := map[string]int{}
-		for _, loc := range fd.GetSourceCodeInfo().GetLocation() {
-			if span := loc.GetSpan(); len(span) > 0 {
-				lineByPath[pathKey(loc.GetPath())] = int(span[0]) + 1
-			}
-		}
-
-		for i, msg := range fd.GetMessageType() {
-			collectProtoLoc(fd.GetPackage(), file, []int32{4, int32(i)}, msg, lineByPath, out)
+		for _, msg := range fd.GetMessageType() {
+			collectProtoLoc(fd.GetPackage(), file, msg, out)
 		}
 	}
 	return out, nil
 }
 
-func collectProtoLoc(prefix, file string, path []int32, msg *descriptorpb.DescriptorProto, lineByPath map[string]int, out map[string]protoLoc) {
+func collectProtoLoc(prefix, file string, msg *descriptorpb.DescriptorProto, out map[string]protoLoc) {
 	full := prefix + "." + msg.GetName()
-	out[full] = protoLoc{file: file, line: lineByPath[pathKey(path)]}
+	out[full] = protoLoc{file: file}
 
-	// nested_type is field 3 of DescriptorProto.
-	for j, nested := range msg.GetNestedType() {
-		childPath := append(append([]int32{}, path...), 3, int32(j))
-		collectProtoLoc(full, file, childPath, nested, lineByPath, out)
+	for _, nested := range msg.GetNestedType() {
+		collectProtoLoc(full, file, nested, out)
 	}
-}
-
-func pathKey(path []int32) string {
-	parts := make([]string, len(path))
-	for i, p := range path {
-		parts[i] = strconv.Itoa(int(p))
-	}
-	return strings.Join(parts, ".")
 }
 
 // --- rendering ---------------------------------------------------------------
@@ -688,14 +674,14 @@ func render(topics []gcp.DesiredTopic, subs []gcp.DesiredSubscription, sites []c
 	b.WriteString("with ast-grep scans of Go (`server/`) and Python (`pystreams/`) call sites.\n")
 	b.WriteString("Run `mise run gen:infra` to regenerate.\n\n")
 
-	writeMermaid(&b, topics, subs, publishers, consumers, locs)
+	writeMermaid(&b, topics, subs, publishers, consumers)
 	writeTables(&b, topics, subs, publishers, consumers, locs)
 	writeNotes(&b, topics, subs, publishers, consumers, unresolved)
 
 	return b.String()
 }
 
-func writeMermaid(b *strings.Builder, topics []gcp.DesiredTopic, subs []gcp.DesiredSubscription, publishers, consumers map[string][]callSite, locs map[string]protoLoc) {
+func writeMermaid(b *strings.Builder, topics []gcp.DesiredTopic, subs []gcp.DesiredSubscription, publishers, consumers map[string][]callSite) {
 	b.WriteString("```mermaid\n")
 	b.WriteString("flowchart LR\n")
 	b.WriteString("  classDef topic fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a;\n")
@@ -720,7 +706,6 @@ func writeMermaid(b *strings.Builder, topics []gcp.DesiredTopic, subs []gcp.Desi
 			label += "<br/>(topic)"
 		}
 		fmt.Fprintf(b, "  %s([\"%s\"]):::%s\n", id, label, class)
-		writeProtoClick(b, id, t.ProtoMessage, locs)
 		if isDeprecated(t.Labels) {
 			deprecated = append(deprecated, id)
 		}
@@ -730,7 +715,6 @@ func writeMermaid(b *strings.Builder, topics []gcp.DesiredTopic, subs []gcp.Desi
 	for _, s := range subs {
 		id := nodeID("s_", s.Name)
 		fmt.Fprintf(b, "  %s[\"%s<br/>(sub)\"]:::sub\n", id, s.Name)
-		writeProtoClick(b, id, s.ProtoMessage, locs)
 		if isDeprecated(s.Labels) {
 			deprecated = append(deprecated, id)
 		}
@@ -743,9 +727,8 @@ func writeMermaid(b *strings.Builder, topics []gcp.DesiredTopic, subs []gcp.Desi
 		for _, site := range publishers[t.Name] {
 			pid := fmt.Sprintf("p%d", siteID)
 			siteID++
-			fmt.Fprintf(b, "  %s[/\"📤 %s\"/]:::%s\n", pid, site.file, site.lang)
+			fmt.Fprintf(b, "  %s[/\"📤<br/>%s\"/]:::%s\n", pid, site.file, site.lang)
 			fmt.Fprintf(b, "  %s --> %s\n", pid, nodeID("t_", t.Name))
-			writeClick(b, pid, site)
 		}
 	}
 
@@ -763,13 +746,12 @@ func writeMermaid(b *strings.Builder, topics []gcp.DesiredTopic, subs []gcp.Desi
 		for _, site := range consumers[s.Name] {
 			cid := fmt.Sprintf("c%d", siteID)
 			siteID++
-			label := fmt.Sprintf("📥 %s", site.file)
+			label := fmt.Sprintf("📥<br/>%s", site.file)
 			if site.handler != "" {
 				label += "<br/>" + site.handler
 			}
 			fmt.Fprintf(b, "  %s[\\\"%s\"\\]:::%s\n", cid, label, site.lang)
 			fmt.Fprintf(b, "  %s --> %s\n", nodeID("s_", s.Name), cid)
-			writeClick(b, cid, site)
 		}
 	}
 
@@ -885,29 +867,23 @@ func siteList(sites []callSite) string {
 	}
 	parts := make([]string, 0, len(sites))
 	for _, s := range sites {
-		// Markdown link with a line anchor; GitHub resolves it against the file's
-		// revision, so the line stays correct for the committed diagram.
-		label := fmt.Sprintf("[`%s:%d`](%s)", s.file, s.line, sourceLink(s))
+		// Link to the file (no line anchor): line numbers shift on every unrelated
+		// edit, churning the committed diagram for no benefit.
+		label := fmt.Sprintf("[`%s`](%s)", s.file, sourceLink(s))
 		parts = append(parts, label)
 	}
 	return strings.Join(parts, "<br/>")
 }
 
 // sourceLink builds a link from docs/pubsub-topology.md to a call site's source
-// location. The path is repo-relative, so one `../` reaches the repo root, and the
-// `#L<line>` anchor jumps to the line on GitHub.
+// file. The path is repo-relative, so one `../` reaches the repo root.
 func sourceLink(s callSite) string {
-	return "../" + s.file + "#L" + strconv.Itoa(s.line)
+	return "../" + s.file
 }
 
-// protoLink builds a link from docs/pubsub-topology.md to a proto declaration,
-// omitting the line anchor when source info was unavailable.
+// protoLink builds a link from docs/pubsub-topology.md to a proto declaration file.
 func protoLink(loc protoLoc) string {
-	link := "../" + loc.file
-	if loc.line > 0 {
-		link += "#L" + strconv.Itoa(loc.line)
-	}
-	return link
+	return "../" + loc.file
 }
 
 // protoNameCell renders a topology resource's name as a code span linking to the
@@ -918,22 +894,4 @@ func protoNameCell(name, protoMessage string, locs map[string]protoLoc) string {
 		return fmt.Sprintf("[`%s`](%s)", name, protoLink(loc))
 	}
 	return "`" + name + "`"
-}
-
-// writeProtoClick emits a mermaid click directive linking a topic/subscription
-// node to its proto declaration in renderers that honor click handlers.
-func writeProtoClick(b *strings.Builder, nodeID, protoMessage string, locs map[string]protoLoc) {
-	loc, ok := locs[protoMessage]
-	if !ok {
-		return
-	}
-	fmt.Fprintf(b, "  click %s \"%s\" \"%s\"\n", nodeID, protoLink(loc), loc.file)
-}
-
-// writeClick emits a mermaid click directive so the node opens its source location
-// in renderers that honor click handlers (mermaid.live, many IDE preview
-// extensions). GitHub strips these for security; the linked table entries are the
-// fallback there.
-func writeClick(b *strings.Builder, nodeID string, s callSite) {
-	fmt.Fprintf(b, "  click %s \"%s\" \"%s:%d\"\n", nodeID, sourceLink(s), s.file, s.line)
 }

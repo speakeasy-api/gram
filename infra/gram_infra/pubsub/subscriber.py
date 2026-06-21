@@ -195,7 +195,8 @@ class _PortalScheduler(Scheduler):
         would serialize intake at one loop-latency apiece while the library holds
         its pause/resume lock). If the enqueue cannot run — the portal is gone or
         the task is cancelled during teardown — the message is nacked so the
-        broker redelivers it rather than dropping it.
+        broker redelivers it immediately rather than leaving it leased until its
+        ack deadline lapses.
         """
         message = args[0] if args else None
         if message is None:
@@ -210,6 +211,10 @@ class _PortalScheduler(Scheduler):
             return
 
         def _nack_on_failure(f) -> None:
+            # ``_enqueue`` nacks the cases it can reach (closed/broken stream); this
+            # covers the one it can't — the scheduled task being cancelled before it
+            # ever runs during a teardown race — so that message is redelivered
+            # immediately too rather than waiting out its ack deadline.
             try:
                 failed = f.cancelled() or f.exception() is not None
             except BaseException:
