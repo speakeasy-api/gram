@@ -122,6 +122,21 @@ class _Detection:
     confidence: float
 
 
+@dataclass(frozen=True)
+class _PendingPublish:
+    """A finding whose publish has already been fired; ``result.get`` confirms it.
+
+    Built and fired off the event loop by ``_scan_and_publish`` so the proto
+    build + serialize never run on the loop thread. The entity type and rule id
+    ride along so the loop can assemble the summary log and per-finding error
+    context without re-deriving them from the detection.
+    """
+
+    entity_type: str
+    rule_id: str
+    result: PublishResult
+
+
 class PresidioHandler:
     """Scans :class:`PresidioAnalysis` payloads for PII using Presidio and
     publishes each detection to the findings topic.
@@ -173,14 +188,18 @@ class PresidioHandler:
         # An empty list means "analyze every entity Presidio knows about".
         requested = list(message.entities) or None
 
-        # Presidio's analyzer is synchronous and CPU-bound; run it off the event
-        # loop so a large request can't stall other subscriptions. Time the whole
-        # offload as wall clock — it includes any wait for a free worker thread,
-        # and under load that queue wait (not the scan itself) can dominate the
-        # per-message ACK latency.
+        # One worker hop does the CPU/GIL-bound scan *and* the build + serialize +
+        # client-enqueue of every finding, so neither the spaCy work nor protobuf
+        # serialization runs on the event-loop thread competing with intake for the
+        # GIL. Timed as wall clock — it includes any wait for a free scan slot,
+        # which under load (not the scan itself) can dominate per-message ACK
+        # latency.
         try:
             scan_started = time.perf_counter()
-            detected = await asyncify(self._scan, limiter=self._get_scan_limiter())(
+            pending = await asyncify(
+                self._scan_and_publish, limiter=self._get_scan_limiter()
+            )(
+                message=message,
                 content=message.content,
                 entities=requested,
             )
@@ -206,17 +225,14 @@ class PresidioHandler:
             )
             return
 
-        if not detected:
+        if not pending:
             return
 
-        # A fresh detection timestamp (UTC, RFC3339) stamped on every finding from
-        # this delivery — when the scan ran, not when the request was created.
-        created_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        # Findings publish concurrently (see _publish_findings), so this wall time
-        # is roughly one round-trip regardless of count — the other half of the
-        # per-message ACK cost alongside the scan.
+        # The publishes were already fired on the worker thread (the client batches
+        # them), so this wall time is just the wait for their commits — roughly one
+        # round-trip regardless of count, the other half of the ACK cost.
         publish_started = time.perf_counter()
-        published = await self._publish_findings(message, detected, created_at)
+        published = await self._collect(message, pending)
         publish_ms = (time.perf_counter() - publish_started) * 1000
 
         # Log entity *types* and counts only — never the matched values or the
@@ -232,65 +248,85 @@ class PresidioHandler:
         # when debugging. The async ``adebug`` keeps that render off the event
         # loop on the occasions debug *is* enabled.
         entity_types: dict[str, int] = {}
-        for d in detected:
-            entity_types[d.entity_type] = entity_types.get(d.entity_type, 0) + 1
+        for p in pending:
+            entity_types[p.entity_type] = entity_types.get(p.entity_type, 0) + 1
         await self.logger.adebug(
             "presidio scan detected entities",
             request_id=message.request_id,
             reply_urn=message.reply_urn,
             requested_entities=requested or [],
             detected_entity_types=sorted(entity_types),
-            detected_count=len(detected),
+            detected_count=len(pending),
             published_count=published,
             delivery_attempt=meta.delivery_attempt,
             # Per-message latency split, safe to retain (durations, never content):
-            # how long the off-loop scan took (incl. worker-thread wait) vs. the
-            # concurrent publish of the resulting findings.
+            # the off-loop scan + finding-publish dispatch (incl. scan-slot wait)
+            # vs. the wait for those publishes' commits.
             scan_ms=round(scan_ms, 1),
             publish_ms=round(publish_ms, 1),
         )
 
-    async def _publish_findings(
+    def _scan_and_publish(
+        self,
+        *,
+        message: presidio_analysis_pb2.PresidioAnalysis,
+        content: str,
+        entities: list[str] | None,
+    ) -> list[_PendingPublish]:
+        """Scan, then build and fire each finding's publish — all off the loop.
+
+        Runs on a worker thread (via ``asyncify``): the analyzer call, the
+        false-positive classification (which may consult the embedded ASN
+        database), the byte-offset conversion, **and** each finding's proto build +
+        ``SerializeToString`` + client enqueue all stay off the event-loop thread.
+        Keeping the serialization here is the point — done on the loop it would be
+        per-finding GIL work competing with message intake.
+
+        A message's findings are independent, so every publish is fired up front
+        (``publish`` returns a future without waiting and the client batches the
+        sends); the returned futures are collected on the loop by ``_collect``. In
+        series a message with N findings would pay N Pub/Sub round-trips back to
+        back; firing them together collapses that toward a single round-trip.
+        """
+        detections = self._scan(content, entities)
+        if not detections:
+            return []
+        # A fresh detection timestamp (UTC, RFC3339) stamped on every finding from
+        # this delivery — when the scan ran, not when the request was created.
+        created_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return [
+            _PendingPublish(
+                entity_type=d.entity_type,
+                rule_id=d.rule_id,
+                result=self.publisher.publish(
+                    self._build_finding(message, d, created_at)
+                ),
+            )
+            for d in detections
+        ]
+
+    async def _collect(
         self,
         message: presidio_analysis_pb2.PresidioAnalysis,
-        detected: Sequence[_Detection],
-        created_at: str,
+        pending: Sequence[_PendingPublish],
     ) -> int:
-        """Publish one Finding per detection concurrently; return how many landed.
-
-        A message's findings are independent, so all publishes are fired up front
-        — ``publish`` returns a future without waiting, and the client batches the
-        sends — and only then are their commits collected. In series a message
-        with N detections would pay N Pub/Sub round-trips back to back, and that
-        serial publish is a large part of the per-message ACK latency; firing them
-        together collapses it toward a single round-trip while the collect loop
-        just gathers results that are already in flight.
+        """Await each already-fired publish's commit; return how many landed.
 
         A publish failure is logged and skipped rather than raised: nacking the
         message would redeliver it and re-publish the findings that already
         landed, duplicating them (there is no dedup downstream).
         """
-        # Fire every publish first so they commit concurrently on the client's
-        # batcher; keep each finding's rule_id alongside its result for logging.
-        pending = [
-            (
-                d.rule_id,
-                self.publisher.publish(self._build_finding(message, d, created_at)),
-            )
-            for d in detected
-        ]
-
         published = 0
-        for rule_id, result in pending:
+        for p in pending:
             try:
-                await result.get()
+                await p.result.get()
             except Exception as exc:
                 # Never echo the finding (it carries the matched value); log the
                 # request, rule id, and exception type only.
                 self.logger.error(
                     "failed to publish risk finding",
                     request_id=message.request_id,
-                    rule_id=rule_id,
+                    rule_id=p.rule_id,
                     error_type=type(exc).__name__,
                 )
                 continue
