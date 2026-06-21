@@ -41,45 +41,48 @@ flowchart LR
   click p0 "../server/internal/ping/publisher.go#L36" "server/internal/ping/publisher.go:36"
   p1[/"📤 pystreams/src/pystreams/risk/handler.py"/]:::python
   p1 --> t_gram_risk_v1_finding
-  click p1 "../pystreams/src/pystreams/risk/handler.py#L217" "pystreams/src/pystreams/risk/handler.py:217"
-  p2[/"📤 server/internal/background/activities/risk_analysis/analyze_batch.go"/]:::go
+  click p1 "../pystreams/src/pystreams/risk/handler.py#L166" "pystreams/src/pystreams/risk/handler.py:166"
+  p2[/"📤 pystreams/src/pystreams/cmd/presidio_load.py"/]:::python
   p2 --> t_gram_risk_v1_presidio_analysis
-  click p2 "../server/internal/background/activities/risk_analysis/analyze_batch.go#L364" "server/internal/background/activities/risk_analysis/analyze_batch.go:364"
+  click p2 "../pystreams/src/pystreams/cmd/presidio_load.py#L85" "pystreams/src/pystreams/cmd/presidio_load.py:85"
+  p3[/"📤 server/internal/background/activities/risk_analysis/analyze_batch.go"/]:::go
+  p3 --> t_gram_risk_v1_presidio_analysis
+  click p3 "../server/internal/background/activities/risk_analysis/analyze_batch.go#L364" "server/internal/background/activities/risk_analysis/analyze_batch.go:364"
   t_gram_ping_v1_message --> s_gram_ping_v1_processor
   s_gram_ping_v1_processor -. dead-letter .-> t_gram_ping_v1_processor_dlq
   t_gram_ping_v1_message --> s_gram_ping_v1_py_processor
   s_gram_ping_v1_py_processor -. dead-letter .-> t_gram_ping_v1_py_processor_dlq
   t_gram_risk_v1_presidio_analysis --> s_gram_risk_v1_presidio_analyzer
   t_gram_risk_v1_presidio_request --> s_gram_risk_v1_presidio_scanner
-  c3[\"📥 server/cmd/gram/streams.go<br/>ping.NewHandler"\]:::go
-  s_gram_ping_v1_processor --> c3
-  click c3 "../server/cmd/gram/streams.go#L215" "server/cmd/gram/streams.go:215"
-  c4[\"📥 pystreams/src/pystreams/cmd/multi.py<br/>PingHandler.handle"\]:::python
-  s_gram_ping_v1_py_processor --> c4
-  click c4 "../pystreams/src/pystreams/cmd/multi.py#L118" "pystreams/src/pystreams/cmd/multi.py:118"
-  c5[\"📥 pystreams/src/pystreams/cmd/multi.py<br/>PresidioHandler.handle"\]:::python
-  s_gram_risk_v1_presidio_analyzer --> c5
-  click c5 "../pystreams/src/pystreams/cmd/multi.py#L123" "pystreams/src/pystreams/cmd/multi.py:123"
+  c4[\"📥 server/cmd/gram/streams.go<br/>ping.NewHandler"\]:::go
+  s_gram_ping_v1_processor --> c4
+  click c4 "../server/cmd/gram/streams.go#L215" "server/cmd/gram/streams.go:215"
+  c5[\"📥 pystreams/src/pystreams/cmd/multi.py<br/>PingHandler.handle"\]:::python
+  s_gram_ping_v1_py_processor --> c5
+  click c5 "../pystreams/src/pystreams/cmd/multi.py#L164" "pystreams/src/pystreams/cmd/multi.py:164"
+  c6[\"📥 pystreams/src/pystreams/cmd/multi.py<br/>presidio_handler.handle"\]:::python
+  s_gram_risk_v1_presidio_analyzer --> c6
+  click c6 "../pystreams/src/pystreams/cmd/multi.py#L169" "pystreams/src/pystreams/cmd/multi.py:169"
 
   class t_gram_risk_v1_presidio_request,s_gram_risk_v1_presidio_scanner deprecated;
 ```
 
 ## Topics
 
-| Topic                                                                                      | Kind               | Retention | Published by                                                                                                                                               |
-| ------------------------------------------------------------------------------------------ | ------------------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`gram-ping-v1-message`](../infra/proto/gram/ping/v1/ping.proto#L10)                       | topic              | 1d        | [`server/internal/ping/publisher.go:36`](../server/internal/ping/publisher.go#L36)                                                                         |
-| [`gram-ping-v1-processor-dlq`](../infra/proto/gram/ping/v1/processor.proto#L9)             | DLQ                | —         | —                                                                                                                                                          |
-| [`gram-ping-v1-py-processor-dlq`](../infra/proto/gram/ping/v1/processor.proto#L23)         | DLQ                | —         | —                                                                                                                                                          |
-| [`gram-risk-v1-finding`](../infra/proto/gram/risk/v1/finding.proto#L13)                    | topic              | 7d        | [`pystreams/src/pystreams/risk/handler.py:217`](../pystreams/src/pystreams/risk/handler.py#L217)                                                           |
-| [`gram-risk-v1-presidio-analysis`](../infra/proto/gram/risk/v1/presidio_analysis.proto#L9) | topic              | 7d        | [`server/internal/background/activities/risk_analysis/analyze_batch.go:364`](../server/internal/background/activities/risk_analysis/analyze_batch.go#L364) |
-| [`gram-risk-v1-presidio-request`](../infra/proto/gram/risk/v1/presidio_request.proto#L10)  | topic (deprecated) | 7d        | —                                                                                                                                                          |
+| Topic                                                                                      | Kind               | Retention | Published by                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------ | ------------------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`gram-ping-v1-message`](../infra/proto/gram/ping/v1/ping.proto#L10)                       | topic              | 1d        | [`server/internal/ping/publisher.go:36`](../server/internal/ping/publisher.go#L36)                                                                                                                                                                                      |
+| [`gram-ping-v1-processor-dlq`](../infra/proto/gram/ping/v1/processor.proto#L9)             | DLQ                | —         | —                                                                                                                                                                                                                                                                       |
+| [`gram-ping-v1-py-processor-dlq`](../infra/proto/gram/ping/v1/processor.proto#L23)         | DLQ                | —         | —                                                                                                                                                                                                                                                                       |
+| [`gram-risk-v1-finding`](../infra/proto/gram/risk/v1/finding.proto#L13)                    | topic              | 7d        | [`pystreams/src/pystreams/risk/handler.py:166`](../pystreams/src/pystreams/risk/handler.py#L166)                                                                                                                                                                        |
+| [`gram-risk-v1-presidio-analysis`](../infra/proto/gram/risk/v1/presidio_analysis.proto#L9) | topic              | 7d        | [`pystreams/src/pystreams/cmd/presidio_load.py:85`](../pystreams/src/pystreams/cmd/presidio_load.py#L85)<br/>[`server/internal/background/activities/risk_analysis/analyze_batch.go:364`](../server/internal/background/activities/risk_analysis/analyze_batch.go#L364) |
+| [`gram-risk-v1-presidio-request`](../infra/proto/gram/risk/v1/presidio_request.proto#L10)  | topic (deprecated) | 7d        | —                                                                                                                                                                                                                                                                       |
 
 ## Subscriptions
 
 | Subscription                                                                                             | Topic                            | Ack | DLQ                             | Consumed by                                                                                |
 | -------------------------------------------------------------------------------------------------------- | -------------------------------- | --- | ------------------------------- | ------------------------------------------------------------------------------------------ |
 | [`gram-ping-v1-processor`](../infra/proto/gram/ping/v1/processor.proto#L9)                               | `gram-ping-v1-message`           | 30s | `gram-ping-v1-processor-dlq`    | [`server/cmd/gram/streams.go:215`](../server/cmd/gram/streams.go#L215)                     |
-| [`gram-ping-v1-py-processor`](../infra/proto/gram/ping/v1/processor.proto#L23)                           | `gram-ping-v1-message`           | 30s | `gram-ping-v1-py-processor-dlq` | [`pystreams/src/pystreams/cmd/multi.py:118`](../pystreams/src/pystreams/cmd/multi.py#L118) |
-| [`gram-risk-v1-presidio-analyzer`](../infra/proto/gram/risk/v1/presidio_analyzer.proto#L9)               | `gram-risk-v1-presidio-analysis` | 1m  | —                               | [`pystreams/src/pystreams/cmd/multi.py:123`](../pystreams/src/pystreams/cmd/multi.py#L123) |
+| [`gram-ping-v1-py-processor`](../infra/proto/gram/ping/v1/processor.proto#L23)                           | `gram-ping-v1-message`           | 30s | `gram-ping-v1-py-processor-dlq` | [`pystreams/src/pystreams/cmd/multi.py:164`](../pystreams/src/pystreams/cmd/multi.py#L164) |
+| [`gram-risk-v1-presidio-analyzer`](../infra/proto/gram/risk/v1/presidio_analyzer.proto#L9)               | `gram-risk-v1-presidio-analysis` | 1m  | —                               | [`pystreams/src/pystreams/cmd/multi.py:169`](../pystreams/src/pystreams/cmd/multi.py#L169) |
 | [`gram-risk-v1-presidio-scanner`](../infra/proto/gram/risk/v1/presidio_scanner.proto#L10) _(deprecated)_ | `gram-risk-v1-presidio-request`  | 1m  | —                               | —                                                                                          |
