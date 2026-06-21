@@ -7,7 +7,7 @@ from gram_infra.pubsub.subscriber import MessageMetadata
 from structlog.testing import capture_logs
 
 from pystreams.risk.handler import PresidioHandler
-from pystreams.risk.scanner import Detection
+from pystreams.risk.scanner import Detection, _AsyncCloseable
 
 # Matches the RFC3339 UTC form the handler stamps on a finding's created_at.
 _RFC3339_UTC = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
@@ -30,7 +30,7 @@ def _detection(
     )
 
 
-class FakeScanner:
+class FakeScanner(_AsyncCloseable):
     """Returns canned detections (or raises), and records its scan calls.
 
     Stands in for a real :class:`~pystreams.risk.scanner.Scanner` so the handler

@@ -8,6 +8,7 @@ from pystreams.risk.scanner import (
     ProcessPoolScanner,
     Recognized,
     ThreadScanner,
+    _AsyncCloseable,
 )
 
 
@@ -167,6 +168,30 @@ async def test_none_entities_forwarded_to_analyzer():
 
     # None tells Presidio to scan every type; it is forwarded unchanged.
     assert analyzer.calls == [("a@b.com", None)]
+
+
+async def test_thread_scanner_is_async_context_manager():
+    analyzer = FakeAnalyzer({"a@b.com": [_Result("EMAIL_ADDRESS", start=0, end=7)]})
+
+    # Entering yields the scanner; the block can scan and leaving closes it.
+    async with ThreadScanner(analyzer) as scanner:
+        (detection,) = await scanner.scan("a@b.com", None)
+        assert detection.match == "a@b.com"
+
+
+async def test_context_manager_exit_closes_scanner():
+    closed = False
+
+    class _RecordingScanner(_AsyncCloseable):
+        async def aclose(self) -> None:
+            nonlocal closed
+            closed = True
+
+    async with _RecordingScanner() as scanner:
+        assert isinstance(scanner, _RecordingScanner)
+        assert not closed
+    # __aexit__ awaits the subclass's aclose, even on a normal exit.
+    assert closed
 
 
 class _StuckExecutor:

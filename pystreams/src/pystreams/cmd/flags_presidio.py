@@ -19,13 +19,13 @@ def presidio_options() -> Sequence[click.Option]:
         click.Option(
             ["--scan-workers"],
             type=int,
-            default=0,
+            default=2,
             envvar="GRAM_PYSTREAMS_SCAN_WORKERS",
             help=(
                 "Run Presidio scans in a pool of this many worker processes, each "
                 "with its own GIL, to break the single-process throughput ceiling. "
-                "0 (default) scans in-process on threads. Each worker loads its own "
-                "spaCy model, so keep this small (2-4)."
+                "Defaults to 2; 0 scans in-process on threads instead. Each worker "
+                "loads its own spaCy model, so keep this small (2-4)."
             ),
         ),
         click.Option(

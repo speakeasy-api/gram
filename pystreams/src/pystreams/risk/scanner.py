@@ -34,7 +34,7 @@ from collections.abc import Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import partial
-from typing import Protocol, TypeVar
+from typing import Protocol, Self, TypeVar
 
 import anyio
 from anyio import to_thread
@@ -79,7 +79,8 @@ class Scanner(Protocol):
     Implementations run the analyzer on a worker thread or in a separate process
     and return the post-false-positive-filter matches. ``aclose`` releases any
     resources (a no-op for the in-process scanner; drains the pool for the
-    process-pool one).
+    process-pool one), and is also exposed as an async context manager so callers
+    can ``async with`` the scanner instead of pairing it with a ``finally``.
     """
 
     async def scan(
@@ -88,19 +89,41 @@ class Scanner(Protocol):
 
     async def aclose(self) -> None: ...
 
+    async def __aenter__(self) -> Self: ...
 
-class ThreadScanner:
-    """Scan in-process on an anyio worker thread (the default).
+    async def __aexit__(self, *exc_info: object) -> None: ...
 
-    Presidio's per-scan work is almost entirely GIL-bound, so extra scan threads
-    don't add parallelism — they thrash the GIL and starve the event loop. A local
-    burst sweep on a 10-core box found throughput/latency peak at 2 concurrent
-    scans and degrade monotonically with more (the default-40 thread pool managed
-    only ~28 msg/s at p50 ~1.55s versus ~42 msg/s at p50 ~1.07s with 2). The
-    optimum tracks the GIL, not the core count, so 2 is a sane default everywhere;
-    to scale past it, use a :class:`ProcessPoolScanner`. ``max_concurrency`` of
-    None (or <=0) disables the cap and falls back to anyio's default thread-pool
-    limiter (40).
+
+class _AsyncCloseable:
+    """Mixin exposing a scanner's ``aclose`` as an async context manager.
+
+    Both scanners release resources through ``aclose``; entering returns the
+    scanner and leaving the block closes it, so a caller can ``async with`` the
+    scanner rather than calling ``aclose`` from a ``finally``.
+    """
+
+    async def aclose(self) -> None: ...
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        await self.aclose()
+
+
+class ThreadScanner(_AsyncCloseable):
+    """Scan in-process on an anyio worker thread (the opt-out from the pool).
+
+    Selected with ``--scan-workers 0``; the :class:`ProcessPoolScanner` is the
+    default. Presidio's per-scan work is almost entirely GIL-bound, so extra scan
+    threads don't add parallelism — they thrash the GIL and starve the event loop.
+    A local burst sweep on a 10-core box found throughput/latency peak at 2
+    concurrent scans and degrade monotonically with more (the default-40 thread
+    pool managed only ~28 msg/s at p50 ~1.55s versus ~42 msg/s at p50 ~1.07s with
+    2). The optimum tracks the GIL, not the core count, so 2 is a sane default
+    everywhere; to scale past it, use a :class:`ProcessPoolScanner`.
+    ``max_concurrency`` of None (or <=0) disables the cap and falls back to
+    anyio's default thread-pool limiter (40).
     """
 
     def __init__(self, analyzer: Analyzer, *, max_concurrency: int | None = 2):
@@ -125,8 +148,8 @@ class ThreadScanner:
         return None
 
 
-class ProcessPoolScanner:
-    """Scan in a pool of worker processes, each with its own GIL.
+class ProcessPoolScanner(_AsyncCloseable):
+    """Scan in a pool of worker processes, each with its own GIL (the default).
 
     The single-process throughput ceiling is the GIL: the spaCy NER pass and
     Presidio's regex recognizers hold it for almost the whole scan, so no number

@@ -36,9 +36,9 @@ class PresidioHandler:
     never written to the handler's own logs — log lines report entity *types* and
     counts only, so they stay safe to retain.
 
-    The scanner determines how the scan is parallelized: an in-process
-    ``ThreadScanner`` (default) or a ``ProcessPoolScanner`` that breaks the
-    single-process GIL ceiling. The handler is agnostic to which it holds.
+    The scanner determines how the scan is parallelized: a ``ProcessPoolScanner``
+    (the default) that breaks the single-process GIL ceiling, or an in-process
+    ``ThreadScanner``. The handler is agnostic to which it holds.
     """
 
     def __init__(
