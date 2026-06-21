@@ -1,3 +1,4 @@
+import time
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -151,12 +152,17 @@ class PresidioHandler:
         requested = list(message.entities) or None
 
         # Presidio's analyzer is synchronous and CPU-bound; run it off the event
-        # loop so a large request can't stall other subscriptions.
+        # loop so a large request can't stall other subscriptions. Time the whole
+        # offload as wall clock — it includes any wait for a free worker thread,
+        # and under load that queue wait (not the scan itself) can dominate the
+        # per-message ACK latency.
         try:
+            scan_started = time.perf_counter()
             detected = await asyncify(self._scan)(
                 content=message.content,
                 entities=requested,
             )
+            scan_ms = (time.perf_counter() - scan_started) * 1000
         except Exception as exc:
             # This is best-effort shadow processing, and the PresidioAnalyzer
             # subscription declares no dead-letter policy. Letting a scan failure
@@ -184,7 +190,12 @@ class PresidioHandler:
         # A fresh detection timestamp (UTC, RFC3339) stamped on every finding from
         # this delivery — when the scan ran, not when the request was created.
         created_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # Findings publish concurrently (see _publish_findings), so this wall time
+        # is roughly one round-trip regardless of count — the other half of the
+        # per-message ACK cost alongside the scan.
+        publish_started = time.perf_counter()
         published = await self._publish_findings(message, detected, created_at)
+        publish_ms = (time.perf_counter() - publish_started) * 1000
 
         # Log entity *types* and counts only — never the matched values or the
         # scanned content — so the line is safe to retain while still being
@@ -201,6 +212,11 @@ class PresidioHandler:
             detected_count=len(detected),
             published_count=published,
             delivery_attempt=meta.delivery_attempt,
+            # Per-message latency split, safe to retain (durations, never content):
+            # how long the off-loop scan took (incl. worker-thread wait) vs. the
+            # concurrent publish of the resulting findings.
+            scan_ms=round(scan_ms, 1),
+            publish_ms=round(publish_ms, 1),
         )
 
     async def _publish_findings(
