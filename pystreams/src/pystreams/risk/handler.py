@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
+import anyio
 import structlog
 from asyncer import asyncify
 from gram.risk.v1 import finding_pb2, presidio_analysis_pb2
@@ -138,10 +139,31 @@ class PresidioHandler:
         logger: structlog.stdlib.BoundLogger,
         publisher: FindingPublisher,
         analyzer: Analyzer,
+        *,
+        max_scan_concurrency: int | None = 2,
     ):
         self.logger = logger
         self.publisher = publisher
         self.analyzer = analyzer
+        # Ceiling on concurrent off-loop scans. Presidio's per-scan work is almost
+        # entirely GIL-bound, so extra scan threads don't add parallelism — they
+        # thrash the GIL and starve the event loop. A local burst sweep on a
+        # 10-core box found throughput/latency peak at 2 (≈41 msg/s, scan p50
+        # ~1.08s) and degrade monotonically with more: the default-40 thread pool
+        # managed only ~28 msg/s at p50 ~1.55s. The optimum tracks the GIL, not the
+        # core count, so 2 is a sane default everywhere; scale throughput with more
+        # processes/replicas, not more threads. None (or <=0) disables the cap and
+        # falls back to anyio's default thread-pool limiter (40).
+        self._max_scan_concurrency = max_scan_concurrency
+        self._scan_limiter: anyio.CapacityLimiter | None = None
+
+    def _get_scan_limiter(self) -> anyio.CapacityLimiter | None:
+        """Lazily build the shared scan limiter (needs a running event loop)."""
+        if self._max_scan_concurrency is None or self._max_scan_concurrency <= 0:
+            return None
+        if self._scan_limiter is None:
+            self._scan_limiter = anyio.CapacityLimiter(self._max_scan_concurrency)
+        return self._scan_limiter
 
     async def handle(
         self,
@@ -158,7 +180,7 @@ class PresidioHandler:
         # per-message ACK latency.
         try:
             scan_started = time.perf_counter()
-            detected = await asyncify(self._scan)(
+            detected = await asyncify(self._scan, limiter=self._get_scan_limiter())(
                 content=message.content,
                 entities=requested,
             )

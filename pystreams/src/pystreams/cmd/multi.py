@@ -23,7 +23,7 @@ from pystreams.health import HealthState, serve_control
 from pystreams.ping.handler import PingHandler
 from pystreams.risk.handler import PresidioHandler, build_default_analyzer
 
-from . import flags_control, flags_gcp, flags_service
+from . import flags_control, flags_gcp, flags_presidio, flags_service
 from .receiver import ReceiverGroup
 
 
@@ -33,6 +33,7 @@ from .receiver import ReceiverGroup
         *flags_service.service_options(),
         *flags_control.server_options(),
         *flags_gcp.pubsub_options(),
+        *flags_presidio.presidio_options(),
     ],
 )
 def cli(**kwargs):
@@ -52,6 +53,8 @@ async def multi(
     # Control server options
     control_host: str,
     control_port: int,
+    # Presidio options
+    max_scan_concurrency: int | None,
 ):
     logging.configure_logging(
         pretty_log=pretty_log,
@@ -94,6 +97,14 @@ async def multi(
             broker, finding_pb2.Finding
         )
         presidio_analyzer = await build_default_analyzer()
+        # Concurrent Presidio scans are GIL-bound, so the handler caps them at a
+        # low default. --max-scan-concurrency overrides it (<=0 disables the cap);
+        # unset (None) leaves the handler default in place.
+        scan_kwargs = (
+            {"max_scan_concurrency": max_scan_concurrency}
+            if max_scan_concurrency is not None
+            else {}
+        )
 
         async with anyio.create_task_group() as tg:
             tg.start_soon(_shutdown_on_signal, tg.cancel_scope, health_state, logger)
@@ -123,7 +134,12 @@ async def multi(
             await receivers.receive(
                 presidio_analysis_pb2.PresidioAnalysis,
                 presidio_analyzer_pb2.PresidioAnalyzer,
-                PresidioHandler(logger, findings_publisher, presidio_analyzer).handle,
+                PresidioHandler(
+                    logger,
+                    findings_publisher,
+                    presidio_analyzer,
+                    **scan_kwargs,
+                ).handle,
             )
 
             health_state.set_ready()
