@@ -3,6 +3,7 @@ package infra
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/urfave/cli/v2"
@@ -35,15 +36,24 @@ func newGenDiagramCommand() *cli.Command {
 			if out == "" {
 				return fmt.Errorf("--out must not be empty")
 			}
+
+			repoRoot := strings.TrimSpace(c.Path("repo-root"))
+			if repoRoot == "" {
+				repoRoot = "."
+			}
+
 			if len(gen.Descriptors) == 0 {
 				return fmt.Errorf("embedded descriptor set is empty: cannot generate pubsub diagram")
 			}
 
-			doc, err := diagram.Generate(c.Context, gen.Descriptors, c.Path("repo-root"))
+			doc, err := diagram.Generate(c.Context, gen.Descriptors, repoRoot)
 			if err != nil {
 				return fmt.Errorf("generate pubsub diagram: %w", err)
 			}
 
+			if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+				return fmt.Errorf("create output directory for %s: %w", out, err)
+			}
 			if err := os.WriteFile(out, []byte(doc), 0o644); err != nil {
 				return fmt.Errorf("write %s: %w", out, err)
 			}

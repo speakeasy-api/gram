@@ -224,7 +224,7 @@ func collectCallSites(ctx context.Context, repoRoot string, scans []scan) (sites
 
 			imports, ok := importCache[m.File]
 			if !ok {
-				imports, err = loadImports(filepath.Join(repoRoot, m.File), s.lang)
+				imports, err = loadImports(filepath.Join(repoRoot, m.File), repoRoot, s.lang)
 				if err != nil {
 					return nil, nil, fmt.Errorf("resolve imports for %s: %w", m.File, err)
 				}
@@ -455,10 +455,10 @@ func resolveSymbol(imports map[string]string, symbol string) (string, bool) {
 	return pkg + "." + parts[len(parts)-1], true
 }
 
-func loadImports(absPath, lang string) (map[string]string, error) {
+func loadImports(absPath, repoRoot, lang string) (map[string]string, error) {
 	switch lang {
 	case "go":
-		return goImports(absPath)
+		return goImports(absPath, repoRoot)
 	case "python":
 		return pyImports(absPath)
 	default:
@@ -466,35 +466,70 @@ func loadImports(absPath, lang string) (map[string]string, error) {
 	}
 }
 
-// goImports maps each generated-proto import alias to its proto package. Only
-// imports under .../infra/gen/ are kept; the proto package is the path tail
-// (e.g. ".../infra/gen/gram/ping/v1" -> "gram.ping.v1").
-func goImports(absPath string) (map[string]string, error) {
+const genMarker = "/infra/gen/"
+
+// goImports maps each generated-proto import's local qualifier to its proto
+// package. Only imports under .../infra/gen/ are kept; the proto package is the
+// path tail (e.g. ".../infra/gen/gram/ping/v1" -> "gram.ping.v1").
+//
+// The qualifier is the import alias when one is given. Otherwise it is the
+// imported package's *declared* name (`package pingv1`), which for these
+// generated packages differs from the directory basename (`v1`) — using the
+// basename would resolve `pingv1.Message` against the wrong key and silently drop
+// the publisher/consumer. The basename is only a fallback when the package source
+// cannot be read.
+func goImports(absPath, repoRoot string) (map[string]string, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, absPath, nil, parser.ImportsOnly)
 	if err != nil {
 		return nil, err
 	}
 
-	const marker = "/infra/gen/"
 	out := map[string]string{}
 	for _, imp := range f.Imports {
 		path := strings.Trim(imp.Path.Value, `"`)
-		_, after, ok := strings.Cut(path, marker)
+		_, after, ok := strings.Cut(path, genMarker)
 		if !ok {
 			continue
 		}
 		pkg := strings.ReplaceAll(after, "/", ".")
 
-		alias := ""
-		if imp.Name != nil {
+		var alias string
+		switch {
+		case imp.Name != nil:
 			alias = imp.Name.Name
-		} else {
-			alias = path[strings.LastIndex(path, "/")+1:]
+		default:
+			alias = path[strings.LastIndex(path, "/")+1:] // basename fallback
+			if name, ok := declaredPackageName(filepath.Join(repoRoot, "infra", "gen", after)); ok {
+				alias = name
+			}
 		}
 		out[alias] = pkg
 	}
 	return out, nil
+}
+
+// declaredPackageName reads the `package` clause of the Go package in dir, used to
+// resolve unaliased imports of generated packages whose name differs from their
+// directory basename.
+func declaredPackageName(dir string) (string, bool) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+	fset := token.NewFileSet()
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.PackageClauseOnly)
+		if err != nil || f.Name == nil || f.Name.Name == "" {
+			continue
+		}
+		return f.Name.Name, true
+	}
+	return "", false
 }
 
 var pyFromImport = regexp.MustCompile(`(?m)^\s*from\s+([\w.]+)\s+import\s+(.+?)\s*$`)
