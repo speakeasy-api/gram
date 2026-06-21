@@ -119,9 +119,15 @@ class _ErrorPublishResult:
 
     def __init__(self, exc: Exception) -> None:
         self._exc = exc
+        # Capture the traceback at construction so ``get`` can re-raise with the
+        # original origin every time. ``raise self._exc`` already preserves the
+        # origin, but it *mutates* the exception's ``__traceback__`` on each raise,
+        # so a result awaited more than once would accumulate frames. Resetting to
+        # the captured traceback keeps every await's traceback identical.
+        self._tb = exc.__traceback__
 
     async def get(self) -> str:
-        raise self._exc
+        raise self._exc.with_traceback(self._tb)
 
 
 class Publisher[M: Message]:
