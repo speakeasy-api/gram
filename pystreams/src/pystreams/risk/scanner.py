@@ -178,10 +178,12 @@ class ProcessPoolScanner(_AsyncCloseable):
       long-lived worker. ``None``/<=0 disables recycling.
     - ``scan_timeout`` bounds how long a single scan may take before it is treated
       as a failure (gunicorn's ``--timeout``). The worker cannot be interrupted
-      mid-scan, but the executor stops routing to it, ``max_tasks_per_child``
-      recycles it once the doomed scan finishes, and meanwhile the other workers
-      keep serving — a single pathological message removes one worker from
-      rotation rather than stalling the consumer. ``None``/<=0 disables the bound.
+      mid-scan: the timed-out scan keeps running on its worker to completion, but
+      the caller stops waiting and that worker is simply unavailable (not serving
+      other scans) until it finishes, at which point ``max_tasks_per_child`` may
+      recycle it. Meanwhile the other workers keep serving — a single pathological
+      message ties up at most one worker rather than stalling the consumer.
+      ``None``/<=0 disables the bound.
 
     Everything that touches the executor is bridged through anyio's threading and
     cancellation primitives (``to_thread.run_sync`` + ``fail_after``) rather than
@@ -305,6 +307,13 @@ class ProcessPoolScanner(_AsyncCloseable):
                 abandon_on_cancel=True,
             )
         if scope.cancelled_caught:
+            # Last resort once the graceful shutdown overran its deadline: reach
+            # into the executor's private ``_processes`` map to hard-kill the
+            # workers. ProcessPoolExecutor exposes no public API for this, so the
+            # access is version-coupled to CPython internals — guarded with
+            # ``getattr`` so a future rename degrades to "graceful shutdown already
+            # timed out, nothing more we can do" instead of an AttributeError that
+            # would mask the original teardown stall.
             for proc in list(getattr(self._executor, "_processes", {}).values()):
                 proc.kill()
 

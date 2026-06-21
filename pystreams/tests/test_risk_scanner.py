@@ -1,4 +1,5 @@
 import threading
+import time
 from concurrent.futures import Future, ProcessPoolExecutor
 from typing import cast
 
@@ -285,6 +286,31 @@ async def test_pool_create_reaps_workers_when_warmup_fails(monkeypatch):
         await ProcessPoolScanner.create(max_workers=2)
 
     assert executor.shutdowns, "executor was not shut down on warmup failure"
+
+
+class _SlowShutdownExecutor:
+    """Executor stand-in whose ``shutdown`` overruns the grace period.
+
+    Has no ``_processes`` attribute, so it stands in for a CPython release that
+    renamed the private internal ``aclose`` reaches for: the hard-kill fallback
+    must degrade to a no-op rather than raising ``AttributeError`` and masking the
+    teardown stall it was trying to recover from.
+    """
+
+    def shutdown(self, wait=True, cancel_futures=False):
+        # Block past the tiny grace_period the test passes so move_on_after fires.
+        time.sleep(5)
+
+
+async def test_aclose_kill_path_degrades_when_processes_attr_missing():
+    scanner = ProcessPoolScanner(
+        cast(ProcessPoolExecutor, _SlowShutdownExecutor()), scan_timeout=None
+    )
+
+    # The graceful shutdown overruns, so aclose falls through to the hard-kill
+    # path; with no ``_processes`` to read it must return cleanly, not raise.
+    with anyio.fail_after(2):
+        await scanner.aclose(grace_period=0.05)
 
 
 class _DeferredExecutor:

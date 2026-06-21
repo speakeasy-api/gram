@@ -70,13 +70,20 @@ type scanConstraint struct {
 	regex   string
 }
 
-// testExclusionGlobs prune test files at scan time (ast-grep already honors
+// scanExclusionGlobs prune files at scan time (ast-grep already honors
 // .gitignore by default, so generated/ignored files never reach us).
-var testExclusionGlobs = []string{
+//
+// Beyond test files, this also drops the emulator-only load generator
+// (cmd/presidio_load.py): it constructs a PresidioAnalysis purely to publish
+// synthetic traffic at the local emulator for profiling, so treating it as a
+// production publisher of gram-risk-v1-presidio-analysis would misrepresent the
+// committed topology.
+var scanExclusionGlobs = []string{
 	"!**/*_test.go",
 	"!**/*_test.py",
 	"!**/test_*.py",
 	"!**/tests/**",
+	"!**/cmd/presidio_load.py",
 }
 
 // subscribeScans are static: subscriptions are registered at a single, specific
@@ -399,7 +406,7 @@ func runASTGrepRules(ctx context.Context, repoRoot, lang string, scans []scan) (
 	sort.Strings(dirs)
 
 	args := []string{"scan", "--inline-rules", strings.Join(rules, "---\n"), "--json=compact"}
-	for _, g := range testExclusionGlobs {
+	for _, g := range scanExclusionGlobs {
 		args = append(args, "--globs", g)
 	}
 	args = append(args, dirs...)
