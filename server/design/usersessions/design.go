@@ -81,21 +81,23 @@ var _ = Service("userSessions", func() {
 	})
 
 	Method("mintUserSession", func() {
-		Description("Mint a user_session for an issuer-gated toolset on behalf of the authenticated dashboard user. The minted JWT matches the shape of the one /mcp/{slug}/token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.")
+		Description("Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: either a toolset (/mcp) or a remote MCP server (/x/mcp). Exactly one of toolset_id or mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.")
 
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
-			Attribute("toolset_id", String, "The toolset to bind the minted JWT to. Must be issuer-gated and live in the caller's project.", func() {
+			Attribute("toolset_id", String, "Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with mcp_server_id; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
 				Format(FormatUUID)
 			})
-			Required("toolset_id")
+			Attribute("mcp_server_id", String, "Bind the JWT to this remote MCP server's user_session_issuer audience (the /x/mcp convention, since remote servers have no toolset). Mutually exclusive with toolset_id; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
+				Format(FormatUUID)
+			})
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
 
 		Result(func() {
-			Attribute("access_token", String, "The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the toolset's /mcp/{slug} surface.")
+			Attribute("access_token", String, "The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.")
 			Attribute("expires_in", Int, "Lifetime of the access token in seconds.")
 			Required("access_token", "expires_in")
 		})

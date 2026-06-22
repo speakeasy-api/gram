@@ -37,8 +37,10 @@ func TestMintUserSessionRequiresMCPConnect(t *testing.T) {
 		authz.NewGrant(authz.ScopeProjectRead, authCtx.ProjectID.String()),
 	)
 
+	toolsetID := toolset.ID.String()
 	_, err := ti.service.MintUserSession(ctx, &sessionsgen.MintUserSessionPayload{
-		ToolsetID:        toolset.ID.String(),
+		ToolsetID:        &toolsetID,
+		McpServerID:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
@@ -55,8 +57,10 @@ func TestMintUserSessionAllowsMCPConnect(t *testing.T) {
 		authz.NewGrant(authz.ScopeMCPConnect, toolset.ID.String()),
 	)
 
+	toolsetID := toolset.ID.String()
 	got, err := ti.service.MintUserSession(ctx, &sessionsgen.MintUserSessionPayload{
-		ToolsetID:        toolset.ID.String(),
+		ToolsetID:        &toolsetID,
+		McpServerID:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
@@ -77,6 +81,32 @@ func TestMintUserSessionAllowsMCPConnect(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, row.UserSessionClientID.Valid)
 	require.True(t, strings.HasPrefix(row.RefreshTokenHash, "dashboard-mint:"))
+}
+
+func TestMintUserSessionRequiresExactlyOneTarget(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	// Neither target set → bad request.
+	_, err := ti.service.MintUserSession(ctx, &sessionsgen.MintUserSessionPayload{
+		ToolsetID:        nil,
+		McpServerID:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	// Both targets set → bad request (mutually exclusive).
+	toolsetID := uuid.New().String()
+	serverID := uuid.New().String()
+	_, err = ti.service.MintUserSession(ctx, &sessionsgen.MintUserSessionPayload{
+		ToolsetID:        &toolsetID,
+		McpServerID:      &serverID,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func createIssuerGatedMintToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) toolsetsrepo.Toolset {

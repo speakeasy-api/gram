@@ -10,7 +10,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type MintUserSessionResponseBody = {
   /**
-   * The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the toolset's /mcp/{slug} surface.
+   * The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.
    */
   accessToken: string;
   /**

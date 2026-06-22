@@ -32717,7 +32717,7 @@ paths:
         name: UserSessionFacets
   /rpc/userSessions.mint:
     post:
-      description: Mint a user_session for an issuer-gated toolset on behalf of the authenticated dashboard user. The minted JWT matches the shape of the one /mcp/{slug}/token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.
+      description: 'Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: either a toolset (/mcp) or a remote MCP server (/x/mcp). Exactly one of toolset_id or mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client''s bearer.'
       operationId: mintUserSession
       parameters:
         - allowEmptyValue: true
@@ -40622,18 +40622,20 @@ components:
     MintUserSessionRequestBody:
       type: object
       properties:
+        mcp_server_id:
+          type: string
+          description: Bind the JWT to this remote MCP server's user_session_issuer audience (the /x/mcp convention, since remote servers have no toolset). Mutually exclusive with toolset_id; exactly one must be set. Must be issuer-gated and live in the caller's project.
+          format: uuid
         toolset_id:
           type: string
-          description: The toolset to bind the minted JWT to. Must be issuer-gated and live in the caller's project.
+          description: Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with mcp_server_id; exactly one must be set. Must be issuer-gated and live in the caller's project.
           format: uuid
-      required:
-        - toolset_id
     MintUserSessionResponseBody:
       type: object
       properties:
         access_token:
           type: string
-          description: 'The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the toolset''s /mcp/{slug} surface.'
+          description: 'The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.'
         expires_in:
           type: integer
           description: Lifetime of the access token in seconds.
