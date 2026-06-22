@@ -58,6 +58,46 @@ func insertAttributeUsageLog(t *testing.T, ctx context.Context, projectID string
 	require.NoError(t, err)
 }
 
+// insertAttributeHookToolLog inserts an agent-hook telemetry row. Agents emit a
+// PreToolUse and a PostToolUse (or PostToolUseFailure) row per tool call, each
+// carrying gram.tool.name; these capture every tool used in a session, Gram and
+// non-Gram alike. They carry no gen_ai.usage.* attributes. The MV must count
+// them (POC-209) while only firing once per call (on the completion event).
+func insertAttributeHookToolLog(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, toolName, hookEvent, email, department string) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	// Hook tool rows are not usage-metrics rows; their gram_urn is the session
+	// hook URN, distinct from the *:usage:metrics aggregate rows.
+	gramURN := "claude-code:hook:" + hookEvent
+	attributes := map[string]any{
+		"gram.tool.name":                  toolName,
+		"gram.hook.event":                 hookEvent,
+		"gram.hook.source":                "claude-code",
+		"user.email":                      email,
+		"user.attributes.department_name": department,
+	}
+
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "tool hook",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, gramURN, "gram-agents")
+	require.NoError(t, err)
+}
+
 func tableCostByGroup(rows []*gen.QueryRow) map[string]float64 {
 	out := make(map[string]float64, len(rows))
 	for _, r := range rows {
@@ -242,6 +282,69 @@ func TestQuery_DefaultSortByAndTopN(t *testing.T) {
 	require.Equal(t, "D10", res.Table[9].GroupValue)
 	require.Equal(t, "Other", res.Table[10].GroupValue, "default top_n should keep 10 groups and roll up the rest")
 	require.InDelta(t, 3.0, res.Table[10].Measures.TotalCost, 1e-9)
+}
+
+// TestQuery_CountsToolCalls is the POC-209 regression: the cost page reported 0
+// tool calls because the attribute_metrics_summaries MV's row filter kept only
+// `*:usage` rows, excluding the hook tool-call rows the count is sourced from.
+// The count must reflect all tools used in a session (Gram and non-Gram), fire
+// once per call (PostToolUse/PostToolUseFailure, not the matching PreToolUse),
+// exclude provider self-names, and leave token/cost sourced from usage rows.
+func TestQuery_CountsToolCalls(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	ts := now.Add(-10 * time.Minute)
+
+	// One usage row (carries cost/tokens).
+	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.25, 15, "opus", "claude-code", "a@x.com", "Engineering", nil)
+
+	// One Bash call: PreToolUse + PostToolUse. Must count once, not twice.
+	insertAttributeHookToolLog(t, ctx, projectID, ts, "Bash", "PreToolUse", "a@x.com", "Engineering")
+	insertAttributeHookToolLog(t, ctx, projectID, ts, "Bash", "PostToolUse", "a@x.com", "Engineering")
+	// A non-Gram MCP tool that failed: counts.
+	insertAttributeHookToolLog(t, ctx, projectID, ts, "mcp__github__search", "PostToolUseFailure", "a@x.com", "Engineering")
+	// A second successful call: counts.
+	insertAttributeHookToolLog(t, ctx, projectID, ts, "Read", "PostToolUse", "a@x.com", "Engineering")
+	// Provider self-name and bare PreToolUse must NOT count.
+	insertAttributeHookToolLog(t, ctx, projectID, ts, "claude-code", "PostToolUse", "a@x.com", "Engineering")
+	insertAttributeHookToolLog(t, ctx, projectID, ts, "Grep", "PreToolUse", "a@x.com", "Engineering")
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// Org total (no group_by): three counted calls (Bash, github search, Read).
+	var totalResult *gen.QueryResult
+	require.Eventually(t, func() bool {
+		res, err := ti.service.Query(ctx, &gen.QueryPayload{
+			From:   from,
+			To:     to,
+			TopN:   10,
+			SortBy: "total_tool_calls",
+		})
+		if err != nil || res == nil || len(res.Table) != 1 {
+			return false
+		}
+		totalResult = res
+		return totalResult.Table[0].Measures.TotalToolCalls == 3
+	}, 10*time.Second, 200*time.Millisecond)
+
+	require.NotNil(t, totalResult, "expected an aggregate row with tool calls")
+	require.EqualValues(t, 3, totalResult.Table[0].Measures.TotalToolCalls)
+	// Hook tool rows carry no gen_ai.usage.cost, so cost stays sourced from the
+	// single usage row — admitting tool rows must not inflate cost.
+	require.InDelta(t, 0.25, totalResult.Table[0].Measures.TotalCost, 1e-9)
 }
 
 func TestQuery_TopNRollupIntoOther(t *testing.T) {
