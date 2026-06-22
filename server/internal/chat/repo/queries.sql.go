@@ -1828,6 +1828,49 @@ func (q *Queries) ListUserFeedbackForChat(ctx context.Context, chatID uuid.UUID)
 	return items, nil
 }
 
+const seedAssistant = `-- name: SeedAssistant :one
+INSERT INTO assistants (project_id, organization_id, name, model, instructions)
+VALUES ($1, $2, $3, 'anthropic/claude-opus-4.8', 'be helpful')
+RETURNING id
+`
+
+type SeedAssistantParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Name           string
+}
+
+// Test fixture: insert a minimal assistant and return its id.
+func (q *Queries) SeedAssistant(ctx context.Context, arg SeedAssistantParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedAssistant, arg.ProjectID, arg.OrganizationID, arg.Name)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedAssistantThread = `-- name: SeedAssistantThread :exec
+INSERT INTO assistant_threads (assistant_id, project_id, correlation_id, chat_id, source_kind)
+VALUES ($1, $2, $3, $4, 'cron')
+`
+
+type SeedAssistantThreadParams struct {
+	AssistantID   uuid.UUID
+	ProjectID     uuid.UUID
+	CorrelationID string
+	ChatID        uuid.UUID
+}
+
+// Test fixture: insert an active assistant thread backed by a chat.
+func (q *Queries) SeedAssistantThread(ctx context.Context, arg SeedAssistantThreadParams) error {
+	_, err := q.db.Exec(ctx, seedAssistantThread,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.CorrelationID,
+		arg.ChatID,
+	)
+	return err
+}
+
 const seedChatAtTime = `-- name: SeedChatAtTime :one
 INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $7)

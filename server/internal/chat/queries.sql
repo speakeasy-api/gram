@@ -850,3 +850,14 @@ VALUES (
     @project_id, @organization_id, @risk_policy_id, 1,
     @chat_message_id, 'test', @found
 );
+
+-- name: SeedAssistant :one
+-- Test fixture: insert a minimal assistant and return its id.
+INSERT INTO assistants (project_id, organization_id, name, model, instructions)
+VALUES (@project_id, @organization_id, @name, 'anthropic/claude-opus-4.8', 'be helpful')
+RETURNING id;
+
+-- name: SeedAssistantThread :exec
+-- Test fixture: insert an active assistant thread backed by a chat.
+INSERT INTO assistant_threads (assistant_id, project_id, correlation_id, chat_id, source_kind)
+VALUES (@assistant_id, @project_id, @correlation_id, @chat_id, 'cron');
