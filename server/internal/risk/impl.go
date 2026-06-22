@@ -1381,6 +1381,12 @@ func (s *Service) GetDetectionDescriptor(ctx context.Context, payload *gen.GetDe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	// Authoring endpoint: gate on org-admin like the rest of the risk policy
+	// authoring surface (create/update policy and custom rules).
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
 	desc := celenv.Descriptor()
 
 	types := make([]*gen.DetectionDescriptorType, 0, len(desc.Types))
@@ -1453,12 +1459,20 @@ func (s *Service) CompileExpr(ctx context.Context, payload *gen.CompileExprPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	// Authoring endpoint: gate on org-admin like the rest of the risk policy
+	// authoring surface.
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
 	expr := strings.TrimSpace(payload.Expr)
 	if expr == "" {
 		return &gen.ExprCompileResult{OK: true, Error: ""}, nil
 	}
-	eng := s.celEng
-	if _, err := eng.Compile(expr); err != nil {
+	if s.celEng == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "cel engine unavailable")
+	}
+	if _, err := s.celEng.Compile(expr); err != nil {
 		return &gen.ExprCompileResult{OK: false, Error: err.Error()}, nil
 	}
 	return &gen.ExprCompileResult{OK: true, Error: ""}, nil
