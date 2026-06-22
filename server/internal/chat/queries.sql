@@ -27,9 +27,26 @@ VALUES (
     NOW(),
     NOW()
 )
--- Use no-op update (id = EXCLUDED.id) to ensure RETURNING always returns a row,
--- whether the chat was newly inserted or already existed.
-ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
+-- On conflict, self-heal a soft-deleted chat that still backs a live assistant
+-- thread: the runtime keeps writing to it, so it must not stay marked deleted (a
+-- deleted chat wedges the thread — compaction-persist 404s on it). Scoped to
+-- thread-backed chats so a write does NOT resurrect a plain chat a user
+-- intentionally deleted. The first WHEN keeps the common (non-deleted) path a
+-- no-op without touching assistant_threads, so the EXISTS stays off the
+-- /chat/completions hot path and only runs for the rare already-deleted row. The
+-- assistant join means a deleted assistant's leftover thread can't heal the
+-- chat. The SET also guarantees RETURNING yields a row whether the chat was
+-- newly inserted or already existed.
+ON CONFLICT (id) DO UPDATE SET deleted_at = CASE
+    WHEN chats.deleted_at IS NULL THEN NULL
+    WHEN chats.project_id = EXCLUDED.project_id AND EXISTS (
+        SELECT 1 FROM assistant_threads t
+        JOIN assistants a ON a.id = t.assistant_id
+        WHERE t.chat_id = chats.id AND t.project_id = chats.project_id
+          AND t.deleted IS FALSE AND a.deleted IS FALSE
+    ) THEN NULL
+    ELSE chats.deleted_at
+END
 RETURNING id;
 
 -- name: UpsertExternalChat :one
