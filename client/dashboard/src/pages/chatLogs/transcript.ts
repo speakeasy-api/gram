@@ -154,6 +154,16 @@ export function rowIsFlagged(
   );
 }
 
+/** Coarse message-type bucket for the header transcript filter. System turns
+ * fold into "assistant" (model-side output) so the filter stays a clean
+ * user / assistant / tool triad rather than exposing a rare fourth chip. */
+export type MessageCategory = "user" | "assistant" | "tool";
+
+export function rowCategory(row: TranscriptRow): MessageCategory {
+  if (row.kind === "tool") return "tool";
+  return row.entryType === "user" ? "user" : "assistant";
+}
+
 export type DisplayItem =
   | { type: "divider"; id: string; generation: number }
   | { type: "row"; id: string; row: TranscriptRow }

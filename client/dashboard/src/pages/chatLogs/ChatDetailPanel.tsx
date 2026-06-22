@@ -1,6 +1,16 @@
-import { format } from "date-fns";
-import { ArrowLeft, ChevronDown, SlidersHorizontal } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
 import {
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  ListFilter,
+  Sparkles,
+  SlidersHorizontal,
+  User,
+  Wrench,
+} from "lucide-react";
+import {
+  type ComponentType,
   type ReactNode,
   useCallback,
   useEffect,
@@ -48,7 +58,14 @@ import {
   type RowContext,
   type TranscriptPagination,
 } from "./ChatTranscript";
-import { buildDisplayItems, buildTranscript, rowIsFlagged } from "./transcript";
+import {
+  buildDisplayItems,
+  buildTranscript,
+  type MessageCategory,
+  rowCategory,
+  rowIsFlagged,
+} from "./transcript";
+import { cn } from "@/lib/utils";
 import {
   buildClaudeToolUsageByToolUseId,
   buildClaudeUsageByMessageId,
@@ -185,6 +202,9 @@ function SessionSummary({
             </span>
           )}
           {tokens > 0 && <span>{formatTokenCount(tokens)} tokens</span>}
+          {/* No cost telemetry for this session (e.g. ClickHouse miss) — fall
+              back to the message count so the trigger is never an empty pill. */}
+          {!hasCost && tokens === 0 && <span>{messageCount} messages</span>}
           <ChevronDown className="size-3.5" />
         </button>
       </PopoverTrigger>
@@ -227,12 +247,116 @@ function SessionSummary({
   );
 }
 
+const MESSAGE_TYPES: ReadonlyArray<{
+  key: MessageCategory;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+}> = [
+  { key: "user", label: "User", icon: User },
+  { key: "assistant", label: "Assistant", icon: Sparkles },
+  { key: "tool", label: "Tool calls", icon: Wrench },
+];
+
+const ALL_CATEGORIES: ReadonlySet<MessageCategory> = new Set(
+  MESSAGE_TYPES.map((t) => t.key),
+);
+
+/** Header control to narrow the transcript to one or more message types. A
+ * checkbox popover (rather than always-on pills) keeps the dense header clean;
+ * the trigger surfaces an active state + count only when a filter is applied. */
+function MessageTypeFilter({
+  active,
+  onChange,
+}: {
+  active: ReadonlySet<MessageCategory>;
+  onChange: (next: Set<MessageCategory>) => void;
+}) {
+  const allOn = active.size === MESSAGE_TYPES.length;
+  const toggle = (key: MessageCategory) => {
+    const next = new Set(active);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    // Never leave the transcript fully empty — clearing the last type resets.
+    if (next.size === 0) for (const t of MESSAGE_TYPES) next.add(t.key);
+    onChange(next);
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Filter messages by type"
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors",
+            allOn
+              ? "text-muted-foreground hover:text-foreground hover:bg-muted"
+              : "text-foreground bg-muted",
+          )}
+        >
+          <ListFilter className="size-4" />
+          Filters
+          {!allOn && (
+            <span className="tabular-nums">
+              ({active.size}/{MESSAGE_TYPES.length})
+            </span>
+          )}
+          <ChevronDown className="size-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-52 p-1.5">
+        <div className="text-muted-foreground px-2 py-1.5 text-xs font-medium">
+          Show messages
+        </div>
+        {MESSAGE_TYPES.map(({ key, label, icon: Glyph }) => {
+          const on = active.has(key);
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => toggle(key)}
+              className="hover:bg-muted flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors"
+            >
+              <span
+                className={cn(
+                  "flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors",
+                  on
+                    ? "bg-primary border-primary text-primary-foreground"
+                    : "border-muted-foreground/40",
+                )}
+              >
+                {on && <Check className="size-3" />}
+              </span>
+              <Glyph className="text-muted-foreground size-4 shrink-0" />
+              <span className={cn(!on && "text-muted-foreground")}>
+                {label}
+              </span>
+            </button>
+          );
+        })}
+        {!allOn && (
+          <button
+            type="button"
+            onClick={() => onChange(new Set(ALL_CATEGORIES))}
+            className="text-muted-foreground hover:text-foreground hover:bg-muted mt-1 flex w-full items-center justify-center rounded-md border-t px-2 pt-2 pb-1.5 text-xs transition-colors"
+          >
+            Reset filter
+          </button>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function ChatDetailHeader({
   chatId,
   chat,
   messageCount,
   toolCount,
   canManageChat,
+  showFilter,
+  typeFilter,
+  onTypeFilterChange,
   onExport,
   onDelete,
   onSetView,
@@ -243,6 +367,9 @@ function ChatDetailHeader({
   messageCount: number;
   toolCount: number;
   canManageChat: boolean;
+  showFilter: boolean;
+  typeFilter: ReadonlySet<MessageCategory>;
+  onTypeFilterChange: (next: Set<MessageCategory>) => void;
   onExport: () => void;
   onDelete: () => void;
   onSetView: (view: ViewMode) => void;
@@ -256,16 +383,21 @@ function ChatDetailHeader({
             {chat.title || getTraceId(chatId)}
           </SheetTitle>
           <SheetDescription asChild>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col items-start gap-1.5">
+              <span className="text-muted-foreground text-sm">
+                {formatDistanceToNow(new Date(chat.createdAt), {
+                  addSuffix: true,
+                })}{" "}
+                <span className="font-mono">
+                  ({format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm")})
+                </span>
+              </span>
               <Badge
                 variant="neutral"
                 className="shrink-0 font-mono text-[10px]"
               >
                 <Badge.Text>{getTraceId(chatId)}</Badge.Text>
               </Badge>
-              <span className="text-muted-foreground shrink-0 font-mono text-xs">
-                {format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm")}
-              </span>
             </div>
           </SheetDescription>
         </div>
@@ -275,6 +407,12 @@ function ChatDetailHeader({
             messageCount={messageCount}
             toolCount={toolCount}
           />
+          {showFilter && (
+            <MessageTypeFilter
+              active={typeFilter}
+              onChange={onTypeFilterChange}
+            />
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -351,6 +489,10 @@ function ChatDetailPanel({
   const canManageChat = isSuperAdmin || hasScope("org:admin");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [view, setView] = useState<ViewMode>("chat");
+  // Header transcript filter — which message types to show (all on by default).
+  const [typeFilter, setTypeFilter] = useState<ReadonlySet<MessageCategory>>(
+    () => new Set(ALL_CATEGORIES),
+  );
   const [exclusionState, setExclusionState] =
     useState<ExclusionSheetState | null>(null);
   // The finding an in-flight exclusion was opened from, and the set of findings
@@ -400,6 +542,7 @@ function ChatDetailPanel({
   // Reset transient UI state when the panel is pointed at a new session.
   useEffect(() => {
     setView("chat");
+    setTypeFilter(new Set(ALL_CATEGORIES));
     setExclusionState(null);
     setPendingExclusionKey(null);
     setOptimisticExcluded(new Set());
@@ -446,18 +589,28 @@ function ChatDetailPanel({
     () => buildTranscript(chatMessages),
     [chatMessages],
   );
+  // Apply the header type filter at the row level so generation dividers and
+  // risk gaps recompute against exactly what's shown (no orphaned dividers).
+  const filterActive = typeFilter.size < ALL_CATEGORIES.size;
+  const visibleRows = useMemo(
+    () =>
+      filterActive
+        ? transcriptRows.filter((r) => typeFilter.has(rowCategory(r)))
+        : transcriptRows,
+    [transcriptRows, typeFilter, filterActive],
+  );
   const hasMoreBefore = active.hasMoreBefore;
   const hasMoreAfter = active.hasMoreAfter;
   const riskGaps = dimNonRisk ? riskTranscript.gaps : undefined;
   const displayItems = useMemo(
     () =>
       buildDisplayItems({
-        rows: transcriptRows,
+        rows: visibleRows,
         hasMoreBefore,
         hasMoreAfter,
         gaps: riskGaps,
       }),
-    [transcriptRows, hasMoreBefore, hasMoreAfter, riskGaps],
+    [visibleRows, hasMoreBefore, hasMoreAfter, riskGaps],
   );
 
   // Risk-review contexts (risk focus or the has-risk spotlight) open scrolled to
@@ -568,6 +721,9 @@ function ChatDetailPanel({
         messageCount={chat.numMessages}
         toolCount={toolLogs.length}
         canManageChat={canManageChat}
+        showFilter={view === "chat"}
+        typeFilter={typeFilter}
+        onTypeFilterChange={setTypeFilter}
         onExport={() => {
           exportTraceDataAsJson({
             chatId,
@@ -599,9 +755,11 @@ function ChatDetailPanel({
             ctx={rowCtx}
             pagination={transcriptPagination}
             emptyMessage={
-              dimNonRisk
-                ? "No flagged messages in this session."
-                : "No messages to display."
+              filterActive
+                ? "No messages match the current filter."
+                : dimNonRisk
+                  ? "No flagged messages in this session."
+                  : "No messages to display."
             }
           />
         </CreateExclusionContext.Provider>
