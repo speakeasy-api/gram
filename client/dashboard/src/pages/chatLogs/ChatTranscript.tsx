@@ -436,6 +436,11 @@ export interface TranscriptPagination {
    * the top. Normal view → null (first message in view); risk view → the first
    * flagged row. */
   initialScrollIndex: number | null;
+  /** Risk/scroll-to-finding view: the transcript opens jumped to the first
+   * finding instead of paginating from the top, so the top-of-list auto-load
+   * must stay off (otherwise it walks the window back to the chat start before
+   * the finding index — sourced from a separate query — has resolved). */
+  scrollToFinding: boolean;
 }
 
 /** Edge "load older/newer" affordance + the risk-gap "load in-between" marker. */
@@ -545,6 +550,7 @@ export function ChatTranscript({
     onLoadOlder,
     onLoadNewer,
     initialScrollIndex,
+    scrollToFinding,
   } = pagination;
 
   // Preserve scroll position across a prepend: capture distance-from-bottom
@@ -571,27 +577,43 @@ export function ChatTranscript({
 
   // Opening already at the top (scrollTop 0) means the scroll handler can't
   // fire, so backward infinite-scroll would stall on the first page. Pull the
-  // previous page whenever we settle near the top with more above. Skipped in
-  // the scroll-to-finding view, which intentionally starts mid-transcript. The
-  // prepend anchor pushes scrollTop past the threshold once a page lands, so
-  // this self-limits instead of loading the whole history at once.
+  // previous page whenever we settle near the top with more above. Never in the
+  // scroll-to-finding view: there the finding index arrives from a separate
+  // query, so until it resolves this would otherwise walk the window all the way
+  // back to the chat start instead of jumping to the finding. The prepend anchor
+  // pushes scrollTop past the threshold once a page lands, so this self-limits.
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el || initialScrollIndex != null) return;
+    if (!el || scrollToFinding) return;
     if (hasMoreBefore && el.scrollTop < 200) {
       anchorRef.current = el.scrollHeight - el.scrollTop;
       onLoadOlder();
     }
-  }, [hasMoreBefore, items.length, initialScrollIndex, onLoadOlder]);
+  }, [hasMoreBefore, items.length, scrollToFinding, onLoadOlder]);
 
   // Land on the requested row once the first page is laid out: the top for a
   // normal session (null → no scroll), or the first finding in risk view.
+  // scrollToIndex under-shoots a far-down target because unmeasured rows use the
+  // 72px estimate while tool UIs are much taller — so re-issue it across a few
+  // frames, letting dynamic measurements converge on the real offset, then lock.
   const didInitialScroll = useRef(false);
   useEffect(() => {
     if (initialScrollIndex == null || didInitialScroll.current) return;
     if (items.length === 0 || !scrollRef.current) return;
-    didInitialScroll.current = true;
-    virtualizer.scrollToIndex(initialScrollIndex, { align: "start" });
+    if (initialScrollIndex >= items.length) return;
+    let raf = 0;
+    let tries = 0;
+    const settle = () => {
+      virtualizer.scrollToIndex(initialScrollIndex, { align: "start" });
+      tries += 1;
+      if (tries < 12) {
+        raf = requestAnimationFrame(settle);
+      } else {
+        didInitialScroll.current = true;
+      }
+    };
+    raf = requestAnimationFrame(settle);
+    return () => cancelAnimationFrame(raf);
   }, [initialScrollIndex, items.length, virtualizer]);
 
   if (items.length === 0) {

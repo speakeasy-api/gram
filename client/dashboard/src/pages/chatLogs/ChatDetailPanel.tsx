@@ -646,6 +646,7 @@ function ChatDetailPanel({
         ? (afterSeq: number) => riskTranscript.loadingKey === `gap:${afterSeq}`
         : undefined,
       initialScrollIndex,
+      scrollToFinding: dimNonRisk,
     }),
     [
       hasMoreBefore,
