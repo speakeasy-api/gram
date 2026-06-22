@@ -32,7 +32,6 @@ import (
 // shared grammar + constants.
 
 const (
-	prefixSecret      = "secret."
 	prefixPII         = "pii."
 	prefixDestructive = "destructive."
 
@@ -107,13 +106,6 @@ func EnableRuleIDFormatEnforcement() {
 // ...) into the canonical snake_case-with-dots form. Their counterparts in
 // the per-source module files (gitleaks.go, presidio.go, ...) compose the
 // description sentence around the result.
-
-// CanonicalGitleaksRuleID prepends the `secret.` prefix to a gitleaks rule
-// id and converts its kebab-case to snake_case so the result conforms to
-// the canonical grammar.
-func CanonicalGitleaksRuleID(raw string) string {
-	return prefixSecret + strings.ReplaceAll(strings.ToLower(raw), "-", "_")
-}
 
 // CanonicalPresidioRuleID converts a Presidio entity type (UPPER_SNAKE) to
 // the canonical `pii.<snake_case>` rule id (`MEDICAL_LICENSE` -> `pii.medical_license`).
