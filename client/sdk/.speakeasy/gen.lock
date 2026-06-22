@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 35c2a8ea20463980024271cfa56db51c
+  docChecksum: adfedbce3fd369e2c32d72f84e28bb15
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -291,15 +291,15 @@ trackedFiles:
   docs/models/components/detectiondescriptorfield.md:
     last_write_checksum: sha1:110584d0dc8d9cfb34758229e25348f8d4c7968d
   docs/models/components/detectiondescriptorfunction.md:
-    last_write_checksum: sha1:0b115f23de45c92c5c09889f5c088039f026e3fd
+    last_write_checksum: sha1:46781b5071b44d0385e64020e1921d9f5a5b8784
   docs/models/components/detectiondescriptormacro.md:
     last_write_checksum: sha1:ef8ac30b39158e0dc8633356cccc797bc690f1e8
   docs/models/components/detectiondescriptorparam.md:
     last_write_checksum: sha1:6a6fc0779801c6ca13a07520158bde8adfbafe47
   docs/models/components/detectiondescriptorresult.md:
-    last_write_checksum: sha1:b943cd074cb21dbb3f5d0633dae145755e5a5941
+    last_write_checksum: sha1:0ef001d51d51c4defc7486e9b2c555a90d30efb7
   docs/models/components/detectiondescriptortype.md:
-    last_write_checksum: sha1:0f5adc4fa3b6af3b9eaddb3e69d059880b1a063d
+    last_write_checksum: sha1:143b9f7351809a90d7ed60d443cd4efb982fbe38
   docs/models/components/detectiondescriptorvariable.md:
     last_write_checksum: sha1:e557f2f0798dca69f3e2708f5e76931c991d7553
   docs/models/components/dimension.md:
@@ -1487,7 +1487,7 @@ trackedFiles:
   docs/models/operations/clonetoolsetsecurityoption2.md:
     last_write_checksum: sha1:1c2d0c3c9dae595284d1f883d1e656a848a370f1
   docs/models/operations/compileexprrequest.md:
-    last_write_checksum: sha1:747bbe534905b2cc066644753252bceca8b7011c
+    last_write_checksum: sha1:a69d1201464f92204f6bf4280ab86807852ccacb
   docs/models/operations/compileexprsecurity.md:
     last_write_checksum: sha1:62e6db42bf61858e998e4da694e6a9c7c5f0d0f5
   docs/models/operations/compileexprsecurityoption1.md:
@@ -3465,7 +3465,7 @@ trackedFiles:
   docs/sdks/exclusions/README.md:
     last_write_checksum: sha1:eb72f4e952a67504b17b06a2b6b9d0eca34926f5
   docs/sdks/expr/README.md:
-    last_write_checksum: sha1:bc5f6a9f698114e3fefceda419b541e654205cfb
+    last_write_checksum: sha1:12084129292d6574c74f1f2c5f18cc209eb83736
   docs/sdks/external/README.md:
     last_write_checksum: sha1:aee21905afb158ea2169e3b8816af5d847616c85
   docs/sdks/features/README.md:
@@ -4025,7 +4025,7 @@ trackedFiles:
   src/funcs/riskExclusionsUpdate.ts:
     last_write_checksum: sha1:199088fed815d31f3044b20342d362e865820839
   src/funcs/riskExprCompile.ts:
-    last_write_checksum: sha1:9a9b3b6030a7ad8fa2911a1395a2e1c7807bd7b4
+    last_write_checksum: sha1:4ebacfa1f3b56b3bcf33cd41130b820d24e29f58
   src/funcs/riskOverviewGet.ts:
     last_write_checksum: sha1:10dc0bdfc2d651c3b001ddb50ce4fe7c0a9a2307
   src/funcs/riskOverviewRules.ts:
@@ -4446,7 +4446,7 @@ trackedFiles:
   src/models/components/detectiondescriptorfield.ts:
     last_write_checksum: sha1:1f029c21fcfc9421a99d0eba69cf9e1861b84117
   src/models/components/detectiondescriptorfunction.ts:
-    last_write_checksum: sha1:4e1f1499c99440856567393c4ff5533db9de707e
+    last_write_checksum: sha1:862cfcb01eb011feae5228a787271ab818ab8241
   src/models/components/detectiondescriptormacro.ts:
     last_write_checksum: sha1:f0addc61dfee46da57e5362cadfee083ab438fde
   src/models/components/detectiondescriptorparam.ts:
@@ -4454,7 +4454,7 @@ trackedFiles:
   src/models/components/detectiondescriptorresult.ts:
     last_write_checksum: sha1:ac4f345f6499bb7d897a228b1f27a2498b8a62e0
   src/models/components/detectiondescriptortype.ts:
-    last_write_checksum: sha1:b8e0cdb8a3a4e3f0a3510a7d8a20df4320b70e49
+    last_write_checksum: sha1:986b66db1120e4ddcc7c1772934d6b3f6563db9e
   src/models/components/detectiondescriptorvariable.ts:
     last_write_checksum: sha1:aa0feec6f7ac0b266fb97bce1a41cb34a6dece29
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts:
@@ -5345,7 +5345,7 @@ trackedFiles:
   src/models/operations/clonetoolset.ts:
     last_write_checksum: sha1:f36895a19ab29b8c9708394ddef22f1079e694cd
   src/models/operations/compileexpr.ts:
-    last_write_checksum: sha1:948041d6ff09e839ce779c58188a23cb4f534c83
+    last_write_checksum: sha1:3b1c4eeb1059878b1e82db56beac0676ab1aacb0
   src/models/operations/createapikey.ts:
     last_write_checksum: sha1:e58c09b3ddb5eddc265ae3128a4bc6235ed67de6
   src/models/operations/createassistant.ts:
@@ -6637,9 +6637,9 @@ trackedFiles:
   src/react-query/riskCategories.ts:
     last_write_checksum: sha1:47e205aa32b5624957c4df7d361043861be74d6b
   src/react-query/riskCompileExpr.core.ts:
-    last_write_checksum: sha1:ea5c56e2f8c593091549143dfa15f305a1500aee
+    last_write_checksum: sha1:fe99e5f98b5319e3a7ccb2eae742bbed4ca959aa
   src/react-query/riskCompileExpr.ts:
-    last_write_checksum: sha1:2c5de206f754f819d379c1d29bf07f11c503fd4e
+    last_write_checksum: sha1:2d3b7e3f89b57546d7e0ee2d3312517b06001fa8
   src/react-query/riskCreateCustomDetectionRule.ts:
     last_write_checksum: sha1:148043ceede98bc2e4359d8126d81f9a49d9f745
   src/react-query/riskCreateExclusion.ts:
@@ -6969,7 +6969,7 @@ trackedFiles:
   src/sdk/exclusions.ts:
     last_write_checksum: sha1:d9f2c5b173f9bb3b9b5da6475ee9fffb7ebb66c0
   src/sdk/expr.ts:
-    last_write_checksum: sha1:aa01ad96aaab844a40776aa0c46ba02352bb8f83
+    last_write_checksum: sha1:27d77ba65ccad9bcca23728a53f047c67e9b5e50
   src/sdk/external.ts:
     last_write_checksum: sha1:b3e3eeec2b512d13ac5efca4e2c1b4ee4026efa9
   src/sdk/features.ts:
@@ -10629,7 +10629,7 @@ examples:
     speakeasy-default-compile-expr:
       parameters:
         query:
-          expr: "<value>"
+          expr: ""
       responses:
         "200":
           application/json: {"error": "<value>", "ok": true}
@@ -10641,7 +10641,7 @@ examples:
     speakeasy-default-get-detection-descriptor:
       responses:
         "200":
-          application/json: {"functions": [{"description": "amid aw insert strait regarding quicker", "member": true, "name": "<value>", "overloadId": "<id>", "receiverType": "<value>", "returnType": "<value>", "signature": "<value>"}], "macros": [], "types": [], "variables": []}
+          application/json: {"functions": [{"description": "amid aw insert strait regarding quicker", "member": true, "name": "<value>", "overloadId": "<id>", "params": [{"name": "<value>", "type": "<value>"}], "receiverType": "<value>", "returnType": "<value>", "signature": "<value>"}], "macros": [], "types": [], "variables": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

@@ -2005,6 +2005,13 @@ func validateCustomDetectionRuleFields(eng *celenv.Engine, title, detectionExpr,
 	if title == "" {
 		return oops.E(oops.CodeInvalid, nil, "title must not be empty")
 	}
+	// A custom rule is its detection predicate, so an empty expression is
+	// rejected rather than saved as an inert (never-firing) rule. This also makes
+	// an update that omits detection_expr fail loudly instead of silently
+	// clearing the existing predicate.
+	if strings.TrimSpace(detectionExpr) == "" {
+		return oops.E(oops.CodeInvalid, nil, "detection_expr must not be empty")
+	}
 	if err := validateExpr(eng, detectionExpr); err != nil {
 		return oops.E(oops.CodeInvalid, err, "detection_expr is invalid")
 	}
