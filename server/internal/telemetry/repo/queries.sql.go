@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -4599,6 +4600,182 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 	}
 
 	return events, nil
+}
+
+type BackfillAttributeMetricsSummariesParams struct {
+	ProjectIDs     []string
+	UserLookupJSON string
+	FromUnixNano   int64
+	CutoffUnixNano int64
+}
+
+func (q *Queries) DeleteAttributeMetricsSummariesBackfillWindow(ctx context.Context, arg BackfillAttributeMetricsSummariesParams) error {
+	query, args, err := squirrel.Expr(
+		"ALTER TABLE attribute_metrics_summaries DELETE WHERE ?",
+		squirrel.And{
+			squirrel.Eq{"gram_project_id": arg.ProjectIDs},
+			squirrel.Expr("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.FromUnixNano),
+			squirrel.Expr("time_bucket < toStartOfHour(fromUnixTimestamp64Nano(?))", arg.CutoffUnixNano),
+		},
+	).ToSql()
+	if err != nil {
+		return fmt.Errorf("building delete attribute metrics summaries backfill query: %w", err)
+	}
+
+	return q.conn.Exec(ctx, query, args...)
+}
+
+func (q *Queries) InsertAttributeMetricsSummariesBackfillWindow(ctx context.Context, arg BackfillAttributeMetricsSummariesParams) error {
+	projectIDsJSON := "[]"
+	if len(arg.ProjectIDs) > 0 {
+		raw, _ := json.Marshal(arg.ProjectIDs)
+		projectIDsJSON = string(raw)
+	}
+	ctx = clickhouse.Context(ctx,
+		clickhouse.WithParameters(clickhouse.Parameters{
+			"user_lookup_json": arg.UserLookupJSON,
+			"project_ids":      projectIDsJSON,
+			"from_unix_nano":   strconv.FormatInt(arg.FromUnixNano, 10),
+			"cutoff_unix_nano": strconv.FormatInt(arg.CutoffUnixNano, 10),
+		}),
+	)
+
+	insertColumns := []string{
+		"gram_project_id",
+		"time_bucket",
+		"department_name",
+		"job_title",
+		"employee_type",
+		"division_name",
+		"cost_center_name",
+		"user_email",
+		"model",
+		"hook_source",
+		"roles",
+		"groups",
+		"total_chats",
+		"total_input_tokens",
+		"total_output_tokens",
+		"total_tokens",
+		"cache_read_input_tokens",
+		"cache_creation_input_tokens",
+		"total_cost",
+		"total_tool_calls",
+	}
+
+	selectQuery := sq.Select(
+		"gram_project_id",
+		"toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket",
+		attributeMetricsLookupStringExpr("department_name", "toString(attributes.user.attributes.department_name)")+" AS department_name",
+		attributeMetricsLookupStringExpr("job_title", "toString(attributes.user.attributes.job_title)")+" AS job_title",
+		attributeMetricsLookupStringExpr("employee_type", "toString(attributes.user.attributes.employee_type)")+" AS employee_type",
+		attributeMetricsLookupStringExpr("division_name", "toString(attributes.user.attributes.division_name)")+" AS division_name",
+		attributeMetricsLookupStringExpr("cost_center_name", "toString(attributes.user.attributes.cost_center_name)")+" AS cost_center_name",
+		"user_email AS user_email",
+		"toString(attributes.gen_ai.response.model) AS model",
+		"hook_source",
+		"arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)')) AS roles",
+		"arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)')) AS groups",
+		"uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats",
+		"sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
+		"sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
+		"sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens",
+		"sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens",
+		"sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens",
+		"sumIfState(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost",
+		"countIfState(startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS total_tool_calls",
+	).
+		Prefix(`WITH
+			JSONExtractArrayRaw({user_lookup_json:String}) AS user_lookup,
+			arrayMap(user -> JSONExtractString(user, 'email'), user_lookup) AS user_lookup_emails`).
+		From("telemetry_logs").
+		Where("gram_project_id IN arrayMap(x -> toUUID(x), JSONExtract({project_ids:String}, 'Array(String)'))").
+		Where("time_unix_nano >= {from_unix_nano:Int64}").
+		Where("time_unix_nano < {cutoff_unix_nano:Int64}").
+		Where(squirrel.Or{
+			squirrel.Expr("startsWith(gram_urn, 'claude-code:usage')"),
+			squirrel.Expr("startsWith(gram_urn, 'codex:usage')"),
+			squirrel.Expr("startsWith(gram_urn, 'cursor:usage')"),
+		}).
+		GroupBy(
+			"gram_project_id",
+			"time_bucket",
+			"department_name",
+			"job_title",
+			"employee_type",
+			"division_name",
+			"cost_center_name",
+			"user_email",
+			"model",
+			"hook_source",
+			"roles",
+			"groups",
+		)
+
+	query, args, err := sq.Insert("attribute_metrics_summaries").
+		Columns(insertColumns...).
+		Select(selectQuery).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("building insert attribute metrics summaries backfill query: %w", err)
+	}
+	if len(args) > 0 {
+		return fmt.Errorf("building insert attribute metrics summaries backfill query: unexpected positional arguments")
+	}
+
+	return q.conn.Exec(ctx, query)
+}
+
+func (q *Queries) CountAttributeMetricsSummariesBackfillWindow(ctx context.Context, arg BackfillAttributeMetricsSummariesParams) (uint64, error) {
+	projectIDsJSON := "[]"
+	if len(arg.ProjectIDs) > 0 {
+		raw, _ := json.Marshal(arg.ProjectIDs)
+		projectIDsJSON = string(raw)
+	}
+	ctx = clickhouse.Context(ctx,
+		clickhouse.WithParameters(clickhouse.Parameters{
+			"user_lookup_json": arg.UserLookupJSON,
+			"project_ids":      projectIDsJSON,
+			"from_unix_nano":   strconv.FormatInt(arg.FromUnixNano, 10),
+			"cutoff_unix_nano": strconv.FormatInt(arg.CutoffUnixNano, 10),
+		}),
+	)
+
+	query, args, err := sq.Select("count()").
+		From("attribute_metrics_summaries").
+		Where("gram_project_id IN arrayMap(x -> toUUID(x), JSONExtract({project_ids:String}, 'Array(String)'))").
+		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano({from_unix_nano:Int64}))").
+		Where("time_bucket < toStartOfHour(fromUnixTimestamp64Nano({cutoff_unix_nano:Int64}))").
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("building count attribute metrics summaries backfill query: %w", err)
+	}
+	if len(args) > 0 {
+		return 0, fmt.Errorf("building count attribute metrics summaries backfill query: unexpected positional arguments")
+	}
+
+	rows, err := q.conn.Query(ctx, query)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var count uint64
+	if rows.Next() {
+		if err := rows.Scan(&count); err != nil {
+			return 0, fmt.Errorf("scan attribute metrics summaries backfill count: %w", err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func attributeMetricsLookupStringExpr(attributeName string, fallbackExpr string) string {
+	lookupIdx := "indexOf(user_lookup_emails, lower(user_email))"
+	lookupAttrs := "JSONExtractRaw(user_lookup[" + lookupIdx + "], 'attributes')"
+	return "if(" + lookupIdx + " > 0, JSONExtractString(" + lookupAttrs + ", '" + attributeName + "'), " + fallbackExpr + ")"
 }
 
 // CountRecentHookEventsForOnboarding returns the total number of hook events
