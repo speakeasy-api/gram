@@ -31,10 +31,10 @@ func scanCEL(t *testing.T, view MessageView, rules []CompiledCELRule) []Finding 
 func TestScanCELRules_CorrelatedToolRule(t *testing.T) {
 	t.Parallel()
 	rules := celRules(t, CustomDetectionRule{
-		RuleID:       "custom.bash_drop",
-		Title:        "bash drop table",
-		Description:  "destructive SQL via a bash tool",
-		DetectionExpr: `tools.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("DROP TABLE"))`,
+		RuleID:        "custom.bash_drop",
+		Title:         "bash drop table",
+		Description:   "destructive SQL via a bash tool",
+		DetectionExpr: `tool_calls.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("DROP TABLE"))`,
 	})
 
 	view := MessageView{
@@ -60,8 +60,8 @@ func TestScanCELRules_CorrelatedToolRule(t *testing.T) {
 func TestScanCELRules_CorrelationDoesNotCrossTools(t *testing.T) {
 	t.Parallel()
 	rules := celRules(t, CustomDetectionRule{
-		RuleID:       "custom.bash_drop",
-		DetectionExpr: `tools.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("DROP TABLE"))`,
+		RuleID:        "custom.bash_drop",
+		DetectionExpr: `tool_calls.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("DROP TABLE"))`,
 	})
 
 	view := MessageView{
@@ -79,7 +79,7 @@ func TestScanCELRules_CorrelationDoesNotCrossTools(t *testing.T) {
 func TestScanCELRules_ContentRule(t *testing.T) {
 	t.Parallel()
 	rules := celRules(t, CustomDetectionRule{
-		RuleID:       "custom.secret",
+		RuleID:        "custom.secret",
 		DetectionExpr: `content.matchRegex("secret")`,
 	})
 

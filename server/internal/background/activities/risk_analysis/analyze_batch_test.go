@@ -675,7 +675,7 @@ func TestAnalyzeBatch_CustomDetectionRuleMatchConfigToolServer(t *testing.T) {
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
-	td = seedCustomRulePolicySelection(t, conn, td, "custom.mise_tool", `tools.exists(t, t.server.matchExact("mise"))`)
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.mise_tool", `tool_calls.exists(t, t.server.matchExact("mise"))`)
 
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "mcp__mise__run_task", map[string]any{"task": "build"})
 
@@ -887,7 +887,7 @@ func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData
 		RuleID:         ruleID,
 		Title:          "ACME token",
 		Description:    "ACME token",
-		DetectionExpr:   detectionValue,
+		DetectionExpr:  detectionValue,
 		Severity:       "high",
 	})
 	require.NoError(t, err)

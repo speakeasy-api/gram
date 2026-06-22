@@ -202,7 +202,7 @@ var RiskSpan = Type("RiskSpan", func() {
 	Meta("struct:pkg:path", "types")
 
 	Attribute("match", String, "The matched secret or sensitive data for this span.")
-	Attribute("field", String, "The message field this span matched, in author-facing form (content, prompt, assistant, output, or tool.name/tool.server/tool.function/tool.args). Empty for detectors that don't attribute a field (e.g. gitleaks, presidio).")
+	Attribute("field", String, "The message field this span matched, in author-facing form (content, prompt, assistant, tool_result, or tool.name/tool.server/tool.function/tool.args). Empty for detectors that don't attribute a field (e.g. gitleaks, presidio).")
 	Attribute("path", String, "The JSON sub-path within the field for a `.get(...)` match (e.g. 'command', 'payload.sql'). Empty when the whole field value matched.")
 	Attribute("start_pos", Int, "Start byte position within the message content.")
 	Attribute("end_pos", Int, "End byte position within the message content.")

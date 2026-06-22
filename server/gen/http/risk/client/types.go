@@ -7044,8 +7044,8 @@ type RiskSpanResponseBody struct {
 	// The matched secret or sensitive data for this span.
 	Match *string `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`
 	// The message field this span matched, in author-facing form (content, prompt,
-	// assistant, output, or tool.name/tool.server/tool.function/tool.args). Empty
-	// for detectors that don't attribute a field (e.g. gitleaks, presidio).
+	// assistant, tool_result, or tool.name/tool.server/tool.function/tool.args).
+	// Empty for detectors that don't attribute a field (e.g. gitleaks, presidio).
 	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
 	// The JSON sub-path within the field for a `.get(...)` match (e.g. 'command',
 	// 'payload.sql'). Empty when the whole field value matched.

@@ -354,8 +354,8 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		DisabledRules:        createPolicyDetectionField(policyType, payload.DisabledRules),
 		CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
 		MessageTypes:         payload.MessageTypes,
-		ScopeInclude:      conv.PtrToPGText(payload.ScopeInclude),
-		ScopeExempt:       conv.PtrToPGText(payload.ScopeExempt),
+		ScopeInclude:         conv.PtrToPGText(payload.ScopeInclude),
+		ScopeExempt:          conv.PtrToPGText(payload.ScopeExempt),
 		Enabled:              enabled,
 		Action:               action,
 		AudienceType:         audienceType,
@@ -670,8 +670,8 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		DisabledRules:        disabledRules,
 		CustomRuleIds:        customRuleIds,
 		MessageTypes:         messageTypes,
-		ScopeInclude:      scopeInclude,
-		ScopeExempt:       scopeExempt,
+		ScopeInclude:         scopeInclude,
+		ScopeExempt:          scopeExempt,
 		Enabled:              enabled,
 		Action:               action,
 		AudienceType:         audienceType,
@@ -1726,7 +1726,7 @@ func (s *Service) CreateCustomDetectionRule(ctx context.Context, payload *gen.Cr
 		RuleID:         ruleID,
 		Title:          title,
 		Description:    description,
-		DetectionExpr:   conv.ToPGTextEmpty(detectionExpr),
+		DetectionExpr:  conv.ToPGTextEmpty(detectionExpr),
 		Severity:       severity,
 	})
 	if err != nil {
@@ -1825,12 +1825,12 @@ func (s *Service) UpdateCustomDetectionRule(ctx context.Context, payload *gen.Up
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := repo.New(dbtx).UpdateCustomDetectionRule(ctx, repo.UpdateCustomDetectionRuleParams{
-		ID:           id,
-		ProjectID:    *authCtx.ProjectID,
-		Title:        title,
-		Description:  description,
+		ID:            id,
+		ProjectID:     *authCtx.ProjectID,
+		Title:         title,
+		Description:   description,
 		DetectionExpr: conv.ToPGTextEmpty(detectionExpr),
-		Severity:     payload.Severity,
+		Severity:      payload.Severity,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "custom detection rule not found").LogError(ctx, s.logger)
@@ -1930,11 +1930,11 @@ func heuristicCustomRuleSuggestion(prompt string, existingIDs []string) *gen.Sug
 	}
 
 	return &gen.SuggestCustomDetectionRuleResult{
-		RuleID:       ruleID,
-		Title:        title,
-		Description:  strings.TrimSpace(prompt),
+		RuleID:        ruleID,
+		Title:         title,
+		Description:   strings.TrimSpace(prompt),
 		DetectionExpr: nil,
-		Severity:     "medium",
+		Severity:      "medium",
 	}
 }
 
@@ -2067,8 +2067,8 @@ CEL environment for "detection_expr":
   - content   — the message's raw text body, any message type.
   - prompt    — the body of a user message (empty otherwise).
   - assistant — the body of an assistant message (empty otherwise).
-  - output    — the body of a tool response, i.e. the tool's output (empty otherwise).
-- tools — the tool calls on a tool-request message. Iterate with tools.exists(t, <predicate on t>). Each t has correlated fields: t.name (raw tool-call name, e.g. mcp__mise__run_task), t.server (MCP server name, "" for native tools like Bash), t.function (bare function name, e.g. run_task), t.args (the raw tool arguments JSON).
+  - tool_result — the output of a tool response message (empty otherwise). Singular: one response carries one tool's output.
+- tool_calls — the tool calls on a tool-request message (plural: one request can fan out parallel calls). Iterate with tool_calls.exists(t, <predicate on t>). Each t has correlated fields: t.name (raw tool-call name, e.g. mcp__mise__run_task), t.server (MCP server name, "" for native tools like Bash), t.function (bare function name, e.g. run_task), t.args (the raw tool arguments JSON).
 - kind — message type string (user_message, assistant_message, tool_request, tool_response). Usually unnecessary because the body fields are already auto-scoped.
 
 Matchers (call as a method on a field; all return bool):
@@ -2085,10 +2085,10 @@ Compose with && (and), || (or), ! (not), and parentheses.
 Examples:
 - prompt.matchText("password")
 - content.matchRegex("sk-[A-Za-z0-9]{32}")
-- tools.exists(t, t.server.matchExact("shell"))
-- tools.exists(t, t.function.matchGlob("*_exec"))
-- tools.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("DROP TABLE"))
-- output.get("error").present()
+- tool_calls.exists(t, t.server.matchExact("shell"))
+- tool_calls.exists(t, t.function.matchGlob("*_exec"))
+- tool_calls.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("DROP TABLE"))
+- tool_result.get("error").present()
 
 Output ONLY the JSON object. No prose, no markdown fences.`
 
@@ -2102,10 +2102,10 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"rule_id":       map[string]any{"type": "string", "pattern": "^custom\\.[a-z0-9_]+$"},
-			"title":         map[string]any{"type": "string", "minLength": 1, "maxLength": 80},
-			"description":   map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
-			"severity":      map[string]any{"type": "string", "enum": []string{"info", "low", "medium", "high", "critical"}},
+			"rule_id":        map[string]any{"type": "string", "pattern": "^custom\\.[a-z0-9_]+$"},
+			"title":          map[string]any{"type": "string", "minLength": 1, "maxLength": 80},
+			"description":    map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
+			"severity":       map[string]any{"type": "string", "enum": []string{"info", "low", "medium", "high", "critical"}},
 			"detection_expr": map[string]any{"type": "string", "minLength": 1, "maxLength": 1000},
 		},
 		"required":             []string{"rule_id", "title", "description", "severity", "detection_expr"},
@@ -2149,10 +2149,10 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	}
 
 	var parsed struct {
-		RuleID       string `json:"rule_id"`
-		Title        string `json:"title"`
-		Description  string `json:"description"`
-		Severity     string `json:"severity"`
+		RuleID        string `json:"rule_id"`
+		Title         string `json:"title"`
+		Description   string `json:"description"`
+		Severity      string `json:"severity"`
 		DetectionExpr string `json:"detection_expr"`
 	}
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
@@ -2182,11 +2182,11 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	}
 
 	return &gen.SuggestCustomDetectionRuleResult{
-		RuleID:       parsed.RuleID,
-		Title:        parsed.Title,
-		Description:  parsed.Description,
+		RuleID:        parsed.RuleID,
+		Title:         parsed.Title,
+		Description:   parsed.Description,
 		DetectionExpr: conv.PtrEmpty(parsed.DetectionExpr),
-		Severity:     parsed.Severity,
+		Severity:      parsed.Severity,
 	}, nil
 }
 
@@ -2331,11 +2331,11 @@ func (s *Service) testCustomRule(ruleID, detectionExpr, text string) (*gen.TestD
 	// message (content/prompt populated, no tool calls). Tool-targeted rules
 	// simply won't match here; save them and run analysis to see matches.
 	compiled, err := ra.CompileCELRules(eng, []ra.CustomDetectionRule{{
-		RuleID:       ruleID,
-		Title:        "",
-		Description:  "Custom rule match",
+		RuleID:        ruleID,
+		Title:         "",
+		Description:   "Custom rule match",
 		DetectionExpr: detectionExpr,
-		Regex:        "",
+		Regex:         "",
 	}})
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid detection_expr")
@@ -2403,8 +2403,8 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		DisabledRules:         row.DisabledRules,
 		CustomRuleIds:         row.CustomRuleIds,
 		MessageTypes:          row.MessageTypes,
-		ScopeInclude:       conv.FromPGText[string](row.ScopeInclude),
-		ScopeExempt:        conv.FromPGText[string](row.ScopeExempt),
+		ScopeInclude:          conv.FromPGText[string](row.ScopeInclude),
+		ScopeExempt:           conv.FromPGText[string](row.ScopeExempt),
 		Enabled:               row.Enabled,
 		Action:                row.Action,
 		AudienceType:          row.AudienceType,
@@ -2436,8 +2436,8 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		DisabledRules:         row.DisabledRules,
 		CustomRuleIds:         row.CustomRuleIds,
 		MessageTypes:          row.MessageTypes,
-		ScopeInclude:       conv.FromPGText[string](row.ScopeInclude),
-		ScopeExempt:        conv.FromPGText[string](row.ScopeExempt),
+		ScopeInclude:          conv.FromPGText[string](row.ScopeInclude),
+		ScopeExempt:           conv.FromPGText[string](row.ScopeExempt),
 		Enabled:               row.Enabled,
 		Action:                row.Action,
 		AudienceType:          row.AudienceType,
@@ -2456,15 +2456,15 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 
 func customDetectionRuleToType(row repo.RiskCustomDetectionRule) *types.RiskCustomDetectionRule {
 	return &types.RiskCustomDetectionRule{
-		ID:           row.ID.String(),
-		RuleID:       row.RuleID,
-		Title:        row.Title,
-		Description:  row.Description,
-		Regex:        conv.PtrValOr(conv.FromPGText[string](row.Regex), ""),
+		ID:            row.ID.String(),
+		RuleID:        row.RuleID,
+		Title:         row.Title,
+		Description:   row.Description,
+		Regex:         conv.PtrValOr(conv.FromPGText[string](row.Regex), ""),
 		DetectionExpr: conv.FromPGText[string](row.DetectionExpr),
-		Severity:     row.Severity,
-		CreatedAt:    row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:    row.UpdatedAt.Time.Format(time.RFC3339),
+		Severity:      row.Severity,
+		CreatedAt:     row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:     row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 
