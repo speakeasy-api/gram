@@ -1000,6 +1000,9 @@ func (f *FlyRunner) tryMarkDeployFailed(
 		}
 	}
 
+	ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+
 	if state.internalAppID != uuid.Nil {
 		reapColumn := pgtype.Timestamptz{
 			Time:             reapedAt,
