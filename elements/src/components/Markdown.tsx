@@ -35,6 +35,7 @@ const MarkdownImpl: FC<MarkdownProps> = ({ children, className }) => {
 };
 
 export const Markdown = memo(MarkdownImpl);
+Markdown.displayName = "Markdown";
 
 // A fenced/indented code block, as opposed to inline `code`. react-markdown
 // (>= v9) no longer passes an `inline` prop, so we infer block status from the

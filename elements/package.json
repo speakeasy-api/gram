@@ -118,9 +118,8 @@
     "fastify": "^4.0.0 || ^5.0.0",
     "hono": "^3.0.0 || ^4.0.0 || ^5.0.0",
     "motion": "^12.0.0",
-    "react": ">=16.8",
-    "react-dom": ">=16.8",
-    "remark-gfm": "^4.0.0",
+    "react": ">=18",
+    "react-dom": ">=18",
     "shiki": "^3.20.0",
     "zustand": "^5.0.0"
   },
@@ -156,9 +155,6 @@
       "optional": true
     },
     "react-dom": {
-      "optional": true
-    },
-    "remark-gfm": {
       "optional": true
     },
     "zustand": {
@@ -202,6 +198,7 @@
     "radix-ui": "^1.4.3",
     "react-markdown": "^10.1.0",
     "recharts": "^2.15.4",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.6.0",
     "tw-shimmer": "^0.4.0",
     "vega": "^6.2.0",

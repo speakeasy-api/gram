@@ -43,9 +43,8 @@ function pgJson(v: unknown): string {
   return pg(JSON.stringify(v));
 }
 function chAttrs(obj: Record<string, unknown>): string {
-  // ClickHouse string literal carrying a JSON object. Seed data is ASCII and
-  // free of single quotes, so a plain wrap is safe.
-  return `'${JSON.stringify(obj)}'`;
+  // ClickHouse string literal carrying a JSON object, single quotes escaped.
+  return `'${JSON.stringify(obj).replace(/'/g, "''")}'`;
 }
 
 // ---------------------------------------------------------------------------
@@ -704,8 +703,8 @@ async function resolveProject(
   let where = "p.deleted = false";
   if (projectArg) {
     where += isUuid
-      ? ` AND p.id = '${projectArg}'`
-      : ` AND p.slug = '${projectArg}'`;
+      ? ` AND p.id = ${pg(projectArg)}`
+      : ` AND p.slug = ${pg(projectArg)}`;
   }
   const query =
     `SELECT p.id, p.organization_id FROM projects p ` +

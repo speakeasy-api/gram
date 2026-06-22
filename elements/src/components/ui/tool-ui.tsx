@@ -355,12 +355,17 @@ function findMatchHits(text: string, values: string[]): MatchHit[] {
       idx = text.indexOf(value, from);
     }
   });
-  hits.sort((a, b) => a.start - b.start);
+  hits.sort((a, b) => a.start - b.start || a.matchIndex - b.matchIndex);
   const merged: MatchHit[] = [];
   for (const hit of hits) {
     const last = merged[merged.length - 1];
-    if (last && hit.start <= last.end) last.end = Math.max(last.end, hit.end);
-    else merged.push({ ...hit });
+    // Only coalesce overlapping ranges from the SAME finding — merging across
+    // findings would drop a matchIndex and mislabel the active match/exclusion.
+    if (last && hit.matchIndex === last.matchIndex && hit.start <= last.end) {
+      last.end = Math.max(last.end, hit.end);
+    } else {
+      merged.push({ ...hit });
+    }
   }
   return merged;
 }
@@ -1046,6 +1051,10 @@ function ToolUIGroup({
 /* -----------------------------------------------------------------------------
  * Exports
  * -------------------------------------------------------------------------- */
+
+ToolUI.displayName = "ToolUI";
+ToolUISection.displayName = "ToolUISection";
+SyntaxHighlightedCode.displayName = "SyntaxHighlightedCode";
 
 export {
   ToolUI,
