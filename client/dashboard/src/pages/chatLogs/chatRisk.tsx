@@ -1,0 +1,361 @@
+import { Eye, EyeOff, ShieldOff } from "lucide-react";
+import { type ReactNode, useContext, useMemo } from "react";
+import {
+  Badge,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Icon,
+} from "@speakeasy-api/moonshine";
+import type { RiskResult } from "@gram/client/models/components";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { CreateExclusionContext } from "./exclusionContext";
+import {
+  buildSnippets,
+  getMatchStrings,
+  getRiskBadgeLabel,
+  highlightMatches,
+  maskValue,
+  resultsAreSensitive,
+  RISK_MARK_CLASS,
+  shouldShowRiskRuleId,
+  useRowReveal,
+} from "./chatRiskHelpers";
+
+/** A short flagged message rendered inline with the matched span(s) marked in
+ * yellow, plus a reveal toggle when the match is sensitive. */
+export function HighlightedMessageText({
+  text,
+  results,
+  revealed: controlledRevealed,
+}: {
+  text: string;
+  results: RiskResult[];
+  /** When provided, the host owns the reveal state (e.g. a toggle in the
+   * message meta strip) and the inline toggle is hidden. */
+  revealed?: boolean;
+}): ReactNode {
+  const matches = useMemo(() => getMatchStrings(results), [results]);
+  const sensitive = resultsAreSensitive(results);
+  const internal = useRowReveal(sensitive);
+  const isControlled = controlledRevealed !== undefined;
+  const revealed = controlledRevealed ?? internal.revealed;
+  return (
+    <div className="space-y-1">
+      <div className="whitespace-pre-wrap">
+        {highlightMatches(text, matches, sensitive && !revealed)}
+      </div>
+      {sensitive && !isControlled && (
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
+          onClick={() => internal.setRevealed(!internal.revealed)}
+        >
+          {internal.revealed ? (
+            <Eye className="size-3" />
+          ) : (
+            <EyeOff className="size-3" />
+          )}
+          {internal.revealed ? "Hide secret" : "Reveal secret"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * For a flagged tool call/result, surface just the matched region(s) with a
+ * little surrounding context and the match highlighted in yellow — so a reviewer
+ * doesn't have to scroll a large payload to find what tripped the rule.
+ */
+export function RiskMatchSnippets({
+  content,
+  results,
+}: {
+  content: string;
+  results: RiskResult[];
+}): ReactNode {
+  const matches = useMemo(() => getMatchStrings(results), [results]);
+  const sensitive = resultsAreSensitive(results);
+  const { revealed, setRevealed } = useRowReveal(sensitive);
+  const snippets = useMemo(
+    () => buildSnippets(content, matches),
+    [content, matches],
+  );
+  if (snippets.length === 0) return null;
+
+  const masked = sensitive && !revealed;
+
+  return (
+    <div className="border-warning-softest bg-warning-softest/40 space-y-1.5 rounded-md border p-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-muted-foreground text-xs font-medium">
+          Flagged content
+        </span>
+        {sensitive && (
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
+            onClick={() => setRevealed(!revealed)}
+          >
+            {revealed ? (
+              <Eye className="size-3" />
+            ) : (
+              <EyeOff className="size-3" />
+            )}
+            {revealed ? "Hide" : "Reveal"}
+          </button>
+        )}
+      </div>
+      {snippets.map((snippet, i) => (
+        <code
+          key={i}
+          className="text-foreground block font-mono text-xs break-all"
+        >
+          {snippet.truncatedStart && (
+            <span className="text-muted-foreground">…</span>
+          )}
+          {snippet.before}
+          <mark className={RISK_MARK_CLASS}>
+            {masked ? maskValue(snippet.value) : snippet.value}
+          </mark>
+          {snippet.after}
+          {snippet.truncatedEnd && (
+            <span className="text-muted-foreground">…</span>
+          )}
+        </code>
+      ))}
+    </div>
+  );
+}
+
+function MaskedMatchInline({ value }: { value: string }): ReactNode {
+  const { revealed, setRevealed } = useRowReveal(true);
+  if (!revealed) {
+    return (
+      <button
+        type="button"
+        className="text-muted-foreground hover:text-foreground mt-1 inline-flex items-center gap-1 text-xs"
+        onClick={() => setRevealed(true)}
+      >
+        <EyeOff className="h-3 w-3" />
+        <span>Click to reveal</span>
+      </button>
+    );
+  }
+  return (
+    <span className="mt-1 inline-flex items-center gap-1">
+      <code className="bg-destructive/10 text-destructive inline-block rounded px-1.5 py-0.5 font-mono text-xs break-all">
+        {value}
+      </code>
+      <button
+        type="button"
+        className="text-muted-foreground hover:text-foreground"
+        onClick={() => setRevealed(false)}
+      >
+        <Eye className="h-3 w-3" />
+      </button>
+    </span>
+  );
+}
+
+/** Compact "N risks" badge with a popover listing each unique finding. */
+export function RiskBadge({
+  results,
+  compact = false,
+}: {
+  results: RiskResult[];
+  compact?: boolean;
+}): ReactNode {
+  const unique = useMemo(() => {
+    const grouped = new Map<string, { result: RiskResult; count: number }>();
+    for (const r of results) {
+      const key = `${r.source} ${r.ruleId ?? ""} ${r.match ?? ""}`;
+      const hit = grouped.get(key);
+      if (hit) hit.count++;
+      else grouped.set(key, { result: r, count: 1 });
+    }
+    return [...grouped.values()];
+  }, [results]);
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="cursor-pointer"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Badge
+            variant="destructive"
+            className={compact ? "px-1.5 py-0 text-[10px]" : "text-xs"}
+          >
+            <Icon
+              name="shield-alert"
+              className={`mr-1 ${compact ? "size-2.5" : "size-3"}`}
+            />
+            {unique.length} {unique.length === 1 ? "Risk" : "Risks"}
+          </Badge>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="max-h-[70vh] w-80 overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="space-y-3">
+          <div className="text-sm font-semibold">Risk Findings</div>
+          <div className="divide-border divide-y">
+            {unique.map(({ result: r, count }) => (
+              <div key={r.id} className="py-2 first:pt-0 last:pb-0">
+                <div className="flex items-center gap-2">
+                  <Badge variant="destructive" className="shrink-0 text-[10px]">
+                    {getRiskBadgeLabel(r)}
+                  </Badge>
+                  {shouldShowRiskRuleId(r) && (
+                    <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
+                      {r.ruleId}
+                    </span>
+                  )}
+                  {count > 1 && (
+                    <Badge
+                      variant="neutral"
+                      className="ml-auto shrink-0 text-[10px]"
+                    >
+                      ×{count}
+                    </Badge>
+                  )}
+                </div>
+                {r.description && (
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    {r.description}
+                  </p>
+                )}
+                {r.match && <MaskedMatchInline value={r.match} />}
+                {r.tags && r.tags.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {r.tags.map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant="neutral"
+                        className="text-[10px]"
+                      >
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Subtle, low-emphasis action styled to sit in the message meta strip alongside
+// the cost figure — muted by default, darkens on hover, small leading icon so it
+// reads as an action rather than a label.
+const META_ACTION_CLASS =
+  "text-muted-foreground hover:text-foreground inline-flex shrink-0 cursor-pointer items-center gap-1 text-xs transition-colors";
+
+/** Reveal/hide toggle for a row's masked secret, styled for the meta strip. The
+ * host owns the `revealed` state so the bubble's highlighted text stays in sync.
+ * Renders nothing when the row has no maskable (sensitive) finding. */
+export function RevealSecretButton({
+  results,
+  revealed,
+  onToggle,
+}: {
+  results: RiskResult[];
+  revealed: boolean;
+  onToggle: () => void;
+}): ReactNode {
+  if (!resultsAreSensitive(results)) return null;
+  return (
+    <button type="button" className={META_ACTION_CLASS} onClick={onToggle}>
+      {revealed ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
+      {revealed ? "Hide" : "Reveal"}
+    </button>
+  );
+}
+
+/** Thin vertical rule between items in a message meta strip. Rendered next to a
+ * sibling (never on its own) so it doesn't dangle. */
+export function MetaSeparator(): ReactNode {
+  return <span aria-hidden className="bg-border h-3 w-px shrink-0" />;
+}
+
+/** Compact "Create exclusion" action for a flagged row's meta strip. When
+ * several distinct findings are excludable it opens a dropdown to pick one.
+ * `leadingSeparator` draws a hairline before it to delimit metadata from
+ * actions — only emitted when the action actually renders. */
+export function CreateExclusionButton({
+  results,
+  leadingSeparator = false,
+}: {
+  results: RiskResult[];
+  leadingSeparator?: boolean;
+}): ReactNode {
+  const openCreateExclusion = useContext(CreateExclusionContext);
+
+  const actionable = useMemo(() => {
+    if (!openCreateExclusion) return [];
+    const seen = new Set<string>();
+    const out: RiskResult[] = [];
+    for (const r of results) {
+      const key = `${r.source}|${r.ruleId ?? ""}|${r.match ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (r.ruleId !== "llm_judge") out.push(r);
+    }
+    return out;
+  }, [results, openCreateExclusion]);
+
+  if (actionable.length === 0) return null;
+
+  const trigger =
+    actionable.length === 1 ? (
+      <button
+        type="button"
+        className={META_ACTION_CLASS}
+        onClick={() => openCreateExclusion?.(actionable[0]!)}
+      >
+        <ShieldOff className="size-3" />
+        Create exclusion
+      </button>
+    ) : (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className={META_ACTION_CLASS}>
+            <ShieldOff className="size-3" />
+            Create exclusion
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {actionable.map((r) => (
+            <DropdownMenuItem
+              key={r.id}
+              className="cursor-pointer"
+              onSelect={() => openCreateExclusion?.(r)}
+            >
+              {[r.ruleId, r.source].filter(Boolean).join(" · ")}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+
+  return (
+    <>
+      {leadingSeparator && <MetaSeparator />}
+      {trigger}
+    </>
+  );
+}
