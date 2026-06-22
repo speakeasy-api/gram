@@ -911,7 +911,7 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "what's each source catching",
       icon: "trend",
       prompt:
-        "What is each detection source catching? Group findings by source (gitleaks, presidio, prompt_injection, shadow_mcp, destructive_tool) over the last 7 days, and report counts with the top rule per source family.",
+        "What is each detection source catching? Group findings by source (gitleaks, PII, prompt_injection, shadow_mcp, destructive_tool) over the last 7 days, and report counts with the top rule per source family.",
     },
     {
       title: "What detectors exist?",

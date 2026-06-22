@@ -51,6 +51,7 @@ import {
   type SeverityLevel,
 } from "./detection-rules-data";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
+import { getCategoryCodeForFinding } from "./risk-utils";
 
 /** Presidio-backed categories: kept in the same order the policy form uses
  *  so users see the two surfaces in the same shape. */
@@ -738,7 +739,7 @@ function MatchList({
                 <span>{m.ruleId}</span>
                 <span>
                   {m.startPos}–{m.endPos} · conf {m.confidence.toFixed(2)} ·{" "}
-                  {m.source}
+                  {getCategoryCodeForFinding(m.source, m.ruleId)}
                 </span>
               </div>
               <pre className="bg-muted/50 overflow-x-auto rounded px-2 py-1 font-mono text-[11px]">
