@@ -181,7 +181,7 @@
     }
   },
   "dependencies": {
-    "@ai-sdk/mcp": "^1.0.0",
+    "@ai-sdk/mcp": "^1.0.51",
     "@chromatic-com/storybook": "^5.0.0",
     "@datadog/browser-rum": "^6.24.1",
     "@json-render/core": "^0.2.0",
