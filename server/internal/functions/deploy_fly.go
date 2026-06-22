@@ -695,13 +695,23 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 
 // isFlyAppReady reports whether the error does NOT indicate a transient Fly.io
 // propagation failure where the Machines API hasn't seen the newly-created app
-// yet. Returns true when err is nil or is an unrelated error.
+// yet. Returns true when err is nil or is an unrelated (non-retryable) error.
 func isFlyAppReady(err error) bool {
 	if err == nil {
 		return true
 	}
+
+	// The Machines API answers 404 ("app not found") while an app created via
+	// the GraphQL API is still propagating. Match the typed Flaps status code
+	// rather than relying solely on substrings.
+	if errors.Is(err, flaps.FlapsErrorNotFound) {
+		return false
+	}
+
 	msg := err.Error()
-	return !strings.Contains(msg, "no rows in result set") && !strings.Contains(msg, "failed to get app")
+	return !strings.Contains(msg, "no rows in result set") &&
+		!strings.Contains(msg, "failed to get app") &&
+		!strings.Contains(msg, "app not found")
 }
 
 func (f *FlyRunner) launchN(ctx context.Context, logger *slog.Logger, appName string, flapsc *flaps.Client, region string, config *fly.MachineConfig, minSecretVersion *uint64, n uint8) ([]*fly.Machine, error) {
