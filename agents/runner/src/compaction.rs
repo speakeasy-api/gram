@@ -23,7 +23,7 @@
 //! not persist as divergence on the user's chat.
 
 use std::num::NonZeroU8;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use agentkit_adapter_completions::CompletionsAdapter;
 use agentkit_compaction::{
@@ -160,6 +160,11 @@ pub struct PersistingCompactor {
     client: GramBootstrapClient,
     tokens: TokenRegistry,
     thread_id: String,
+    /// Set for the OnTurnEnd terminal pass: after a successful compact+persist,
+    /// the result is stashed here for the [`CachedCompactor`] mutator to apply
+    /// in-memory at the next turn. `None` for the Threshold inline compactor,
+    /// which mutates the live transcript itself.
+    cache: Option<CompactionCache>,
 }
 
 impl PersistingCompactor {
@@ -168,12 +173,14 @@ impl PersistingCompactor {
         client: GramBootstrapClient,
         tokens: TokenRegistry,
         thread_id: String,
+        cache: Option<CompactionCache>,
     ) -> Self {
         Self {
             inner,
             client,
             tokens,
             thread_id,
+            cache,
         }
     }
 }
@@ -248,6 +255,17 @@ impl Compactor for PersistingCompactor {
                     rows = messages.len(),
                     "compacted generation persisted"
                 );
+                // Hand the compacted transcript to the OnTurnEnd mutator so it
+                // can replace the live in-memory transcript on the next turn
+                // without re-summarising. `input_len` lets the mutator re-append
+                // anything submitted between now and then.
+                if let Some(cache) = &self.cache {
+                    let mut slot = cache.lock().unwrap_or_else(|p| p.into_inner());
+                    *slot = Some(CachedCompaction {
+                        input_len: transcript.len(),
+                        items: compacted.clone(),
+                    });
+                }
                 Ok(compacted)
             }
             Err(err) => {
@@ -267,12 +285,82 @@ impl Compactor for PersistingCompactor {
     }
 }
 
-/// Builds the compactor to attach to the agent via
-/// [`agentkit_compaction::AgentBuilderCompactorExt::compactor`]. Returns
-/// `None` when [`build_trigger`] declines. The returned compactor POSTs
-/// the post-compaction transcript to the server synchronously inside
-/// `compact()` so the new chat_messages generation is durable before the
-/// loop accepts the next turn.
+/// Hand-off slot between the terminal turn-end compaction and the OnTurnEnd
+/// mutator. The terminal pass runs at `LoopStep::Finished` — which fires the
+/// instant a turn ends, before the next turn is admitted and before a cron
+/// thread can be idle-reaped — computes + persists once, and stashes the result
+/// here. The mutator reads it back at the next `AfterTurnEnded` and applies it
+/// to the live transcript, so the warm transcript is bounded without a second
+/// summarisation pass. A reaped-before-next-turn cron simply loses the slot;
+/// the terminal pass already persisted, so the next cold bootstrap is compacted.
+pub(crate) type CompactionCache = Arc<Mutex<Option<CachedCompaction>>>;
+
+pub(crate) struct CachedCompaction {
+    /// Length of the transcript the terminal pass compacted, so the mutator can
+    /// re-append anything submitted between then and the next turn.
+    input_len: usize,
+    items: Vec<Item>,
+}
+
+/// The OnTurnEnd loop mutator. It never summarises: it returns the transcript
+/// the terminal [`PersistingCompactor`] already computed + persisted at turn
+/// end (via `cache`), with anything submitted since appended, so the loop
+/// replaces the live in-memory transcript with the compacted one for free. A
+/// cache miss (first turn, or the terminal pass failed/raced) is a no-op — the
+/// terminal pass owns persistence, so correctness never depends on this hit.
+pub struct CachedCompactor {
+    cache: CompactionCache,
+    trigger: TriggerFn,
+}
+
+#[async_trait]
+impl Compactor for CachedCompactor {
+    fn should_compact(
+        &self,
+        transcript: &[Item],
+        point: MutationPoint,
+    ) -> Option<CompactionReason> {
+        (self.trigger)(transcript, point)
+    }
+
+    async fn compact(
+        &self,
+        transcript: &[Item],
+        _reason: CompactionReason,
+        _cancellation: Option<TurnCancellation>,
+    ) -> Result<Vec<Item>, CompactionError> {
+        let cached = self
+            .cache
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take();
+        match cached {
+            Some(c) if c.input_len <= transcript.len() => {
+                let mut out = c.items;
+                out.extend_from_slice(&transcript[c.input_len..]);
+                Ok(out)
+            }
+            _ => Ok(transcript.to_vec()),
+        }
+    }
+}
+
+/// What [`build_compactor`] hands back. `Threshold` shrinks-to-fit inline before
+/// a model request; `OnTurnEnd` pairs a `terminal` pass (run explicitly at turn
+/// end — computes, persists, caches) with a `mutator` that applies the cached
+/// result in-memory at the next turn.
+pub enum Compaction {
+    Inline(PersistingCompactor),
+    TurnEnd {
+        mutator: CachedCompactor,
+        terminal: PersistingCompactor,
+    },
+}
+
+/// Builds the compaction wiring for a thread, or `None` when [`build_trigger`]
+/// declines. Both the inline and terminal compactors POST the post-compaction
+/// transcript to the server synchronously inside `compact()` so the new
+/// chat_messages generation is durable before the loop accepts the next turn.
 pub fn build_compactor(
     policy: &CompactionPolicy,
     chat_id: &str,
@@ -281,7 +369,7 @@ pub fn build_compactor(
     compactor_adapter: CompletionsAdapter<OpenRouterProvider>,
     client: GramBootstrapClient,
     tokens: TokenRegistry,
-) -> Result<Option<PersistingCompactor>, RunnerError> {
+) -> Result<Option<Compaction>, RunnerError> {
     let Some(trigger) = build_trigger(policy, context_window) else {
         return Ok(None);
     };
@@ -313,12 +401,36 @@ pub fn build_compactor(
         .backend(backend)
         .build()
         .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
-    Ok(Some(PersistingCompactor::new(
-        inner,
-        client,
-        tokens,
-        thread_id.to_string(),
-    )))
+
+    // OnTurnEnd fires at AfterTurnEnded, which agentkit only reaches when the
+    // NEXT turn is admitted — too late for a cron thread reaped between fires,
+    // and it would never even persist. So run the real compaction terminally at
+    // turn end (caching its output) and let a lightweight mutator replay the
+    // cache in-memory if and when a next turn arrives. Threshold needs neither:
+    // it shrinks-to-fit inline and mutates the transcript directly.
+    if policy.runs_at_turn_end() {
+        let cache: CompactionCache = Arc::new(Mutex::new(None));
+        let terminal = PersistingCompactor::new(
+            inner,
+            client,
+            tokens,
+            thread_id.to_string(),
+            Some(Arc::clone(&cache)),
+        );
+        let mutator = CachedCompactor {
+            cache,
+            trigger: on_turn_end_trigger(),
+        };
+        Ok(Some(Compaction::TurnEnd { mutator, terminal }))
+    } else {
+        Ok(Some(Compaction::Inline(PersistingCompactor::new(
+            inner,
+            client,
+            tokens,
+            thread_id.to_string(),
+            None,
+        ))))
+    }
 }
 
 /// Converts an agentkit transcript back into the wire shape the server
@@ -439,6 +551,53 @@ mod tests {
 
     fn parse(json: &str) -> CompactionPolicy {
         serde_json::from_str(json).expect("CompactionPolicy::deserialize never errors")
+    }
+
+    #[tokio::test]
+    async fn cached_compactor_replays_cache_and_appends_tail() {
+        // The terminal pass cached a 1-item summary of a length-2 transcript.
+        let cache: CompactionCache = Arc::new(Mutex::new(Some(CachedCompaction {
+            input_len: 2,
+            items: vec![Item::text(ItemKind::User, "summary")],
+        })));
+        let compactor = CachedCompactor {
+            cache: Arc::clone(&cache),
+            trigger: on_turn_end_trigger(),
+        };
+        // The live transcript grew by one freshly-submitted item since.
+        let transcript = vec![
+            Item::text(ItemKind::User, "old-1"),
+            Item::text(ItemKind::Assistant, "old-2"),
+            Item::text(ItemKind::User, "new-input"),
+        ];
+        let out = compactor
+            .compact(&transcript, CompactionReason::Custom("x".into()), None)
+            .await
+            .expect("cached compact never errors");
+        // summary + the one item past input_len, not a re-summarisation.
+        assert_eq!(out.len(), 2);
+        assert_eq!(concat_text(&out[0].parts), "summary");
+        assert_eq!(concat_text(&out[1].parts), "new-input");
+        // The slot is consumed so a stale cache can't be replayed twice.
+        assert!(cache.lock().unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn cached_compactor_miss_keeps_transcript() {
+        let compactor = CachedCompactor {
+            cache: Arc::new(Mutex::new(None)),
+            trigger: on_turn_end_trigger(),
+        };
+        let transcript = vec![
+            Item::text(ItemKind::User, "a"),
+            Item::text(ItemKind::User, "b"),
+        ];
+        let out = compactor
+            .compact(&transcript, CompactionReason::Custom("x".into()), None)
+            .await
+            .expect("cached compact never errors");
+        assert_eq!(out.len(), 2);
+        assert_eq!(concat_text(&out[1].parts), "b");
     }
 
     #[test]
