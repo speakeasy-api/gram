@@ -29,6 +29,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@gram-ai/elements": "workspace:*",
     "@gram/client": "workspace:*",
+    "@marcbachmann/cel-js": "^7.6.1",
     "@monaco-editor/react": "^4.7.0",
     "@openrouter/ai-sdk-provider": "^2.0.0",
     "@pierre/diffs": "^1.1.1",

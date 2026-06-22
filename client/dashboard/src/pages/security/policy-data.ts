@@ -97,8 +97,9 @@ export const RULE_CATEGORY_META: Record<
     icon: "terminal",
   },
   custom: {
-    label: "Custom Patterns",
-    description: "Organization-specific data patterns (regex)",
+    label: "Custom Rules",
+    description:
+      "Organization-defined detection rules over message content, tool calls, and arguments",
     icon: "regex",
   },
 };
@@ -123,6 +124,181 @@ export const POLICY_MESSAGE_TYPE_META: Record<
     label: "Assistant Messages",
     description: "Assistant text responses that are not tool-call requests",
   },
+};
+
+// Provider -> family for breaking the large `secrets` catalog into navigable
+// sub-groups. Keyed by the token after `secret.` up to the first underscore
+// (e.g. `secret.aws_access_token` -> "aws"). Unmapped/new providers fall into
+// "Other", so the catalog keeps working as gitleaks rules are added upstream.
+const SECRET_FAMILY_BY_PROVIDER: Record<string, string> = {
+  // Cloud & Infrastructure
+  aws: "Cloud & Infrastructure",
+  azure: "Cloud & Infrastructure",
+  gcp: "Cloud & Infrastructure",
+  alibaba: "Cloud & Infrastructure",
+  digitalocean: "Cloud & Infrastructure",
+  heroku: "Cloud & Infrastructure",
+  flyio: "Cloud & Infrastructure",
+  scalingo: "Cloud & Infrastructure",
+  netlify: "Cloud & Infrastructure",
+  fastly: "Cloud & Infrastructure",
+  cloudflare: "Cloud & Infrastructure",
+  openshift: "Cloud & Infrastructure",
+  kubernetes: "Cloud & Infrastructure",
+  pulumi: "Cloud & Infrastructure",
+  hashicorp: "Cloud & Infrastructure",
+  vault: "Cloud & Infrastructure",
+  yandex: "Cloud & Infrastructure",
+  cisco: "Cloud & Infrastructure",
+  // Source Control & Packages
+  github: "Source Control & Packages",
+  gitlab: "Source Control & Packages",
+  bitbucket: "Source Control & Packages",
+  sourcegraph: "Source Control & Packages",
+  jfrog: "Source Control & Packages",
+  artifactory: "Source Control & Packages",
+  npm: "Source Control & Packages",
+  nuget: "Source Control & Packages",
+  pypi: "Source Control & Packages",
+  rubygems: "Source Control & Packages",
+  clojars: "Source Control & Packages",
+  postman: "Source Control & Packages",
+  // CI & DevOps
+  codecov: "CI & DevOps",
+  droneci: "CI & DevOps",
+  travisci: "CI & DevOps",
+  harness: "CI & DevOps",
+  octopus: "CI & DevOps",
+  infracost: "CI & DevOps",
+  doppler: "CI & DevOps",
+  launchdarkly: "CI & DevOps",
+  sidekiq: "CI & DevOps",
+  snyk: "CI & DevOps",
+  sonar: "CI & DevOps",
+  prefect: "CI & DevOps",
+  rapidapi: "CI & DevOps",
+  // Payments & Fintech
+  stripe: "Payments & Fintech",
+  plaid: "Payments & Fintech",
+  square: "Payments & Fintech",
+  coinbase: "Payments & Fintech",
+  kraken: "Payments & Fintech",
+  kucoin: "Payments & Fintech",
+  bittrex: "Payments & Fintech",
+  gocardless: "Payments & Fintech",
+  flutterwave: "Payments & Fintech",
+  finicity: "Payments & Fintech",
+  finnhub: "Payments & Fintech",
+  duffel: "Payments & Fintech",
+  easypost: "Payments & Fintech",
+  shippo: "Payments & Fintech",
+  lob: "Payments & Fintech",
+  freshbooks: "Payments & Fintech",
+  // Communication
+  slack: "Communication",
+  discord: "Communication",
+  telegram: "Communication",
+  twilio: "Communication",
+  messagebird: "Communication",
+  sendbird: "Communication",
+  mattermost: "Communication",
+  intercom: "Communication",
+  zendesk: "Communication",
+  beamer: "Communication",
+  gitter: "Communication",
+  // Email & Marketing
+  mailchimp: "Email & Marketing",
+  mailgun: "Email & Marketing",
+  sendgrid: "Email & Marketing",
+  sendinblue: "Email & Marketing",
+  hubspot: "Email & Marketing",
+  typeform: "Email & Marketing",
+  contentful: "Email & Marketing",
+  freemius: "Email & Marketing",
+  // AI & ML
+  anthropic: "AI & ML",
+  openai: "AI & ML",
+  cohere: "AI & ML",
+  huggingface: "AI & ML",
+  perplexity: "AI & ML",
+  privateai: "AI & ML",
+  // Observability
+  datadog: "Observability",
+  sentry: "Observability",
+  grafana: "Observability",
+  sumologic: "Observability",
+  dynatrace: "Observability",
+  new: "Observability",
+  // Data & Analytics
+  clickhouse: "Data & Analytics",
+  databricks: "Data & Analytics",
+  looker: "Data & Analytics",
+  confluent: "Data & Analytics",
+  planetscale: "Data & Analytics",
+  algolia: "Data & Analytics",
+  mapbox: "Data & Analytics",
+  maxmind: "Data & Analytics",
+  // Identity & Auth
+  "1password": "Identity & Auth",
+  okta: "Identity & Auth",
+  authress: "Identity & Auth",
+  intra42: "Identity & Auth",
+  microsoft: "Identity & Auth",
+  adobe: "Identity & Auth",
+  jwt: "Identity & Auth",
+  pkcs12: "Identity & Auth",
+  age: "Identity & Auth",
+  private: "Identity & Auth",
+  atlassian: "Identity & Auth",
+  // Productivity & SaaS
+  airtable: "Productivity & SaaS",
+  asana: "Productivity & SaaS",
+  linear: "Productivity & SaaS",
+  notion: "Productivity & SaaS",
+  dropbox: "Productivity & SaaS",
+  frameio: "Productivity & SaaS",
+  readme: "Productivity & SaaS",
+  shopify: "Productivity & SaaS",
+  squarespace: "Productivity & SaaS",
+  etsy: "Productivity & SaaS",
+  twitter: "Productivity & SaaS",
+  twitch: "Productivity & SaaS",
+  facebook: "Productivity & SaaS",
+  linkedin: "Productivity & SaaS",
+  flickr: "Productivity & SaaS",
+  nytimes: "Productivity & SaaS",
+};
+
+const SECRET_FAMILY_OTHER = "Other";
+
+// Render order for rule families; "Other" always sorts last.
+export const RULE_FAMILY_ORDER: string[] = [
+  "Cloud & Infrastructure",
+  "Source Control & Packages",
+  "CI & DevOps",
+  "Payments & Fintech",
+  "Communication",
+  "Email & Marketing",
+  "AI & ML",
+  "Observability",
+  "Data & Analytics",
+  "Identity & Auth",
+  "Productivity & SaaS",
+  SECRET_FAMILY_OTHER,
+];
+
+function secretRuleFamily(rule: DetectionRule): string {
+  const provider = rule.id.replace(/^secret\./, "").split("_")[0] ?? "";
+  return SECRET_FAMILY_BY_PROVIDER[provider] ?? SECRET_FAMILY_OTHER;
+}
+
+// Categories large enough to be unnavigable as a flat list get a family
+// classifier; everything else renders flat. Currently just `secrets` (~200
+// rules); other categories are small.
+export const RULE_FAMILY_OF: Partial<
+  Record<RuleCategory, (rule: DetectionRule) => string>
+> = {
+  secrets: secretRuleFamily,
 };
 
 // All available detection rules, organized by category
