@@ -11,10 +11,8 @@ import { useRevealAll } from "@/pages/security/reveal-all-context";
 
 /** Soft warning (yellow) wash used to mark a flagged span inside message text
  * or tool output. */
-export const RISK_MARK_CLASS =
+const RISK_MARK_CLASS =
   "rounded-sm bg-warning-softest px-0.5 text-foreground ring-1 ring-warning-softest";
-
-export const SNIPPET_CONTEXT_CHARS = 48;
 
 export function getRiskBadgeLabel(result: RiskResult): string {
   if (result.ruleId === "llm_judge") return getRuleTitleFallback(result.ruleId);
@@ -47,7 +45,7 @@ export function getMatchStrings(results: RiskResult[] | undefined): string[] {
   return [...set].sort((a, b) => b.length - a.length);
 }
 
-export function maskValue(value: string): string {
+function maskValue(value: string): string {
   // Mask character-for-character so revealing/hiding doesn't change the text
   // length (and thus doesn't shift surrounding layout).
   return "•".repeat(value.length);
@@ -122,50 +120,6 @@ export function highlightMatches(
   });
   if (pos < text.length) nodes.push(text.slice(pos));
   return nodes;
-}
-
-export interface SnippetMatch {
-  before: string;
-  value: string;
-  after: string;
-  truncatedStart: boolean;
-  truncatedEnd: boolean;
-}
-
-export function buildSnippets(
-  content: string,
-  matches: string[],
-): SnippetMatch[] {
-  const snippets: SnippetMatch[] = [];
-  const seen = new Set<string>();
-  for (const match of matches) {
-    if (!match || seen.has(match)) continue;
-    seen.add(match);
-    const idx = content.indexOf(match);
-    if (idx === -1) {
-      snippets.push({
-        before: "",
-        value: match,
-        after: "",
-        truncatedStart: false,
-        truncatedEnd: false,
-      });
-      continue;
-    }
-    const start = Math.max(0, idx - SNIPPET_CONTEXT_CHARS);
-    const end = Math.min(
-      content.length,
-      idx + match.length + SNIPPET_CONTEXT_CHARS,
-    );
-    snippets.push({
-      before: content.slice(start, idx),
-      value: match,
-      after: content.slice(idx + match.length, end),
-      truncatedStart: start > 0,
-      truncatedEnd: end < content.length,
-    });
-  }
-  return snippets;
 }
 
 export function findingToExclusionState(

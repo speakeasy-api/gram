@@ -9,7 +9,7 @@ import { TRANSCRIPT_PAGE_SIZE } from "./useChatTranscript";
 // request; gaps between disjoint findings are expanded on demand.
 const RISK_INITIAL_LIMIT = 200;
 
-export type RiskLoadKey = "before" | "after" | `gap:${number}`;
+type RiskLoadKey = "before" | "after" | `gap:${number}`;
 
 export interface ChatRiskTranscript {
   chat: Chat | undefined;

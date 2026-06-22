@@ -6,7 +6,7 @@ import {
   type TraceEntryType,
 } from "./traceEntries";
 
-export type MessageEntryType = Extract<
+type MessageEntryType = Extract<
   TraceEntryType,
   "user" | "assistant" | "system"
 >;
@@ -121,7 +121,7 @@ export function buildTranscript(messages: ChatMessage[]): TranscriptRow[] {
 
 /** Chat-message ids backing a row — used for risk lookups (one row can span an
  * assistant tool_call message and its tool-result message). */
-export function rowMessageIds(row: TranscriptRow): string[] {
+function rowMessageIds(row: TranscriptRow): string[] {
   if (row.kind === "message") return [row.message.id];
   const ids: string[] = [];
   if (row.callMessage) ids.push(row.callMessage.id);

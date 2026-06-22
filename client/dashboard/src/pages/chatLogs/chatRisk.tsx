@@ -16,13 +16,10 @@ import {
 } from "@/components/ui/popover";
 import { CreateExclusionContext } from "./exclusionContext";
 import {
-  buildSnippets,
   getMatchStrings,
   getRiskBadgeLabel,
   highlightMatches,
-  maskValue,
   resultsAreSensitive,
-  RISK_MARK_CLASS,
   shouldShowRiskRuleId,
   useRowReveal,
 } from "./chatRiskHelpers";
@@ -45,10 +42,16 @@ export function HighlightedMessageText({
   const internal = useRowReveal(sensitive);
   const isControlled = controlledRevealed !== undefined;
   const revealed = controlledRevealed ?? internal.revealed;
+  // The risk scan sees the raw message (including the <message-context> plumbing
+  // that gets stripped for display), so a finding's match can live outside the
+  // visible text and leave an empty bubble. When the visible text is empty, fall
+  // back to the matched value(s) so the finding — and its reveal — still show.
+  const body =
+    text.trim().length > 0 || matches.length === 0 ? text : matches.join("  ");
   return (
     <div className="space-y-1">
       <div className="whitespace-pre-wrap">
-        {highlightMatches(text, matches, sensitive && !revealed)}
+        {highlightMatches(body, matches, sensitive && !revealed)}
       </div>
       {sensitive && !isControlled && (
         <button
@@ -64,72 +67,6 @@ export function HighlightedMessageText({
           {internal.revealed ? "Hide secret" : "Reveal secret"}
         </button>
       )}
-    </div>
-  );
-}
-
-/**
- * For a flagged tool call/result, surface just the matched region(s) with a
- * little surrounding context and the match highlighted in yellow — so a reviewer
- * doesn't have to scroll a large payload to find what tripped the rule.
- */
-export function RiskMatchSnippets({
-  content,
-  results,
-}: {
-  content: string;
-  results: RiskResult[];
-}): ReactNode {
-  const matches = useMemo(() => getMatchStrings(results), [results]);
-  const sensitive = resultsAreSensitive(results);
-  const { revealed, setRevealed } = useRowReveal(sensitive);
-  const snippets = useMemo(
-    () => buildSnippets(content, matches),
-    [content, matches],
-  );
-  if (snippets.length === 0) return null;
-
-  const masked = sensitive && !revealed;
-
-  return (
-    <div className="border-warning-softest bg-warning-softest/40 space-y-1.5 rounded-md border p-2.5">
-      <div className="flex items-center justify-between">
-        <span className="text-muted-foreground text-xs font-medium">
-          Flagged content
-        </span>
-        {sensitive && (
-          <button
-            type="button"
-            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
-            onClick={() => setRevealed(!revealed)}
-          >
-            {revealed ? (
-              <Eye className="size-3" />
-            ) : (
-              <EyeOff className="size-3" />
-            )}
-            {revealed ? "Hide" : "Reveal"}
-          </button>
-        )}
-      </div>
-      {snippets.map((snippet, i) => (
-        <code
-          key={i}
-          className="text-foreground block font-mono text-xs break-all"
-        >
-          {snippet.truncatedStart && (
-            <span className="text-muted-foreground">…</span>
-          )}
-          {snippet.before}
-          <mark className={RISK_MARK_CLASS}>
-            {masked ? maskValue(snippet.value) : snippet.value}
-          </mark>
-          {snippet.after}
-          {snippet.truncatedEnd && (
-            <span className="text-muted-foreground">…</span>
-          )}
-        </code>
-      ))}
     </div>
   );
 }

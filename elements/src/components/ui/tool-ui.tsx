@@ -87,9 +87,6 @@ interface SectionHighlight {
   matches: SectionMatch[];
   /** Dot out the matched characters until the viewer reveals them (secrets). */
   masked?: boolean;
-  /** Scroll the first finding into view when the section first renders. Off by
-   * default; hosts opt in for risk-review contexts. Never animates (instant). */
-  autoScroll?: boolean;
   /** Optional host-supplied badge rendered in the section header (e.g. a risk
    * pill). Replaces the default warning icon when present. */
   headerBadge?: React.ReactNode;
@@ -378,12 +375,10 @@ function HighlightedCode({
   text,
   matches,
   masked,
-  autoScroll = false,
 }: {
   text: string;
   matches: SectionMatch[];
   masked?: boolean;
-  autoScroll?: boolean;
 }): React.JSX.Element {
   const hits = React.useMemo(
     () =>
@@ -397,25 +392,23 @@ function HighlightedCode({
   const [active, setActive] = useState(0);
   const [revealed, setRevealed] = useState(!masked);
   const markRefs = React.useRef<Array<HTMLElement | null>>([]);
-  // Skip the very first scroll unless the host opted into auto-scroll — we don't
-  // want a flagged tool to yank the viewport in a non-risk (e.g. cost) context.
-  const didMount = React.useRef(false);
+  const preRef = React.useRef<HTMLPreElement>(null);
 
   useEffect(() => {
     if (active >= count && count > 0) setActive(0);
   }, [count, active]);
+  // Center the active match within the code block *only* — adjust the <pre>'s
+  // own scrollTop rather than scrollIntoView(), which would also yank the
+  // surrounding sheet. Runs on mount (focus the first match) and on each step.
   useEffect(() => {
-    if (!didMount.current) {
-      didMount.current = true;
-      if (!autoScroll) return;
-    }
-    // Always instant — stepping between matches (or focusing the first one)
-    // should jump, not animate.
-    markRefs.current[active]?.scrollIntoView({
-      block: "center",
-      behavior: "auto",
-    });
-  }, [active, autoScroll]);
+    const pre = preRef.current;
+    const mark = markRefs.current[active];
+    if (!pre || !mark) return;
+    const markRect = mark.getBoundingClientRect();
+    const preRect = pre.getBoundingClientRect();
+    pre.scrollTop +=
+      markRect.top - preRect.top - pre.clientHeight / 2 + markRect.height / 2;
+  }, [active, count]);
 
   const go = (delta: number) => {
     if (count === 0) return;
@@ -493,12 +486,13 @@ function HighlightedCode({
                 {revealed ? "Hide" : "Reveal"}
               </button>
             )}
-            {count > 1 && (
+            {count >= 1 && (
               <div className="flex items-center gap-0.5">
                 <button
                   type="button"
                   onClick={() => go(-1)}
-                  className="rounded p-1 transition-colors hover:bg-slate-700 hover:text-slate-100"
+                  disabled={count <= 1}
+                  className="rounded p-1 transition-colors hover:bg-slate-700 hover:text-slate-100 disabled:opacity-40 disabled:hover:bg-transparent"
                   aria-label="Previous match"
                 >
                   <ChevronUpIcon className="size-3.5" />
@@ -509,7 +503,8 @@ function HighlightedCode({
                 <button
                   type="button"
                   onClick={() => go(1)}
-                  className="rounded p-1 transition-colors hover:bg-slate-700 hover:text-slate-100"
+                  disabled={count <= 1}
+                  className="rounded p-1 transition-colors hover:bg-slate-700 hover:text-slate-100 disabled:opacity-40 disabled:hover:bg-transparent"
                   aria-label="Next match"
                 >
                   <ChevronDownIcon className="size-3.5" />
@@ -519,7 +514,10 @@ function HighlightedCode({
           </div>
         </div>
       )}
-      <pre className="max-h-[300px] w-full overflow-y-auto bg-slate-800/90 px-4 py-3 text-sm break-all whitespace-pre-wrap text-slate-100">
+      <pre
+        ref={preRef}
+        className="max-h-[300px] w-full overflow-y-auto bg-slate-800/90 px-4 py-3 text-sm break-all whitespace-pre-wrap text-slate-100"
+      >
         {segments}
       </pre>
     </div>
@@ -651,7 +649,6 @@ function ToolUISection({
               text={contentString}
               matches={highlight!.matches}
               masked={highlight?.masked}
-              autoScroll={highlight?.autoScroll}
             />
           ) : highlightSyntax ? (
             <SyntaxHighlightedCode text={contentString} language={language} />

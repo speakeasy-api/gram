@@ -26,6 +26,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   type ClaudeUsageMatch,
   formatByteCount,
@@ -50,10 +51,6 @@ interface RowContext {
   /** When the session has findings, non-flagged rows are dimmed to spotlight
    * the risky ones. */
   dimNonRisk: boolean;
-  /** Risk-review entry point (RiskEvents, risk overview details). Drives the
-   * one-shot auto-scroll to the first flagged tool match — off in cost/default
-   * contexts so opening a session there doesn't jump to a finding. */
-  riskFocus: boolean;
 }
 
 // Fade non-risky rows so the findings stand out.
@@ -169,6 +166,16 @@ function ToolByteBadge({ bytes }: { bytes: number }) {
 // (bg-muted, rounded-xl). When flagged, the risk/cost badges and the
 // create-exclusion action ride above the bubble (right-aligned) so the bubble
 // itself stays clean.
+// Two letters for the avatar fallback: the first two name parts of an email
+// local-part (jane.doe → JD), else the first two characters.
+function userInitials(id: string | undefined): string {
+  if (!id) return "?";
+  const handle = id.includes("@") ? id.slice(0, id.indexOf("@")) : id;
+  const parts = handle.split(/[._\-\s]+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
+  return handle.slice(0, 2).toUpperCase();
+}
+
 function UserMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
   const { message } = row;
   const results = ctx.riskResultsByMessage.get(message.id);
@@ -202,16 +209,23 @@ function UserMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
           )}
         </div>
       )}
-      <div className="bg-muted text-foreground max-w-[80%] min-w-0 rounded-xl px-4 py-2 wrap-break-word">
-        {flagged ? (
-          <HighlightedMessageText
-            text={text}
-            results={results}
-            revealed={sensitive ? revealed : undefined}
-          />
-        ) : (
-          <div className="whitespace-pre-wrap">{text}</div>
-        )}
+      <div className="bg-muted text-foreground flex max-w-[80%] items-center gap-2.5 rounded-xl py-2 pr-4 pl-2 wrap-break-word">
+        <Avatar className="size-8 shrink-0 self-start">
+          <AvatarFallback className="bg-background text-xs font-medium">
+            {userInitials(message.externalUserId ?? message.userId)}
+          </AvatarFallback>
+        </Avatar>
+        <div className="min-w-0">
+          {flagged ? (
+            <HighlightedMessageText
+              text={text}
+              results={results}
+              revealed={sensitive ? revealed : undefined}
+            />
+          ) : (
+            <div className="whitespace-pre-wrap">{text}</div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -357,7 +371,6 @@ function ToolRowView({ row, ctx }: { row: ToolRow; ctx: RowContext }) {
         matches: reqMatches ?? [],
         masked: resultsAreSensitive(callResults),
         headerBadge: <RiskBadge results={callResults} />,
-        autoScroll: ctx.riskFocus,
       }
     : undefined;
   const resultHighlight = resultResults?.length
@@ -365,7 +378,6 @@ function ToolRowView({ row, ctx }: { row: ToolRow; ctx: RowContext }) {
         matches: resMatches ?? [],
         masked: resultsAreSensitive(resultResults),
         headerBadge: <RiskBadge results={resultResults} />,
-        autoScroll: ctx.riskFocus,
       }
     : undefined;
 
@@ -417,8 +429,10 @@ export interface TranscriptPagination {
   isFetchingNewer: boolean;
   onLoadGap?: (afterSeq: number) => void;
   isLoadingGap?: (afterSeq: number) => boolean;
-  /** Start at the newest message (chat-style). The risk view starts at the top. */
-  initialScrollToEnd: boolean;
+  /** Display-item index to bring to the top on first paint, or null to stay at
+   * the top. Normal view → null (first message in view); risk view → the first
+   * flagged row. */
+  initialScrollIndex: number | null;
 }
 
 /** Edge "load older/newer" affordance + the risk-gap "load in-between" marker. */
@@ -527,7 +541,7 @@ export function ChatTranscript({
     hasMoreAfter,
     onLoadOlder,
     onLoadNewer,
-    initialScrollToEnd,
+    initialScrollIndex,
   } = pagination;
 
   // Preserve scroll position across a prepend: capture distance-from-bottom
@@ -552,14 +566,30 @@ export function ChatTranscript({
     }
   }, [items.length]);
 
-  // Chat-style: land on the newest message once the first page is laid out.
+  // Opening already at the top (scrollTop 0) means the scroll handler can't
+  // fire, so backward infinite-scroll would stall on the first page. Pull the
+  // previous page whenever we settle near the top with more above. Skipped in
+  // the scroll-to-finding view, which intentionally starts mid-transcript. The
+  // prepend anchor pushes scrollTop past the threshold once a page lands, so
+  // this self-limits instead of loading the whole history at once.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || initialScrollIndex != null) return;
+    if (hasMoreBefore && el.scrollTop < 200) {
+      anchorRef.current = el.scrollHeight - el.scrollTop;
+      onLoadOlder();
+    }
+  }, [hasMoreBefore, items.length, initialScrollIndex, onLoadOlder]);
+
+  // Land on the requested row once the first page is laid out: the top for a
+  // normal session (null → no scroll), or the first finding in risk view.
   const didInitialScroll = useRef(false);
   useEffect(() => {
-    if (!initialScrollToEnd || didInitialScroll.current) return;
+    if (initialScrollIndex == null || didInitialScroll.current) return;
     if (items.length === 0 || !scrollRef.current) return;
     didInitialScroll.current = true;
-    virtualizer.scrollToIndex(items.length - 1, { align: "end" });
-  }, [initialScrollToEnd, items.length, virtualizer]);
+    virtualizer.scrollToIndex(initialScrollIndex, { align: "start" });
+  }, [initialScrollIndex, items.length, virtualizer]);
 
   if (items.length === 0) {
     return (

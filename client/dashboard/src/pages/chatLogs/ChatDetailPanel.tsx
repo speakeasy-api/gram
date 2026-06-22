@@ -48,7 +48,7 @@ import {
   type RowContext,
   type TranscriptPagination,
 } from "./ChatTranscript";
-import { buildDisplayItems, buildTranscript } from "./transcript";
+import { buildDisplayItems, buildTranscript, rowIsFlagged } from "./transcript";
 import {
   buildClaudeToolUsageByToolUseId,
   buildClaudeUsageByMessageId,
@@ -172,15 +172,20 @@ function SessionSummary({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors"
+          className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
         >
           {hasCost && (
             <span className="tabular-nums">
               {formatUsageCost(chat.totalCost!)}
             </span>
           )}
+          {hasCost && tokens > 0 && (
+            <span aria-hidden className="text-muted-foreground/40">
+              |
+            </span>
+          )}
           {tokens > 0 && <span>{formatTokenCount(tokens)} tokens</span>}
-          <Icon name="chevron-down" className="size-3" />
+          <ChevronDown className="size-3.5" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72">
@@ -357,15 +362,21 @@ function ChatDetailPanel({
     ReadonlySet<string>
   >(() => new Set());
 
-  // Normal view paginates the latest generation by seq keyset; the risk view
-  // loads server-windowed findings + context. Only the active one is enabled so
-  // we don't double-fetch.
-  const transcript = useChatTranscript(chatId, !riskFocus);
-  const riskTranscript = useChatRiskTranscript(chatId, riskFocus);
-  const active = riskFocus ? riskTranscript : transcript;
-  const chat = active.chat;
+  // Risk-review contexts — explicit risk focus, or opened from the has-risk
+  // filter — load the server-windowed risk transcript so findings load no matter
+  // which page they sit on, and spotlight them. Plain views paginate the latest
+  // generation by seq keyset. Only the active transcript is enabled so we don't
+  // double-fetch.
+  const dimNonRisk = riskFocus || dimNonRiskProp;
+  // Always load the latest page for chat-level enrichment (cost, agent usage,
+  // source) — the risk-only load omits it. Risk views additionally load the
+  // server-windowed findings and render those instead of the latest page.
+  const transcript = useChatTranscript(chatId, true);
+  const riskTranscript = useChatRiskTranscript(chatId, dimNonRisk);
+  const active = dimNonRisk ? riskTranscript : transcript;
+  const chat = transcript.chat;
   const chatMessages = active.messages;
-  const chatLoading = active.isLoading;
+  const chatLoading = active.isLoading || transcript.isLoading;
   const chatLoadHasErrors = active.isError;
 
   const {
@@ -437,7 +448,7 @@ function ChatDetailPanel({
   );
   const hasMoreBefore = active.hasMoreBefore;
   const hasMoreAfter = active.hasMoreAfter;
-  const riskGaps = riskFocus ? riskTranscript.gaps : undefined;
+  const riskGaps = dimNonRisk ? riskTranscript.gaps : undefined;
   const displayItems = useMemo(
     () =>
       buildDisplayItems({
@@ -449,47 +460,59 @@ function ChatDetailPanel({
     [transcriptRows, hasMoreBefore, hasMoreAfter, riskGaps],
   );
 
+  // Risk-review contexts (risk focus or the has-risk spotlight) open scrolled to
+  // the first finding, however far down it is. Plain cost/default views open at
+  // the top (first message) — even when the session happens to have findings.
+  const initialScrollIndex = useMemo(() => {
+    if (!dimNonRisk) return null;
+    const idx = displayItems.findIndex(
+      (it) => it.type === "row" && rowIsFlagged(it.row, riskResultsByMessage),
+    );
+    return idx >= 0 ? idx : null;
+  }, [dimNonRisk, displayItems, riskResultsByMessage]);
+
   const transcriptPagination = useMemo<TranscriptPagination>(
     () => ({
       hasMoreBefore,
       hasMoreAfter,
       onLoadOlder: () =>
-        riskFocus ? riskTranscript.loadBefore() : transcript.fetchOlder(),
+        dimNonRisk ? riskTranscript.loadBefore() : transcript.fetchOlder(),
       onLoadNewer: () =>
-        riskFocus ? riskTranscript.loadAfter() : transcript.fetchNewer(),
-      isFetchingOlder: riskFocus
+        dimNonRisk ? riskTranscript.loadAfter() : transcript.fetchNewer(),
+      isFetchingOlder: dimNonRisk
         ? riskTranscript.loadingKey === "before"
         : transcript.isFetchingOlder,
-      isFetchingNewer: riskFocus
+      isFetchingNewer: dimNonRisk
         ? riskTranscript.loadingKey === "after"
         : transcript.isFetchingNewer,
-      onLoadGap: riskFocus ? riskTranscript.loadGap : undefined,
-      isLoadingGap: riskFocus
+      onLoadGap: dimNonRisk ? riskTranscript.loadGap : undefined,
+      isLoadingGap: dimNonRisk
         ? (afterSeq: number) => riskTranscript.loadingKey === `gap:${afterSeq}`
         : undefined,
-      // Normal view opens at the newest message; risk view starts at the top.
-      initialScrollToEnd: !riskFocus,
+      initialScrollIndex,
     }),
-    [hasMoreBefore, hasMoreAfter, riskFocus, riskTranscript, transcript],
+    [
+      hasMoreBefore,
+      hasMoreAfter,
+      dimNonRisk,
+      riskTranscript,
+      transcript,
+      initialScrollIndex,
+    ],
   );
 
-  // Spotlight findings in the risk-focused view or when opened from a
-  // risk-filtered list (e.g. Agent Sessions has_risk). NOT in plain cost views.
-  const dimNonRisk = riskFocus || dimNonRiskProp;
   const rowCtx = useMemo<RowContext>(
     () => ({
       riskResultsByMessage,
       claudeUsageByMessage,
       claudeToolUsageByToolUseId,
       dimNonRisk,
-      riskFocus,
     }),
     [
       riskResultsByMessage,
       claudeUsageByMessage,
       claudeToolUsageByToolUseId,
       dimNonRisk,
-      riskFocus,
     ],
   );
 
@@ -575,7 +598,7 @@ function ChatDetailPanel({
             ctx={rowCtx}
             pagination={transcriptPagination}
             emptyMessage={
-              riskFocus
+              dimNonRisk
                 ? "No flagged messages in this session."
                 : "No messages to display."
             }
