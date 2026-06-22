@@ -8,21 +8,6 @@ export function formatLogTimestamp(nanos: string): string {
   return format(new Date(ms), "HH:mm:ss.SSS");
 }
 
-export function getSeverityBadgeVariant(
-  severity: string | undefined,
-): "destructive" | "warning" | "neutral" {
-  switch (severity?.toUpperCase()) {
-    case "ERROR":
-    case "FATAL":
-      return "destructive";
-    case "WARN":
-      return "warning";
-    case undefined:
-    default:
-      return "neutral";
-  }
-}
-
 export function filterToolLogs(
   logs: TelemetryLogRecord[],
 ): TelemetryLogRecord[] {

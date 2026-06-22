@@ -62,10 +62,13 @@ function dimClass(dim: boolean): string {
 // timestamp, user id) and trailing whitespace the harness prepends to prompts —
 // it's machine plumbing, not part of the conversation.
 function cleanMessageText(raw: string): string {
-  return raw
-    .replace(/<message-context>[\s\S]*?<\/message-context>/gi, "")
-    .replace(/[ \t]+$/gm, "")
-    .trim();
+  return (
+    raw
+      // Only the leading injected envelope, not literal tags mid-message.
+      .replace(/^\s*<message-context>[\s\S]*?<\/message-context>/i, "")
+      .replace(/[ \t]+$/gm, "")
+      .trim()
+  );
 }
 
 function messageText(content: unknown): string {

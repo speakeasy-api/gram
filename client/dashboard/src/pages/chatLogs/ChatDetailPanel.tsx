@@ -56,7 +56,7 @@ import {
   formatUsageCost,
 } from "./claudeUsage";
 import { filterPanelTelemetryLogs, filterToolLogs } from "./chatLogFilters";
-import { TelemetryLogsView, ToolCallsView } from "./chatLogViews";
+import { ToolCallsView } from "./chatLogViews";
 import { exportTraceDataAsJson } from "./chatExport";
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
@@ -77,7 +77,7 @@ interface ChatDetailSheetProps extends Omit<ChatDetailPanelProps, "chatId"> {
   chatId: string | null;
 }
 
-type ViewMode = "chat" | "logs" | "tools" | "exclusion";
+type ViewMode = "chat" | "tools" | "exclusion";
 
 // Identity for a finding, used to optimistically hide it the moment an exclusion
 // is created for it (the server reconcile is async, so a refetch lags).
@@ -565,7 +565,7 @@ function ChatDetailPanel({
       <ChatDetailHeader
         chatId={chatId}
         chat={chat}
-        messageCount={chatMessages.length}
+        messageCount={chat.numMessages}
         toolCount={toolLogs.length}
         canManageChat={canManageChat}
         onExport={() => {
@@ -594,6 +594,7 @@ function ChatDetailPanel({
           value={canManageChat ? openExclusion : null}
         >
           <ChatTranscript
+            key={chatId}
             items={displayItems}
             ctx={rowCtx}
             pagination={transcriptPagination}
@@ -604,19 +605,6 @@ function ChatDetailPanel({
             }
           />
         </CreateExclusionContext.Provider>
-      )}
-
-      {view === "logs" && (
-        <>
-          <SubViewBar title="Telemetry logs" onBack={() => setView("chat")} />
-          <div className="flex-1 overflow-y-auto">
-            <TelemetryLogsView
-              logs={logs}
-              isLoading={logsLoading}
-              error={error}
-            />
-          </div>
-        </>
       )}
 
       {view === "tools" && (

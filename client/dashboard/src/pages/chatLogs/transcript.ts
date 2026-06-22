@@ -47,6 +47,19 @@ function hasTextContent(content: unknown): boolean {
   return false;
 }
 
+/** A message with nothing left once the leading <message-context> envelope is
+ * stripped — machine plumbing, so its row is hidden instead of rendered as an
+ * empty bubble. Only applies to plain string content (arrays go through
+ * hasTextContent). */
+function hasNoVisibleText(content: unknown): boolean {
+  if (typeof content !== "string") return false;
+  return (
+    content
+      .replace(/^\s*<message-context>[\s\S]*?<\/message-context>/i, "")
+      .trim().length === 0
+  );
+}
+
 /**
  * Flatten the raw chat messages into chat rows. The key transform is pairing
  * each assistant tool_call with the separate tool-role message that carries its
@@ -81,7 +94,7 @@ export function buildTranscript(messages: ChatMessage[]): TranscriptRow[] {
     }
 
     if (entryType === "tool_call" && toolCalls) {
-      if (hasTextContent(m.content)) {
+      if (hasTextContent(m.content) && !hasNoVisibleText(m.content)) {
         rows.push({
           kind: "message",
           id: `${m.id}:text`,
@@ -106,6 +119,9 @@ export function buildTranscript(messages: ChatMessage[]): TranscriptRow[] {
       });
       continue;
     }
+
+    // Hide rows that are only the injected <message-context> plumbing.
+    if (hasNoVisibleText(m.content)) continue;
 
     rows.push({
       kind: "message",
@@ -146,11 +162,13 @@ export type DisplayItem =
   /** Un-loaded span between two disjoint risk segments (risk-focused view). */
   | { type: "serverGap"; id: string; afterSeq: number };
 
-/** Largest message seq backing a row — gap anchors are message seqs, and a tool
- * row spans the assistant call + its later tool-result message. */
-function rowLastSeq(row: TranscriptRow): number {
+/** The row's display-order anchor seq. Gap anchors are message seqs; for a tool
+ * row use the assistant call's seq (its position in the list), not the
+ * tool-result's — the result can sit much later in seq order and would break the
+ * monotonic progression the gap placement relies on. */
+function rowAnchorSeq(row: TranscriptRow): number {
   if (row.kind === "message") return row.message.seq;
-  return row.resultMessage?.seq ?? row.callMessage?.seq ?? -1;
+  return row.callMessage?.seq ?? row.resultMessage?.seq ?? -1;
 }
 
 /**
@@ -196,8 +214,8 @@ export function buildDisplayItems({
 
     // Place each pending gap marker after the last row whose seq is <= the
     // anchor (survives even if the exact boundary row is a paired tool row).
-    const seq = rowLastSeq(row);
-    const nextSeq = i + 1 < rows.length ? rowLastSeq(rows[i + 1]!) : Infinity;
+    const seq = rowAnchorSeq(row);
+    const nextSeq = i + 1 < rows.length ? rowAnchorSeq(rows[i + 1]!) : Infinity;
     while (gi < gapAnchors.length && gapAnchors[gi]! < nextSeq) {
       if (gapAnchors[gi]! >= seq) {
         items.push({

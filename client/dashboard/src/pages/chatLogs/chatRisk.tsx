@@ -42,16 +42,10 @@ export function HighlightedMessageText({
   const internal = useRowReveal(sensitive);
   const isControlled = controlledRevealed !== undefined;
   const revealed = controlledRevealed ?? internal.revealed;
-  // The risk scan sees the raw message (including the <message-context> plumbing
-  // that gets stripped for display), so a finding's match can live outside the
-  // visible text and leave an empty bubble. When the visible text is empty, fall
-  // back to the matched value(s) so the finding — and its reveal — still show.
-  const body =
-    text.trim().length > 0 || matches.length === 0 ? text : matches.join("  ");
   return (
     <div className="space-y-1">
       <div className="whitespace-pre-wrap">
-        {highlightMatches(body, matches, sensitive && !revealed)}
+        {highlightMatches(text, matches, sensitive && !revealed)}
       </div>
       {sensitive && !isControlled && (
         <button

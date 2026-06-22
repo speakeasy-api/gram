@@ -642,14 +642,16 @@ function ToolUISection({
       </button>
       {isExpanded && (
         <div className="border-t border-border">
-          {isStructured ? (
-            <StructuredResultContent content={content} />
-          ) : matchCount > 0 ? (
+          {matchCount > 0 ? (
+            // Flagged content must go through the masked/highlighted view even
+            // when it's structured, otherwise secrets render in clear text.
             <HighlightedCode
               text={contentString}
               matches={highlight!.matches}
               masked={highlight?.masked}
             />
+          ) : isStructured ? (
+            <StructuredResultContent content={content} />
           ) : highlightSyntax ? (
             <SyntaxHighlightedCode text={contentString} language={language} />
           ) : (

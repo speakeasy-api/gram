@@ -62,13 +62,21 @@ export function useRowReveal(sensitive: boolean): {
   const revealAll = reveal?.revealAll ?? false;
   const [revealed, setRevealed] = useState(sensitive ? revealAll : true);
   const lastGeneration = useRef(generation);
+  const lastSensitive = useRef(sensitive);
   useEffect(() => {
-    if (!sensitive) return;
-    if (generation === undefined) return;
-    if (lastGeneration.current === generation) return;
-    lastGeneration.current = generation;
-    setRevealed(revealAll);
-  }, [generation, revealAll, sensitive]);
+    const becameSensitive = sensitive && !lastSensitive.current;
+    const generationChanged =
+      generation !== undefined && lastGeneration.current !== generation;
+    lastSensitive.current = sensitive;
+    if (generation !== undefined) lastGeneration.current = generation;
+    // Re-apply the masked (reveal-all) default when the row newly becomes
+    // sensitive — e.g. findings arrive after first paint — so it can't stay
+    // revealed from its earlier non-sensitive state, and when the panel-wide
+    // reveal-all switch flips. Manual per-row toggles between those are kept.
+    if (sensitive && (becameSensitive || generationChanged)) {
+      setRevealed(revealAll);
+    }
+  }, [sensitive, generation, revealAll]);
   return { revealed, setRevealed };
 }
 
