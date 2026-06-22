@@ -516,7 +516,10 @@ function ChatDetailPanel({
   const transcript = useChatTranscript(chatId, true);
   const riskTranscript = useChatRiskTranscript(chatId, dimNonRisk);
   const active = dimNonRisk ? riskTranscript : transcript;
-  const chat = transcript.chat;
+  // Prefer the enriched (cost/usage) normal-load chat, but fall back to the
+  // active transcript's chat so a risk view still renders if only that load
+  // resolved (otherwise the panel would show "Not found" despite having data).
+  const chat = transcript.chat ?? active.chat;
   const chatMessages = active.messages;
   const chatLoading = active.isLoading || transcript.isLoading;
   const chatLoadHasErrors = active.isError;

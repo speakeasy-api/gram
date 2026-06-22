@@ -19,6 +19,7 @@ import {
   getMatchStrings,
   getRiskBadgeLabel,
   highlightMatches,
+  maskValue,
   resultsAreSensitive,
   shouldShowRiskRuleId,
   useRowReveal,
@@ -42,11 +43,36 @@ export function HighlightedMessageText({
   const internal = useRowReveal(sensitive);
   const isControlled = controlledRevealed !== undefined;
   const revealed = controlledRevealed ?? internal.revealed;
+  // A finding can match content that was stripped for display (e.g. the
+  // <message-context> envelope), so the matched span isn't in the visible text.
+  // Surface those values explicitly so a flagged row never hides what tripped it.
+  const matchesInText = matches.some((m) => m && text.includes(m));
+  const orphanMatches = matches.length > 0 && !matchesInText;
   return (
     <div className="space-y-1">
-      <div className="whitespace-pre-wrap">
-        {highlightMatches(text, matches, sensitive && !revealed)}
-      </div>
+      {text && (
+        <div className="whitespace-pre-wrap">
+          {highlightMatches(text, matches, sensitive && !revealed)}
+        </div>
+      )}
+      {orphanMatches && (
+        <div className="text-muted-foreground space-y-1 text-xs">
+          <span>
+            Flagged value{matches.length > 1 ? "s" : ""} (not shown in message
+            text):
+          </span>
+          <div className="flex flex-wrap gap-1">
+            {matches.map((m, i) => (
+              <code
+                key={i}
+                className="bg-destructive/10 text-destructive rounded px-1 py-0.5 font-mono break-all"
+              >
+                {sensitive && !revealed ? maskValue(m) : m}
+              </code>
+            ))}
+          </div>
+        </div>
+      )}
       {sensitive && !isControlled && (
         <button
           type="button"

@@ -45,7 +45,7 @@ export function getMatchStrings(results: RiskResult[] | undefined): string[] {
   return [...set].sort((a, b) => b.length - a.length);
 }
 
-function maskValue(value: string): string {
+export function maskValue(value: string): string {
   // Mask character-for-character so revealing/hiding doesn't change the text
   // length (and thus doesn't shift surrounding layout).
   return "•".repeat(value.length);
