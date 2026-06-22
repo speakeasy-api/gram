@@ -185,43 +185,68 @@ func TestGetEmployeeDataFlowGraph_WithHookToolCalls(t *testing.T) {
 		}
 		assert.NotEmpty(c, res.Nodes)
 
+		// Guard every node/edge lookup before dereferencing: assert.NotNil only
+		// records a failure, so without an early return a nil hit on a not-yet-
+		// converged poll iteration would panic and abort the whole test.
 		originNode := findEmployeeDataFlowNode(res.Nodes, "origin", originHostname)
-		assert.NotNil(c, originNode)
+		if !assert.NotNil(c, originNode) {
+			return
+		}
 		assert.Equal(c, int64(3), originNode.TotalCalls)
 		assert.Nil(c, findEmployeeDataFlowNode(res.Nodes, "origin", "https://api.github.com/mcp"))
 
 		githubNode := findEmployeeDataFlowNode(res.Nodes, "server", "GitHub")
-		assert.NotNil(c, githubNode)
-		assert.NotNil(c, githubNode.ServerClass)
+		if !assert.NotNil(c, githubNode) {
+			return
+		}
+		if !assert.NotNil(c, githubNode.ServerClass) {
+			return
+		}
 		assert.Equal(c, "external", *githubNode.ServerClass)
 		assert.Equal(c, int64(2), githubNode.TotalCalls)
 
 		localNode := findEmployeeDataFlowNode(res.Nodes, "server", "local")
-		assert.NotNil(c, localNode)
-		assert.NotNil(c, localNode.ServerClass)
+		if !assert.NotNil(c, localNode) {
+			return
+		}
+		if !assert.NotNil(c, localNode.ServerClass) {
+			return
+		}
 		assert.Equal(c, "local", *localNode.ServerClass)
 		assert.Equal(c, int64(1), localNode.TotalCalls)
 
 		cursorNode := findEmployeeDataFlowNode(res.Nodes, "client", "cursor")
-		assert.NotNil(c, cursorNode)
+		if !assert.NotNil(c, cursorNode) {
+			return
+		}
 		assert.Equal(c, int64(2), cursorNode.TotalCalls)
 
 		edge := findEmployeeDataFlowEdge(res.Edges, originNode.ID, cursorNode.ID)
-		assert.NotNil(c, edge)
+		if !assert.NotNil(c, edge) {
+			return
+		}
 		assert.Equal(c, int64(2), edge.CallCount)
 
 		listIssuesNode := findEmployeeDataFlowNode(res.Nodes, "tool", "list_issues")
-		assert.NotNil(c, listIssuesNode)
+		if !assert.NotNil(c, listIssuesNode) {
+			return
+		}
 		edge = findEmployeeDataFlowEdge(res.Edges, githubNode.ID, listIssuesNode.ID)
-		assert.NotNil(c, edge)
+		if !assert.NotNil(c, edge) {
+			return
+		}
 		assert.Equal(c, int64(1), edge.CallCount)
 		assert.Equal(c, int64(1), edge.SuccessCount)
 		assert.Equal(c, int64(0), edge.FailureCount)
 
 		createIssueNode := findEmployeeDataFlowNode(res.Nodes, "tool", "create_issue")
-		assert.NotNil(c, createIssueNode)
+		if !assert.NotNil(c, createIssueNode) {
+			return
+		}
 		edge = findEmployeeDataFlowEdge(res.Edges, githubNode.ID, createIssueNode.ID)
-		assert.NotNil(c, edge)
+		if !assert.NotNil(c, edge) {
+			return
+		}
 		assert.Equal(c, int64(1), edge.CallCount)
 		assert.Equal(c, int64(0), edge.SuccessCount)
 		assert.Equal(c, int64(1), edge.FailureCount)
