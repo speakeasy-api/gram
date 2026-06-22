@@ -1509,8 +1509,9 @@ function generateChatUUID(chatNumber: number): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
-// Deterministic id for the seeded detection policy so re-runs are idempotent.
-const SEED_RISK_POLICY_ID = "b1a5c0de-0000-4000-8000-000000000001";
+// Name used to find + reset the seeded detection policy on re-runs. The id is
+// DB-generated (not hardcoded) so re-seeding into a freshly recreated project
+// can't collide on a global primary key and silently skip policy creation.
 const SEED_RISK_POLICY_NAME = "Seeded Detection Policy";
 
 // Risk-finding catalog spanning every detection source the dashboard knows
@@ -1681,16 +1682,20 @@ async function seedRiskFindings(init: {
     DELETE FROM risk_results WHERE project_id = '${projectId}';
     DELETE FROM risk_policies WHERE project_id = '${projectId}' AND name = '${SEED_RISK_POLICY_NAME}';
 
-    INSERT INTO risk_policies (
-      id, project_id, organization_id, name, policy_type, sources, enabled, action, version
-    ) VALUES (
-      '${SEED_RISK_POLICY_ID}', '${projectId}', '${organizationId}', '${SEED_RISK_POLICY_NAME}',
-      'standard',
-      ARRAY['gitleaks','presidio','prompt_injection','shadow_mcp','destructive_tool','cli_destructive'],
-      TRUE, 'flag', 1
-    ) ON CONFLICT (id) DO NOTHING;
-
-    WITH msgs AS (
+    -- pol (re)creates the policy with a DB-generated id and feeds that id
+    -- straight into the risk_results insert, so findings always attach to a
+    -- policy owned by THIS project.
+    WITH pol AS (
+      INSERT INTO risk_policies (
+        project_id, organization_id, name, policy_type, sources, enabled, action, version
+      ) VALUES (
+        '${projectId}', '${organizationId}', '${SEED_RISK_POLICY_NAME}', 'standard',
+        ARRAY['gitleaks','presidio','prompt_injection','shadow_mcp','destructive_tool','cli_destructive'],
+        TRUE, 'flag', 1
+      )
+      RETURNING id
+    ),
+    msgs AS (
       SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn
       FROM chat_messages
       WHERE project_id = '${projectId}'
@@ -1705,11 +1710,12 @@ async function seedRiskFindings(init: {
       chat_message_id, source, found, rule_id, description, match, confidence, created_at
     )
     SELECT
-      '${projectId}', '${organizationId}', '${SEED_RISK_POLICY_ID}', 1,
+      '${projectId}', '${organizationId}', pol.id, 1,
       m.id, f.source, TRUE, f.rule_id, f.description, f.match, f.confidence,
       now() - ((f.idx % 6) || ' days')::interval
     FROM findings f
     CROSS JOIN mcount
+    CROSS JOIN pol
     JOIN msgs m ON m.rn = (f.idx % mcount.n) + 1;
     COMMIT;
   `;
