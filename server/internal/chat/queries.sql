@@ -701,9 +701,11 @@ ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
 RETURNING id;
 
 -- name: SeedChatMessage :one
--- Test fixture: insert a minimal chat message and return its id.
-INSERT INTO chat_messages (chat_id, project_id, role, content)
-VALUES (@chat_id, @project_id, 'user', 'test message')
+-- Test fixture: insert a minimal chat message and return its id. An optional
+-- created_at lets ordering tests assign distinct, deterministic timestamps
+-- instead of relying on wall-clock gaps between inserts.
+INSERT INTO chat_messages (chat_id, project_id, role, content, created_at)
+VALUES (@chat_id, @project_id, 'user', 'test message', COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
 RETURNING id;
 
 -- name: SeedRiskPolicy :one

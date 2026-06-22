@@ -156,6 +156,16 @@ linters:
         linters:
           - forbidigo
         text: GG010
+      # GG013 (no time.Sleep) is enforced repo-wide EXCEPT the files below, which
+      # still hold legitimate or not-yet-reviewed time.Sleep calls: in-process
+      # timing-sensitive tests (rate limiters, debounce, TTL/expiry), infra
+      # readiness polling, and a production retry/backoff. Each is a candidate for
+      # require.EventuallyWithT / require.Never or testing/synctest; drop it from
+      # this list once migrated. (cmd/ is already exempt from all forbidigo above.)
+      - path: internal/background/activities/custom_domain_ingress\.go|internal/guardian/policy_test\.go|internal/hooks/pending_helpers_test\.go|internal/remotemcp/proxy/proxy_test\.go|internal/testenv/redis\.go|internal/testinfra/clickhouse\.go|internal/variations/listglobal_test\.go
+        linters:
+          - forbidigo
+        text: GG013
   settings:
     custom:
       glint:
@@ -246,6 +256,9 @@ linters:
         - pattern: ^os\.Stderr$
           pkg: ^os$
           msg: "GG012: Writing to os.Stderr bypasses structured logging. Use a *slog.Logger instead. The sanctioned slog handler setup in internal/o11y/slog.go is exempt."
+        - pattern: ^time\.Sleep$
+          pkg: ^time$
+          msg: "GG013: Avoid time.Sleep. In tests, poll with require.EventuallyWithT (wait until assertions pass) or require.Never (assert a condition never holds)."
     sloglint:
       no-mixed-args: true
       attr-only: true
