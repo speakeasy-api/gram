@@ -30,7 +30,7 @@ var _ = Service("risk", func() {
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
-			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy.")
+			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
@@ -133,7 +133,7 @@ var _ = Service("risk", func() {
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
-			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy. Omit to preserve the current selection.")
+			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
@@ -737,12 +737,12 @@ var _ = Service("risk", func() {
 			Attribute("rule_id", String, "Stable rule identifier, prefixed with `custom.`.")
 			Attribute("title", String, "Human-readable title for the rule.")
 			Attribute("description", String, "Description of what the rule detects.")
-			Attribute("regex", String, "RE2-compatible regex pattern.")
+			Attribute("detection_expr", String, "CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.")
 			Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
 				Enum("info", "low", "medium", "high", "critical")
 				Default("medium")
 			})
-			Required("rule_id", "title", "regex")
+			Required("rule_id", "title")
 		})
 
 		Result(shared.RiskCustomDetectionRule)
@@ -828,11 +828,11 @@ var _ = Service("risk", func() {
 			})
 			Attribute("title", String, "Human-readable title for the rule.")
 			Attribute("description", String, "Description of what the rule detects.")
-			Attribute("regex", String, "RE2-compatible regex pattern.")
+			Attribute("detection_expr", String, "CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.")
 			Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
 				Enum("info", "low", "medium", "high", "critical")
 			})
-			Required("id", "title", "regex", "severity")
+			Required("id", "title", "severity")
 		})
 
 		Result(shared.RiskCustomDetectionRule)
@@ -1069,7 +1069,7 @@ var _ = Service("risk", func() {
 				MinLength(1)
 				MaxLength(50000)
 			})
-			Attribute("regex", String, "Regex pattern. Required for `custom.*` rule ids since the server doesn't persist custom rules yet; ignored for built-in rules.")
+			Attribute("detection_expr", String, "CEL detection predicate for `custom.*` rule ids, evaluated against the sample message.")
 			Required("rule_id", "text")
 		})
 
@@ -1094,11 +1094,11 @@ var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", 
 	Attribute("rule_id", String, "Suggested stable identifier, prefixed with `custom.`.")
 	Attribute("title", String, "Short, human-friendly title for the rule.")
 	Attribute("description", String, "Description of what the rule detects and why it matters.")
-	Attribute("regex", String, "RE2-compatible regex pattern the rule should match against.")
+	Attribute("detection_expr", String, "Suggested CEL detection predicate.")
 	Attribute("severity", String, "Suggested severity level.", func() {
 		Enum("info", "low", "medium", "high", "critical")
 	})
-	Required("rule_id", "title", "description", "regex", "severity")
+	Required("rule_id", "title", "description", "severity")
 })
 
 var TestDetectionRuleMatch = Type("TestDetectionRuleMatch", func() {

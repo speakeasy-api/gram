@@ -38,6 +38,11 @@ type RiskResult struct {
 	Confidence *float64
 	// Tags from the detection rule.
 	Tags []string
+	// All matched spans attributed to this finding. A finding may carry several
+	// correlated spans (e.g. a custom rule matching a tool's function name and its
+	// arguments on the same call). The top-level match/start_pos/end_pos mirror
+	// the primary (first) span.
+	Spans []*RiskSpan
 	// When this result was created.
 	CreatedAt string
 }

@@ -172,8 +172,9 @@ type CreateCustomDetectionRulePayload struct {
 	Title string
 	// Description of what the rule detects.
 	Description *string
-	// RE2-compatible regex pattern.
-	Regex string
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionExpr *string
 	// Severity level for findings produced by this rule.
 	Severity string
 }
@@ -228,7 +229,7 @@ type CreateRiskPolicyPayload struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
-	// Custom detection rule ids to enable for this policy.
+	// Custom detection rule ids to attach as detectors: a match produces a finding.
 	CustomRuleIds []string
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
@@ -848,8 +849,8 @@ type SuggestCustomDetectionRuleResult struct {
 	Title string
 	// Description of what the rule detects and why it matters.
 	Description string
-	// RE2-compatible regex pattern the rule should match against.
-	Regex string
+	// Suggested CEL detection predicate.
+	DetectionExpr *string
 	// Suggested severity level.
 	Severity string
 }
@@ -885,9 +886,9 @@ type TestDetectionRulePayload struct {
 	RuleID string
 	// Sample text to scan.
 	Text string
-	// Regex pattern. Required for `custom.*` rule ids since the server doesn't
-	// persist custom rules yet; ignored for built-in rules.
-	Regex *string
+	// CEL detection predicate for `custom.*` rule ids, evaluated against the
+	// sample message.
+	DetectionExpr *string
 }
 
 // TestDetectionRuleResult is the result type of the risk service
@@ -928,8 +929,9 @@ type UpdateCustomDetectionRulePayload struct {
 	Title string
 	// Description of what the rule detects.
 	Description *string
-	// RE2-compatible regex pattern.
-	Regex string
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionExpr *string
 	// Severity level for findings produced by this rule.
 	Severity string
 }
@@ -977,8 +979,8 @@ type UpdateRiskPolicyPayload struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
-	// Custom detection rule ids to enable for this policy. Omit to preserve the
-	// current selection.
+	// Custom detection rule ids to attach as detectors: a match produces a
+	// finding. Omit to preserve the current selection.
 	CustomRuleIds []string
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.

@@ -369,6 +369,8 @@ export * from "./riskresultredacted.js";
 export * from "./riskrulebreakdownentry.js";
 export * from "./riskrulebreakdownresult.js";
 export * from "./risksegment.js";
+export * from "./riskspan.js";
+export * from "./riskspanredacted.js";
 export * from "./riskuserbreakdownresult.js";
 export * from "./role.js";
 export * from "./rolegrant.js";

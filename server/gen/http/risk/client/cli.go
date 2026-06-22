@@ -1243,7 +1243,7 @@ func BuildCreateCustomDetectionRulePayload(riskCreateCustomDetectionRuleBody str
 	{
 		err = json.Unmarshal([]byte(riskCreateCustomDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"regex\": \"abc123\",\n      \"rule_id\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"detection_expr\": \"abc123\",\n      \"rule_id\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
 		}
 		if !(body.Severity == "info" || body.Severity == "low" || body.Severity == "medium" || body.Severity == "high" || body.Severity == "critical") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity", body.Severity, []any{"info", "low", "medium", "high", "critical"}))
@@ -1271,11 +1271,11 @@ func BuildCreateCustomDetectionRulePayload(riskCreateCustomDetectionRuleBody str
 		}
 	}
 	v := &risk.CreateCustomDetectionRulePayload{
-		RuleID:      body.RuleID,
-		Title:       body.Title,
-		Description: body.Description,
-		Regex:       body.Regex,
-		Severity:    body.Severity,
+		RuleID:        body.RuleID,
+		Title:         body.Title,
+		Description:   body.Description,
+		DetectionExpr: body.DetectionExpr,
+		Severity:      body.Severity,
 	}
 	{
 		var zero string
@@ -1366,7 +1366,7 @@ func BuildUpdateCustomDetectionRulePayload(riskUpdateCustomDetectionRuleBody str
 	{
 		err = json.Unmarshal([]byte(riskUpdateCustomDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"regex\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"detection_expr\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if !(body.Severity == "info" || body.Severity == "low" || body.Severity == "medium" || body.Severity == "high" || body.Severity == "critical") {
@@ -1395,11 +1395,11 @@ func BuildUpdateCustomDetectionRulePayload(riskUpdateCustomDetectionRuleBody str
 		}
 	}
 	v := &risk.UpdateCustomDetectionRulePayload{
-		ID:          body.ID,
-		Title:       body.Title,
-		Description: body.Description,
-		Regex:       body.Regex,
-		Severity:    body.Severity,
+		ID:            body.ID,
+		Title:         body.Title,
+		Description:   body.Description,
+		DetectionExpr: body.DetectionExpr,
+		Severity:      body.Severity,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -1731,7 +1731,7 @@ func BuildTestDetectionRulePayload(riskTestDetectionRuleBody string, riskTestDet
 	{
 		err = json.Unmarshal([]byte(riskTestDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"regex\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"detection_expr\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.RuleID) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.rule_id", body.RuleID, utf8.RuneCountInString(body.RuleID), 1, true))
@@ -1768,9 +1768,9 @@ func BuildTestDetectionRulePayload(riskTestDetectionRuleBody string, riskTestDet
 		}
 	}
 	v := &risk.TestDetectionRulePayload{
-		RuleID: body.RuleID,
-		Text:   body.Text,
-		Regex:  body.Regex,
+		RuleID:        body.RuleID,
+		Text:          body.Text,
+		DetectionExpr: body.DetectionExpr,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

@@ -252,7 +252,7 @@ INSERT INTO risk_custom_detection_rules (
   , rule_id
   , title
   , description
-  , regex
+  , detection_expr
   , severity
 )
 VALUES (
@@ -261,7 +261,7 @@ VALUES (
   , @rule_id
   , @title
   , @description
-  , @regex
+  , sqlc.narg(detection_expr)::text
   , @severity
 )
 RETURNING *;
@@ -284,7 +284,7 @@ WHERE id = @id
 UPDATE risk_custom_detection_rules
 SET title = @title
   , description = @description
-  , regex = @regex
+  , detection_expr = sqlc.narg(detection_expr)::text
   , severity = @severity
   , updated_at = clock_timestamp()
 WHERE id = @id
@@ -665,6 +665,7 @@ INSERT INTO risk_results (
   , end_pos
   , confidence
   , tags
+  , spans
   , dead_letter_reason
 )
 VALUES (
@@ -683,6 +684,7 @@ VALUES (
   , @end_pos
   , @confidence
   , @tags
+  , @spans
   , @dead_letter_reason
 );
 
@@ -711,14 +713,14 @@ SELECT
     sub.id, sub.project_id, sub.organization_id, sub.risk_policy_id,
     sub.risk_policy_version, sub.chat_message_id, sub.source, sub.found,
     sub.rule_id, sub.description, sub.match, sub.start_pos, sub.end_pos,
-    sub.confidence, sub.tags, sub.dead_letter_reason, sub.created_at,
+    sub.confidence, sub.tags, sub.spans, sub.dead_letter_reason, sub.created_at,
     sub.chat_id, sub.message_created_at, sub.chat_title, sub.chat_user_id
 FROM (
   SELECT
       rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id,
       rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found,
       rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos,
-      rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at,
+      rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.created_at,
       cm.chat_id, cm.created_at AS message_created_at,
       c.title AS chat_title, c.external_user_id AS chat_user_id,
       CASE

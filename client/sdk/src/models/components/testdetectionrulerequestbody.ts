@@ -7,9 +7,9 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type TestDetectionRuleRequestBody = {
   /**
-   * Regex pattern. Required for `custom.*` rule ids since the server doesn't persist custom rules yet; ignored for built-in rules.
+   * CEL detection predicate for `custom.*` rule ids, evaluated against the sample message.
    */
-  regex?: string | undefined;
+  detectionExpr?: string | undefined;
   /**
    * Rule identifier to evaluate (e.g. `secret.aws_access_token`, `pii.email_address`, `custom.acme_token`).
    */
@@ -22,7 +22,7 @@ export type TestDetectionRuleRequestBody = {
 
 /** @internal */
 export type TestDetectionRuleRequestBody$Outbound = {
-  regex?: string | undefined;
+  detection_expr?: string | undefined;
   rule_id: string;
   text: string;
 };
@@ -33,12 +33,13 @@ export const TestDetectionRuleRequestBody$outboundSchema: z.ZodMiniType<
   TestDetectionRuleRequestBody
 > = z.pipe(
   z.object({
-    regex: z.optional(z.string()),
+    detectionExpr: z.optional(z.string()),
     ruleId: z.string(),
     text: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      detectionExpr: "detection_expr",
       ruleId: "rule_id",
     });
   }),

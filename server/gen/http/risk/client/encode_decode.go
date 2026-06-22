@@ -7916,6 +7916,33 @@ func unmarshalRiskResultResponseBodyToTypesRiskResult(v *RiskResultResponseBody)
 			res.Tags[i] = val
 		}
 	}
+	if v.Spans != nil {
+		res.Spans = make([]*types.RiskSpan, len(v.Spans))
+		for i, val := range v.Spans {
+			if val == nil {
+				res.Spans[i] = nil
+				continue
+			}
+			res.Spans[i] = unmarshalRiskSpanResponseBodyToTypesRiskSpan(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalRiskSpanResponseBodyToTypesRiskSpan builds a value of type
+// *types.RiskSpan from a value of type *RiskSpanResponseBody.
+func unmarshalRiskSpanResponseBodyToTypesRiskSpan(v *RiskSpanResponseBody) *types.RiskSpan {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskSpan{
+		Match:    *v.Match,
+		Field:    v.Field,
+		Path:     v.Path,
+		StartPos: v.StartPos,
+		EndPos:   v.EndPos,
+	}
 
 	return res
 }
@@ -7945,6 +7972,33 @@ func unmarshalRiskResultRedactedResponseBodyToTypesRiskResultRedacted(v *RiskRes
 		for i, val := range v.Tags {
 			res.Tags[i] = val
 		}
+	}
+	if v.SpansRedacted != nil {
+		res.SpansRedacted = make([]*types.RiskSpanRedacted, len(v.SpansRedacted))
+		for i, val := range v.SpansRedacted {
+			if val == nil {
+				res.SpansRedacted[i] = nil
+				continue
+			}
+			res.SpansRedacted[i] = unmarshalRiskSpanRedactedResponseBodyToTypesRiskSpanRedacted(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalRiskSpanRedactedResponseBodyToTypesRiskSpanRedacted builds a value
+// of type *types.RiskSpanRedacted from a value of type
+// *RiskSpanRedactedResponseBody.
+func unmarshalRiskSpanRedactedResponseBodyToTypesRiskSpanRedacted(v *RiskSpanRedactedResponseBody) *types.RiskSpanRedacted {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskSpanRedacted{
+		MatchRedacted: *v.MatchRedacted,
+		Field:         v.Field,
+		Path:          v.Path,
+		PositionKnown: *v.PositionKnown,
 	}
 
 	return res
@@ -8174,14 +8228,15 @@ func unmarshalRiskPolicyBypassRequestResponseBodyToRiskRiskPolicyBypassRequest(v
 // *RiskCustomDetectionRuleResponseBody.
 func unmarshalRiskCustomDetectionRuleResponseBodyToTypesRiskCustomDetectionRule(v *RiskCustomDetectionRuleResponseBody) *types.RiskCustomDetectionRule {
 	res := &types.RiskCustomDetectionRule{
-		ID:          *v.ID,
-		RuleID:      *v.RuleID,
-		Title:       *v.Title,
-		Description: *v.Description,
-		Regex:       *v.Regex,
-		Severity:    *v.Severity,
-		CreatedAt:   *v.CreatedAt,
-		UpdatedAt:   *v.UpdatedAt,
+		ID:            *v.ID,
+		RuleID:        *v.RuleID,
+		Title:         *v.Title,
+		Description:   *v.Description,
+		Regex:         *v.Regex,
+		DetectionExpr: v.DetectionExpr,
+		Severity:      *v.Severity,
+		CreatedAt:     *v.CreatedAt,
+		UpdatedAt:     *v.UpdatedAt,
 	}
 
 	return res

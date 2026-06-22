@@ -987,7 +987,11 @@ func newStartCommand() *cli.Command {
 			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
 
 			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient)
-			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, meterProvider)
+			celEngine, err := celenv.New()
+			if err != nil {
+				return fmt.Errorf("create cel engine: %w", err)
+			}
+			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, meterProvider, celEngine)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -1110,10 +1114,6 @@ func newStartCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
 			riskReconciler := &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger}
 			riskResultsCleaner := &background.TemporalRiskPolicyResultsCleaner{TemporalEnv: temporalEnv, Logger: logger}
-			celEngine, err := celenv.New()
-			if err != nil {
-				return fmt.Errorf("create cel engine: %w", err)
-			}
 			riskService := risk.NewService(
 				logger,
 				tracerProvider,

@@ -36056,9 +36056,9 @@ components:
                 description:
                     type: string
                     description: Description of what the rule detects.
-                regex:
+                detection_expr:
                     type: string
-                    description: RE2-compatible regex pattern.
+                    description: 'CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.'
                 rule_id:
                     type: string
                     description: Stable rule identifier, prefixed with `custom.`.
@@ -36078,7 +36078,6 @@ components:
             required:
                 - rule_id
                 - title
-                - regex
         CreateDeploymentForm:
             type: object
             properties:
@@ -36750,7 +36749,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Custom detection rule ids to enable for this policy.
+                    description: 'Custom detection rule ids to attach as detectors: a match produces a finding.'
                 disabled_rules:
                     type: array
                     items:
@@ -43986,13 +43985,16 @@ components:
                 description:
                     type: string
                     description: Description of what the rule detects.
+                detection_expr:
+                    type: string
+                    description: 'CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding. Supersedes regex.'
                 id:
                     type: string
                     description: The custom detection rule ID.
                     format: uuid
                 regex:
                     type: string
-                    description: RE2-compatible regex pattern.
+                    description: Legacy RE2-compatible regex pattern (read-only). Live for existing rules; evaluated as content.match(regex) when detection_expr is empty. New rules author detection_expr instead.
                 rule_id:
                     type: string
                     description: Stable rule identifier, prefixed with `custom.`.
@@ -44223,7 +44225,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Custom detection rule ids enabled for this policy.
+                    description: 'Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors; exemptions are expressed via scope_exempt.'
                 disabled_rules:
                     type: array
                     items:
@@ -44500,6 +44502,11 @@ components:
                 source:
                     type: string
                     description: Detection source (e.g. gitleaks).
+                spans:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskSpan'
+                    description: All matched spans attributed to this finding. A finding may carry several correlated spans (e.g. a custom rule matching a tool's function name and its arguments on the same call). The top-level match/start_pos/end_pos mirror the primary (first) span.
                 start_pos:
                     type: integer
                     description: Start byte position within the message content.
@@ -44568,6 +44575,11 @@ components:
                 source:
                     type: string
                     description: Detection source (e.g. gitleaks, presidio, shadow_mcp).
+                spans_redacted:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskSpanRedacted'
+                    description: All matched spans attributed to this finding, each with its match replaced by an opaque fingerprint.
                 tags:
                     type: array
                     items:
@@ -44654,6 +44666,46 @@ components:
                 - last_seq
                 - has_more_before
                 - has_more_after
+        RiskSpan:
+            type: object
+            properties:
+                end_pos:
+                    type: integer
+                    description: End byte position within the message content.
+                    format: int64
+                field:
+                    type: string
+                    description: The message field this span matched, in author-facing form (content, prompt, assistant, tool_result, or tool.name/tool.server/tool.function/tool.args). Empty for detectors that don't attribute a field (e.g. gitleaks, presidio).
+                match:
+                    type: string
+                    description: The matched secret or sensitive data for this span.
+                path:
+                    type: string
+                    description: The JSON sub-path within the field for a `.get(...)` match (e.g. 'command', 'payload.sql'). Empty when the whole field value matched.
+                start_pos:
+                    type: integer
+                    description: Start byte position within the message content.
+                    format: int64
+            required:
+                - match
+        RiskSpanRedacted:
+            type: object
+            properties:
+                field:
+                    type: string
+                    description: The message field this span matched (see RiskSpan.field).
+                match_redacted:
+                    type: string
+                    description: Opaque fingerprint of this span's match, in the same form as RiskResultRedacted.match_redacted.
+                path:
+                    type: string
+                    description: The JSON sub-path within the field for a `.get(...)` match (see RiskSpan.path).
+                position_known:
+                    type: boolean
+                    description: Whether this span carried byte-position information.
+            required:
+                - match_redacted
+                - position_known
         RiskUserBreakdownResult:
             type: object
             properties:
@@ -46134,9 +46186,9 @@ components:
                 description:
                     type: string
                     description: Description of what the rule detects and why it matters.
-                regex:
+                detection_expr:
                     type: string
-                    description: RE2-compatible regex pattern the rule should match against.
+                    description: Suggested CEL detection predicate.
                 rule_id:
                     type: string
                     description: Suggested stable identifier, prefixed with `custom.`.
@@ -46156,7 +46208,6 @@ components:
                 - rule_id
                 - title
                 - description
-                - regex
                 - severity
         TUMPeriod:
             type: object
@@ -46304,9 +46355,9 @@ components:
         TestDetectionRuleRequestBody:
             type: object
             properties:
-                regex:
+                detection_expr:
                     type: string
-                    description: Regex pattern. Required for `custom.*` rule ids since the server doesn't persist custom rules yet; ignored for built-in rules.
+                    description: CEL detection predicate for `custom.*` rule ids, evaluated against the sample message.
                 rule_id:
                     type: string
                     description: Rule identifier to evaluate (e.g. `secret.aws_access_token`, `pii.email_address`, `custom.acme_token`).
@@ -47866,13 +47917,13 @@ components:
                 description:
                     type: string
                     description: Description of what the rule detects.
+                detection_expr:
+                    type: string
+                    description: 'CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.'
                 id:
                     type: string
                     description: The custom detection rule ID.
                     format: uuid
-                regex:
-                    type: string
-                    description: RE2-compatible regex pattern.
                 severity:
                     type: string
                     description: Severity level for findings produced by this rule.
@@ -47888,7 +47939,6 @@ components:
             required:
                 - id
                 - title
-                - regex
                 - severity
         UpdateDomainRequestBody:
             type: object
@@ -48449,7 +48499,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Custom detection rule ids to enable for this policy. Omit to preserve the current selection.
+                    description: 'Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.'
                 disabled_rules:
                     type: array
                     items:
