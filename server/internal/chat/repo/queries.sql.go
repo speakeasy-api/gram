@@ -521,7 +521,7 @@ WITH ordered AS (
       -- Some rows store tool_calls double-encoded (a JSON string holding the
       -- array); treat any non-empty/non-"[]" string as carrying tool calls.
       WHEN jsonb_typeof(cm.tool_calls) = 'string'
-        THEN (cm.tool_calls #>> '{}') NOT IN ('', '[]', 'null')
+        THEN btrim(cm.tool_calls #>> '{}') NOT IN ('', '[]', 'null')
       ELSE false
     END AS has_tool_calls
   FROM chat_messages cm

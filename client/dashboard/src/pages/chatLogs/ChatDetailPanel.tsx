@@ -1594,7 +1594,14 @@ function ChatDetailPanel({
         tool_result: totals.toolResults,
       }
     : getEntryTypeCounts(chatMessages);
-  const totalEntryCount = totals ? totals.total : chatMessages.length;
+  // Denominator sums the four entry types (system rows are excluded from both
+  // counts, so the fallback can't use chatMessages.length, which includes them).
+  const totalEntryCount = totals
+    ? totals.total
+    : FILTERABLE_ENTRY_TYPES.reduce(
+        (sum, type) => sum + entryTypeCounts[type],
+        0,
+      );
   // "Showing X of Y entries": X is the sum of the currently-enabled types'
   // totals, so toggling a type off subtracts its whole-generation count.
   const visibleEntryCount = FILTERABLE_ENTRY_TYPES.reduce(
