@@ -1002,6 +1002,166 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 	return items, nil
 }
 
+const listChatMessagesAfterPage = `-- name: ListChatMessagesAfterPage :many
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
+WHERE cm.chat_id = $1
+  AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
+  AND cm.generation = $3::integer
+  AND cm.seq > $4::bigint
+ORDER BY cm.seq ASC
+LIMIT $5::integer
+`
+
+type ListChatMessagesAfterPageParams struct {
+	ChatID     uuid.UUID
+	ProjectID  uuid.UUID
+	Generation int32
+	AfterSeq   int64
+	Lim        int32
+}
+
+// Keyset page within a generation, oldest first. Returns messages with seq
+// strictly greater than @after_seq. Fetch @lim = pageSize+1 to detect whether
+// more newer rows remain.
+func (q *Queries) ListChatMessagesAfterPage(ctx context.Context, arg ListChatMessagesAfterPageParams) ([]ChatMessage, error) {
+	rows, err := q.db.Query(ctx, listChatMessagesAfterPage,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Generation,
+		arg.AfterSeq,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChatMessage
+	for rows.Next() {
+		var i ChatMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.Model,
+			&i.MessageID,
+			&i.FinishReason,
+			&i.ToolCalls,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.TotalTokens,
+			&i.StorageError,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.ExternalMessageID,
+			&i.Origin,
+			&i.UserAgent,
+			&i.IpAddress,
+			&i.Source,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.ToolOutcome,
+			&i.ToolOutcomeNotes,
+			&i.ContentHash,
+			&i.Generation,
+			&i.CreatedAt,
+			&i.RiskAnalyzedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatMessagesBeforePage = `-- name: ListChatMessagesBeforePage :many
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
+WHERE cm.chat_id = $1
+  AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
+  AND cm.generation = $3::integer
+  AND ($4::bigint IS NULL OR cm.seq < $4::bigint)
+ORDER BY cm.seq DESC
+LIMIT $5::integer
+`
+
+type ListChatMessagesBeforePageParams struct {
+	ChatID     uuid.UUID
+	ProjectID  uuid.UUID
+	Generation int32
+	BeforeSeq  pgtype.Int8
+	Lim        int32
+}
+
+// Keyset page within a generation, newest first. Returns messages with seq
+// strictly less than @before_seq, or the newest page when @before_seq is NULL.
+// Order DESC so LIMIT keeps the most recent rows; the caller reverses to
+// ascending for display. Fetch @lim = pageSize+1 to detect whether more older
+// rows remain.
+func (q *Queries) ListChatMessagesBeforePage(ctx context.Context, arg ListChatMessagesBeforePageParams) ([]ChatMessage, error) {
+	rows, err := q.db.Query(ctx, listChatMessagesBeforePage,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Generation,
+		arg.BeforeSeq,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChatMessage
+	for rows.Next() {
+		var i ChatMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.Model,
+			&i.MessageID,
+			&i.FinishReason,
+			&i.ToolCalls,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.TotalTokens,
+			&i.StorageError,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.ExternalMessageID,
+			&i.Origin,
+			&i.UserAgent,
+			&i.IpAddress,
+			&i.Source,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.ToolOutcome,
+			&i.ToolOutcomeNotes,
+			&i.ContentHash,
+			&i.Generation,
+			&i.CreatedAt,
+			&i.RiskAnalyzedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatMessagesByGeneration = `-- name: ListChatMessagesByGeneration :many
 SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1
@@ -1405,6 +1565,148 @@ func (q *Queries) ListLatestGenerationChatMessages(ctx context.Context, arg List
 			&i.Generation,
 			&i.CreatedAt,
 			&i.RiskAnalyzedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRiskWindowedMessages = `-- name: ListRiskWindowedMessages :many
+WITH ordered AS (
+  SELECT
+    cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at,
+    row_number() OVER (ORDER BY cm.seq) AS rn,
+    count(*) OVER () AS total,
+    EXISTS (
+      SELECT 1 FROM risk_results rr
+      WHERE rr.chat_message_id = cm.id
+        AND rr.project_id = $2::uuid
+        AND rr.found IS TRUE
+        AND rr.excluded_at IS NULL
+        AND rr.false_positive_at IS NULL
+    ) AS is_risk
+  FROM chat_messages cm
+  WHERE cm.chat_id = $3
+    AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
+    AND cm.generation = $4::integer
+),
+risk_rns AS (
+  SELECT rn FROM ordered WHERE is_risk
+)
+SELECT o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.created_at, o.risk_analyzed_at, o.rn, o.total, o.is_risk
+FROM ordered o
+WHERE EXISTS (
+  SELECT 1 FROM risk_rns r
+  WHERE o.rn BETWEEN r.rn - $1::bigint AND r.rn + $1::bigint
+)
+ORDER BY o.seq ASC
+`
+
+type ListRiskWindowedMessagesParams struct {
+	ContextSize int64
+	ProjectID   uuid.UUID
+	ChatID      uuid.UUID
+	Generation  int32
+}
+
+type ListRiskWindowedMessagesRow struct {
+	ID                uuid.UUID
+	Seq               int64
+	ChatID            uuid.UUID
+	ProjectID         uuid.NullUUID
+	Role              string
+	Content           string
+	ContentRaw        []byte
+	ContentAssetUrl   pgtype.Text
+	Model             pgtype.Text
+	MessageID         pgtype.Text
+	FinishReason      pgtype.Text
+	ToolCalls         []byte
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	StorageError      pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	Origin            pgtype.Text
+	UserAgent         pgtype.Text
+	IpAddress         pgtype.Text
+	Source            pgtype.Text
+	ToolCallID        pgtype.Text
+	ToolUrn           pgtype.Text
+	ToolOutcome       pgtype.Text
+	ToolOutcomeNotes  pgtype.Text
+	ContentHash       []byte
+	Generation        int32
+	CreatedAt         pgtype.Timestamptz
+	RiskAnalyzedAt    pgtype.Timestamptz
+	Rn                int64
+	Total             int64
+	IsRisk            bool
+}
+
+// Risk-only view: returns every message within +/- @context_size ordinal
+// positions of any active risk finding in the generation, ordered oldest to
+// newest. rn is the message's 1-based ordinal within the generation and total
+// is the generation's message count, so the caller can fold consecutive rn into
+// contiguous segments and decide whether earlier (rn > 1) or later (rn < total)
+// messages remain to be expanded. Overlapping windows merge naturally via set
+// membership.
+func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWindowedMessagesParams) ([]ListRiskWindowedMessagesRow, error) {
+	rows, err := q.db.Query(ctx, listRiskWindowedMessages,
+		arg.ContextSize,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.Generation,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRiskWindowedMessagesRow
+	for rows.Next() {
+		var i ListRiskWindowedMessagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.Model,
+			&i.MessageID,
+			&i.FinishReason,
+			&i.ToolCalls,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.TotalTokens,
+			&i.StorageError,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.ExternalMessageID,
+			&i.Origin,
+			&i.UserAgent,
+			&i.IpAddress,
+			&i.Source,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.ToolOutcome,
+			&i.ToolOutcomeNotes,
+			&i.ContentHash,
+			&i.Generation,
+			&i.CreatedAt,
+			&i.RiskAnalyzedAt,
+			&i.Rn,
+			&i.Total,
+			&i.IsRisk,
 		); err != nil {
 			return nil, err
 		}

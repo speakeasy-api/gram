@@ -46,6 +46,10 @@ export type ChatMessage = {
    */
   role: string;
   /**
+   * Monotonic sequence number of the message. Strictly increasing within a chat; use it as the keyset cursor for `before_seq`/`after_seq` pagination. Not contiguous (the sequence is shared across chats), so do not infer gaps from arithmetic differences.
+   */
+  seq: number;
+  /**
    * The tool call ID of the message
    */
   toolCallId?: string | undefined;
@@ -75,6 +79,7 @@ export const ChatMessage$inboundSchema: z.ZodMiniType<ChatMessage, unknown> = z
       model: z.string(),
       prompt_id: z.optional(z.string()),
       role: z.string(),
+      seq: z.int(),
       tool_call_id: z.optional(z.string()),
       tool_calls: z.optional(z.string()),
       user_id: z.optional(z.string()),

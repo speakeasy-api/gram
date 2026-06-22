@@ -80,7 +80,7 @@ var _ = Service("chat", func() {
 	})
 
 	Method("loadChat", func() {
-		Description("Load a chat by its ID. Messages are paginated one generation per request; omit `generation` to receive the latest generation.")
+		Description("Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -89,6 +89,20 @@ var _ = Service("chat", func() {
 			Attribute("id", String, "The ID of the chat")
 			Attribute("generation", Int, "Generation to load. A generation is an immutable snapshot of the chat transcript: a new one is opened whenever the conversation is compacted or an earlier message is edited, while normal turns append to the current generation. Generations are numbered from 0 (oldest) up to `max_generation` (latest). Omit this attribute to receive the latest generation, or page through history by walking from `max_generation` down to 0.", func() {
 				Minimum(0)
+			})
+			Attribute("limit", Int, "Maximum number of messages to return for this page.", func() {
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
+			Attribute("before_seq", Int64, "Keyset cursor: return messages with `seq` strictly less than this value (older messages), newest first within the page. Use the `seq` of the oldest message you currently hold to load the previous page. Ignored when `risk_only` is set.", func() {
+				Minimum(1)
+			})
+			Attribute("after_seq", Int64, "Keyset cursor: return messages with `seq` strictly greater than this value (newer messages), oldest first within the page. Use the `seq` of the newest message you currently hold to load the next page. Ignored when `risk_only` is set.", func() {
+				Minimum(1)
+			})
+			Attribute("risk_only", Boolean, "When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request.", func() {
+				Default(false)
 			})
 			Required("id")
 		})
@@ -99,6 +113,10 @@ var _ = Service("chat", func() {
 			GET("/rpc/chat.load")
 			Param("id")
 			Param("generation")
+			Param("limit")
+			Param("before_seq")
+			Param("after_seq")
+			Param("risk_only")
 			security.SessionHeader()
 			security.ProjectHeader()
 			security.ChatSessionsTokenHeader()
@@ -256,16 +274,30 @@ var ChatOverview = Type("ChatOverview", func() {
 
 var Chat = Type("Chat", func() {
 	Extend(ChatOverview)
-	Attribute("messages", ArrayOf(ChatMessage), "The list of messages in the chat for the returned generation")
+	Attribute("messages", ArrayOf(ChatMessage), "The list of messages in the chat for the returned generation, ordered oldest to newest by `seq`.")
 	Attribute("generation", Int, "The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.")
 	Attribute("max_generation", Int, "The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.")
+	Attribute("has_more_before", Boolean, "Whether older messages exist before the first message in this page (within the returned generation). Load them with a `before_seq` cursor.")
+	Attribute("has_more_after", Boolean, "Whether newer messages exist after the last message in this page (within the returned generation). Load them with an `after_seq` cursor.")
+	Attribute("risk_segments", ArrayOf(RiskSegment), "Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment's cursors to expand it.")
 	Attribute("agent_usage", AgentUsage, "Agent-specific usage enrichment for the chat, when available.")
 
-	Required("messages", "generation", "max_generation")
+	Required("messages", "generation", "max_generation", "has_more_before", "has_more_after")
+})
+
+var RiskSegment = Type("RiskSegment", func() {
+	Description("A contiguous run of messages in the risk-only view, covering one or more risk findings plus their surrounding context. Messages for a segment are the entries of `Chat.messages` whose `seq` falls within `[first_seq, last_seq]`.")
+	Attribute("first_seq", Int64, "The `seq` of the first (oldest) message in this segment.")
+	Attribute("last_seq", Int64, "The `seq` of the last (newest) message in this segment.")
+	Attribute("has_more_before", Boolean, "Whether messages exist before this segment within the generation. Expand with a `before_seq` request using `first_seq`.")
+	Attribute("has_more_after", Boolean, "Whether messages exist after this segment within the generation. Expand with an `after_seq` request using `last_seq`.")
+
+	Required("first_seq", "last_seq", "has_more_before", "has_more_after")
 })
 
 var ChatMessage = Type("ChatMessage", func() {
 	Attribute("id", String, "The ID of the message")
+	Attribute("seq", Int64, "Monotonic sequence number of the message. Strictly increasing within a chat; use it as the keyset cursor for `before_seq`/`after_seq` pagination. Not contiguous (the sequence is shared across chats), so do not infer gaps from arithmetic differences.")
 	Attribute("role", String, "The role of the message")
 	Attribute("content", Any, "The content of the message — string for plain text, array for multimodal/tool-call content parts, null for assistant messages that only carry tool_calls", func() {
 		Meta("struct:field:type", "json.RawMessage", "encoding/json")
@@ -283,7 +315,7 @@ var ChatMessage = Type("ChatMessage", func() {
 	})
 	Attribute("generation", Int, "Conversation generation — bumps on compaction or edit divergence")
 
-	Required("id", "role", "model", "created_at", "generation")
+	Required("id", "seq", "role", "model", "created_at", "generation")
 })
 
 var AgentUsage = Type("AgentUsage", func() {
