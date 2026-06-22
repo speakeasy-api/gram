@@ -19,8 +19,12 @@ import (
 type Service interface {
 	// List all chats for a project
 	ListChats(context.Context, *ListChatsPayload) (res *ListChatsResult, err error)
-	// Load a chat by its ID. Messages are paginated one generation per request;
-	// omit `generation` to receive the latest generation.
+	// Load a chat by its ID. Messages within a generation are paginated by `seq`
+	// keyset: omit cursors to receive the newest page, pass `before_seq` to load
+	// older messages (scroll up) or `after_seq` to load newer ones (scroll down).
+	// Omit `generation` to receive the latest generation. Set `risk_only` to
+	// return only messages with risk findings plus a few messages of surrounding
+	// context per finding.
 	LoadChat(context.Context, *LoadChatPayload) (res *Chat, err error)
 	// Generate a title for a chat based on its messages
 	GenerateTitle(context.Context, *GenerateTitlePayload) (res *GenerateTitleResult, err error)
@@ -65,7 +69,8 @@ type AgentUsage struct {
 
 // Chat is the result type of the chat service loadChat method.
 type Chat struct {
-	// The list of messages in the chat for the returned generation
+	// The list of messages in the chat for the returned generation, ordered oldest
+	// to newest by `seq`.
 	Messages []*ChatMessage
 	// The generation that this response's messages belong to. A generation is an
 	// immutable snapshot of the transcript; a new one is opened on compaction or
@@ -75,6 +80,16 @@ type Chat struct {
 	// history, walk from `max_generation` down to 0, requesting each generation in
 	// turn.
 	MaxGeneration int
+	// Whether older messages exist before the first message in this page (within
+	// the returned generation). Load them with a `before_seq` cursor.
+	HasMoreBefore bool
+	// Whether newer messages exist after the last message in this page (within the
+	// returned generation). Load them with an `after_seq` cursor.
+	HasMoreAfter bool
+	// Present only when `risk_only` was requested: contiguous runs of returned
+	// messages, each spanning a risk finding and its surrounding context. Use each
+	// segment's cursors to expand it.
+	RiskSegments []*RiskSegment
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsage
 	// The ID of the chat
@@ -113,6 +128,11 @@ type Chat struct {
 type ChatMessage struct {
 	// The ID of the message
 	ID string
+	// Monotonic sequence number of the message. Strictly increasing within a chat;
+	// use it as the keyset cursor for `before_seq`/`after_seq` pagination. Not
+	// contiguous (the sequence is shared across chats), so do not infer gaps from
+	// arithmetic differences.
+	Seq int64
 	// The role of the message
 	Role string
 	// The content of the message — string for plain text, array for
@@ -311,6 +331,43 @@ type LoadChatPayload struct {
 	// (latest). Omit this attribute to receive the latest generation, or page
 	// through history by walking from `max_generation` down to 0.
 	Generation *int
+	// Maximum number of messages to return for this page.
+	Limit int
+	// Keyset cursor: return the page of messages with `seq` strictly less than
+	// this value (older messages). The returned `messages` are always ordered
+	// oldest to newest by `seq`, like every other response. Use the `seq` of the
+	// oldest message you currently hold to load the previous page. Ignored when
+	// `risk_only` is set. Mutually exclusive with `after_seq`; if both are
+	// supplied, `after_seq` takes precedence.
+	BeforeSeq *int64
+	// Keyset cursor: return the page of messages with `seq` strictly greater than
+	// this value (newer messages). The returned `messages` are always ordered
+	// oldest to newest by `seq`. Use the `seq` of the newest message you currently
+	// hold to load the next page. Ignored when `risk_only` is set. Mutually
+	// exclusive with `before_seq`; if both are supplied, `after_seq` takes
+	// precedence.
+	AfterSeq *int64
+	// When true, return only messages that have active risk findings, each padded
+	// with a fixed window of surrounding messages, grouped into contiguous
+	// segments (see `risk_segments`). Cursors are ignored in this mode; expand a
+	// segment with a follow-up `before_seq`/`after_seq` request.
+	RiskOnly bool
+}
+
+// A contiguous run of messages in the risk-only view, covering one or more
+// risk findings plus their surrounding context. Messages for a segment are the
+// entries of `Chat.messages` whose `seq` falls within `[first_seq, last_seq]`.
+type RiskSegment struct {
+	// The `seq` of the first (oldest) message in this segment.
+	FirstSeq int64
+	// The `seq` of the last (newest) message in this segment.
+	LastSeq int64
+	// Whether messages exist before this segment within the generation. Expand
+	// with a `before_seq` request using `first_seq`.
+	HasMoreBefore bool
+	// Whether messages exist after this segment within the generation. Expand with
+	// an `after_seq` request using `last_seq`.
+	HasMoreAfter bool
 }
 
 // SubmitFeedbackPayload is the payload type of the chat service submitFeedback

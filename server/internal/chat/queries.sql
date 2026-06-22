@@ -433,6 +433,69 @@ ORDER BY cm.seq ASC;
 -- name: GetMaxGenerationForChat :one
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = @chat_id;
 
+-- name: ListChatMessagesBeforePage :many
+-- Keyset page within a generation, newest first. Returns messages with seq
+-- strictly less than @before_seq, or the newest page when @before_seq is NULL.
+-- Order DESC so LIMIT keeps the most recent rows; the caller reverses to
+-- ascending for display. Fetch @lim = pageSize+1 to detect whether more older
+-- rows remain.
+SELECT cm.* FROM chat_messages cm
+WHERE cm.chat_id = @chat_id
+  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.generation = @generation::integer
+  AND (sqlc.narg('before_seq')::bigint IS NULL OR cm.seq < sqlc.narg('before_seq')::bigint)
+ORDER BY cm.seq DESC
+LIMIT @lim::integer;
+
+-- name: ListChatMessagesAfterPage :many
+-- Keyset page within a generation, oldest first. Returns messages with seq
+-- strictly greater than @after_seq. Fetch @lim = pageSize+1 to detect whether
+-- more newer rows remain.
+SELECT cm.* FROM chat_messages cm
+WHERE cm.chat_id = @chat_id
+  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.generation = @generation::integer
+  AND cm.seq > @after_seq::bigint
+ORDER BY cm.seq ASC
+LIMIT @lim::integer;
+
+-- name: ListRiskWindowedMessages :many
+-- Risk-only view: returns every message within +/- @context_size ordinal
+-- positions of any active risk finding in the generation, ordered oldest to
+-- newest. rn is the message's 1-based ordinal within the generation and total
+-- is the generation's message count, so the caller can fold consecutive rn into
+-- contiguous segments and decide whether earlier (rn > 1) or later (rn < total)
+-- messages remain to be expanded. Overlapping windows merge naturally via set
+-- membership.
+WITH ordered AS (
+  SELECT
+    cm.*,
+    row_number() OVER (ORDER BY cm.seq) AS rn,
+    count(*) OVER () AS total
+  FROM chat_messages cm
+  WHERE cm.chat_id = @chat_id
+    AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+    AND cm.generation = @generation::integer
+),
+risk_rns AS (
+  SELECT o.rn FROM ordered o
+  WHERE EXISTS (
+    SELECT 1 FROM risk_results rr
+    WHERE rr.chat_message_id = o.id
+      AND rr.project_id = @project_id::uuid
+      AND rr.found IS TRUE
+      AND rr.excluded_at IS NULL
+      AND rr.false_positive_at IS NULL
+  )
+)
+SELECT o.*
+FROM ordered o
+WHERE EXISTS (
+  SELECT 1 FROM risk_rns r
+  WHERE o.rn BETWEEN r.rn - @context_size::bigint AND r.rn + @context_size::bigint
+)
+ORDER BY o.seq ASC;
+
 -- name: ListChatMessagesForMatch :many
 SELECT id, role, content, tool_call_id, tool_calls
 FROM chat_messages

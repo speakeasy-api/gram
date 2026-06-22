@@ -46,6 +46,10 @@ export function buildLoadChatQuery(
     queryKey: queryKeyLoadChat({
       id: request.id,
       generation: request.generation,
+      limit: request.limit,
+      beforeSeq: request.beforeSeq,
+      afterSeq: request.afterSeq,
+      riskOnly: request.riskOnly,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
       gramChatSession: request.gramChatSession,
@@ -76,6 +80,10 @@ export function queryKeyLoadChat(
   parameters: {
     id: string;
     generation?: number | undefined;
+    limit?: number | undefined;
+    beforeSeq?: number | undefined;
+    afterSeq?: number | undefined;
+    riskOnly?: boolean | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
     gramChatSession?: string | undefined;

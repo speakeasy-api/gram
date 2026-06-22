@@ -94,7 +94,7 @@ export class Chat extends ClientSDK {
    * loadChat chat
    *
    * @remarks
-   * Load a chat by its ID. Messages are paginated one generation per request; omit `generation` to receive the latest generation.
+   * Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding.
    */
   async load(
     request: operations.LoadChatRequest,

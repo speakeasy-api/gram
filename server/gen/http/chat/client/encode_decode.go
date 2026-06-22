@@ -321,6 +321,14 @@ func EncodeLoadChatRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 		if p.Generation != nil {
 			values.Add("generation", fmt.Sprintf("%v", *p.Generation))
 		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		if p.BeforeSeq != nil {
+			values.Add("before_seq", fmt.Sprintf("%v", *p.BeforeSeq))
+		}
+		if p.AfterSeq != nil {
+			values.Add("after_seq", fmt.Sprintf("%v", *p.AfterSeq))
+		}
+		values.Add("risk_only", fmt.Sprintf("%v", p.RiskOnly))
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -1491,6 +1499,7 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 func unmarshalChatMessageResponseBodyToChatChatMessage(v *ChatMessageResponseBody) *chat.ChatMessage {
 	res := &chat.ChatMessage{
 		ID:             *v.ID,
+		Seq:            *v.Seq,
 		Role:           *v.Role,
 		Content:        v.Content,
 		Model:          *v.Model,
@@ -1502,6 +1511,22 @@ func unmarshalChatMessageResponseBodyToChatChatMessage(v *ChatMessageResponseBod
 		ExternalUserID: v.ExternalUserID,
 		CreatedAt:      *v.CreatedAt,
 		Generation:     *v.Generation,
+	}
+
+	return res
+}
+
+// unmarshalRiskSegmentResponseBodyToChatRiskSegment builds a value of type
+// *chat.RiskSegment from a value of type *RiskSegmentResponseBody.
+func unmarshalRiskSegmentResponseBodyToChatRiskSegment(v *RiskSegmentResponseBody) *chat.RiskSegment {
+	if v == nil {
+		return nil
+	}
+	res := &chat.RiskSegment{
+		FirstSeq:      *v.FirstSeq,
+		LastSeq:       *v.LastSeq,
+		HasMoreBefore: *v.HasMoreBefore,
+		HasMoreAfter:  *v.HasMoreAfter,
 	}
 
 	return res
