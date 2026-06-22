@@ -196,11 +196,15 @@ fn token_threshold_trigger(window: u64, percent: u32, fire_at_turn_end: bool) ->
             .usage
             .as_ref()
             .and_then(|u| u.tokens.as_ref())?;
-        let appended: u64 = transcript[last_usage_idx + 1..]
+        // Sum chars across the whole appended tail, then divide once — dividing
+        // per item would floor away up to ~3 chars each and underestimate the
+        // growth, letting a runaway turn slip past the ceiling.
+        let appended_chars: usize = transcript[last_usage_idx + 1..]
             .iter()
-            .map(estimate_item_tokens)
+            .map(estimate_item_chars)
             .sum();
-        let projected = tokens.input_tokens + tokens.output_tokens + appended;
+        let projected =
+            tokens.input_tokens + tokens.output_tokens + (appended_chars / 4) as u64;
         (projected >= threshold).then(|| {
             CompactionReason::Custom(format!(
                 "projected_tokens={projected} >= threshold={threshold} (window={window}, {percent}%, {point:?})"
@@ -209,13 +213,13 @@ fn token_threshold_trigger(window: u64, percent: u32, fire_at_turn_end: bool) ->
     })
 }
 
-/// Char-based token estimate (~4 chars/token) for an item whose provider usage
-/// is not yet known — the tool results appended after the last model response.
-/// Only used to project the next request size in [`token_threshold_trigger`];
-/// kinds that don't round-trip through the runner contribute nothing.
-fn estimate_item_tokens(item: &Item) -> u64 {
-    let chars: usize = item
-        .parts
+/// Char count of an item whose provider usage is not yet known — the tool
+/// results appended after the last model response. The caller sums these across
+/// the tail and divides once (~4 chars/token) to project the next request size
+/// in [`token_threshold_trigger`]; kinds that don't round-trip through the
+/// runner contribute nothing.
+fn estimate_item_chars(item: &Item) -> usize {
+    item.parts
         .iter()
         .map(|part| match part {
             Part::Text(t) => t.text.len(),
@@ -223,8 +227,7 @@ fn estimate_item_tokens(item: &Item) -> u64 {
             Part::ToolCall(c) => c.input.to_string().len(),
             _ => 0,
         })
-        .sum();
-    (chars / 4) as u64
+        .sum()
 }
 
 /// Returns the trigger closure for the requested policy, or `None` when
