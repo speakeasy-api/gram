@@ -484,8 +484,16 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 	ms, err := f.launchN(ctx, logger, appName, flapsc, region, machineConfig, minSecretVersion, scale)
 	if err != nil {
 		if len(ms) > 0 {
+			// Partial success is tolerated: the app still serves traffic on the
+			// machines that came up, so this is a warning, not a failure. The
+			// joined err carries each per-machine cause; include the
+			// succeeded/requested counts so it reads as partial rather than as
+			// a hard failure. Only an all-zero result (below) is user-facing.
 			span.RecordError(err)
-			logger.WarnContext(ctx, "failed to spin up some function runner machines", attr.SlogError(err))
+			logger.WarnContext(ctx,
+				fmt.Sprintf("function runner deploy came up partially: %d/%d machines started", len(ms), scale),
+				attr.SlogError(err),
+			)
 		} else {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to spin up function runner machines").LogError(ctx, logger)
 		}
