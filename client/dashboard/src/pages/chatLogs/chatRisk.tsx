@@ -44,10 +44,10 @@ export function HighlightedMessageText({
   const isControlled = controlledRevealed !== undefined;
   const revealed = controlledRevealed ?? internal.revealed;
   // A finding can match content that was stripped for display (e.g. the
-  // <message-context> envelope), so the matched span isn't in the visible text.
-  // Surface those values explicitly so a flagged row never hides what tripped it.
-  const matchesInText = matches.some((m) => m && text.includes(m));
-  const orphanMatches = matches.length > 0 && !matchesInText;
+  // <message-context> envelope), so its span isn't in the visible text. Surface
+  // each such value explicitly — per-match, so an orphan isn't hidden just
+  // because a sibling match happens to appear in the text.
+  const orphanMatches = matches.filter((m) => m && !text.includes(m));
   return (
     <div className="space-y-1">
       {text && (
@@ -55,14 +55,14 @@ export function HighlightedMessageText({
           {highlightMatches(text, matches, sensitive && !revealed)}
         </div>
       )}
-      {orphanMatches && (
+      {orphanMatches.length > 0 && (
         <div className="text-muted-foreground space-y-1 text-xs">
           <span>
-            Flagged value{matches.length > 1 ? "s" : ""} (not shown in message
-            text):
+            Flagged value{orphanMatches.length > 1 ? "s" : ""} (not shown in
+            message text):
           </span>
           <div className="flex flex-wrap gap-1">
-            {matches.map((m, i) => (
+            {orphanMatches.map((m, i) => (
               <code
                 key={i}
                 className="bg-destructive/10 text-destructive rounded px-1 py-0.5 font-mono break-all"

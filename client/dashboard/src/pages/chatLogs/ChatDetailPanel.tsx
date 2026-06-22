@@ -314,10 +314,13 @@ function MessageTypeFilter({
             <button
               key={key}
               type="button"
+              role="checkbox"
+              aria-checked={on}
               onClick={() => toggle(key)}
               className="hover:bg-muted flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors"
             >
               <span
+                aria-hidden
                 className={cn(
                   "flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors",
                   on
