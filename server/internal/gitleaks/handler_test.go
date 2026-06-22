@@ -1,7 +1,6 @@
 package gitleaks_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -50,7 +49,7 @@ func TestHandle_PublishesGitleaksFinding(t *testing.T) {
 	require.NoError(t, err)
 
 	content := `Here is my AWS key: AKIAIOSFODNN7REALKEY and secret: wJalrXUtnFEMI/K7MDENG/bPxRfiCYREALKEYXX`
-	require.NoError(t, h.Handle(context.Background(), newRequest(content), gcp.MessageMetadata{}))
+	require.NoError(t, h.Handle(t.Context(), newRequest(content), gcp.MessageMetadata{}))
 
 	require.NotEmpty(t, *published, "expected at least one finding published")
 
@@ -84,6 +83,6 @@ func TestHandle_CleanContentPublishesNothing(t *testing.T) {
 	h, err := gitleaks.NewHandler(testenv.NewLogger(t), pub)
 	require.NoError(t, err)
 
-	require.NoError(t, h.Handle(context.Background(), newRequest("hello world, this is a normal message"), gcp.MessageMetadata{}))
+	require.NoError(t, h.Handle(t.Context(), newRequest("hello world, this is a normal message"), gcp.MessageMetadata{}))
 	require.Empty(t, *published)
 }

@@ -143,10 +143,14 @@ func NewReusableScanner() (*ReusableScanner, error) {
 
 // Scan scans a single message on the reused detector under the mutex.
 func (r *ReusableScanner) Scan(content string) []Detection {
-	r.mu.Lock()
-	raw := r.det.DetectString(content)
-	r.mu.Unlock()
+	raw := r.detect(content)
 	return convertFindings(content, raw)
+}
+
+func (r *ReusableScanner) detect(content string) []report.Finding {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.det.DetectString(content)
 }
 
 // convertFindings converts raw gitleaks findings to detections. Rule ids are

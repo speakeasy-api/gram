@@ -308,6 +308,31 @@ func messageRowMessageType(msg repo.GetMessageContentBatchRow) (message.Type, bo
 	}
 }
 
+// publishAckTimeout bounds how long we wait on a single shadow-mode Pub/Sub
+// publish ack while draining the issued futures. Kept well under the
+// AnalyzeBatch activity's 60s HeartbeatTimeout so a transient Pub/Sub stall
+// logs and moves on instead of blocking the goroutine past the heartbeat
+// window — otherwise Temporal cancels the activity and retries the whole
+// (expensive) scan. These publishes are fire-and-forget, so a timed-out ack is
+// only a warning.
+const publishAckTimeout = 10 * time.Second
+
+// drainPublishAcks waits on each shadow-mode publish future with a bounded
+// per-ack timeout, recording a heartbeat between acks so the worker keeps
+// signaling liveness throughout the drain. warnMsg is logged (with the ack
+// error) for any publish that fails or times out.
+func drainPublishAcks(ctx context.Context, logger *slog.Logger, warnMsg string, results []gcp.PublishResult) {
+	for _, res := range results {
+		waitCtx, cancel := context.WithTimeout(ctx, publishAckTimeout)
+		_, err := res.Get(waitCtx)
+		cancel()
+		if err != nil {
+			logger.WarnContext(ctx, warnMsg, attr.SlogError(err))
+		}
+		activity.RecordHeartbeat(ctx, "publish_ack")
+	}
+}
+
 // scan runs enabled scanners concurrently. Gitleaks (CPU-bound), presidio
 // (IO-bound), and prompt-injection (CPU-bound, regex-only) all run in
 // parallel — folding the cheap prompt-injection pass under presidio's
@@ -367,11 +392,7 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 					Content:  new(content),
 				}.Build())
 			}
-			for _, res := range publishResults {
-				if _, err := res.Get(ctx); err != nil {
-					a.logger.WarnContext(ctx, "failed to publish gitleaks scan request", attr.SlogError(err))
-				}
-			}
+			drainPublishAcks(ctx, a.logger, "failed to publish gitleaks scan request", publishResults)
 
 			results, err := a.scanner.ScanBatchParallel(contents)
 			if err != nil {
@@ -407,11 +428,7 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 					Entities: args.PresidioEntities,
 				}.Build())
 			}
-			for _, res := range publishResults {
-				if _, err := res.Get(ctx); err != nil {
-					a.logger.WarnContext(ctx, "failed to publish presidio scan request", attr.SlogError(err))
-				}
-			}
+			drainPublishAcks(ctx, a.logger, "failed to publish presidio scan request", publishResults)
 
 			// PIIScanner may return partial results alongside an error;
 			// always consume results so successful per-text findings are
