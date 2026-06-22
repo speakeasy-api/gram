@@ -36,11 +36,15 @@ export type RiskCustomDetectionRule = {
    */
   description: string;
   /**
+   * CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding. Supersedes regex.
+   */
+  detectionExpr?: string | undefined;
+  /**
    * The custom detection rule ID.
    */
   id: string;
   /**
-   * RE2-compatible regex pattern.
+   * Legacy RE2-compatible regex pattern (read-only). Live for existing rules; evaluated as content.match(regex) when detection_expr is empty. New rules author detection_expr instead.
    */
   regex: string;
   /**
@@ -77,6 +81,7 @@ export const RiskCustomDetectionRule$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     description: z.string(),
+    detection_expr: z.optional(z.string()),
     id: z.string(),
     regex: z.string(),
     rule_id: z.string(),
@@ -90,6 +95,7 @@ export const RiskCustomDetectionRule$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
+      "detection_expr": "detectionExpr",
       "rule_id": "ruleId",
       "updated_at": "updatedAt",
     });

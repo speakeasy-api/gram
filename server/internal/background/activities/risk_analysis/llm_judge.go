@@ -190,5 +190,7 @@ func JudgeFinding(verdict JudgeVerdict) Finding {
 		Confidence:       verdict.Confidence,
 		DeadLetterReason: "",
 		toolCallID:       "",
+		field:            "",
+		path:             "",
 	}
 }

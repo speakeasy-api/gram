@@ -22213,6 +22213,114 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: RiskCategories
+  /rpc/risk.compileExpr:
+    get:
+      description: Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).
+      operationId: compileExpr
+      parameters:
+        - allowEmptyValue: true
+          description: The CEL expression to compile. Empty is valid and compiles to ok=true.
+          in: query
+          name: expr
+          schema:
+            default: ""
+            description: The CEL expression to compile. Empty is valid and compiles to ok=true.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExprCompileResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: compileExpr risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.expr
+      x-speakeasy-name-override: compile
+      x-speakeasy-react-hook:
+        name: RiskCompileExpr
   /rpc/risk.createExclusions:
     post:
       description: Create a risk exclusion. Omit risk_policy_id to create a global exclusion that applies to every policy in the project.
@@ -35413,9 +35521,9 @@ components:
         description:
           type: string
           description: Description of what the rule detects.
-        regex:
+        detection_expr:
           type: string
-          description: RE2-compatible regex pattern.
+          description: 'CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.'
         rule_id:
           type: string
           description: Stable rule identifier, prefixed with `custom.`.
@@ -35435,7 +35543,6 @@ components:
       required:
         - rule_id
         - title
-        - regex
     CreateDeploymentForm:
       type: object
       properties:
@@ -36107,7 +36214,7 @@ components:
           type: array
           items:
             type: string
-          description: Custom detection rule ids to enable for this policy.
+          description: 'Custom detection rule ids to attach as detectors: a match produces a finding.'
         disabled_rules:
           type: array
           items:
@@ -37223,6 +37330,19 @@ components:
           maxLength: 40
       required:
         - mcp_slug
+    ExprCompileResult:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Compiler error message when ok is false; empty otherwise.
+        ok:
+          type: boolean
+          description: True when the expression compiled successfully.
+      description: The result of compiling a single CEL expression for the editor.
+      required:
+        - ok
+        - error
     ExternalMCPHeaderDefinition:
       type: object
       properties:
@@ -43166,13 +43286,16 @@ components:
         description:
           type: string
           description: Description of what the rule detects.
+        detection_expr:
+          type: string
+          description: 'CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding. Supersedes regex.'
         id:
           type: string
           description: The custom detection rule ID.
           format: uuid
         regex:
           type: string
-          description: RE2-compatible regex pattern.
+          description: Legacy RE2-compatible regex pattern (read-only). Live for existing rules; evaluated as content.match(regex) when detection_expr is empty. New rules author detection_expr instead.
         rule_id:
           type: string
           description: Stable rule identifier, prefixed with `custom.`.
@@ -43403,7 +43526,7 @@ components:
           type: array
           items:
             type: string
-          description: Custom detection rule ids enabled for this policy.
+          description: 'Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.'
         disabled_rules:
           type: array
           items:
@@ -43680,6 +43803,11 @@ components:
         source:
           type: string
           description: Detection source (e.g. gitleaks).
+        spans:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskSpan'
+          description: All matched spans attributed to this finding. A finding may carry several correlated spans (e.g. a custom rule matching a tool's function name and its arguments on the same call). The top-level match/start_pos/end_pos mirror the primary (first) span.
         start_pos:
           type: integer
           description: Start byte position within the message content.
@@ -43748,6 +43876,11 @@ components:
         source:
           type: string
           description: Detection source (e.g. gitleaks, presidio, shadow_mcp).
+        spans_redacted:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskSpanRedacted'
+          description: All matched spans attributed to this finding, each with its match replaced by an opaque fingerprint.
         tags:
           type: array
           items:
@@ -43834,6 +43967,46 @@ components:
         - last_seq
         - has_more_before
         - has_more_after
+    RiskSpan:
+      type: object
+      properties:
+        end_pos:
+          type: integer
+          description: End byte position within the message content.
+          format: int64
+        field:
+          type: string
+          description: The message field this span matched, in author-facing form (content, prompt, assistant, tool_result, or tool.name/tool.server/tool.function/tool.args). Empty for detectors that don't attribute a field (e.g. gitleaks, presidio).
+        match:
+          type: string
+          description: The matched secret or sensitive data for this span.
+        path:
+          type: string
+          description: The JSON sub-path within the field for a `.get(...)` match (e.g. 'command', 'payload.sql'). Empty when the whole field value matched.
+        start_pos:
+          type: integer
+          description: Start byte position within the message content.
+          format: int64
+      required:
+        - match
+    RiskSpanRedacted:
+      type: object
+      properties:
+        field:
+          type: string
+          description: The message field this span matched (see RiskSpan.field).
+        match_redacted:
+          type: string
+          description: Opaque fingerprint of this span's match, in the same form as RiskResultRedacted.match_redacted.
+        path:
+          type: string
+          description: The JSON sub-path within the field for a `.get(...)` match (see RiskSpan.path).
+        position_known:
+          type: boolean
+          description: Whether this span carried byte-position information.
+      required:
+        - match_redacted
+        - position_known
     RiskUserBreakdownResult:
       type: object
       properties:
@@ -45314,9 +45487,9 @@ components:
         description:
           type: string
           description: Description of what the rule detects and why it matters.
-        regex:
+        detection_expr:
           type: string
-          description: RE2-compatible regex pattern the rule should match against.
+          description: Suggested CEL detection predicate.
         rule_id:
           type: string
           description: Suggested stable identifier, prefixed with `custom.`.
@@ -45336,7 +45509,6 @@ components:
         - rule_id
         - title
         - description
-        - regex
         - severity
     TUMPeriod:
       type: object
@@ -45484,9 +45656,9 @@ components:
     TestDetectionRuleRequestBody:
       type: object
       properties:
-        regex:
+        detection_expr:
           type: string
-          description: Regex pattern. Required for `custom.*` rule ids since the server doesn't persist custom rules yet; ignored for built-in rules.
+          description: CEL detection predicate for `custom.*` rule ids, evaluated against the sample message.
         rule_id:
           type: string
           description: Rule identifier to evaluate (e.g. `secret.aws_access_token`, `pii.email_address`, `custom.acme_token`).
@@ -47046,13 +47218,13 @@ components:
         description:
           type: string
           description: Description of what the rule detects.
+        detection_expr:
+          type: string
+          description: 'CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.'
         id:
           type: string
           description: The custom detection rule ID.
           format: uuid
-        regex:
-          type: string
-          description: RE2-compatible regex pattern.
         severity:
           type: string
           description: Severity level for findings produced by this rule.
@@ -47068,7 +47240,6 @@ components:
       required:
         - id
         - title
-        - regex
         - severity
     UpdateDomainRequestBody:
       type: object
@@ -47629,7 +47800,7 @@ components:
           type: array
           items:
             type: string
-          description: Custom detection rule ids to enable for this policy. Omit to preserve the current selection.
+          description: 'Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.'
         disabled_rules:
           type: array
           items:

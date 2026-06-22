@@ -71,7 +71,7 @@ export type RiskPolicy = {
    */
   createdAt: Date;
   /**
-   * Custom detection rule ids enabled for this policy.
+   * Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.
    */
   customRuleIds?: Array<string> | undefined;
   /**
