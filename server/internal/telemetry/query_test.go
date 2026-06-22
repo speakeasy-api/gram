@@ -3,6 +3,7 @@ package telemetry_test
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"testing"
 	"time"
 
@@ -236,6 +237,51 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	require.Empty(t, totalResult.Table[0].GroupValue)
 	require.InDelta(t, 0.85, totalResult.Table[0].Measures.TotalCost, 1e-9)
 	require.Len(t, totalResult.Timeseries, 1)
+}
+
+func TestQuery_DefaultSortByAndTopN(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	ts := now.Add(-10 * time.Minute)
+	for i := range 12 {
+		dept := "D" + strconv.Itoa(i+1)
+		cost := float64(12 - i)
+		insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), cost, 1, "m", "claude-code", dept+"@x.com", dept, nil)
+	}
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	var res *gen.QueryResult
+	require.Eventually(t, func() bool {
+		r, err := ti.service.Query(ctx, &gen.QueryPayload{
+			From:    from,
+			To:      to,
+			GroupBy: conv.PtrEmpty("department_name"),
+		})
+		if err != nil || r == nil {
+			return false
+		}
+		res = r
+		return len(r.Table) == 11
+	}, 10*time.Second, 200*time.Millisecond)
+
+	require.Equal(t, "D1", res.Table[0].GroupValue, "default sort_by should rank by total_cost")
+	require.Equal(t, "D10", res.Table[9].GroupValue)
+	require.Equal(t, "Other", res.Table[10].GroupValue, "default top_n should keep 10 groups and roll up the rest")
+	require.InDelta(t, 3.0, res.Table[10].Measures.TotalCost, 1e-9)
 }
 
 // TestQuery_CountsToolCalls is the POC-209 regression: the cost page reported 0
