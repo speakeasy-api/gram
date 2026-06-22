@@ -1130,7 +1130,10 @@ func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload
 	// fail and wedges the thread. Refuse to delete a chat that backs a live
 	// assistant thread (a deleted assistant's leftover threads don't count, or the
 	// chat could never be cleaned up).
-	backsThread, err := s.repo.ChatBacksLiveAssistantThread(ctx, chatID)
+	backsThread, err := s.repo.ChatBacksLiveAssistantThread(ctx, repo.ChatBacksLiveAssistantThreadParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "check assistant thread for chat").LogError(ctx, s.logger)
 	}

@@ -7,8 +7,10 @@ WHERE t.chat_id = @chat_id
 LIMIT 1;
 
 -- name: ChatBacksLiveAssistantThread :one
--- True when the chat backs a thread of a live (non-deleted) assistant. The
--- assistant join matters because DeleteAssistant only soft-deletes the
+-- True when the chat backs a thread of a live (non-deleted) assistant in the
+-- given project. Project-scoped so a chat ID from another project falls through
+-- to the project-scoped SoftDeleteChat no-op rather than leaking existence via a
+-- 409. The assistant join matters because DeleteAssistant only soft-deletes the
 -- assistant, leaving its threads behind — those orphaned threads must not keep
 -- the backing chat undeletable forever.
 SELECT EXISTS (
@@ -16,6 +18,7 @@ SELECT EXISTS (
   FROM assistant_threads t
   JOIN assistants a ON a.id = t.assistant_id
   WHERE t.chat_id = @chat_id
+    AND t.project_id = @project_id
     AND t.deleted IS FALSE
     AND a.deleted IS FALSE
 ) AS backs_thread;
