@@ -967,6 +967,15 @@ func (f *FlyRunner) tryMarkDeployFailed(
 	req RunnerDeployRequest,
 	state partialDeploy,
 ) {
+	// Cleanup usually runs precisely because the parent ctx was cancelled (the
+	// deploy was torn down mid-flight). Detach from that cancellation with a
+	// fresh deadline so we can still delete the Fly app and reconcile the DB
+	// row. Otherwise the leaked fly_apps row stays active (reaped_at IS NULL)
+	// and poisons later retries with a duplicate-key collision on
+	// fly_apps_project_deployment_function_active_key.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+
 	var reapedAt time.Time
 	if state.appName != "" {
 		if err := f.client.DeleteApp(ctx, state.appName); err != nil {
