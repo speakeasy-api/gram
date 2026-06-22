@@ -22,6 +22,12 @@ carries when `role === "tool"`.
 
 ***
 
+### seq?
+
+> `optional` **seq**: `number`
+
+***
+
 ### model
 
 > **model**: `string`
