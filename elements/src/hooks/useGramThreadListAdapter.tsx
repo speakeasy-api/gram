@@ -158,8 +158,18 @@ async function loadFullChat(
       { headers },
     );
     if (!response.ok) {
-      // Return whatever was gathered so far; null only if the first page failed.
-      return base ? { ...base, messages: all } : null;
+      // First page failed → nothing to show. A later page failing means we'd
+      // silently truncate the thread, so log loudly rather than passing partial
+      // history off as complete.
+      if (!base) {
+        console.error("Failed to load chat:", response.status);
+        return null;
+      }
+      console.error(
+        `Failed to load full chat history (status ${response.status}); ` +
+          `returning ${all.length} of ${base.numMessages ?? "?"} messages — transcript is truncated.`,
+      );
+      return { ...base, messages: all };
     }
     const page = (await response.json()) as GramChat;
     if (!base) base = page;

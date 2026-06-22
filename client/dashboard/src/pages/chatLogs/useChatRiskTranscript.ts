@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Chat, ChatMessage } from "@gram/client/models/components";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useLoadChat } from "@gram/client/react-query";
@@ -76,90 +76,98 @@ export function useChatRiskTranscript(
 
   const [state, setState] = useState<RiskState | null>(null);
   const [loadingKey, setLoadingKey] = useState<RiskLoadKey | null>(null);
+  const [loadError, setLoadError] = useState(false);
+
+  // Tracks the chat the hook currently represents so a slow in-flight page from
+  // a previous chat can't apply its response (or error) after a switch.
+  const chatIdRef = useRef(chatId);
+  chatIdRef.current = chatId;
 
   // Re-seed whenever a fresh base response arrives (chat switch or refetch).
-  // User expansions are intentionally reset on refetch.
+  // User expansions and any prior incremental-load error are reset.
   useEffect(() => {
-    if (base.data) setState(buildInitial(base.data));
+    if (base.data) {
+      setState(buildInitial(base.data));
+      setLoadError(false);
+    }
   }, [base.data]);
 
+  // Runs one incremental page load: ignores the result if the chat changed
+  // mid-flight, and records failures so they surface via isError instead of
+  // silently no-opping.
+  const runIncrementalLoad = useCallback(
+    (
+      key: RiskLoadKey,
+      request: { beforeSeq?: number; afterSeq?: number },
+      apply: (prev: RiskState, page: Chat) => RiskState,
+    ) => {
+      if (loadingKey) return;
+      const requestChatId = chatId;
+      setLoadingKey(key);
+      void client.chat
+        .load({ id: chatId, limit: TRANSCRIPT_PAGE_SIZE, ...request })
+        .then((page) => {
+          if (chatIdRef.current !== requestChatId) return; // chat switched
+          setState((prev) => (prev ? apply(prev, page) : prev));
+        })
+        .catch(() => {
+          if (chatIdRef.current === requestChatId) setLoadError(true);
+        })
+        .finally(() => {
+          if (chatIdRef.current === requestChatId) setLoadingKey(null);
+        });
+    },
+    [client, chatId, loadingKey],
+  );
+
   const loadBefore = useCallback(() => {
-    if (!state || loadingKey || !state.hasMoreBefore) return;
+    if (!state || !state.hasMoreBefore) return;
     const oldest = state.messages[0];
     if (!oldest) return;
-    setLoadingKey("before");
-    void client.chat
-      .load({ id: chatId, beforeSeq: oldest.seq, limit: TRANSCRIPT_PAGE_SIZE })
-      .then((page) =>
-        setState((prev) =>
-          prev
-            ? {
-                ...prev,
-                messages: mergeSorted(page.messages, prev.messages),
-                hasMoreBefore: page.hasMoreBefore,
-              }
-            : prev,
-        ),
-      )
-      .finally(() => setLoadingKey(null));
-  }, [client, chatId, state, loadingKey]);
+    runIncrementalLoad("before", { beforeSeq: oldest.seq }, (prev, page) => ({
+      ...prev,
+      messages: mergeSorted(page.messages, prev.messages),
+      hasMoreBefore: page.hasMoreBefore,
+    }));
+  }, [state, runIncrementalLoad]);
 
   const loadAfter = useCallback(() => {
-    if (!state || loadingKey || !state.hasMoreAfter) return;
+    if (!state || !state.hasMoreAfter) return;
     const newest = state.messages[state.messages.length - 1];
     if (!newest) return;
-    setLoadingKey("after");
-    void client.chat
-      .load({ id: chatId, afterSeq: newest.seq, limit: TRANSCRIPT_PAGE_SIZE })
-      .then((page) =>
-        setState((prev) =>
-          prev
-            ? {
-                ...prev,
-                messages: mergeSorted(prev.messages, page.messages),
-                hasMoreAfter: page.hasMoreAfter,
-              }
-            : prev,
-        ),
-      )
-      .finally(() => setLoadingKey(null));
-  }, [client, chatId, state, loadingKey]);
+    runIncrementalLoad("after", { afterSeq: newest.seq }, (prev, page) => ({
+      ...prev,
+      messages: mergeSorted(prev.messages, page.messages),
+      hasMoreAfter: page.hasMoreAfter,
+    }));
+  }, [state, runIncrementalLoad]);
 
   const loadGap = useCallback(
     (afterSeq: number) => {
-      if (!state || loadingKey) return;
-      setLoadingKey(`gap:${afterSeq}`);
-      void client.chat
-        .load({ id: chatId, afterSeq, limit: TRANSCRIPT_PAGE_SIZE })
-        .then((page) =>
-          setState((prev) => {
-            if (!prev) return prev;
-            // The message immediately after the gap, by seq.
-            const nextSeq = prev.messages
-              .map((m) => m.seq)
-              .filter((s) => s > afterSeq)
-              .sort((x, y) => x - y)[0];
-            const maxLoaded = page.messages.reduce(
-              (mx, m) => Math.max(mx, m.seq),
-              afterSeq,
-            );
-            const gaps = new Set(prev.gaps);
-            gaps.delete(afterSeq);
-            // Gap stays open (advanced to the new edge) only if the page didn't
-            // reach the next already-loaded message.
-            if (nextSeq !== undefined && maxLoaded < nextSeq) {
-              gaps.add(maxLoaded);
-            }
-            return {
-              ...prev,
-              messages: mergeSorted(prev.messages, page.messages),
-              gaps,
-            };
-          }),
-        )
-        .finally(() => setLoadingKey(null));
+      if (!state) return;
+      runIncrementalLoad(`gap:${afterSeq}`, { afterSeq }, (prev, page) => {
+        // The message immediately after the gap, by seq (messages stay sorted
+        // ascending via mergeSorted, so find() is enough).
+        const nextSeq = prev.messages.find((m) => m.seq > afterSeq)?.seq;
+        const maxLoaded = page.messages.reduce(
+          (mx, m) => Math.max(mx, m.seq),
+          afterSeq,
+        );
+        const gaps = new Set(prev.gaps);
+        gaps.delete(afterSeq);
+        // Gap stays open (advanced to the new edge) only if the page didn't
+        // reach the next already-loaded message.
+        if (nextSeq !== undefined && maxLoaded < nextSeq) {
+          gaps.add(maxLoaded);
+        }
+        return {
+          ...prev,
+          messages: mergeSorted(prev.messages, page.messages),
+          gaps,
+        };
+      });
     },
-    [client, chatId, state, loadingKey],
+    [state, runIncrementalLoad],
   );
 
   return {
@@ -173,6 +181,6 @@ export function useChatRiskTranscript(
     loadGap,
     loadingKey,
     isLoading: base.isLoading,
-    isError: base.isError,
+    isError: base.isError || loadError,
   };
 }

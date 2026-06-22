@@ -471,22 +471,22 @@ WITH ordered AS (
   SELECT
     cm.*,
     row_number() OVER (ORDER BY cm.seq) AS rn,
-    count(*) OVER () AS total,
-    EXISTS (
-      SELECT 1 FROM risk_results rr
-      WHERE rr.chat_message_id = cm.id
-        AND rr.project_id = @project_id::uuid
-        AND rr.found IS TRUE
-        AND rr.excluded_at IS NULL
-        AND rr.false_positive_at IS NULL
-    ) AS is_risk
+    count(*) OVER () AS total
   FROM chat_messages cm
   WHERE cm.chat_id = @chat_id
     AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
     AND cm.generation = @generation::integer
 ),
 risk_rns AS (
-  SELECT rn FROM ordered WHERE is_risk
+  SELECT o.rn FROM ordered o
+  WHERE EXISTS (
+    SELECT 1 FROM risk_results rr
+    WHERE rr.chat_message_id = o.id
+      AND rr.project_id = @project_id::uuid
+      AND rr.found IS TRUE
+      AND rr.excluded_at IS NULL
+      AND rr.false_positive_at IS NULL
+  )
 )
 SELECT o.*
 FROM ordered o

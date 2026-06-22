@@ -43,12 +43,24 @@ export const useChatHistory = (
     throwOnError: false,
   });
 
-  // Eagerly pull every older page so the replayed history is complete.
+  // Eagerly pull every older page so the replayed history is complete. Stop on
+  // a page-fetch error: hasNextPage stays true after a failed fetch (it's based
+  // on the last successful page), so without the isFetchNextPageError guard this
+  // would retry the same failing page forever.
   useEffect(() => {
-    if (query.hasNextPage && !query.isFetchingNextPage) {
+    if (
+      query.hasNextPage &&
+      !query.isFetchingNextPage &&
+      !query.isFetchNextPageError
+    ) {
       void query.fetchNextPage();
     }
-  }, [query.hasNextPage, query.isFetchingNextPage, query]);
+  }, [
+    query.hasNextPage,
+    query.isFetchingNextPage,
+    query.isFetchNextPageError,
+    query,
+  ]);
 
   // Pages arrive newest-first; reverse them so the flattened list is ascending.
   const messages = useMemo(
@@ -116,9 +128,11 @@ export const useChatHistory = (
   }
 
   // isLoading stays true until every older page is in, so the playground never
-  // replays a partial transcript and then jumps.
+  // replays a partial transcript and then jumps — but not once a page errors
+  // (we stop paging then, so further "loading" would never resolve).
   return {
     chatHistory,
-    isLoading: query.isLoading || query.hasNextPage,
+    isLoading:
+      query.isLoading || (query.hasNextPage && !query.isFetchNextPageError),
   };
 };

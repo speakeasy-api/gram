@@ -95,10 +95,10 @@ var _ = Service("chat", func() {
 				Minimum(1)
 				Maximum(200)
 			})
-			Attribute("before_seq", Int64, "Keyset cursor: return messages with `seq` strictly less than this value (older messages), newest first within the page. Use the `seq` of the oldest message you currently hold to load the previous page. Ignored when `risk_only` is set.", func() {
+			Attribute("before_seq", Int64, "Keyset cursor: return the page of messages with `seq` strictly less than this value (older messages). The returned `messages` are always ordered oldest to newest by `seq`, like every other response. Use the `seq` of the oldest message you currently hold to load the previous page. Ignored when `risk_only` is set. Mutually exclusive with `after_seq`; if both are supplied, `after_seq` takes precedence.", func() {
 				Minimum(1)
 			})
-			Attribute("after_seq", Int64, "Keyset cursor: return messages with `seq` strictly greater than this value (newer messages), oldest first within the page. Use the `seq` of the newest message you currently hold to load the next page. Ignored when `risk_only` is set.", func() {
+			Attribute("after_seq", Int64, "Keyset cursor: return the page of messages with `seq` strictly greater than this value (newer messages). The returned `messages` are always ordered oldest to newest by `seq`. Use the `seq` of the newest message you currently hold to load the next page. Ignored when `risk_only` is set. Mutually exclusive with `before_seq`; if both are supplied, `after_seq` takes precedence.", func() {
 				Minimum(1)
 			})
 			Attribute("risk_only", Boolean, "When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request.", func() {

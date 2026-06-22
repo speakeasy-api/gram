@@ -1581,24 +1581,24 @@ WITH ordered AS (
   SELECT
     cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at,
     row_number() OVER (ORDER BY cm.seq) AS rn,
-    count(*) OVER () AS total,
-    EXISTS (
-      SELECT 1 FROM risk_results rr
-      WHERE rr.chat_message_id = cm.id
-        AND rr.project_id = $2::uuid
-        AND rr.found IS TRUE
-        AND rr.excluded_at IS NULL
-        AND rr.false_positive_at IS NULL
-    ) AS is_risk
+    count(*) OVER () AS total
   FROM chat_messages cm
-  WHERE cm.chat_id = $3
-    AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
+  WHERE cm.chat_id = $2
+    AND (cm.project_id IS NULL OR cm.project_id = $3::uuid)
     AND cm.generation = $4::integer
 ),
 risk_rns AS (
-  SELECT rn FROM ordered WHERE is_risk
+  SELECT o.rn FROM ordered o
+  WHERE EXISTS (
+    SELECT 1 FROM risk_results rr
+    WHERE rr.chat_message_id = o.id
+      AND rr.project_id = $3::uuid
+      AND rr.found IS TRUE
+      AND rr.excluded_at IS NULL
+      AND rr.false_positive_at IS NULL
+  )
 )
-SELECT o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.created_at, o.risk_analyzed_at, o.rn, o.total, o.is_risk
+SELECT o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.created_at, o.risk_analyzed_at, o.rn, o.total
 FROM ordered o
 WHERE EXISTS (
   SELECT 1 FROM risk_rns r
@@ -1609,8 +1609,8 @@ ORDER BY o.seq ASC
 
 type ListRiskWindowedMessagesParams struct {
 	ContextSize int64
-	ProjectID   uuid.UUID
 	ChatID      uuid.UUID
+	ProjectID   uuid.UUID
 	Generation  int32
 }
 
@@ -1648,7 +1648,6 @@ type ListRiskWindowedMessagesRow struct {
 	RiskAnalyzedAt    pgtype.Timestamptz
 	Rn                int64
 	Total             int64
-	IsRisk            bool
 }
 
 // Risk-only view: returns every message within +/- @context_size ordinal
@@ -1661,8 +1660,8 @@ type ListRiskWindowedMessagesRow struct {
 func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWindowedMessagesParams) ([]ListRiskWindowedMessagesRow, error) {
 	rows, err := q.db.Query(ctx, listRiskWindowedMessages,
 		arg.ContextSize,
-		arg.ProjectID,
 		arg.ChatID,
+		arg.ProjectID,
 		arg.Generation,
 	)
 	if err != nil {
@@ -1706,7 +1705,6 @@ func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWind
 			&i.RiskAnalyzedAt,
 			&i.Rn,
 			&i.Total,
-			&i.IsRisk,
 		); err != nil {
 			return nil, err
 		}

@@ -331,10 +331,22 @@ function TranscriptBody({
   const rows = useMemo<TranscriptRow[]>(() => {
     const out: TranscriptRow[] = [];
     if (hasMoreBefore) out.push({ kind: "loadTop" });
-    for (const message of visibleMessages) {
+    // Gap anchors, ascending. We place each divider after the last visible
+    // message whose seq is <= the anchor, so the affordance survives even when
+    // the exact boundary message is hidden by the entry-type filter.
+    const gapAnchors =
+      mode === "risk" && gaps ? [...gaps].sort((a, b) => a - b) : [];
+    let gi = 0;
+    for (let i = 0; i < visibleMessages.length; i++) {
+      const message = visibleMessages[i]!;
       out.push({ kind: "message", message });
-      if (mode === "risk" && gaps?.has(message.seq)) {
-        out.push({ kind: "gap", afterSeq: message.seq });
+      const nextSeq =
+        i + 1 < visibleMessages.length ? visibleMessages[i + 1]!.seq : Infinity;
+      while (gi < gapAnchors.length && gapAnchors[gi]! < nextSeq) {
+        if (gapAnchors[gi]! >= message.seq) {
+          out.push({ kind: "gap", afterSeq: gapAnchors[gi]! });
+        }
+        gi++;
       }
     }
     if (hasMoreAfter) out.push({ kind: "loadBottom" });
