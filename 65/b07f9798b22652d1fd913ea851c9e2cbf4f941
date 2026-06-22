@@ -1,0 +1,29 @@
+server/internal/permissions/check.go
+  s_a5f37a1929f11b::t_c5909e8e3dd819 1-20
+server/internal/permissions/decision.go
+  s_a5f37a1929f11b::t_c5909e8e3dd819 1-30
+server/internal/permissions/principal.go
+  s_a5f37a1929f11b::t_c5909e8e3dd819 1-9
+server/internal/permissions/scope.go
+  s_a5f37a1929f11b::t_c5909e8e3dd819 1-4
+server/internal/permissions/selector.go
+  s_a5f37a1929f11b::t_c5909e8e3dd819 1-8
+server/internal/permissions/grant.go
+  s_a5f37a1929f11b::t_c5909e8e3dd819 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "65b07f9798b22652d1fd913ea851c9e2cbf4f941",
+  "prompts": {},
+  "sessions": {
+    "s_a5f37a1929f11b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ee04b-25b9-7e42-9e18-fe6de7ddd0f2",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
