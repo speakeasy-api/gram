@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -94,6 +95,9 @@ type Service struct {
 	// playground returns an "unsupported" response for that scanner family.
 	piiScanner ra.PIIScanner
 	piScanner  *ra.PromptInjectionScanner
+	// celEng is the shared CEL engine, injected at construction; CompileExpr
+	// compiles author expressions against it. nil in the lightweight observer.
+	celEng *celenv.Engine
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -126,6 +130,7 @@ func NewObserver(
 		piiScanner:       nil,
 		piScanner:        nil,
 		flags:            nil,
+		celEng:           nil,
 	}
 }
 
@@ -145,6 +150,7 @@ func NewService(
 	piiScanner ra.PIIScanner,
 	piScanner *ra.PromptInjectionScanner,
 	flags feature.Provider,
+	celEng *celenv.Engine,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -165,6 +171,7 @@ func NewService(
 		piiScanner:       piiScanner,
 		piScanner:        piScanner,
 		flags:            flags,
+		celEng:           celEng,
 	}
 }
 
@@ -1361,6 +1368,100 @@ func (s *Service) ListRiskCategories(ctx context.Context, payload *gen.ListRiskC
 		})
 	}
 	return &gen.RiskCategoriesResult{Categories: out}, nil
+}
+
+// GetDetectionDescriptor returns the machine-readable CEL environment descriptor
+// the dashboard's client-side type-checker is configured from. It is a direct
+// projection of celenv.Descriptor() — the same source buildEnv compiles — so the
+// editor's instant validation and completion stay faithful to the engine.
+// Compilation remains server-authoritative on save (see CompileExpr).
+func (s *Service) GetDetectionDescriptor(ctx context.Context, payload *gen.GetDetectionDescriptorPayload) (*gen.DetectionDescriptorResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	desc := celenv.Descriptor()
+
+	types := make([]*gen.DetectionDescriptorType, 0, len(desc.Types))
+	for _, t := range desc.Types {
+		fields := make([]*gen.DetectionDescriptorField, 0, len(t.Fields))
+		for _, f := range t.Fields {
+			fields = append(fields, &gen.DetectionDescriptorField{
+				Name:        f.Name,
+				Type:        f.Type,
+				Description: f.Description,
+			})
+		}
+		types = append(types, &gen.DetectionDescriptorType{
+			Name:        t.Name,
+			Opaque:      t.Opaque,
+			Fields:      fields,
+			DisplayName: t.DisplayName,
+			Description: t.Description,
+		})
+	}
+
+	vars := make([]*gen.DetectionDescriptorVariable, 0, len(desc.Variables))
+	for _, v := range desc.Variables {
+		vars = append(vars, &gen.DetectionDescriptorVariable{
+			Name:        v.Name,
+			Type:        v.Type,
+			DisplayType: v.DisplayType,
+			Description: v.Description,
+		})
+	}
+
+	fns := make([]*gen.DetectionDescriptorFunction, 0, len(desc.Functions))
+	for _, f := range desc.Functions {
+		params := make([]*gen.DetectionDescriptorParam, 0, len(f.Params))
+		for _, p := range f.Params {
+			params = append(params, &gen.DetectionDescriptorParam{Name: p.Name, Type: p.Type})
+		}
+		fns = append(fns, &gen.DetectionDescriptorFunction{
+			Name:         f.Name,
+			OverloadID:   f.OverloadID,
+			Member:       f.Member,
+			ReceiverType: f.ReceiverType,
+			Params:       params,
+			ReturnType:   f.ReturnType,
+			Signature:    f.Signature,
+			Description:  f.Description,
+		})
+	}
+
+	macros := make([]*gen.DetectionDescriptorMacro, 0, len(desc.Macros))
+	for _, m := range desc.Macros {
+		macros = append(macros, &gen.DetectionDescriptorMacro{
+			Name:        m.Name,
+			Signature:   m.Signature,
+			Description: m.Description,
+			ReturnsBool: m.ReturnsBool,
+		})
+	}
+
+	return &gen.DetectionDescriptorResult{Types: types, Variables: vars, Functions: fns, Macros: macros}, nil
+}
+
+// CompileExpr compiles a single CEL expression without evaluating it, so the
+// editor can validate as the author types. It mirrors the save-time gate
+// (celenv.Compile via the shared engine) so an expression that compiles here
+// also saves. An empty expression is valid.
+func (s *Service) CompileExpr(ctx context.Context, payload *gen.CompileExprPayload) (*gen.ExprCompileResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	expr := strings.TrimSpace(payload.Expr)
+	if expr == "" {
+		return &gen.ExprCompileResult{OK: true, Error: ""}, nil
+	}
+	eng := s.celEng
+	if _, err := eng.Compile(expr); err != nil {
+		return &gen.ExprCompileResult{OK: false, Error: err.Error()}, nil
+	}
+	return &gen.ExprCompileResult{OK: true, Error: ""}, nil
 }
 
 func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRiskUserBreakdownPayload) (*gen.RiskUserBreakdownResult, error) {

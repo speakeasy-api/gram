@@ -5,7 +5,9 @@
 import { ClientSDK } from "../lib/sdks.js";
 import { Categories } from "./categories.js";
 import { CustomRules } from "./customrules.js";
+import { DetectionDescriptor } from "./detectiondescriptor.js";
 import { Exclusions } from "./exclusions.js";
+import { Expr } from "./expr.js";
 import { Overview } from "./overview.js";
 import { Policies } from "./policies.js";
 import { PolicyBypassRequests } from "./policybypassrequests.js";
@@ -25,6 +27,11 @@ export class Risk extends ClientSDK {
     return (this._categories ??= new Categories(this._options));
   }
 
+  private _expr?: Expr;
+  get expr(): Expr {
+    return (this._expr ??= new Expr(this._options));
+  }
+
   private _exclusions?: Exclusions;
   get exclusions(): Exclusions {
     return (this._exclusions ??= new Exclusions(this._options));
@@ -33,6 +40,13 @@ export class Risk extends ClientSDK {
   private _customRules?: CustomRules;
   get customRules(): CustomRules {
     return (this._customRules ??= new CustomRules(this._options));
+  }
+
+  private _detectionDescriptor?: DetectionDescriptor;
+  get detectionDescriptor(): DetectionDescriptor {
+    return (this._detectionDescriptor ??= new DetectionDescriptor(
+      this._options,
+    ));
   }
 
   private _overview?: Overview;

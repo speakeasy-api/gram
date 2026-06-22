@@ -505,6 +505,28 @@ type ListRiskCategoriesResponseBody struct {
 	Categories []*RiskCategoryDefinitionResponseBody `form:"categories" json:"categories" xml:"categories"`
 }
 
+// GetDetectionDescriptorResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body.
+type GetDetectionDescriptorResponseBody struct {
+	// Declared CEL types (the opaque 'field' and the 'tool' object type).
+	Types []*DetectionDescriptorTypeResponseBody `form:"types" json:"types" xml:"types"`
+	// Variables an author may reference.
+	Variables []*DetectionDescriptorVariableResponseBody `form:"variables" json:"variables" xml:"variables"`
+	// Function overloads with precise receiver/param/return types.
+	Functions []*DetectionDescriptorFunctionResponseBody `form:"functions" json:"functions" xml:"functions"`
+	// Standard CEL macros (exists/all/has/map/...).
+	Macros []*DetectionDescriptorMacroResponseBody `form:"macros" json:"macros" xml:"macros"`
+}
+
+// CompileExprResponseBody is the type of the "risk" service "compileExpr"
+// endpoint HTTP response body.
+type CompileExprResponseBody struct {
+	// True when the expression compiled successfully.
+	OK bool `form:"ok" json:"ok" xml:"ok"`
+	// Compiler error message when ok is false; empty otherwise.
+	Error string `form:"error" json:"error" xml:"error"`
+}
+
 // GetRiskUserBreakdownResponseBody is the type of the "risk" service
 // "getRiskUserBreakdown" endpoint HTTP response body.
 type GetRiskUserBreakdownResponseBody struct {
@@ -2688,6 +2710,376 @@ type ListRiskCategoriesUnexpectedResponseBody struct {
 // "listRiskCategories" endpoint HTTP response body for the "gateway_error"
 // error.
 type ListRiskCategoriesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorUnauthorizedResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetDetectionDescriptorUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorForbiddenResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "forbidden" error.
+type GetDetectionDescriptorForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorBadRequestResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "bad_request" error.
+type GetDetectionDescriptorBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorNotFoundResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body for the "not_found"
+// error.
+type GetDetectionDescriptorNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorConflictResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body for the "conflict"
+// error.
+type GetDetectionDescriptorConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorUnsupportedMediaResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetDetectionDescriptorUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorInvalidResponseBody is the type of the "risk" service
+// "getDetectionDescriptor" endpoint HTTP response body for the "invalid" error.
+type GetDetectionDescriptorInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorInvariantViolationResponseBody is the type of the
+// "risk" service "getDetectionDescriptor" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetDetectionDescriptorInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorUnexpectedResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "unexpected" error.
+type GetDetectionDescriptorUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetDetectionDescriptorGatewayErrorResponseBody is the type of the "risk"
+// service "getDetectionDescriptor" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetDetectionDescriptorGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprUnauthorizedResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "unauthorized" error.
+type CompileExprUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprForbiddenResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "forbidden" error.
+type CompileExprForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprBadRequestResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "bad_request" error.
+type CompileExprBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprNotFoundResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "not_found" error.
+type CompileExprNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprConflictResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "conflict" error.
+type CompileExprConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprUnsupportedMediaResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "unsupported_media" error.
+type CompileExprUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprInvalidResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "invalid" error.
+type CompileExprInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprInvariantViolationResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "invariant_violation"
+// error.
+type CompileExprInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprUnexpectedResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "unexpected" error.
+type CompileExprUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompileExprGatewayErrorResponseBody is the type of the "risk" service
+// "compileExpr" endpoint HTTP response body for the "gateway_error" error.
+type CompileExprGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -6689,6 +7081,89 @@ type RiskCategoryDefinitionResponseBody struct {
 	RuleIDPrefix string `form:"rule_id_prefix" json:"rule_id_prefix" xml:"rule_id_prefix"`
 }
 
+// DetectionDescriptorTypeResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorTypeResponseBody struct {
+	// Engine type name (e.g. 'field', 'celenv.celTool').
+	Name string `form:"name" json:"name" xml:"name"`
+	// True when the type has no readable members, only receiver methods (e.g.
+	// 'field').
+	Opaque bool `form:"opaque" json:"opaque" xml:"opaque"`
+	// Typed members of a non-opaque object type. Empty when opaque.
+	Fields []*DetectionDescriptorFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
+	// Short human label for the editor (e.g. 'field', 'tool').
+	DisplayName string `form:"displayName" json:"displayName" xml:"displayName"`
+	// Plain-English description of the type.
+	Description string `form:"description" json:"description" xml:"description"`
+}
+
+// DetectionDescriptorFieldResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorFieldResponseBody struct {
+	// Member name as written after a dot (e.g. 'name', 'args').
+	Name string `form:"name" json:"name" xml:"name"`
+	// Machine type-string of the member (e.g. 'field').
+	Type string `form:"type" json:"type" xml:"type"`
+	// Plain-English description of the member.
+	Description string `form:"description" json:"description" xml:"description"`
+}
+
+// DetectionDescriptorVariableResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorVariableResponseBody struct {
+	// Variable name as written in CEL (e.g. 'content', 'tools').
+	Name string `form:"name" json:"name" xml:"name"`
+	// Machine type-string (e.g. 'field', 'string', 'list<celenv.celTool>').
+	Type string `form:"type" json:"type" xml:"type"`
+	// Human type tag for the editor (e.g. 'field', 'list(tool)').
+	DisplayType string `form:"displayType" json:"displayType" xml:"displayType"`
+	// Plain-English description of the variable.
+	Description string `form:"description" json:"description" xml:"description"`
+}
+
+// DetectionDescriptorFunctionResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorFunctionResponseBody struct {
+	// Function name (e.g. 'match', 'get').
+	Name string `form:"name" json:"name" xml:"name"`
+	// Stable overload identifier (also the engine binding key).
+	OverloadID string `form:"overloadId" json:"overloadId" xml:"overloadId"`
+	// True for receiver-style calls (x.fn(...)); false for global calls.
+	Member bool `form:"member" json:"member" xml:"member"`
+	// Machine type-string of the receiver when member is true.
+	ReceiverType string `form:"receiverType" json:"receiverType" xml:"receiverType"`
+	// Non-receiver parameters in order.
+	Params []*DetectionDescriptorParamResponseBody `form:"params,omitempty" json:"params,omitempty" xml:"params,omitempty"`
+	// Machine type-string of the result (e.g. 'bool', 'field').
+	ReturnType string `form:"returnType" json:"returnType" xml:"returnType"`
+	// Human-readable call signature.
+	Signature string `form:"signature" json:"signature" xml:"signature"`
+	// Plain-English description of the overload.
+	Description string `form:"description" json:"description" xml:"description"`
+}
+
+// DetectionDescriptorParamResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorParamResponseBody struct {
+	// Parameter name (e.g. 'pattern', 'path').
+	Name string `form:"name" json:"name" xml:"name"`
+	// Machine type-string of the parameter (e.g. 'string').
+	Type string `form:"type" json:"type" xml:"type"`
+}
+
+// DetectionDescriptorMacroResponseBody is used to define fields on response
+// body types.
+type DetectionDescriptorMacroResponseBody struct {
+	// Macro name (e.g. 'exists', 'has', 'map').
+	Name string `form:"name" json:"name" xml:"name"`
+	// Human-readable call signature.
+	Signature string `form:"signature" json:"signature" xml:"signature"`
+	// Plain-English description of the macro's behaviour.
+	Description string `form:"description" json:"description" xml:"description"`
+	// True when the macro yields a boolean verdict; false when it yields a list.
+	ReturnsBool bool `form:"returnsBool" json:"returnsBool" xml:"returnsBool"`
+}
+
 // RiskPolicyBypassRequestResponseBody is used to define fields on response
 // body types.
 type RiskPolicyBypassRequestResponseBody struct {
@@ -7187,6 +7662,71 @@ func NewListRiskCategoriesResponseBody(res *risk.RiskCategoriesResult) *ListRisk
 		}
 	} else {
 		body.Categories = []*RiskCategoryDefinitionResponseBody{}
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorResponseBody builds the HTTP response body from the
+// result of the "getDetectionDescriptor" endpoint of the "risk" service.
+func NewGetDetectionDescriptorResponseBody(res *risk.DetectionDescriptorResult) *GetDetectionDescriptorResponseBody {
+	body := &GetDetectionDescriptorResponseBody{}
+	if res.Types != nil {
+		body.Types = make([]*DetectionDescriptorTypeResponseBody, len(res.Types))
+		for i, val := range res.Types {
+			if val == nil {
+				body.Types[i] = nil
+				continue
+			}
+			body.Types[i] = marshalRiskDetectionDescriptorTypeToDetectionDescriptorTypeResponseBody(val)
+		}
+	} else {
+		body.Types = []*DetectionDescriptorTypeResponseBody{}
+	}
+	if res.Variables != nil {
+		body.Variables = make([]*DetectionDescriptorVariableResponseBody, len(res.Variables))
+		for i, val := range res.Variables {
+			if val == nil {
+				body.Variables[i] = nil
+				continue
+			}
+			body.Variables[i] = marshalRiskDetectionDescriptorVariableToDetectionDescriptorVariableResponseBody(val)
+		}
+	} else {
+		body.Variables = []*DetectionDescriptorVariableResponseBody{}
+	}
+	if res.Functions != nil {
+		body.Functions = make([]*DetectionDescriptorFunctionResponseBody, len(res.Functions))
+		for i, val := range res.Functions {
+			if val == nil {
+				body.Functions[i] = nil
+				continue
+			}
+			body.Functions[i] = marshalRiskDetectionDescriptorFunctionToDetectionDescriptorFunctionResponseBody(val)
+		}
+	} else {
+		body.Functions = []*DetectionDescriptorFunctionResponseBody{}
+	}
+	if res.Macros != nil {
+		body.Macros = make([]*DetectionDescriptorMacroResponseBody, len(res.Macros))
+		for i, val := range res.Macros {
+			if val == nil {
+				body.Macros[i] = nil
+				continue
+			}
+			body.Macros[i] = marshalRiskDetectionDescriptorMacroToDetectionDescriptorMacroResponseBody(val)
+		}
+	} else {
+		body.Macros = []*DetectionDescriptorMacroResponseBody{}
+	}
+	return body
+}
+
+// NewCompileExprResponseBody builds the HTTP response body from the result of
+// the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprResponseBody(res *risk.ExprCompileResult) *CompileExprResponseBody {
+	body := &CompileExprResponseBody{
+		OK:    res.OK,
+		Error: res.Error,
 	}
 	return body
 }
@@ -9016,6 +9556,296 @@ func NewListRiskCategoriesUnexpectedResponseBody(res *goa.ServiceError) *ListRis
 // from the result of the "listRiskCategories" endpoint of the "risk" service.
 func NewListRiskCategoriesGatewayErrorResponseBody(res *goa.ServiceError) *ListRiskCategoriesGatewayErrorResponseBody {
 	body := &ListRiskCategoriesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorUnauthorizedResponseBody(res *goa.ServiceError) *GetDetectionDescriptorUnauthorizedResponseBody {
+	body := &GetDetectionDescriptorUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorForbiddenResponseBody builds the HTTP response body
+// from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorForbiddenResponseBody(res *goa.ServiceError) *GetDetectionDescriptorForbiddenResponseBody {
+	body := &GetDetectionDescriptorForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorBadRequestResponseBody builds the HTTP response
+// body from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorBadRequestResponseBody(res *goa.ServiceError) *GetDetectionDescriptorBadRequestResponseBody {
+	body := &GetDetectionDescriptorBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorNotFoundResponseBody builds the HTTP response body
+// from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorNotFoundResponseBody(res *goa.ServiceError) *GetDetectionDescriptorNotFoundResponseBody {
+	body := &GetDetectionDescriptorNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorConflictResponseBody builds the HTTP response body
+// from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorConflictResponseBody(res *goa.ServiceError) *GetDetectionDescriptorConflictResponseBody {
+	body := &GetDetectionDescriptorConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getDetectionDescriptor" endpoint of
+// the "risk" service.
+func NewGetDetectionDescriptorUnsupportedMediaResponseBody(res *goa.ServiceError) *GetDetectionDescriptorUnsupportedMediaResponseBody {
+	body := &GetDetectionDescriptorUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorInvalidResponseBody builds the HTTP response body
+// from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorInvalidResponseBody(res *goa.ServiceError) *GetDetectionDescriptorInvalidResponseBody {
+	body := &GetDetectionDescriptorInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getDetectionDescriptor" endpoint of
+// the "risk" service.
+func NewGetDetectionDescriptorInvariantViolationResponseBody(res *goa.ServiceError) *GetDetectionDescriptorInvariantViolationResponseBody {
+	body := &GetDetectionDescriptorInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorUnexpectedResponseBody(res *goa.ServiceError) *GetDetectionDescriptorUnexpectedResponseBody {
+	body := &GetDetectionDescriptorUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetDetectionDescriptorGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getDetectionDescriptor" endpoint of the "risk"
+// service.
+func NewGetDetectionDescriptorGatewayErrorResponseBody(res *goa.ServiceError) *GetDetectionDescriptorGatewayErrorResponseBody {
+	body := &GetDetectionDescriptorGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprUnauthorizedResponseBody(res *goa.ServiceError) *CompileExprUnauthorizedResponseBody {
+	body := &CompileExprUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprForbiddenResponseBody builds the HTTP response body from the
+// result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprForbiddenResponseBody(res *goa.ServiceError) *CompileExprForbiddenResponseBody {
+	body := &CompileExprForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprBadRequestResponseBody builds the HTTP response body from the
+// result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprBadRequestResponseBody(res *goa.ServiceError) *CompileExprBadRequestResponseBody {
+	body := &CompileExprBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprNotFoundResponseBody builds the HTTP response body from the
+// result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprNotFoundResponseBody(res *goa.ServiceError) *CompileExprNotFoundResponseBody {
+	body := &CompileExprNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprConflictResponseBody builds the HTTP response body from the
+// result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprConflictResponseBody(res *goa.ServiceError) *CompileExprConflictResponseBody {
+	body := &CompileExprConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprUnsupportedMediaResponseBody(res *goa.ServiceError) *CompileExprUnsupportedMediaResponseBody {
+	body := &CompileExprUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprInvalidResponseBody builds the HTTP response body from the
+// result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprInvalidResponseBody(res *goa.ServiceError) *CompileExprInvalidResponseBody {
+	body := &CompileExprInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprInvariantViolationResponseBody(res *goa.ServiceError) *CompileExprInvariantViolationResponseBody {
+	body := &CompileExprInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprUnexpectedResponseBody builds the HTTP response body from the
+// result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprUnexpectedResponseBody(res *goa.ServiceError) *CompileExprUnexpectedResponseBody {
+	body := &CompileExprUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompileExprGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "compileExpr" endpoint of the "risk" service.
+func NewCompileExprGatewayErrorResponseBody(res *goa.ServiceError) *CompileExprGatewayErrorResponseBody {
+	body := &CompileExprGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12209,6 +13039,28 @@ func NewGetRiskOverviewPayload(from *string, to *string, apikeyToken *string, se
 // endpoint payload.
 func NewListRiskCategoriesPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskCategoriesPayload {
 	v := &risk.ListRiskCategoriesPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetDetectionDescriptorPayload builds a risk service
+// getDetectionDescriptor endpoint payload.
+func NewGetDetectionDescriptorPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetDetectionDescriptorPayload {
+	v := &risk.GetDetectionDescriptorPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewCompileExprPayload builds a risk service compileExpr endpoint payload.
+func NewCompileExprPayload(expr string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CompileExprPayload {
+	v := &risk.CompileExprPayload{}
+	v.Expr = expr
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
