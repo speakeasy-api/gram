@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -73,34 +74,40 @@ func TestListChallengeBuckets_GroupsByDimensions(t *testing.T) {
 	// Insert 1 challenge with a different scope — separate bucket.
 	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, uuid.NewString(), "deny", "user:u1", "build:read")
 
-	// ClickHouse eventual consistency.
-	time.Sleep(100 * time.Millisecond)
-
-	result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
-		Outcome:      nil,
-		PrincipalUrn: nil,
-		Scope:        nil,
-		ProjectID:    nil,
-		Resolved:     nil,
-		Limit:        20,
-		Offset:       0,
-		ApikeyToken:  nil,
-		SessionToken: nil,
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Buckets, 2)
-
-	// Find the org:admin bucket.
-	var adminBucket *gen.ChallengeBucket
-	for _, b := range result.Buckets {
-		if b.Scope == "org:admin" {
-			adminBucket = b
-			break
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
+			Outcome:      nil,
+			PrincipalUrn: nil,
+			Scope:        nil,
+			ProjectID:    nil,
+			Resolved:     nil,
+			Limit:        20,
+			Offset:       0,
+			ApikeyToken:  nil,
+			SessionToken: nil,
+		})
+		if !assert.NoError(c, err) {
+			return
 		}
-	}
-	require.NotNil(t, adminBucket, "expected org:admin bucket")
-	require.Equal(t, 3, adminBucket.ChallengeCount)
-	require.Len(t, adminBucket.ChallengeIds, 3)
+		if !assert.NotNil(c, result) {
+			return
+		}
+		assert.Len(c, result.Buckets, 2)
+
+		// Find the org:admin bucket.
+		var adminBucket *gen.ChallengeBucket
+		for _, b := range result.Buckets {
+			if b.Scope == "org:admin" {
+				adminBucket = b
+				break
+			}
+		}
+		if !assert.NotNil(c, adminBucket, "expected org:admin bucket") {
+			return
+		}
+		assert.Equal(c, 3, adminBucket.ChallengeCount)
+		assert.Len(c, adminBucket.ChallengeIds, 3)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func TestListChallengeBuckets_FilterByOutcome(t *testing.T) {
@@ -112,23 +119,30 @@ func TestListChallengeBuckets_FilterByOutcome(t *testing.T) {
 	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, uuid.NewString(), "deny", "user:u1", "org:read")
 	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, uuid.NewString(), "allow", "user:u1", "org:read")
 
-	time.Sleep(100 * time.Millisecond)
-
 	outcome := "deny"
-	result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
-		Outcome:      &outcome,
-		PrincipalUrn: nil,
-		Scope:        nil,
-		ProjectID:    nil,
-		Resolved:     nil,
-		Limit:        20,
-		Offset:       0,
-		ApikeyToken:  nil,
-		SessionToken: nil,
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Buckets, 1)
-	require.Equal(t, "deny", result.Buckets[0].Outcome)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
+			Outcome:      &outcome,
+			PrincipalUrn: nil,
+			Scope:        nil,
+			ProjectID:    nil,
+			Resolved:     nil,
+			Limit:        20,
+			Offset:       0,
+			ApikeyToken:  nil,
+			SessionToken: nil,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, result) {
+			return
+		}
+		if !assert.Len(c, result.Buckets, 1) {
+			return
+		}
+		assert.Equal(c, "deny", result.Buckets[0].Outcome)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func TestListChallengeBuckets_FilterByResolved(t *testing.T) {
@@ -157,28 +171,35 @@ func TestListChallengeBuckets_FilterByResolved(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
-
 	// Filter: resolved=true
 	resolvedTrue := true
-	result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
-		Outcome:      nil,
-		PrincipalUrn: nil,
-		Scope:        nil,
-		ProjectID:    nil,
-		Resolved:     &resolvedTrue,
-		Limit:        20,
-		Offset:       0,
-		ApikeyToken:  nil,
-		SessionToken: nil,
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Buckets, 1)
-	require.NotNil(t, result.Buckets[0].ResolvedAt)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
+			Outcome:      nil,
+			PrincipalUrn: nil,
+			Scope:        nil,
+			ProjectID:    nil,
+			Resolved:     &resolvedTrue,
+			Limit:        20,
+			Offset:       0,
+			ApikeyToken:  nil,
+			SessionToken: nil,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, result) {
+			return
+		}
+		if !assert.Len(c, result.Buckets, 1) {
+			return
+		}
+		assert.NotNil(c, result.Buckets[0].ResolvedAt)
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// Filter: resolved=false
 	resolvedFalse := false
-	result, err = ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
+	result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
 		Outcome:      nil,
 		PrincipalUrn: nil,
 		Scope:        nil,
@@ -205,22 +226,27 @@ func TestListChallengeBuckets_Pagination(t *testing.T) {
 		insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, uuid.NewString(), "deny", fmt.Sprintf("user:u%d", i), "org:read")
 	}
 
-	time.Sleep(100 * time.Millisecond)
-
-	result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
-		Outcome:      nil,
-		PrincipalUrn: nil,
-		Scope:        nil,
-		ProjectID:    nil,
-		Resolved:     nil,
-		Limit:        2,
-		Offset:       0,
-		ApikeyToken:  nil,
-		SessionToken: nil,
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Buckets, 2)
-	require.Equal(t, 5, result.Total)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
+			Outcome:      nil,
+			PrincipalUrn: nil,
+			Scope:        nil,
+			ProjectID:    nil,
+			Resolved:     nil,
+			Limit:        2,
+			Offset:       0,
+			ApikeyToken:  nil,
+			SessionToken: nil,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, result) {
+			return
+		}
+		assert.Len(c, result.Buckets, 2)
+		assert.Equal(c, 5, result.Total)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func TestListChallengeBuckets_IsolatesByOrganization(t *testing.T) {
@@ -232,21 +258,26 @@ func TestListChallengeBuckets_IsolatesByOrganization(t *testing.T) {
 	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, uuid.NewString(), "deny", "user:u1", "org:read")
 	insertCHChallenge(t, ti, "org-other-"+uuid.NewString(), uuid.NewString(), "deny", "user:u1", "org:read")
 
-	time.Sleep(100 * time.Millisecond)
-
-	result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
-		Outcome:      nil,
-		PrincipalUrn: nil,
-		Scope:        nil,
-		ProjectID:    nil,
-		Resolved:     nil,
-		Limit:        20,
-		Offset:       0,
-		ApikeyToken:  nil,
-		SessionToken: nil,
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Buckets, 1)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
+			Outcome:      nil,
+			PrincipalUrn: nil,
+			Scope:        nil,
+			ProjectID:    nil,
+			Resolved:     nil,
+			Limit:        20,
+			Offset:       0,
+			ApikeyToken:  nil,
+			SessionToken: nil,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, result) {
+			return
+		}
+		assert.Len(c, result.Buckets, 1)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func TestListChallengeBuckets_AllChallengeIdsReturned(t *testing.T) {
@@ -263,26 +294,33 @@ func TestListChallengeBuckets_AllChallengeIdsReturned(t *testing.T) {
 		insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, id, "deny", "user:u1", "org:admin")
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
+			Outcome:      nil,
+			PrincipalUrn: nil,
+			Scope:        nil,
+			ProjectID:    nil,
+			Resolved:     nil,
+			Limit:        20,
+			Offset:       0,
+			ApikeyToken:  nil,
+			SessionToken: nil,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, result) {
+			return
+		}
+		if !assert.Len(c, result.Buckets, 1) {
+			return
+		}
+		assert.Equal(c, 15, result.Buckets[0].ChallengeCount)
+		assert.Len(c, result.Buckets[0].ChallengeIds, 15)
 
-	result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
-		Outcome:      nil,
-		PrincipalUrn: nil,
-		Scope:        nil,
-		ProjectID:    nil,
-		Resolved:     nil,
-		Limit:        20,
-		Offset:       0,
-		ApikeyToken:  nil,
-		SessionToken: nil,
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Buckets, 1)
-	require.Equal(t, 15, result.Buckets[0].ChallengeCount)
-	require.Len(t, result.Buckets[0].ChallengeIds, 15)
-
-	// Verify all inserted IDs are present.
-	for _, cid := range result.Buckets[0].ChallengeIds {
-		require.True(t, ids[cid], "unexpected challenge ID: %s", cid)
-	}
+		// Verify all inserted IDs are present.
+		for _, cid := range result.Buckets[0].ChallengeIds {
+			assert.True(c, ids[cid], "unexpected challenge ID: %s", cid)
+		}
+	}, 10*time.Second, 100*time.Millisecond)
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -239,15 +240,33 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	assert.Equal(t, 5, resp.Usage.CompletionTokens)
 	assert.Equal(t, 15, resp.Usage.TotalTokens)
 
-	// Give async operations time to complete
-	time.Sleep(100 * time.Millisecond)
+	// Wait for all async operations to complete. Each flag is set under its own
+	// mutex by a background goroutine, so poll all of them (not just the capture
+	// flags) before asserting on the captured data below.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		captureStrategy.mu.Lock()
+		startResume := captureStrategy.startOrResumeCalled
+		capMsg := captureStrategy.captureMessageCalled
+		captureStrategy.mu.Unlock()
 
-	// Verify all services were called
-	assert.True(t, captureStrategy.startOrResumeCalled, "StartOrResumeChat should be called")
-	assert.True(t, captureStrategy.captureMessageCalled, "CaptureMessage should be called")
-	assert.True(t, trackingStrategy.trackUsageCalled, "TrackUsage should be called")
-	assert.True(t, titleGenerator.called, "ScheduleChatTitleGeneration should be called")
-	assert.True(t, telemetryLogger.called, "CreateLog should be called")
+		trackingStrategy.mu.Lock()
+		trackUsage := trackingStrategy.trackUsageCalled
+		trackingStrategy.mu.Unlock()
+
+		titleGenerator.mu.Lock()
+		titleCalled := titleGenerator.called
+		titleGenerator.mu.Unlock()
+
+		telemetryLogger.mu.Lock()
+		telemetryCalled := telemetryLogger.called
+		telemetryLogger.mu.Unlock()
+
+		assert.True(c, startResume, "StartOrResumeChat should be called")
+		assert.True(c, capMsg, "CaptureMessage should be called")
+		assert.True(c, trackUsage, "TrackUsage should be called")
+		assert.True(c, titleCalled, "ScheduleChatTitleGeneration should be called")
+		assert.True(c, telemetryCalled, "CreateLog should be called")
+	}, 10*time.Second, 10*time.Millisecond)
 
 	// Verify captured data
 	assert.Equal(t, "msg_123", captureStrategy.capturedResponse.MessageID)
@@ -362,15 +381,33 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 	assert.Contains(t, bodyStr, "Hello")
 	assert.Contains(t, bodyStr, "streaming")
 
-	// Give async operations time to complete
-	time.Sleep(100 * time.Millisecond)
+	// Wait for all async operations to complete. Each flag is set under its own
+	// mutex by a background goroutine, so poll all of them (not just the capture
+	// flags) before asserting on the captured data below.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		captureStrategy.mu.Lock()
+		startResume := captureStrategy.startOrResumeCalled
+		capMsg := captureStrategy.captureMessageCalled
+		captureStrategy.mu.Unlock()
 
-	// Verify all services were called
-	assert.True(t, captureStrategy.startOrResumeCalled, "StartOrResumeChat should be called")
-	assert.True(t, captureStrategy.captureMessageCalled, "CaptureMessage should be called")
-	assert.True(t, trackingStrategy.trackUsageCalled, "TrackUsage should be called")
-	assert.True(t, titleGenerator.called, "ScheduleChatTitleGeneration should be called")
-	assert.True(t, telemetryLogger.called, "CreateLog should be called")
+		trackingStrategy.mu.Lock()
+		trackUsage := trackingStrategy.trackUsageCalled
+		trackingStrategy.mu.Unlock()
+
+		titleGenerator.mu.Lock()
+		titleCalled := titleGenerator.called
+		titleGenerator.mu.Unlock()
+
+		telemetryLogger.mu.Lock()
+		telemetryCalled := telemetryLogger.called
+		telemetryLogger.mu.Unlock()
+
+		assert.True(c, startResume, "StartOrResumeChat should be called")
+		assert.True(c, capMsg, "CaptureMessage should be called")
+		assert.True(c, trackUsage, "TrackUsage should be called")
+		assert.True(c, titleCalled, "ScheduleChatTitleGeneration should be called")
+		assert.True(c, telemetryCalled, "CreateLog should be called")
+	}, 10*time.Second, 10*time.Millisecond)
 
 	// Verify captured data
 	assert.Equal(t, "msg_456", captureStrategy.capturedResponse.MessageID)
@@ -476,12 +513,16 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 	assert.Equal(t, "call_1", resp.ToolCalls[0].ID)
 	assert.Equal(t, "get_weather", resp.ToolCalls[0].Function.Name)
 
-	// Give async operations time to complete
-	time.Sleep(100 * time.Millisecond)
+	// Wait for async operations to complete and verify telemetry includes tool calls.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		telemetryService.mu.Lock()
+		called := telemetryService.called
+		logs := telemetryService.logs
+		telemetryService.mu.Unlock()
 
-	// Verify telemetry includes tool calls
-	assert.True(t, telemetryService.called)
-	assert.NotEmpty(t, telemetryService.logs)
+		assert.True(c, called, "telemetry should be logged")
+		assert.NotEmpty(c, logs, "telemetry logs should not be empty")
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func TestChatClient_NormalizesMixedAssistantOnlyForOpenRouterRequest(t *testing.T) {
@@ -786,14 +827,16 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 		require.NoError(t, err)
 	}
 
-	// Give async operations time to complete
-	time.Sleep(200 * time.Millisecond)
-
+	// Wait for async operations to complete.
 	// Title generation should be scheduled for each completion since the simple mock always reports isFirstMessage=true.
 	// In production, the real capture strategy only returns isFirstMessage=true on the first call.
-	titleGenerator.mu.Lock()
-	assert.Equal(t, 3, titleGenerator.callCount, "Title generation should be scheduled when isFirstMessage=true (mock always returns true)")
-	titleGenerator.mu.Unlock()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		titleGenerator.mu.Lock()
+		count := titleGenerator.callCount
+		titleGenerator.mu.Unlock()
+
+		assert.Equal(c, 3, count, "Title generation should be scheduled when isFirstMessage=true (mock always returns true)")
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 // trackingTitleGenerator records every ScheduleChatTitleGeneration call with its chatID.
@@ -937,11 +980,11 @@ func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
 	_, err = client.GetCompletion(context.Background(), req)
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
-
-	titleGenerator.mu.Lock()
-	defer titleGenerator.mu.Unlock()
-	require.Empty(t, titleGenerator.calls,
+	require.Never(t, func() bool {
+		titleGenerator.mu.Lock()
+		defer titleGenerator.mu.Unlock()
+		return len(titleGenerator.calls) > 0
+	}, 100*time.Millisecond, 20*time.Millisecond,
 		"title generation must not be scheduled when ChatID is nil")
 }
 
@@ -997,18 +1040,17 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 	})
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
+	// Only the 3 real-chat completions should trigger title gen, not the nil one.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		titleGenerator.mu.Lock()
+		calls := slices.Clone(titleGenerator.calls)
+		titleGenerator.mu.Unlock()
 
-	titleGenerator.mu.Lock()
-	defer titleGenerator.mu.Unlock()
-
-	// Only the 3 real-chat completions should trigger title gen, not the nil one
-	require.Len(t, titleGenerator.calls, 3,
-		"title generation should be scheduled for each completion with a valid ChatID")
-	for _, id := range titleGenerator.calls {
-		require.Equal(t, chatID.String(), id,
-			"all title generation calls should use the real chat ID, never nil")
-	}
+		assert.Len(c, calls, 3, "title generation should be scheduled for each completion with a valid ChatID")
+		for _, id := range calls {
+			assert.Equal(c, chatID.String(), id, "all title generation calls should use the real chat ID, never nil")
+		}
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 // Verify that reloading a chat and sending a new message does not duplicate

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -82,59 +83,65 @@ func TestSearchChats_AggregatesByChatID(t *testing.T) {
 	insertChatLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-6*time.Minute), chatID2, 150, 75, 225, 1.8, "stop", "claude-3", "anthropic")
 	insertToolCallLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-5*time.Minute), chatID2, "tools:http:petstore:getPet", 500, 1.0)
 
-	// Wait for ClickHouse eventual consistency
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-		Filter: &gen.SearchChatsFilter{
-			From: &from,
-			To:   &to,
-		},
-		Limit: 100,
-		Sort:  "desc",
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+			Filter: &gen.SearchChatsFilter{
+				From: &from,
+				To:   &to,
+			},
+			Limit: 100,
+			Sort:  "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Len(c, res.Chats, 2)
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Len(t, result.Chats, 2)
+		// Find both chats
+		chatsByID := make(map[string]*gen.ChatSummary)
+		for _, chat := range res.Chats {
+			chatsByID[chat.GramChatID] = chat
+		}
 
-	// Find both chats
-	chatsByID := make(map[string]*gen.ChatSummary)
-	for _, chat := range result.Chats {
-		chatsByID[chat.GramChatID] = chat
-	}
+		// Chat 1 assertions
+		c1 := chatsByID[chatID1]
+		if !assert.NotNil(c, c1) {
+			return
+		}
+		assert.Equal(c, uint64(3), c1.LogCount)      // 2 completions + 1 tool call
+		assert.Equal(c, uint64(1), c1.ToolCallCount) // 1 tool call
+		assert.Equal(c, uint64(2), c1.MessageCount)  // 2 completions
+		assert.Greater(c, c1.DurationSeconds, float64(0))
+		assert.Equal(c, "success", c1.Status) // no failed tool calls
+		assert.NotNil(c, c1.Model)
+		assert.Equal(c, "gpt-4", *c1.Model)
+		assert.Equal(c, int64(300), c1.TotalInputTokens)  // 100 + 200
+		assert.Equal(c, int64(150), c1.TotalOutputTokens) // 50 + 100
+		assert.Equal(c, int64(450), c1.TotalTokens)       // 150 + 300
+		assert.Positive(c, c1.StartTimeUnixNano)
+		assert.Positive(c, c1.EndTimeUnixNano)
 
-	// Chat 1 assertions
-	c1 := chatsByID[chatID1]
-	require.NotNil(t, c1)
-	require.Equal(t, uint64(3), c1.LogCount)      // 2 completions + 1 tool call
-	require.Equal(t, uint64(1), c1.ToolCallCount) // 1 tool call
-	require.Equal(t, uint64(2), c1.MessageCount)  // 2 completions
-	require.Greater(t, c1.DurationSeconds, float64(0))
-	require.Equal(t, "success", c1.Status) // no failed tool calls
-	require.NotNil(t, c1.Model)
-	require.Equal(t, "gpt-4", *c1.Model)
-	require.Equal(t, int64(300), c1.TotalInputTokens)  // 100 + 200
-	require.Equal(t, int64(150), c1.TotalOutputTokens) // 50 + 100
-	require.Equal(t, int64(450), c1.TotalTokens)       // 150 + 300
-	require.Positive(t, c1.StartTimeUnixNano)
-	require.Positive(t, c1.EndTimeUnixNano)
-
-	// Chat 2 assertions
-	c2 := chatsByID[chatID2]
-	require.NotNil(t, c2)
-	require.Equal(t, uint64(2), c2.LogCount) // 1 completion + 1 tool call
-	require.Equal(t, uint64(1), c2.ToolCallCount)
-	require.Equal(t, uint64(1), c2.MessageCount)
-	require.Equal(t, "error", c2.Status) // failed tool call (status 500)
-	require.NotNil(t, c2.Model)
-	require.Equal(t, "claude-3", *c2.Model)
-	require.Equal(t, int64(150), c2.TotalInputTokens)
-	require.Equal(t, int64(75), c2.TotalOutputTokens)
-	require.Equal(t, int64(225), c2.TotalTokens)
+		// Chat 2 assertions
+		c2 := chatsByID[chatID2]
+		if !assert.NotNil(c, c2) {
+			return
+		}
+		assert.Equal(c, uint64(2), c2.LogCount) // 1 completion + 1 tool call
+		assert.Equal(c, uint64(1), c2.ToolCallCount)
+		assert.Equal(c, uint64(1), c2.MessageCount)
+		assert.Equal(c, "error", c2.Status) // failed tool call (status 500)
+		assert.NotNil(c, c2.Model)
+		assert.Equal(c, "claude-3", *c2.Model)
+		assert.Equal(c, int64(150), c2.TotalInputTokens)
+		assert.Equal(c, int64(75), c2.TotalOutputTokens)
+		assert.Equal(c, int64(225), c2.TotalTokens)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestSearchChats_Pagination(t *testing.T) {
@@ -155,23 +162,30 @@ func TestSearchChats_Pagination(t *testing.T) {
 		insertChatLogWithChatID(t, ctx, projectID, deploymentID, ts, chatID, 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
 	}
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
 	// Page 1: limit 2
-	page1, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-		Filter: &gen.SearchChatsFilter{
-			From: &from,
-			To:   &to,
-		},
-		Limit: 2,
-		Sort:  "desc",
-	})
-	require.NoError(t, err)
-	require.Len(t, page1.Chats, 2)
-	require.NotNil(t, page1.NextCursor)
+	var page1 *gen.SearchChatsResult
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+			Filter: &gen.SearchChatsFilter{
+				From: &from,
+				To:   &to,
+			},
+			Limit: 2,
+			Sort:  "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Len(c, res.Chats, 2)
+		assert.NotNil(c, res.NextCursor)
+		page1 = res
+	}, 10*time.Second, 200*time.Millisecond)
 
 	// Page 2
 	page2, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
@@ -226,23 +240,27 @@ func TestSearchChats_FilterByDeploymentID(t *testing.T) {
 	insertChatLogWithChatID(t, ctx, projectID, deployment2, now.Add(-9*time.Minute), uuid.New().String(), 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
 	insertChatLogWithChatID(t, ctx, projectID, deployment1, now.Add(-8*time.Minute), uuid.New().String(), 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-		Filter: &gen.SearchChatsFilter{
-			From:         &from,
-			To:           &to,
-			DeploymentID: &deployment1,
-		},
-		Limit: 100,
-		Sort:  "desc",
-	})
-
-	require.NoError(t, err)
-	require.Len(t, result.Chats, 2)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+			Filter: &gen.SearchChatsFilter{
+				From:         &from,
+				To:           &to,
+				DeploymentID: &deployment1,
+			},
+			Limit: 100,
+			Sort:  "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Len(c, res.Chats, 2)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestSearchChats_PaginationAscOrder(t *testing.T) {
@@ -263,23 +281,30 @@ func TestSearchChats_PaginationAscOrder(t *testing.T) {
 		insertChatLogWithChatID(t, ctx, projectID, deploymentID, ts, chatID, 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
 	}
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
 	// Page 1: limit 2 with ascending sort
-	page1, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-		Filter: &gen.SearchChatsFilter{
-			From: &from,
-			To:   &to,
-		},
-		Limit: 2,
-		Sort:  "asc",
-	})
-	require.NoError(t, err)
-	require.Len(t, page1.Chats, 2)
-	require.NotNil(t, page1.NextCursor)
+	var page1 *gen.SearchChatsResult
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+			Filter: &gen.SearchChatsFilter{
+				From: &from,
+				To:   &to,
+			},
+			Limit: 2,
+			Sort:  "asc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Len(c, res.Chats, 2)
+		assert.NotNil(c, res.NextCursor)
+		page1 = res
+	}, 10*time.Second, 200*time.Millisecond)
 
 	// Page 2
 	page2, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
@@ -340,36 +365,43 @@ func TestSearchChats_ChatWithOnlyTools(t *testing.T) {
 	insertToolCallLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID, "tools:http:petstore:listPets", 200, 0.5)
 	insertToolCallLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID, "tools:http:petstore:getPet", 200, 0.3)
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-		Filter: &gen.SearchChatsFilter{
-			From: &from,
-			To:   &to,
-		},
-		Limit: 100,
-		Sort:  "desc",
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+			Filter: &gen.SearchChatsFilter{
+				From: &from,
+				To:   &to,
+			},
+			Limit: 100,
+			Sort:  "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Len(c, res.Chats, 1)
+		if len(res.Chats) != 1 {
+			return
+		}
 
-	require.NoError(t, err)
-	require.Len(t, result.Chats, 1)
-
-	chat := result.Chats[0]
-	require.Equal(t, chatID, chat.GramChatID)
-	require.Equal(t, uint64(2), chat.LogCount)
-	require.Equal(t, uint64(2), chat.ToolCallCount)
-	require.Equal(t, uint64(0), chat.MessageCount) // No completion messages
-	// Model is nil or empty string when no completions (anyIf returns empty string)
-	if chat.Model != nil {
-		require.Empty(t, *chat.Model, "Model should be empty when no completions")
-	}
-	require.Equal(t, int64(0), chat.TotalInputTokens)
-	require.Equal(t, int64(0), chat.TotalOutputTokens)
-	require.Equal(t, int64(0), chat.TotalTokens)
-	require.Equal(t, "success", chat.Status) // All tools succeeded (200)
+		chat := res.Chats[0]
+		assert.Equal(c, chatID, chat.GramChatID)
+		assert.Equal(c, uint64(2), chat.LogCount)
+		assert.Equal(c, uint64(2), chat.ToolCallCount)
+		assert.Equal(c, uint64(0), chat.MessageCount) // No completion messages
+		// Model is nil or empty string when no completions (anyIf returns empty string)
+		if chat.Model != nil {
+			assert.Empty(c, *chat.Model, "Model should be empty when no completions")
+		}
+		assert.Equal(c, int64(0), chat.TotalInputTokens)
+		assert.Equal(c, int64(0), chat.TotalOutputTokens)
+		assert.Equal(c, int64(0), chat.TotalTokens)
+		assert.Equal(c, "success", chat.Status) // All tools succeeded (200)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestSearchChats_ChatWithOnlyMessages(t *testing.T) {
@@ -388,34 +420,41 @@ func TestSearchChats_ChatWithOnlyMessages(t *testing.T) {
 	insertChatLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID, 100, 50, 150, 1.5, "stop", "gpt-4", "openai")
 	insertChatLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID, 200, 100, 300, 2.0, "stop", "gpt-4", "openai")
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-		Filter: &gen.SearchChatsFilter{
-			From: &from,
-			To:   &to,
-		},
-		Limit: 100,
-		Sort:  "desc",
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+			Filter: &gen.SearchChatsFilter{
+				From: &from,
+				To:   &to,
+			},
+			Limit: 100,
+			Sort:  "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Len(c, res.Chats, 1)
+		if len(res.Chats) != 1 {
+			return
+		}
 
-	require.NoError(t, err)
-	require.Len(t, result.Chats, 1)
-
-	chat := result.Chats[0]
-	require.Equal(t, chatID, chat.GramChatID)
-	require.Equal(t, uint64(2), chat.LogCount)
-	require.Equal(t, uint64(0), chat.ToolCallCount) // No tool calls
-	require.Equal(t, uint64(2), chat.MessageCount)
-	require.NotNil(t, chat.Model)
-	require.Equal(t, "gpt-4", *chat.Model)
-	require.Equal(t, int64(300), chat.TotalInputTokens)  // 100 + 200
-	require.Equal(t, int64(150), chat.TotalOutputTokens) // 50 + 100
-	require.Equal(t, int64(450), chat.TotalTokens)       // 150 + 300
-	require.Equal(t, "success", chat.Status)             // No failed tools
+		chat := res.Chats[0]
+		assert.Equal(c, chatID, chat.GramChatID)
+		assert.Equal(c, uint64(2), chat.LogCount)
+		assert.Equal(c, uint64(0), chat.ToolCallCount) // No tool calls
+		assert.Equal(c, uint64(2), chat.MessageCount)
+		assert.NotNil(c, chat.Model)
+		assert.Equal(c, "gpt-4", *chat.Model)
+		assert.Equal(c, int64(300), chat.TotalInputTokens)  // 100 + 200
+		assert.Equal(c, int64(150), chat.TotalOutputTokens) // 50 + 100
+		assert.Equal(c, int64(450), chat.TotalTokens)       // 150 + 300
+		assert.Equal(c, "success", chat.Status)             // No failed tools
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestSearchChats_FilterByGramURN(t *testing.T) {
@@ -441,34 +480,38 @@ func TestSearchChats_FilterByGramURN(t *testing.T) {
 	chatID3 := uuid.New().String()
 	insertToolCallLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), chatID3, "tools:http:petstore:getPet", 200, 0.4)
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
 	// Filter by "petstore" substring - should match 2 chats
 	gramURN := "petstore"
-	result, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-		Filter: &gen.SearchChatsFilter{
-			From:    &from,
-			To:      &to,
-			GramUrn: &gramURN,
-		},
-		Limit: 100,
-		Sort:  "desc",
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+			Filter: &gen.SearchChatsFilter{
+				From:    &from,
+				To:      &to,
+				GramUrn: &gramURN,
+			},
+			Limit: 100,
+			Sort:  "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Len(c, res.Chats, 2, "should match 2 chats with petstore in gram_urn")
 
-	require.NoError(t, err)
-	require.Len(t, result.Chats, 2, "should match 2 chats with petstore in gram_urn")
-
-	// Verify the matched chats are the petstore ones
-	chatIDs := make(map[string]bool)
-	for _, chat := range result.Chats {
-		chatIDs[chat.GramChatID] = true
-	}
-	require.True(t, chatIDs[chatID1], "should include chat with listPets")
-	require.True(t, chatIDs[chatID3], "should include chat with getPet")
-	require.False(t, chatIDs[chatID2], "should not include chat with weather")
+		// Verify the matched chats are the petstore ones
+		chatIDs := make(map[string]bool)
+		for _, chat := range res.Chats {
+			chatIDs[chat.GramChatID] = true
+		}
+		assert.True(c, chatIDs[chatID1], "should include chat with listPets")
+		assert.True(c, chatIDs[chatID3], "should include chat with getPet")
+		assert.False(c, chatIDs[chatID2], "should not include chat with weather")
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestSearchChats_PaginationCursorScopedByProject(t *testing.T) {
@@ -497,23 +540,30 @@ func TestSearchChats_PaginationCursorScopedByProject(t *testing.T) {
 	// and corrupt pagination.
 	insertChatLogWithChatID(t, ctx, otherProjectID, deploymentID, now.Add(-5*time.Hour), chatIDs[0], 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
 	// Page 1: get first 2 chats
-	page1, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
-		Filter: &gen.SearchChatsFilter{
-			From: &from,
-			To:   &to,
-		},
-		Limit: 2,
-		Sort:  "desc",
-	})
-	require.NoError(t, err)
-	require.Len(t, page1.Chats, 2)
-	require.NotNil(t, page1.NextCursor)
+	var page1 *gen.SearchChatsResult
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+			Filter: &gen.SearchChatsFilter{
+				From: &from,
+				To:   &to,
+			},
+			Limit: 2,
+			Sort:  "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Len(c, res.Chats, 2)
+		assert.NotNil(c, res.NextCursor)
+		page1 = res
+	}, 10*time.Second, 200*time.Millisecond)
 
 	// Page 2: should return exactly the remaining 1 chat from this project
 	page2, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
@@ -558,23 +608,27 @@ func TestSearchLogs_FilterByGramChatID(t *testing.T) {
 	insertToolCallLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID, "tools:http:test:op", 200, 0.5)
 	insertTelemetryLog(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), nil, "urn:gram:other", "INFO")
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
-		Filter: &gen.SearchLogsFilter{
-			From:       &from,
-			To:         &to,
-			GramChatID: &chatID,
-		},
-		Limit: 100,
-		Sort:  "desc",
-	})
-
-	require.NoError(t, err)
-	require.Len(t, result.Logs, 2, "should only return logs matching gram_chat_id")
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchLogs(ctx, &gen.SearchLogsPayload{
+			Filter: &gen.SearchLogsFilter{
+				From:       &from,
+				To:         &to,
+				GramChatID: &chatID,
+			},
+			Limit: 100,
+			Sort:  "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Len(c, res.Logs, 2, "should only return logs matching gram_chat_id")
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 // insertChatLogWithChatID inserts a chat completion log with the gram_chat_id column set.

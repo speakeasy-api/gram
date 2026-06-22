@@ -9,6 +9,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
@@ -185,18 +186,21 @@ func TestGetTokensUnderManagementQuery_FiltersUnstoredSessions(t *testing.T) {
 	// Stored session rows outside the window. Excluded.
 	insertTokenUsageRow(t, chConn, projectID.String(), now.Add(-5*24*time.Hour), storedToolChat, 9000)
 
-	// Wait for ClickHouse eventual consistency.
-	time.Sleep(200 * time.Millisecond)
-
-	buckets, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-		ProjectIDs:    []string{projectID.String()},
-		StartUnixNano: windowStart.UnixNano(),
-		EndUnixNano:   windowEnd.UnixNano(),
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(1300), sumTumBuckets(buckets), "should count only sessions with stored non-metrics data inside the window")
-	require.Len(t, buckets, 1, "all in-window rows share one day bucket")
-	require.Equal(t, dayStart, buckets[0].Day.UTC())
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+			ProjectIDs:    []string{projectID.String()},
+			StartUnixNano: windowStart.UnixNano(),
+			EndUnixNano:   windowEnd.UnixNano(),
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Equal(c, int64(1300), sumTumBuckets(res), "should count only sessions with stored non-metrics data inside the window")
+		if !assert.Len(c, res, 1, "all in-window rows share one day bucket") {
+			return
+		}
+		assert.Equal(c, dayStart, res[0].Day.UTC())
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func sumTumBuckets(buckets []telemetryrepo.TumDayBucket) int64 {
@@ -225,19 +229,23 @@ func TestGetTokensUnderManagementQuery_DailyBreakdown(t *testing.T) {
 	insertTokenUsageRow(t, chConn, projectID.String(), now, chatID, 300)
 	insertTokenUsageRow(t, chConn, projectID.String(), now.Add(-24*time.Hour), chatID, 200)
 
-	time.Sleep(200 * time.Millisecond)
-
-	buckets, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
-		ProjectIDs:    []string{projectID.String()},
-		StartUnixNano: windowStart.UnixNano(),
-		EndUnixNano:   windowEnd.UnixNano(),
-	})
-	require.NoError(t, err)
-	require.Len(t, buckets, 2)
-	require.Equal(t, dayStart.Add(-24*time.Hour), buckets[0].Day.UTC())
-	require.Equal(t, int64(200), buckets[0].Tokens)
-	require.Equal(t, dayStart, buckets[1].Day.UTC())
-	require.Equal(t, int64(300), buckets[1].Tokens)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+			ProjectIDs:    []string{projectID.String()},
+			StartUnixNano: windowStart.UnixNano(),
+			EndUnixNano:   windowEnd.UnixNano(),
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.Len(c, res, 2) {
+			return
+		}
+		assert.Equal(c, dayStart.Add(-24*time.Hour), res[0].Day.UTC())
+		assert.Equal(c, int64(200), res[0].Tokens)
+		assert.Equal(c, dayStart, res[1].Day.UTC())
+		assert.Equal(c, int64(300), res[1].Tokens)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestGetTokensUnderManagementQuery_EvidenceOutsideWindowDoesNotCount(t *testing.T) {
@@ -257,7 +265,22 @@ func TestGetTokensUnderManagementQuery_EvidenceOutsideWindowDoesNotCount(t *test
 	insertTokenUsageRow(t, chConn, projectID.String(), now, chatID, 4000)
 	insertToolCallRow(t, chConn, projectID.String(), now.Add(-5*24*time.Hour), chatID)
 
-	time.Sleep(200 * time.Millisecond)
+	// Confirm the inserted rows have propagated using a wider window that
+	// includes the stale evidence, which qualifies the session and surfaces
+	// the in-window tokens. Once visible there, the narrow window below is a
+	// reliable negative.
+	widerStart := dayStart.Add(-7 * 24 * time.Hour)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+			ProjectIDs:    []string{projectID.String()},
+			StartUnixNano: widerStart.UnixNano(),
+			EndUnixNano:   windowEnd.UnixNano(),
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Equal(c, int64(4000), sumTumBuckets(res))
+	}, 10*time.Second, 200*time.Millisecond)
 
 	buckets, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
 		ProjectIDs:    []string{projectID.String()},
@@ -325,20 +348,25 @@ func TestGetTokensUnderManagement_CountsStoredSessions(t *testing.T) {
 	insertToolCallRow(t, chConn, projectID.String(), now, storedChat)
 	insertTokenUsageRow(t, chConn, projectID.String(), now, forwardedChat, 9000)
 
-	time.Sleep(200 * time.Millisecond)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := svc.GetTokensUnderManagement(testAuthContext(orgID), &gen.GetTokensUnderManagementPayload{})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Equal(c, int64(450), res.Tokens)
 
-	result, err := svc.GetTokensUnderManagement(testAuthContext(orgID), &gen.GetTokensUnderManagementPayload{})
-	require.NoError(t, err)
-	require.Equal(t, int64(450), result.Tokens)
-
-	// The active cycle's daily points sum to the headline number.
-	last := result.History[len(result.History)-1]
-	require.Equal(t, int64(450), last.Tokens)
-	var daySum int64
-	for _, day := range last.Days {
-		daySum += day.Tokens
-	}
-	require.Equal(t, int64(450), daySum)
+		// The active cycle's daily points sum to the headline number.
+		last := res.History[len(res.History)-1]
+		assert.Equal(c, int64(450), last.Tokens)
+		var daySum int64
+		for _, day := range last.Days {
+			daySum += day.Tokens
+		}
+		assert.Equal(c, int64(450), daySum)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestSetBillingMetadata_RequiresPlatformAdmin(t *testing.T) {

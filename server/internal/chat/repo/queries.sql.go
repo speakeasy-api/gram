@@ -1486,19 +1486,22 @@ func (q *Queries) SeedChatAtTime(ctx context.Context, arg SeedChatAtTimeParams) 
 }
 
 const seedChatMessage = `-- name: SeedChatMessage :one
-INSERT INTO chat_messages (chat_id, project_id, role, content)
-VALUES ($1, $2, 'user', 'test message')
+INSERT INTO chat_messages (chat_id, project_id, role, content, created_at)
+VALUES ($1, $2, 'user', 'test message', COALESCE($3::timestamptz, clock_timestamp()))
 RETURNING id
 `
 
 type SeedChatMessageParams struct {
 	ChatID    uuid.UUID
 	ProjectID uuid.NullUUID
+	CreatedAt pgtype.Timestamptz
 }
 
-// Test fixture: insert a minimal chat message and return its id.
+// Test fixture: insert a minimal chat message and return its id. An optional
+// created_at lets ordering tests assign distinct, deterministic timestamps
+// instead of relying on wall-clock gaps between inserts.
 func (q *Queries) SeedChatMessage(ctx context.Context, arg SeedChatMessageParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, seedChatMessage, arg.ChatID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, seedChatMessage, arg.ChatID, arg.ProjectID, arg.CreatedAt)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
