@@ -726,12 +726,44 @@ UPDATE chat_user_feedback
 SET chat_resolution_id = @chat_resolution_id
 WHERE id = @id;
 
--- name: SoftDeleteChat :exec
-UPDATE chats
-SET deleted_at = clock_timestamp()
-WHERE id = @id
-  AND project_id = @project_id
-  AND deleted IS FALSE;
+-- name: SoftDeleteChat :one
+-- Soft-delete a chat unless it backs a live assistant thread, and report the
+-- disposition in a single statement so the caller never has to re-query (which
+-- would race with concurrent thread create/delete). `guard` snapshots whether
+-- the chat exists in-project, undeleted, and is thread-backed; `del` deletes it
+-- only when not thread-backed. Both CTEs share one statement snapshot, so the
+-- delete and the diagnosis are consistent: a live (existing, undeleted)
+-- thread-backed chat always yields backs_live_thread=true (caller returns 409)
+-- and is never silently reported as a successful no-op.
+WITH guard AS (
+  SELECT
+    c.id,
+    EXISTS (
+      SELECT 1
+      FROM assistant_threads t
+      JOIN assistants a ON a.id = t.assistant_id
+      WHERE t.chat_id = c.id
+        AND t.project_id = @project_id
+        AND t.deleted IS FALSE
+        AND a.deleted IS FALSE
+    ) AS backs_live_thread
+  FROM chats c
+  WHERE c.id = @id
+    AND c.project_id = @project_id
+    AND c.deleted IS FALSE
+),
+del AS (
+  UPDATE chats
+  SET deleted_at = clock_timestamp()
+  WHERE id = @id
+    AND project_id = @project_id
+    AND deleted IS FALSE
+    AND id IN (SELECT id FROM guard WHERE backs_live_thread IS FALSE)
+  RETURNING id
+)
+SELECT
+  EXISTS (SELECT 1 FROM del) AS deleted,
+  COALESCE((SELECT backs_live_thread FROM guard), FALSE)::boolean AS backs_live_thread;
 
 -- name: GetTopUsersByMessages :many
 SELECT
@@ -850,3 +882,19 @@ VALUES (
     @project_id, @organization_id, @risk_policy_id, 1,
     @chat_message_id, 'test', @found
 );
+
+-- name: SeedAssistant :one
+-- Test fixture: insert a minimal assistant and return its id.
+INSERT INTO assistants (project_id, organization_id, name, model, instructions)
+VALUES (@project_id, @organization_id, @name, 'anthropic/claude-opus-4.8', 'be helpful')
+RETURNING id;
+
+-- name: SeedAssistantThread :exec
+-- Test fixture: insert an active assistant thread backed by a chat.
+INSERT INTO assistant_threads (assistant_id, project_id, correlation_id, chat_id, source_kind)
+VALUES (@assistant_id, @project_id, @correlation_id, @chat_id, 'cron');
+
+-- name: SeedSoftDeleteAssistant :exec
+-- Test fixture: soft-delete an assistant (mirrors DeleteAssistant, which leaves
+-- its threads behind).
+UPDATE assistants SET deleted_at = clock_timestamp() WHERE id = @id;
