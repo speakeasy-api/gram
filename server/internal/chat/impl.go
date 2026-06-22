@@ -1125,28 +1125,32 @@ func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload
 		return oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
 	}
 
-	// An assistant thread depends on its backing chat operationally: the runtime
-	// reloads the conversation every turn, so a soft-deleted chat makes that fetch
-	// fail and wedges the thread. Refuse to delete a chat that backs a live
-	// assistant thread (a deleted assistant's leftover threads don't count, or the
-	// chat could never be cleaned up).
-	backsThread, err := s.repo.ChatBacksLiveAssistantThread(ctx, repo.ChatBacksLiveAssistantThreadParams{
-		ChatID:    chatID,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "check assistant thread for chat").LogError(ctx, s.logger)
-	}
-	if backsThread {
-		return oops.E(oops.CodeConflict, nil, "cannot delete a chat that backs an assistant thread").LogError(ctx, s.logger)
-	}
-
-	err = s.repo.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{
+	// SoftDeleteChat refuses to delete a chat that backs a live assistant thread
+	// (the anti-join lives in its WHERE), so the check and the delete are one
+	// atomic statement — a thread created concurrently can't be orphaned by a
+	// racing delete. A live-thread chat reloads its conversation every turn, so a
+	// soft-deleted backing chat would wedge the thread.
+	affected, err := s.repo.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{
 		ID:        chatID,
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "soft delete chat").LogError(ctx, s.logger)
+	}
+	if affected == 0 {
+		// The delete was a no-op: either the chat backs a live assistant thread
+		// (block with a clear conflict) or it doesn't exist / is already deleted
+		// (success, matching the prior project-scoped no-op behavior).
+		backsThread, err := s.repo.ChatBacksLiveAssistantThread(ctx, repo.ChatBacksLiveAssistantThreadParams{
+			ChatID:    chatID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "check assistant thread for chat").LogError(ctx, s.logger)
+		}
+		if backsThread {
+			return oops.E(oops.CodeConflict, nil, "cannot delete a chat that backs an assistant thread").LogError(ctx, s.logger)
+		}
 	}
 
 	return nil

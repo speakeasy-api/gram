@@ -743,12 +743,26 @@ UPDATE chat_user_feedback
 SET chat_resolution_id = @chat_resolution_id
 WHERE id = @id;
 
--- name: SoftDeleteChat :exec
+-- name: SoftDeleteChat :execrows
+-- The NOT EXISTS anti-join makes the live-thread check atomic with the delete:
+-- a chat that backs a live assistant thread is never soft-deleted, even if the
+-- thread is created concurrently after a caller's separate pre-check. Returns
+-- the affected row count so the caller can tell "blocked / not found" (0) from
+-- "deleted" (1).
 UPDATE chats
 SET deleted_at = clock_timestamp()
-WHERE id = @id
-  AND project_id = @project_id
-  AND deleted IS FALSE;
+WHERE chats.id = @id
+  AND chats.project_id = @project_id
+  AND chats.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_threads t
+    JOIN assistants a ON a.id = t.assistant_id
+    WHERE t.chat_id = chats.id
+      AND t.project_id = @project_id
+      AND t.deleted IS FALSE
+      AND a.deleted IS FALSE
+  );
 
 -- name: GetTopUsersByMessages :many
 SELECT

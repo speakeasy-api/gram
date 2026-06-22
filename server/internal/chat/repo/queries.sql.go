@@ -2017,12 +2017,21 @@ func (q *Queries) SeedSoftDeleteAssistant(ctx context.Context, id uuid.UUID) err
 	return err
 }
 
-const softDeleteChat = `-- name: SoftDeleteChat :exec
+const softDeleteChat = `-- name: SoftDeleteChat :execrows
 UPDATE chats
 SET deleted_at = clock_timestamp()
-WHERE id = $1
-  AND project_id = $2
-  AND deleted IS FALSE
+WHERE chats.id = $1
+  AND chats.project_id = $2
+  AND chats.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_threads t
+    JOIN assistants a ON a.id = t.assistant_id
+    WHERE t.chat_id = chats.id
+      AND t.project_id = $2
+      AND t.deleted IS FALSE
+      AND a.deleted IS FALSE
+  )
 `
 
 type SoftDeleteChatParams struct {
@@ -2030,9 +2039,17 @@ type SoftDeleteChatParams struct {
 	ProjectID uuid.UUID
 }
 
-func (q *Queries) SoftDeleteChat(ctx context.Context, arg SoftDeleteChatParams) error {
-	_, err := q.db.Exec(ctx, softDeleteChat, arg.ID, arg.ProjectID)
-	return err
+// The NOT EXISTS anti-join makes the live-thread check atomic with the delete:
+// a chat that backs a live assistant thread is never soft-deleted, even if the
+// thread is created concurrently after a caller's separate pre-check. Returns
+// the affected row count so the caller can tell "blocked / not found" (0) from
+// "deleted" (1).
+func (q *Queries) SoftDeleteChat(ctx context.Context, arg SoftDeleteChatParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteChat, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateAIIntegrationConfigChatCursor = `-- name: UpdateAIIntegrationConfigChatCursor :exec
