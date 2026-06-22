@@ -1,0 +1,78 @@
+client/dashboard/src/pages/security/cel-monaco-editor.lazy.tsx
+  s_e5457925ae460d::t_7eea8c58cca2b9 1-12
+client/dashboard/src/pages/security/cel-match-preview.tsx
+  s_e5457925ae460d::t_d39a5efbe873a5 159
+  s_e5457925ae460d::t_4e470b0dc63a39 56-57,64,70,75
+  s_e5457925ae460d::t_5fd94202158932 83-84
+  s_e5457925ae460d::t_7eea8c58cca2b9 1-46,49-55,58-63,65-69,71-74,76-82,85-115,118-138,140-158,160-265
+  s_e5457925ae460d::t_6ab59835409816 47-48
+  s_e5457925ae460d::t_201c49950844b9 116-117
+  s_e5457925ae460d::t_7d71d2df554b84 139
+client/dashboard/src/pages/security/cel-wasm.ts
+  s_e5457925ae460d::t_6a7008abfd8ffd 125
+  s_e5457925ae460d::t_e2c79fc656f366 1-5,8,71
+  s_e5457925ae460d::t_7eea8c58cca2b9 6-7,9-70,72-102,105-124,126-138,141-184,186-187,190-193
+  s_e5457925ae460d::t_7925496f6064a2 139-140
+  s_e5457925ae460d::t_b4e9a076101c98 185,188-189
+  s_e5457925ae460d::t_88206a5d34f4d8 103-104
+client/dashboard/src/pages/security/cel-field.tsx
+  s_e5457925ae460d::t_7b966a25bcd139 18-19
+  s_e5457925ae460d::t_c587219ef4bda1 93
+  s_e5457925ae460d::t_3b4a0469cb7280 60
+  s_e5457925ae460d::t_fe2519e5603153 161-162
+  s_e5457925ae460d::t_7eea8c58cca2b9 1-17,20-59,61-92,94-160,163-224
+client/dashboard/src/pages/security/use-cel-status.ts
+  s_e5457925ae460d::t_7eea8c58cca2b9 1-9,11-12,16-19,21-28,31-34,36-41
+  s_e5457925ae460d::t_2b2e1be3d94e81 10,13-15,20,29-30,35
+client/dashboard/src/pages/security/cel-monaco-editor.tsx
+  s_e5457925ae460d::t_9498e68ade79ae 319
+  s_e5457925ae460d::t_7eea8c58cca2b9 1-6,8-11,14-16,19-26,29-30,32-36,38-45,48-59,61-70,76-77,126-128,131-137,140-202,204-211,216-221,244-246,278-283,285-293,295-301,303-313,315,318,320-358,361-371,374-418,421-429
+  s_e5457925ae460d::t_ae92a220a76208 129-130
+  s_e5457925ae460d::t_2f054cf4573062 78-79
+  s_e5457925ae460d::t_37ca82c55d6f1c 138-139
+  s_1e8896a2951d70::t_d948bd08ce21ff 71-75,203,222-243,262-277
+  s_e5457925ae460d::t_4bdb0bc0edd34d 60
+  s_e5457925ae460d::t_96d17f7cb33107 247,250
+  s_e5457925ae460d::t_76260665472004 12-13,17-18,27-28
+  s_5e8039f9d96e02::t_3775840e1afa48 46-47
+  s_e5457925ae460d::t_918b6fb570752a 359-360
+  s_e5457925ae460d::t_172e713aefff8d 314
+  s_e5457925ae460d::t_594a852f421cba 284
+  s_e5457925ae460d::t_cbf757da8f3e3f 7,31,37,80-125,212-215,248-249,251-261,294,302,316-317
+  s_e5457925ae460d::t_0e2563fd8a84c6 419-420
+  s_e5457925ae460d::t_13667ded1d7667 372-373
+client/dashboard/src/pages/security/use-cel-engine.ts
+  s_e5457925ae460d::t_7eea8c58cca2b9 1-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "6a2b32e020eba63636e416d22e5074f3e60e382d",
+  "prompts": {},
+  "sessions": {
+    "s_1e8896a2951d70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eec3e-6bb9-7893-9caa-b28cfd2709c7",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    },
+    "s_5e8039f9d96e02": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7204e23b-9892-40b9-9abd-f538d9fb898d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    },
+    "s_e5457925ae460d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "27e802d5-8b32-4910-b9fd-7266730d92eb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    }
+  }
+}
