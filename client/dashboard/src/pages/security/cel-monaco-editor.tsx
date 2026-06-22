@@ -4,6 +4,7 @@ import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import type * as Monaco from "monaco-editor";
 import * as monaco from "monaco-editor";
 import { useEffect, useRef, type JSX } from "react";
+import type { CelCompletionItem, CelEngine } from "./cel-wasm";
 
 // oxlint-disable-next-line import/default -- Vite ?worker URL imports lack named defaults
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
@@ -26,48 +27,23 @@ try {
 
 const CEL_LANGUAGE_ID = "cel";
 
-// One author-visible variable/function pair, mirrored from the backend's
-// getDetectionDescriptor so completions can't drift from what the engine accepts.
-export type CelSchemaItem = {
-  name: string;
-  detail: string;
-  doc: string;
-  gettable?: boolean;
-  // Member fields available on each element when this item is a list/object
-  // variable (e.g. a `tool_calls` element's name/server/function/args). Used to
-  // complete a comprehension's bound variable (tool_calls.exists(t, t.name…)).
-  fields?: CelSchemaItem[];
-};
-// A CEL macro. `member` is true for the list macros invoked after a dot
-// (tool_calls.exists(...)); false for the global `has(...)`, which is named at the
-// top level like a function call.
-export type CelMacroItem = CelSchemaItem & { member: boolean };
-export type CelSchema = {
-  variables: CelSchemaItem[];
-  functions: CelSchemaItem[];
-  macros: CelMacroItem[];
-};
-
-// Registration state and the active completion schema live on globalThis, not in
-// module-level slots. Monaco is a singleton that survives Vite HMR while this
-// module is re-evaluated, so module-level state would reset on every hot reload —
-// re-running registerCelLanguage and stacking another completion provider on the
+// Registration state and the active engine live on globalThis, not in module-
+// level slots. Monaco is a singleton that survives Vite HMR while this module is
+// re-evaluated, so module-level state would reset on every hot reload — re-
+// running registerCelLanguage and stacking another completion provider on the
 // same instance (duplicate suggestions that grow by one per reload). globalThis
 // persists across the re-eval, so we register exactly once and the single
-// provider always reads the current schema. (It can't live on the Monaco module
+// provider always reads the current engine. (It can't live on the Monaco module
 // namespace itself — that's a frozen Module object and assigning to it throws.)
 interface CelRuntime {
   registered: boolean;
-  schema: CelSchema;
+  engine: CelEngine | null;
 }
 
 function celRuntime(): CelRuntime {
   const holder = globalThis as unknown as { __celRuntime?: CelRuntime };
   if (!holder.__celRuntime) {
-    holder.__celRuntime = {
-      registered: false,
-      schema: { variables: [], functions: [], macros: [] },
-    };
+    holder.__celRuntime = { registered: false, engine: null };
   }
   return holder.__celRuntime;
 }
@@ -92,7 +68,7 @@ const MATCHER_WORDS = [
 ];
 // List macros CEL exposes on `tool_calls` (and other lists).
 // Highlighted as built-in macro/function keywords. Completion offerings come
-// from the schema; this list only drives syntax coloring.
+// from the engine; this list only drives syntax coloring.
 const MACRO_WORDS = [
   "has",
   "exists",
@@ -103,25 +79,6 @@ const MACRO_WORDS = [
   "size",
 ];
 
-// The resolved type of an access chain, enough to decide what completes after a
-// dot: a list offers macros, an object offers its member fields, a field offers
-// matchers; anything we can't resolve falls back to matchers (the safe superset
-// and the long-standing behaviour).
-type CelType =
-  | { kind: "list" } // e.g. `tool_calls` — offer comprehension macros
-  | { kind: "object"; fields: CelSchemaItem[] } // a bound element — offer fields
-  | { kind: "field"; item?: CelSchemaItem } // a matchable field — offer matchers
-  | { kind: "unknown" };
-
-function functionsForFieldReceiver(
-  schema: CelSchema,
-  receiver?: CelSchemaItem,
-): CelSchemaItem[] {
-  return schema.functions.filter(
-    (fn) => fn.name !== "get" || receiver?.gettable,
-  );
-}
-
 function shouldSuggestLogicalOperators(upto: string): boolean {
   const trimmed = upto.trimEnd();
   if (!trimmed) return false;
@@ -129,71 +86,61 @@ function shouldSuggestLogicalOperators(upto: string): boolean {
   return /(?:\)|\]|\}|"|'|[A-Za-z_]\w*)$/.test(trimmed);
 }
 
-// detectBindVariables scans the expression for `<list>.<macro>(<bind>, …)` and
-// maps each bound variable name to its element's member fields. Heuristic (no
-// real parse, so it can't see nesting or shadowing), but CEL scope expressions
-// here are short single statements, so the common `tool_calls.exists(t, …)` resolves.
-function detectBindVariables(
-  text: string,
-  schema: CelSchema,
-): Map<string, CelSchemaItem[]> {
-  const byName = new Map(schema.variables.map((v) => [v.name, v]));
-  const binds = new Map<string, CelSchemaItem[]>();
-  const re =
-    /([A-Za-z_]\w*)\s*\.\s*(?:exists|exists_one|all|filter|map)\s*\(\s*([A-Za-z_]\w*)\s*,/g;
-  for (let mm = re.exec(text); mm; mm = re.exec(text)) {
-    const listName = mm[1];
-    const bindName = mm[2];
-    if (!listName || !bindName) continue;
-    const v = byName.get(listName);
-    if (v && v.detail.startsWith("list(")) binds.set(bindName, v.fields ?? []);
+// suggestionFor turns one engine completion item into a Monaco suggestion. The
+// engine decided WHAT belongs here (type-directed); this only maps category to
+// an icon and an insertion snippet — present() takes no args, get/match* take
+// one, the comprehension macros take a bound var and a body.
+function suggestionFor(
+  item: CelCompletionItem,
+  range: Monaco.IRange,
+): Monaco.languages.CompletionItem {
+  const snippet = (text: string) => ({
+    insertText: text,
+    insertTextRules:
+      monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+  });
+  const base = {
+    label: item.label,
+    detail: item.detail,
+    documentation: item.doc,
+    range,
+  };
+  switch (item.category) {
+    case "field":
+      return {
+        ...base,
+        kind: monaco.languages.CompletionItemKind.Field,
+        insertText: item.label,
+      };
+    case "variable":
+    case "bind":
+      return {
+        ...base,
+        kind: monaco.languages.CompletionItemKind.Variable,
+        insertText: item.label,
+      };
+    case "macro": // list comprehension macro: exists(t, …)
+      return {
+        ...base,
+        kind: monaco.languages.CompletionItemKind.Method,
+        ...snippet(`${item.label}(\${1:t}, $2)`),
+      };
+    case "matcher":
+    case "globalMacro":
+    default:
+      // present() is the only nullary matcher; everything else takes one arg.
+      return {
+        ...base,
+        kind: monaco.languages.CompletionItemKind.Method,
+        ...(item.label === "present"
+          ? { insertText: "present()" }
+          : snippet(`${item.label}($1)`)),
+      };
   }
-  return binds;
-}
-
-// resolveReceiverType resolves the type of the dotted access chain ending right
-// before the cursor — `t` in `t.`, `t.name` in `t.name.` — so the provider can
-// offer the right completions for that receiver.
-function resolveReceiverType(
-  upto: string,
-  schema: CelSchema,
-  binds: Map<string, CelSchemaItem[]>,
-): CelType {
-  const m = upto.match(/([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*\.\s*\w*$/);
-  const raw = m?.[1];
-  if (!raw) return { kind: "unknown" };
-  const chain = raw.split(".").map((s) => s.trim());
-  const byName = new Map(schema.variables.map((v) => [v.name, v]));
-
-  // Head of the chain: a bound element, or a top-level variable.
-  const head = chain[0];
-  if (!head) return { kind: "unknown" };
-  let cur: CelType;
-  const boundFields = binds.get(head);
-  if (boundFields) {
-    cur = { kind: "object", fields: boundFields };
-  } else {
-    const v = byName.get(head);
-    if (!v) return { kind: "unknown" };
-    if (v.detail.startsWith("list(")) cur = { kind: "list" };
-    else if (v.detail === "field") cur = { kind: "field", item: v };
-    else return { kind: "unknown" };
-  }
-
-  // Walk member accesses; tool fields are themselves matchable fields.
-  for (let i = 1; i < chain.length; i++) {
-    const seg = chain[i];
-    if (cur.kind !== "object" || seg === undefined) return { kind: "unknown" };
-    const f: CelSchemaItem | undefined = cur.fields.find((x) => x.name === seg);
-    if (!f) return { kind: "unknown" };
-    cur =
-      f.detail === "field" ? { kind: "field", item: f } : { kind: "unknown" };
-  }
-  return cur;
 }
 
 // registerCelLanguage installs the CEL Monarch grammar (syntax highlighting) and
-// a schema-driven completion provider. Idempotent per Monaco instance (survives
+// an engine-driven completion provider. Idempotent per Monaco instance (survives
 // HMR), so it registers the language exactly once.
 function registerCelLanguage(m: typeof Monaco): void {
   const rt = celRuntime();
@@ -279,11 +226,10 @@ function registerCelLanguage(m: typeof Monaco): void {
         startColumn: word.startColumn,
         endColumn: word.endColumn,
       };
-      const schema = celRuntime().schema;
-      const binds = detectBindVariables(model.getValue(), schema);
+      const engine = celRuntime().engine;
 
-      // Text from line start to the cursor — enough lookbehind to tell whether
-      // we're after a `.` and, if so, what the receiver of that dot is.
+      // Text from the expression start to the cursor — the engine reads this to
+      // resolve the receiver's type and decide what's valid here.
       const upto = model.getValueInRange({
         startLineNumber: 1,
         startColumn: 1,
@@ -315,96 +261,24 @@ function registerCelLanguage(m: typeof Monaco): void {
         };
       }
 
-      if (/\.\s*\w*$/.test(upto)) {
-        const recv = resolveReceiverType(upto, schema, binds);
+      // No engine yet (wasm still loading, or unavailable): offer nothing rather
+      // than stale guesses — validation falls back to the server on save.
+      if (!engine) return { suggestions: [] };
 
-        // A bound element (`t.`) → its member fields.
-        if (recv.kind === "object") {
-          return {
-            suggestions: recv.fields.map((f) => ({
-              label: f.name,
-              kind: monaco.languages.CompletionItemKind.Field,
-              insertText: f.name,
-              detail: f.detail,
-              documentation: f.doc,
-              range,
-            })),
-          };
-        }
+      // The engine resolves the receiver's real type and returns exactly what's
+      // valid here — fields after a tool, macros after a list, matchers after a
+      // field. No receiver-type heuristics on this side.
+      const completion = engine.complete(upto);
+      const suggestions = completion.items.map((item) =>
+        suggestionFor(item, range),
+      );
 
-        // A list (`tool_calls.`) → the member macros that iterate it, sourced from
-        // the schema so the set can't drift from the engine.
-        if (recv.kind === "list") {
-          return {
-            suggestions: schema.macros
-              .filter((m) => m.member)
-              .map((m) => ({
-                label: m.name,
-                kind: monaco.languages.CompletionItemKind.Method,
-                insertText: `${m.name}(\${1:t}, $2)`,
-                insertTextRules:
-                  monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                detail: m.detail,
-                documentation: m.doc,
-                range,
-              })),
-          };
-        }
-
-        // A field (or anything unresolved) → the matcher functions.
-        return {
-          suggestions: functionsForFieldReceiver(
-            schema,
-            recv.kind === "field" ? recv.item : undefined,
-          ).map((fn) => ({
-            label: fn.name,
-            kind: monaco.languages.CompletionItemKind.Method,
-            insertText: `${fn.name}($1)`,
-            insertTextRules:
-              monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            detail: fn.detail,
-            documentation: fn.doc,
-            range,
-          })),
-        };
-      }
-
-      // Not after a dot: name a top-level variable or an in-scope bind variable.
-      // The list member macros (exists/all/...) are intentionally not offered
-      // here — they surface after `tool_calls.` like every other member. Global
-      // macros that read like a call (has(...)) do belong at this position.
-      const suggestions: Monaco.languages.CompletionItem[] =
-        schema.variables.map((v) => ({
-          label: v.name,
-          kind: monaco.languages.CompletionItemKind.Variable,
-          insertText: v.name,
-          detail: v.detail,
-          documentation: v.doc,
-          range,
-        }));
-      for (const [bindName] of binds) {
-        suggestions.push({
-          label: bindName,
-          kind: monaco.languages.CompletionItemKind.Variable,
-          insertText: bindName,
-          detail: "bound tool",
-          documentation: "Iteration variable bound to a tool call.",
-          range,
-        });
-      }
-      for (const m of schema.macros.filter((x) => !x.member)) {
-        suggestions.push({
-          label: m.name,
-          kind: monaco.languages.CompletionItemKind.Method,
-          insertText: `${m.name}($1)`,
-          insertTextRules:
-            monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-          detail: m.detail,
-          documentation: m.doc,
-          range,
-        });
-      }
-      if (shouldSuggestLogicalOperators(upto)) {
+      // Logical operators aren't part of the engine's vocabulary; offer them at a
+      // name position once there's a complete operand to join onto.
+      if (
+        completion.context === "name" &&
+        shouldSuggestLogicalOperators(upto)
+      ) {
         suggestions.push(
           {
             label: "&&",
@@ -439,7 +313,7 @@ registerCelLanguage(monaco);
 export function CelMonacoEditor({
   value,
   onChange,
-  schema,
+  engine,
   errorMessage,
   errorRange,
   disabled,
@@ -447,7 +321,7 @@ export function CelMonacoEditor({
 }: {
   value: string;
   onChange: (value: string) => void;
-  schema?: CelSchema;
+  engine?: CelEngine | null;
   errorMessage?: string | null;
   // Character offset range of the error within the expression; when present the
   // marker underlines just that span instead of the whole expression.
@@ -459,11 +333,11 @@ export function CelMonacoEditor({
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof Monaco | null>(null);
 
-  // Keep the shared completion schema current as the cached query resolves. The
-  // single provider reads this same instance slot, so updates apply live.
+  // Publish the engine to the single shared completion provider as it loads. The
+  // provider reads this same slot, so completion turns on the moment wasm is ready.
   useEffect(() => {
-    if (schema) celRuntime().schema = schema;
-  }, [schema]);
+    celRuntime().engine = engine ?? null;
+  }, [engine]);
 
   // Surface the backend compile error as a single inline marker spanning the
   // whole expression (compileExpr returns a message, not a position).

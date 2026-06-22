@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
+    "build:cel-wasm": "mise run gen:celwasm",
+    "prebuild": "pnpm build:cel-wasm || echo '⚠ cel.wasm not built (Go toolchain unavailable); CEL editor will fall back to server-side validation'",
     "build": "vite build",
     "lint": "pnpm lint:format && pnpm lint:no-barrels && pnpm lint:oxlint && pnpm type-check",
     "lint:oxlint": "oxlint --type-aware",
@@ -29,7 +31,6 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@gram-ai/elements": "workspace:*",
     "@gram/client": "workspace:*",
-    "@marcbachmann/cel-js": "^7.6.1",
     "@monaco-editor/react": "^4.7.0",
     "@openrouter/ai-sdk-provider": "^2.0.0",
     "@pierre/diffs": "^1.1.1",

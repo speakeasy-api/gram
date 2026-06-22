@@ -5,7 +5,6 @@
 import { ClientSDK } from "../lib/sdks.js";
 import { Categories } from "./categories.js";
 import { CustomRules } from "./customrules.js";
-import { DetectionDescriptor } from "./detectiondescriptor.js";
 import { Exclusions } from "./exclusions.js";
 import { Expr } from "./expr.js";
 import { Overview } from "./overview.js";
@@ -40,13 +39,6 @@ export class Risk extends ClientSDK {
   private _customRules?: CustomRules;
   get customRules(): CustomRules {
     return (this._customRules ??= new CustomRules(this._options));
-  }
-
-  private _detectionDescriptor?: DetectionDescriptor;
-  get detectionDescriptor(): DetectionDescriptor {
-    return (this._detectionDescriptor ??= new DetectionDescriptor(
-      this._options,
-    ));
   }
 
   private _overview?: Overview;

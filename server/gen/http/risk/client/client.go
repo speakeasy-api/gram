@@ -57,10 +57,6 @@ type Client struct {
 	// listRiskCategories endpoint.
 	ListRiskCategoriesDoer goahttp.Doer
 
-	// GetDetectionDescriptor Doer is the HTTP client used to make requests to the
-	// getDetectionDescriptor endpoint.
-	GetDetectionDescriptorDoer goahttp.Doer
-
 	// CompileExpr Doer is the HTTP client used to make requests to the compileExpr
 	// endpoint.
 	CompileExprDoer goahttp.Doer
@@ -175,7 +171,6 @@ func NewClient(
 		ListRiskResultsByChatDoer:          doer,
 		GetRiskOverviewDoer:                doer,
 		ListRiskCategoriesDoer:             doer,
-		GetDetectionDescriptorDoer:         doer,
 		CompileExprDoer:                    doer,
 		GetRiskUserBreakdownDoer:           doer,
 		GetRiskRuleBreakdownDoer:           doer,
@@ -440,30 +435,6 @@ func (c *Client) ListRiskCategories() goa.Endpoint {
 		resp, err := c.ListRiskCategoriesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "listRiskCategories", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// GetDetectionDescriptor returns an endpoint that makes HTTP requests to the
-// risk service getDetectionDescriptor server.
-func (c *Client) GetDetectionDescriptor() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeGetDetectionDescriptorRequest(c.encoder)
-		decodeResponse = DecodeGetDetectionDescriptorResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetDetectionDescriptorRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.GetDetectionDescriptorDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("risk", "getDetectionDescriptor", err)
 		}
 		return decodeResponse(resp)
 	}

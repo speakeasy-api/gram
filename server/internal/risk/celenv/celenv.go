@@ -113,83 +113,87 @@ type Engine struct {
 	env *cel.Env
 }
 
-// New builds the CEL environment with the risk fields and matchers.
+// New builds the CEL environment: the risk field variables, the span-recording
+// matcher methods, and the JSON-drilldown helpers. The environment declares
+// itself here — this is the single source of truth for what an expression may
+// reference. The editor's autocomplete/reference is a thin doc projection of the
+// same surface (see Reference), but it is not authoritative: the engine compiled
+// to wasm and run in the browser is, so there is no second declaration to keep
+// in parity.
 func New() (*Engine, error) {
-	env, err := buildEnv()
+	env, err := cel.NewEnv(
+		// Register celTool as an object type so `tool_calls` elements have
+		// validated fields (name/server/function/args), each of the opaque field
+		// type — so `t.functionn` is a compile error, not a silent runtime miss.
+		ext.NativeTypes(reflect.TypeFor[celTool](), ext.ParseStructTags(true)),
+
+		cel.Variable("kind", cel.StringType),
+		cel.Variable("content", fieldType),
+		cel.Variable("prompt", fieldType),
+		cel.Variable("assistant", fieldType),
+		cel.Variable("tool_result", fieldType),
+		cel.Variable("tool_calls", cel.ListType(cel.ObjectType(toolTypeName))),
+
+		// The match* family: span-recording matchers, one per strategy. The shared
+		// match prefix marks them as detectors (a true verdict records a highlighted
+		// span) and keeps them clear of the stdlib string functions
+		// (matches/contains/startsWith/...), which cel-go can't re-overload onto a
+		// custom type anyway.
+		matcher("matchRegex", (*fieldVal).matchRegex),
+		matcher("matchText", (*fieldVal).matchText),
+		matcher("matchExact", (*fieldVal).matchExact),
+		matcher("matchPrefix", (*fieldVal).matchPrefix),
+		matcher("matchSuffix", (*fieldVal).matchSuffix),
+		matcher("matchGlob", (*fieldVal).matchGlob),
+
+		// get (navigation) and present (presence) sit outside the match* family.
+		cel.Function("get", cel.MemberOverload("field_get_string",
+			[]*cel.Type{fieldType, cel.StringType}, fieldType,
+			cel.BinaryBinding(func(lhs, rhs ref.Val) ref.Val {
+				f, ok := lhs.(*fieldVal)
+				if !ok {
+					return types.NewErr("get: receiver is not a field")
+				}
+				p, ok := rhs.(types.String)
+				if !ok {
+					return types.NewErr("get: path must be string")
+				}
+				return f.get(string(p))
+			}))),
+		cel.Function("present", cel.MemberOverload("field_present",
+			[]*cel.Type{fieldType}, cel.BoolType,
+			cel.UnaryBinding(func(v ref.Val) ref.Val {
+				f, ok := v.(*fieldVal)
+				if !ok {
+					return types.NewErr("present: receiver is not a field")
+				}
+				return types.Bool(f.present())
+			}))),
+	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build cel env: %w", err)
 	}
 	return &Engine{env: env}, nil
 }
 
-func buildEnv() (*cel.Env, error) {
-	desc := Descriptor()
-
-	// Register celTool as an object type so `tool_calls` elements have validated
-	// fields (name/server/function/args), each of the opaque field type. This
-	// reflection registration and the opaque fieldType are the two declarations
-	// that can't be pure data; the descriptor mirrors their shape (the celTool
-	// TypeDecl and the "field" TypeDecl) and the parity test asserts agreement.
-	opts := []cel.EnvOption{
-		ext.NativeTypes(reflect.TypeFor[celTool](), ext.ParseStructTags(true)),
-	}
-
-	for _, v := range desc.Variables {
-		t, err := celType(v.Type)
-		if err != nil {
-			return nil, fmt.Errorf("variable %q: %w", v.Name, err)
-		}
-		opts = append(opts, cel.Variable(v.Name, t))
-	}
-
-	// Every declared overload must have a Go implementation in bindings; a
-	// missing key is a hard error so a declaration can't ship without behaviour.
-	// Method names avoid CEL's string built-ins (matches/contains/startsWith/
-	// endsWith), which cannot be re-overloaded onto a custom type.
-	for _, f := range desc.Functions {
-		b, ok := bindings[f.OverloadID]
-		if !ok {
-			return nil, fmt.Errorf("function %q: no binding for overload %q", f.Name, f.OverloadID)
-		}
-		ret, err := celType(f.ReturnType)
-		if err != nil {
-			return nil, fmt.Errorf("function %q return type: %w", f.Name, err)
-		}
-		args := make([]*cel.Type, 0, 1+len(f.Params))
-		if f.Member {
-			rt, err := celType(f.ReceiverType)
-			if err != nil {
-				return nil, fmt.Errorf("function %q receiver type: %w", f.Name, err)
+// matcher declares one `field.matchX(string) -> bool` overload bound to fn — the
+// shape every span-recording matcher shares. The overload id is derived from the
+// name (lowercased) so a new matcher is a single line above.
+func matcher(name string, fn func(*fieldVal, string) bool) cel.EnvOption {
+	overloadID := "field_" + strings.ToLower(name) + "_string"
+	return cel.Function(name, cel.MemberOverload(overloadID,
+		[]*cel.Type{fieldType, cel.StringType}, cel.BoolType,
+		cel.BinaryBinding(func(lhs, rhs ref.Val) ref.Val {
+			f, ok := lhs.(*fieldVal)
+			if !ok {
+				return types.NewErr("%s: receiver is not a field", name)
 			}
-			args = append(args, rt)
-		}
-		for _, p := range f.Params {
-			pt, err := celType(p.Type)
-			if err != nil {
-				return nil, fmt.Errorf("function %q param %q: %w", f.Name, p.Name, err)
+			s, ok := rhs.(types.String)
+			if !ok {
+				return types.NewErr("%s: argument must be string", name)
 			}
-			args = append(args, pt)
-		}
-
-		var binding cel.OverloadOpt
-		switch {
-		case b.binary != nil:
-			binding = cel.BinaryBinding(b.binary)
-		case b.unary != nil:
-			binding = cel.UnaryBinding(b.unary)
-		default:
-			return nil, fmt.Errorf("function %q: empty binding for overload %q", f.Name, f.OverloadID)
-		}
-
-		// All current overloads are member (receiver) overloads.
-		opts = append(opts, cel.Function(f.Name, cel.MemberOverload(f.OverloadID, args, ret, binding)))
-	}
-
-	env, err := cel.NewEnv(opts...)
-	if err != nil {
-		return nil, fmt.Errorf("build cel env: %w", err)
-	}
-	return env, nil
+			return types.Bool(fn(f, string(s)))
+		})))
 }
 
 // Compile type-checks an expression. Every expression — scope or detection — is

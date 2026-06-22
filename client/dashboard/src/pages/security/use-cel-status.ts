@@ -1,6 +1,5 @@
-import { useRiskDetectionDescriptor } from "@gram/client/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { buildCelEnv, checkExpr } from "./cel-env";
+import { useCelEngine } from "./use-cel-engine";
 
 const DEBOUNCE_MS = 150;
 
@@ -8,18 +7,15 @@ export type CelStatus =
   | { kind: "idle" }
   | { kind: "validating" }
   | { kind: "ok" }
-  | {
-      kind: "error";
-      message: string;
-      range?: { start: number; end: number };
-    };
+  | { kind: "error"; message: string };
 
-/** Live, client-side type-check for a single CEL expression. Builds a cel-js
- *  environment from the backend descriptor — the same source the Go engine
- *  compiles from — so a check here matches what the server accepts. Validation
- *  is instant (no round-trip); the server stays authoritative on the save path.
- */
+/** Live, client-side type-check for a single CEL expression, run through the
+ *  wasm engine — the same celenv the server compiles with, so a check here
+ *  matches what the server accepts. Validation is instant (no round-trip); the
+ *  server stays authoritative on the save path. If the engine fails to load,
+ *  don't block: the server validates on save. */
 export function useCelStatus(expr: string): CelStatus {
+  const engine = useCelEngine();
   const trimmed = expr.trim();
 
   // Short debounce only to coalesce rapid typing (avoids flashing errors mid
@@ -30,33 +26,22 @@ export function useCelStatus(expr: string): CelStatus {
     return () => clearTimeout(timer);
   }, [trimmed]);
 
-  const { data: descriptor, isError } = useRiskDetectionDescriptor();
-  const env = useMemo(
-    () => (descriptor ? buildCelEnv(descriptor) : null),
-    [descriptor],
-  );
-  const checked = useMemo(
-    () => (env && debounced ? checkExpr(env, debounced) : null),
-    [env, debounced],
-  );
+  const result = useMemo(() => {
+    if (engine.status !== "ready" || !debounced) return null;
+    // The engine asserts the expression is a bool predicate (celenv.Compile's
+    // OutputType == bool check), so an error here already covers "must be true
+    // or false" — no separate type assertion needed.
+    return engine.engine.compile(debounced);
+  }, [engine, debounced]);
 
   if (trimmed === "") return { kind: "idle" };
-  // Can't check until the descriptor loads. If it failed to load, don't block —
+  // Can't check until the engine loads. If it failed, don't block the author —
   // the server validates authoritatively on save.
-  if (!env) return isError ? { kind: "ok" } : { kind: "validating" };
+  if (engine.status === "error") return { kind: "ok" };
+  if (engine.status === "loading") return { kind: "validating" };
   // Settling while the debounce catches up to the latest input.
-  if (debounced !== trimmed || !checked) return { kind: "validating" };
+  if (debounced !== trimmed || !result) return { kind: "validating" };
 
-  if (!checked.valid) {
-    return { kind: "error", message: checked.message, range: checked.range };
-  }
-  // A detection/scope expression must be a predicate — mirrors celenv.Compile's
-  // OutputType == bool assertion so the editor and the save gate agree.
-  if (checked.type !== "bool") {
-    return {
-      kind: "error",
-      message: `Expression must be true or false, but it's a ${checked.type}.`,
-    };
-  }
+  if (!result.ok) return { kind: "error", message: result.error };
   return { kind: "ok" };
 }

@@ -4,11 +4,12 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import { useRiskDetectionDescriptor } from "@gram/client/react-query";
 import { Check, ChevronRight, CircleAlert, Loader2 } from "lucide-react";
-import { Suspense, useMemo, useState, type JSX } from "react";
+import { Suspense, useState, type JSX } from "react";
 import { useCelStatus, type CelStatus } from "./use-cel-status";
-import { descriptorToCelSchema } from "./cel-env";
+import { useCelEngine } from "./use-cel-engine";
+import { CelMatchPreview } from "./cel-match-preview";
+import type { CelReferenceData } from "./cel-wasm";
 import CelMonacoEditorLazy from "./cel-monaco-editor.lazy";
 
 /** A named, insertable CEL snippet shown beneath the field. */
@@ -92,10 +93,13 @@ function CelStatusLine({ status }: { status: CelStatus }): JSX.Element | null {
 }
 
 /** Collapsible reference listing the fields, matcher functions, and macros an
- *  author may use, sourced from the backend's `getDetectionDescriptor` — the
- *  same source the engine compiles from — so it never drifts. */
-export function CelReference(): JSX.Element {
-  const { data } = useRiskDetectionDescriptor();
+ *  author may use, sourced from the wasm engine's catalog (celenv.Describe()) —
+ *  the same engine that compiles expressions — so it never drifts. */
+export function CelReference({
+  reference,
+}: {
+  reference?: CelReferenceData;
+}): JSX.Element {
   const [open, setOpen] = useState(false);
 
   return (
@@ -109,21 +113,21 @@ export function CelReference(): JSX.Element {
       <CollapsibleContent className="mt-2 space-y-3">
         <ReferenceGroup
           title="Fields"
-          items={(data?.variables ?? []).map((v) => ({
+          items={(reference?.variables ?? []).map((v) => ({
             term: v.name,
-            note: `${v.displayType} — ${v.description}`,
+            note: `${v.type} — ${v.description}`,
           }))}
         />
         <ReferenceGroup
           title="Matchers"
-          items={(data?.functions ?? []).map((f) => ({
+          items={(reference?.matchers ?? []).map((f) => ({
             term: f.signature,
             note: f.description,
           }))}
         />
         <ReferenceGroup
           title="Macros"
-          items={(data?.macros ?? []).map((m) => ({
+          items={(reference?.macros ?? []).map((m) => ({
             term: m.signature,
             note: m.description,
           }))}
@@ -174,18 +178,8 @@ export function CelExpressionField({
   disabled?: boolean;
 }): JSX.Element {
   const status = useCelStatus(value);
-  const { data } = useRiskDetectionDescriptor();
-
-  // Project the descriptor into the Monaco completion shape (the same descriptor
-  // that drives validation). Memoized so the editor's completion-schema effect
-  // only fires when the descriptor changes.
-  const celSchema = useMemo(
-    () =>
-      data
-        ? descriptorToCelSchema(data)
-        : { variables: [], functions: [], macros: [] },
-    [data],
-  );
+  const engine = useCelEngine();
+  const ready = engine.status === "ready" ? engine.engine : null;
 
   return (
     <div className="space-y-2">
@@ -197,13 +191,12 @@ export function CelExpressionField({
         <CelMonacoEditorLazy
           value={value}
           onChange={onChange}
-          schema={celSchema}
+          engine={ready}
           errorMessage={
             status.kind === "error"
               ? formatCelError(status.message).message
               : null
           }
-          errorRange={status.kind === "error" ? (status.range ?? null) : null}
           disabled={disabled}
         />
       </Suspense>
@@ -211,6 +204,8 @@ export function CelExpressionField({
       <div className="flex min-h-4 items-start justify-between gap-2">
         <CelStatusLine status={status} />
       </div>
+
+      {ready && <CelMatchPreview expr={value} engine={ready} />}
 
       {examples && examples.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
@@ -229,7 +224,7 @@ export function CelExpressionField({
         </div>
       )}
 
-      <CelReference />
+      <CelReference reference={ready?.reference} />
     </div>
   );
 }

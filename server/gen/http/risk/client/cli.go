@@ -754,35 +754,6 @@ func BuildListRiskCategoriesPayload(riskListRiskCategoriesApikeyToken string, ri
 	return v, nil
 }
 
-// BuildGetDetectionDescriptorPayload builds the payload for the risk
-// getDetectionDescriptor endpoint from CLI flags.
-func BuildGetDetectionDescriptorPayload(riskGetDetectionDescriptorApikeyToken string, riskGetDetectionDescriptorSessionToken string, riskGetDetectionDescriptorProjectSlugInput string) (*risk.GetDetectionDescriptorPayload, error) {
-	var apikeyToken *string
-	{
-		if riskGetDetectionDescriptorApikeyToken != "" {
-			apikeyToken = &riskGetDetectionDescriptorApikeyToken
-		}
-	}
-	var sessionToken *string
-	{
-		if riskGetDetectionDescriptorSessionToken != "" {
-			sessionToken = &riskGetDetectionDescriptorSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if riskGetDetectionDescriptorProjectSlugInput != "" {
-			projectSlugInput = &riskGetDetectionDescriptorProjectSlugInput
-		}
-	}
-	v := &risk.GetDetectionDescriptorPayload{}
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
 // BuildCompileExprPayload builds the payload for the risk compileExpr endpoint
 // from CLI flags.
 func BuildCompileExprPayload(riskCompileExprExpr string, riskCompileExprApikeyToken string, riskCompileExprSessionToken string, riskCompileExprProjectSlugInput string) (*risk.CompileExprPayload, error) {
