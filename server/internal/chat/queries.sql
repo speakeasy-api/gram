@@ -6,23 +6,6 @@ WHERE t.chat_id = @chat_id
   AND t.deleted IS FALSE
 LIMIT 1;
 
--- name: ChatBacksLiveAssistantThread :one
--- True when the chat backs a thread of a live (non-deleted) assistant in the
--- given project. Project-scoped so a chat ID from another project falls through
--- to the project-scoped SoftDeleteChat no-op rather than leaking existence via a
--- 409. The assistant join matters because DeleteAssistant only soft-deletes the
--- assistant, leaving its threads behind — those orphaned threads must not keep
--- the backing chat undeletable forever.
-SELECT EXISTS (
-  SELECT 1
-  FROM assistant_threads t
-  JOIN assistants a ON a.id = t.assistant_id
-  WHERE t.chat_id = @chat_id
-    AND t.project_id = @project_id
-    AND t.deleted IS FALSE
-    AND a.deleted IS FALSE
-) AS backs_thread;
-
 -- name: UpsertChat :one
 INSERT INTO chats (
     id
@@ -743,26 +726,44 @@ UPDATE chat_user_feedback
 SET chat_resolution_id = @chat_resolution_id
 WHERE id = @id;
 
--- name: SoftDeleteChat :execrows
--- The NOT EXISTS anti-join makes the live-thread check atomic with the delete:
--- a chat that backs a live assistant thread is never soft-deleted, even if the
--- thread is created concurrently after a caller's separate pre-check. Returns
--- the affected row count so the caller can tell "blocked / not found" (0) from
--- "deleted" (1).
-UPDATE chats
-SET deleted_at = clock_timestamp()
-WHERE chats.id = @id
-  AND chats.project_id = @project_id
-  AND chats.deleted IS FALSE
-  AND NOT EXISTS (
-    SELECT 1
-    FROM assistant_threads t
-    JOIN assistants a ON a.id = t.assistant_id
-    WHERE t.chat_id = chats.id
-      AND t.project_id = @project_id
-      AND t.deleted IS FALSE
-      AND a.deleted IS FALSE
-  );
+-- name: SoftDeleteChat :one
+-- Soft-delete a chat unless it backs a live assistant thread, and report the
+-- disposition in a single statement so the caller never has to re-query (which
+-- would race with concurrent thread create/delete). `guard` snapshots whether
+-- the chat exists in-project, undeleted, and is thread-backed; `del` deletes it
+-- only when not thread-backed. Both CTEs share one statement snapshot, so the
+-- delete and the diagnosis are consistent: a live (existing, undeleted)
+-- thread-backed chat always yields backs_live_thread=true (caller returns 409)
+-- and is never silently reported as a successful no-op.
+WITH guard AS (
+  SELECT
+    c.id,
+    EXISTS (
+      SELECT 1
+      FROM assistant_threads t
+      JOIN assistants a ON a.id = t.assistant_id
+      WHERE t.chat_id = c.id
+        AND t.project_id = @project_id
+        AND t.deleted IS FALSE
+        AND a.deleted IS FALSE
+    ) AS backs_live_thread
+  FROM chats c
+  WHERE c.id = @id
+    AND c.project_id = @project_id
+    AND c.deleted IS FALSE
+),
+del AS (
+  UPDATE chats
+  SET deleted_at = clock_timestamp()
+  WHERE id = @id
+    AND project_id = @project_id
+    AND deleted IS FALSE
+    AND id IN (SELECT id FROM guard WHERE backs_live_thread IS FALSE)
+  RETURNING id
+)
+SELECT
+  EXISTS (SELECT 1 FROM del) AS deleted,
+  COALESCE((SELECT backs_live_thread FROM guard), FALSE)::boolean AS backs_live_thread;
 
 -- name: GetTopUsersByMessages :many
 SELECT

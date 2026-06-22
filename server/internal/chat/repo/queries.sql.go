@@ -28,36 +28,6 @@ func (q *Queries) AddUserFeedbackChatResolution(ctx context.Context, arg AddUser
 	return err
 }
 
-const chatBacksLiveAssistantThread = `-- name: ChatBacksLiveAssistantThread :one
-SELECT EXISTS (
-  SELECT 1
-  FROM assistant_threads t
-  JOIN assistants a ON a.id = t.assistant_id
-  WHERE t.chat_id = $1
-    AND t.project_id = $2
-    AND t.deleted IS FALSE
-    AND a.deleted IS FALSE
-) AS backs_thread
-`
-
-type ChatBacksLiveAssistantThreadParams struct {
-	ChatID    uuid.UUID
-	ProjectID uuid.UUID
-}
-
-// True when the chat backs a thread of a live (non-deleted) assistant in the
-// given project. Project-scoped so a chat ID from another project falls through
-// to the project-scoped SoftDeleteChat no-op rather than leaking existence via a
-// 409. The assistant join matters because DeleteAssistant only soft-deletes the
-// assistant, leaving its threads behind — those orphaned threads must not keep
-// the backing chat undeletable forever.
-func (q *Queries) ChatBacksLiveAssistantThread(ctx context.Context, arg ChatBacksLiveAssistantThreadParams) (bool, error) {
-	row := q.db.QueryRow(ctx, chatBacksLiveAssistantThread, arg.ChatID, arg.ProjectID)
-	var backs_thread bool
-	err := row.Scan(&backs_thread)
-	return backs_thread, err
-}
-
 const countChatMessages = `-- name: CountChatMessages :one
 SELECT COUNT(*) FROM chat_messages
 WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
@@ -2017,39 +1987,61 @@ func (q *Queries) SeedSoftDeleteAssistant(ctx context.Context, id uuid.UUID) err
 	return err
 }
 
-const softDeleteChat = `-- name: SoftDeleteChat :execrows
-UPDATE chats
-SET deleted_at = clock_timestamp()
-WHERE chats.id = $1
-  AND chats.project_id = $2
-  AND chats.deleted IS FALSE
-  AND NOT EXISTS (
-    SELECT 1
-    FROM assistant_threads t
-    JOIN assistants a ON a.id = t.assistant_id
-    WHERE t.chat_id = chats.id
-      AND t.project_id = $2
-      AND t.deleted IS FALSE
-      AND a.deleted IS FALSE
-  )
+const softDeleteChat = `-- name: SoftDeleteChat :one
+WITH guard AS (
+  SELECT
+    c.id,
+    EXISTS (
+      SELECT 1
+      FROM assistant_threads t
+      JOIN assistants a ON a.id = t.assistant_id
+      WHERE t.chat_id = c.id
+        AND t.project_id = $1
+        AND t.deleted IS FALSE
+        AND a.deleted IS FALSE
+    ) AS backs_live_thread
+  FROM chats c
+  WHERE c.id = $2
+    AND c.project_id = $1
+    AND c.deleted IS FALSE
+),
+del AS (
+  UPDATE chats
+  SET deleted_at = clock_timestamp()
+  WHERE id = $2
+    AND project_id = $1
+    AND deleted IS FALSE
+    AND id IN (SELECT id FROM guard WHERE backs_live_thread IS FALSE)
+  RETURNING id
+)
+SELECT
+  EXISTS (SELECT 1 FROM del) AS deleted,
+  COALESCE((SELECT backs_live_thread FROM guard), FALSE)::boolean AS backs_live_thread
 `
 
 type SoftDeleteChatParams struct {
-	ID        uuid.UUID
 	ProjectID uuid.UUID
+	ID        uuid.UUID
 }
 
-// The NOT EXISTS anti-join makes the live-thread check atomic with the delete:
-// a chat that backs a live assistant thread is never soft-deleted, even if the
-// thread is created concurrently after a caller's separate pre-check. Returns
-// the affected row count so the caller can tell "blocked / not found" (0) from
-// "deleted" (1).
-func (q *Queries) SoftDeleteChat(ctx context.Context, arg SoftDeleteChatParams) (int64, error) {
-	result, err := q.db.Exec(ctx, softDeleteChat, arg.ID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type SoftDeleteChatRow struct {
+	Deleted         bool
+	BacksLiveThread bool
+}
+
+// Soft-delete a chat unless it backs a live assistant thread, and report the
+// disposition in a single statement so the caller never has to re-query (which
+// would race with concurrent thread create/delete). `guard` snapshots whether
+// the chat exists in-project, undeleted, and is thread-backed; `del` deletes it
+// only when not thread-backed. Both CTEs share one statement snapshot, so the
+// delete and the diagnosis are consistent: a live (existing, undeleted)
+// thread-backed chat always yields backs_live_thread=true (caller returns 409)
+// and is never silently reported as a successful no-op.
+func (q *Queries) SoftDeleteChat(ctx context.Context, arg SoftDeleteChatParams) (SoftDeleteChatRow, error) {
+	row := q.db.QueryRow(ctx, softDeleteChat, arg.ProjectID, arg.ID)
+	var i SoftDeleteChatRow
+	err := row.Scan(&i.Deleted, &i.BacksLiveThread)
+	return i, err
 }
 
 const updateAIIntegrationConfigChatCursor = `-- name: UpdateAIIntegrationConfigChatCursor :exec
