@@ -4,33 +4,35 @@
 //
 //   - Scope predicates: decide whether a message is in scope for a policy.
 //     EvalScope returns the boolean verdict.
-//     e.g. `tools.exists(t, t.server.matchExact("shell"))`
+//     e.g. `tool_calls.exists(t, t.server.matchExact("shell"))`
 //
 //   - Detection matchers: the same boolean grammar, but EvalDetection also
 //     returns the SPANS that the matcher methods recorded — the substrings that
 //     matched, attributed to the field (tool call and JSON path) they matched
 //     in — so the dashboard can highlight them.
-//     e.g. `tools.exists(t, t.function.matchRegex("bash") &&
+//     e.g. `tool_calls.exists(t, t.function.matchRegex("bash") &&
 //     t.args.get("command").matchRegex("DROP TABLE"))`
 //
 // Fields:
 //
-//	kind       string                   message type (escape hatch; rarely needed)
-//	content    field                    the raw body, any message type
-//	prompt     field                    the body of a user_message (else empty)
-//	assistant  field                    the body of an assistant_message (else empty)
-//	output     field                    the body of a tool_response (else empty)
-//	tools      list of tool             the calls on a tool_request; each tool has
+//	kind         string                 message type (escape hatch; rarely needed)
+//	content      field                  the raw body, any message type
+//	prompt       field                  the body of a user_message (else empty)
+//	assistant    field                  the body of an assistant_message (else empty)
+//	tool_result  field                  the output of a tool_response (else empty)
+//	tool_calls   list of tool           the calls on a tool_request; each tool has
 //	                                     .name .server .function .args fields
 //
-// Body fields are auto-scoped: `prompt.matchText(x)` only matches user messages
-// because prompt is empty otherwise, so an explicit `kind ==` check is usually
-// unnecessary. tool_request calls are correlated: inside `tools.exists(t, ...)`,
+// tool_calls is plural (one request can fan out parallel calls); tool_result is
+// singular (one response message carries one tool's output). Body fields are
+// auto-scoped: `prompt.matchText(x)` only matches user messages because prompt is
+// empty otherwise, so an explicit `kind ==` check is usually unnecessary.
+// tool_request calls are correlated: inside `tool_calls.exists(t, ...)`,
 // `t.function` and `t.args` are bound to the SAME tool.
 //
 // JSON drill-down: any field's `.get(path)` returns a sub-field scoped to the
 // gjson value at path (`command`, `payload.sql`, `rows.0.ssn`), so every matcher
-// composes over it — `t.args.get("command").matchRegex(x)`, `output.get("error")`.
+// composes over it — `t.args.get("command").matchRegex(x)`, `tool_result.get("error")`.
 //
 // Authoring stays natural: conditions combine with `&&`/`||`, exactly what a
 // guided query builder emits. Spans are captured as a side effect of the matcher
@@ -61,7 +63,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 )
 
-// Tool is one tool call exposed to expressions as an element of `tools`.
+// Tool is one tool call exposed to expressions as an element of `tool_calls`.
 type Tool struct {
 	Name     string
 	Server   string
@@ -91,7 +93,7 @@ type Span struct {
 // construct one; they only call matcher methods on the bound fields.
 var fieldType = types.NewOpaqueType("celenv.field")
 
-// celTool is the registered object type for an element of `tools`. Its fields
+// celTool is the registered object type for an element of `tool_calls`. Its fields
 // are the matchable tool attributes; declaring them explicitly (rather than a
 // map(string, field)) gives compile-time validation, so `t.functionn` is a
 // compile error, not a silent runtime miss.
@@ -103,7 +105,7 @@ type celTool struct {
 }
 
 // toolTypeName is celTool's CEL type name (pkg alias + struct name), used to
-// declare the element type of the `tools` list.
+// declare the element type of the `tool_calls` list.
 const toolTypeName = "celenv.celTool"
 
 // Engine holds the compiled-once CEL environment.
@@ -123,7 +125,7 @@ func New() (*Engine, error) {
 func buildEnv() (*cel.Env, error) {
 	desc := Descriptor()
 
-	// Register celTool as an object type so `tools` elements have validated
+	// Register celTool as an object type so `tool_calls` elements have validated
 	// fields (name/server/function/args), each of the opaque field type. This
 	// reflection registration and the opaque fieldType are the two declarations
 	// that can't be pure data; the descriptor mirrors their shape (the celTool
@@ -264,12 +266,12 @@ func activation(msg Message, coll *collector) map[string]any {
 	}
 
 	return map[string]any{
-		"kind":      msg.Type,
-		"content":   body("content", true),
-		"prompt":    body("prompt", msg.Type == message.User),
-		"assistant": body("assistant", msg.Type == message.Assistant),
-		"output":    body("output", msg.Type == message.ToolResponse),
-		"tools":     tools,
+		"kind":        msg.Type,
+		"content":     body("content", true),
+		"prompt":      body("prompt", msg.Type == message.User),
+		"assistant":   body("assistant", msg.Type == message.Assistant),
+		"tool_result": body("tool_result", msg.Type == message.ToolResponse),
+		"tool_calls":  tools,
 	}
 }
 

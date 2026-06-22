@@ -113,8 +113,8 @@ func Descriptor() EnvDescriptor {
 			{Name: "content", Type: "field", DisplayType: "field", Description: "The message's raw text body, any message type."},
 			{Name: "prompt", Type: "field", DisplayType: "field", Description: "The body of a user_message (empty otherwise)."},
 			{Name: "assistant", Type: "field", DisplayType: "field", Description: "The body of an assistant_message (empty otherwise)."},
-			{Name: "output", Type: "field", DisplayType: "field", Description: "The body of a tool_response — the tool's output (empty otherwise)."},
-			{Name: "tools", Type: "list<" + toolTypeName + ">", DisplayType: "list(tool)", Description: "Tool calls on a tool_request. Iterate with tools.exists(t, ...); each tool has .name, .server, .function, .args (correlated to the same call)."},
+			{Name: "tool_result", Type: "field", DisplayType: "field", Description: "The output of a tool_response message (empty otherwise). Singular: one response message carries one tool's output."},
+			{Name: "tool_calls", Type: "list<" + toolTypeName + ">", DisplayType: "list(tool)", Description: "The tool calls on a tool_request message. Plural: one request can fan out parallel calls. Iterate with tool_calls.exists(t, ...); each tool has .name, .server, .function, .args (correlated to the same call)."},
 		},
 		// The match* family: span-recording matchers, one per strategy. The
 		// shared match prefix marks them as detectors (a true verdict records a
@@ -145,11 +145,11 @@ func Descriptor() EnvDescriptor {
 			},
 		},
 		Macros: []MacroDecl{
-			{Name: "exists", Signature: "list.exists(x, predicate) -> bool", Description: "True when the predicate holds for at least one element. The usual way to match tool calls: tools.exists(t, t.function.matchExact(\"bash\")).", ReturnsBool: true},
+			{Name: "exists", Signature: "list.exists(x, predicate) -> bool", Description: "True when the predicate holds for at least one element. The usual way to match tool calls: tool_calls.exists(t, t.function.matchExact(\"bash\")).", ReturnsBool: true},
 			{Name: "all", Signature: "list.all(x, predicate) -> bool", Description: "True when the predicate holds for every element (vacuously true when the list is empty).", ReturnsBool: true},
 			{Name: "exists_one", Signature: "list.exists_one(x, predicate) -> bool", Description: "True when the predicate holds for exactly one element.", ReturnsBool: true},
 			{Name: "has", Signature: "has(field) -> bool", Description: "True when a field/path is present and set, e.g. has(t.args.command). Use field.present() to also require non-empty.", ReturnsBool: true},
-			{Name: "map", Signature: "list.map(x, expr) -> list", Description: "Transforms each element to expr, yielding a new list; the 3-arg form list.map(x, predicate, expr) maps only elements matching predicate. Returns a list, not a verdict — feed it to another macro (e.g. tools.map(t, t.name).exists(...)).", ReturnsBool: false},
+			{Name: "map", Signature: "list.map(x, expr) -> list", Description: "Transforms each element to expr, yielding a new list; the 3-arg form list.map(x, predicate, expr) maps only elements matching predicate. Returns a list, not a verdict — feed it to another macro (e.g. tool_calls.map(t, t.name).exists(...)).", ReturnsBool: false},
 			{Name: "filter", Signature: "list.filter(x, predicate) -> list", Description: "Keeps the elements where the predicate holds, yielding a sublist. Returns a list, not a verdict — combine with another macro to reach a bool.", ReturnsBool: false},
 		},
 	}

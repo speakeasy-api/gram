@@ -56,7 +56,7 @@ func TestScope_ToolServer(t *testing.T) {
 	eng, err := celenv.New()
 	require.NoError(t, err)
 
-	prg, err := eng.Compile(`tools.exists(t, t.server.matchExact("shell"))`)
+	prg, err := eng.Compile(`tool_calls.exists(t, t.server.matchExact("shell"))`)
 	require.NoError(t, err)
 
 	in, err := eng.EvalScope(prg, toolReq(
@@ -83,11 +83,11 @@ func TestCompile_RejectsUnknownToolField(t *testing.T) {
 	eng, err := celenv.New()
 	require.NoError(t, err)
 
-	_, err = eng.Compile(`tools.exists(t, t.functionn.matchRegex("bash"))`)
+	_, err = eng.Compile(`tool_calls.exists(t, t.functionn.matchRegex("bash"))`)
 	require.Error(t, err)
 
 	// the real fields still compile
-	_, err = eng.Compile(`tools.exists(t, t.function.matchRegex("bash"))`)
+	_, err = eng.Compile(`tool_calls.exists(t, t.function.matchRegex("bash"))`)
 	require.NoError(t, err)
 }
 
@@ -96,7 +96,7 @@ func TestDetection_Glob(t *testing.T) {
 	eng, err := celenv.New()
 	require.NoError(t, err)
 
-	prg, err := eng.Compile(`tools.exists(t, t.function.matchGlob("*_exec"))`)
+	prg, err := eng.Compile(`tool_calls.exists(t, t.function.matchGlob("*_exec"))`)
 	require.NoError(t, err)
 
 	spans, matched, err := eng.EvalDetection(prg, toolReq(
@@ -117,7 +117,7 @@ func TestDetection_CorrelatedTwoSpans(t *testing.T) {
 	eng, err := celenv.New()
 	require.NoError(t, err)
 
-	prg, err := eng.Compile(`tools.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("DROP TABLE"))`)
+	prg, err := eng.Compile(`tool_calls.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("DROP TABLE"))`)
 	require.NoError(t, err)
 
 	spans, matched, err := eng.EvalDetection(prg, toolReq(
@@ -143,7 +143,7 @@ func TestDetection_CorrelationDoesNotCrossTools(t *testing.T) {
 	eng, err := celenv.New()
 	require.NoError(t, err)
 
-	prg, err := eng.Compile(`tools.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("DROP TABLE"))`)
+	prg, err := eng.Compile(`tool_calls.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("DROP TABLE"))`)
 	require.NoError(t, err)
 
 	spans, matched, err := eng.EvalDetection(prg, toolReq(
@@ -162,7 +162,7 @@ func TestDetection_JSONPathNested(t *testing.T) {
 	eng, err := celenv.New()
 	require.NoError(t, err)
 
-	prg, err := eng.Compile(`tools.exists(t, t.args.get("payload.sql").matchText("delete"))`)
+	prg, err := eng.Compile(`tool_calls.exists(t, t.args.get("payload.sql").matchText("delete"))`)
 	require.NoError(t, err)
 
 	spans, matched, err := eng.EvalDetection(prg, toolReq(
@@ -180,7 +180,7 @@ func TestDetection_JSONPathBracketSyntaxNormalized(t *testing.T) {
 	eng, err := celenv.New()
 	require.NoError(t, err)
 
-	prg, err := eng.Compile(`tools.exists(t, t.args.get("$.items[0].name").matchExact("danger"))`)
+	prg, err := eng.Compile(`tool_calls.exists(t, t.args.get("$.items[0].name").matchExact("danger"))`)
 	require.NoError(t, err)
 
 	_, matched, err := eng.EvalDetection(prg, toolReq(
@@ -195,7 +195,7 @@ func TestDetection_MissingPathNoMatch(t *testing.T) {
 	eng, err := celenv.New()
 	require.NoError(t, err)
 
-	prg, err := eng.Compile(`tools.exists(t, t.args.get("nope").present())`)
+	prg, err := eng.Compile(`tool_calls.exists(t, t.args.get("nope").present())`)
 	require.NoError(t, err)
 
 	_, matched, err := eng.EvalDetection(prg, toolReq(
@@ -212,14 +212,14 @@ func TestDetection_OutputJSON(t *testing.T) {
 	eng, err := celenv.New()
 	require.NoError(t, err)
 
-	prg, err := eng.Compile(`output.get("error").present()`)
+	prg, err := eng.Compile(`tool_result.get("error").present()`)
 	require.NoError(t, err)
 
 	spans, matched, err := eng.EvalDetection(prg, toolResp(`{"error":"permission denied"}`))
 	require.NoError(t, err)
 	require.True(t, matched)
 	require.Len(t, spans, 1)
-	require.Equal(t, "output", spans[0].Target)
+	require.Equal(t, "tool_result", spans[0].Target)
 	require.Equal(t, "error", spans[0].Path)
 	require.Equal(t, "permission denied", spans[0].Value)
 }
@@ -229,7 +229,7 @@ func TestDetection_OutputEmptyOnNonResponse(t *testing.T) {
 	eng, err := celenv.New()
 	require.NoError(t, err)
 
-	prg, err := eng.Compile(`output.present()`)
+	prg, err := eng.Compile(`tool_result.present()`)
 	require.NoError(t, err)
 
 	_, matched, err := eng.EvalDetection(prg, userMsg(`{"error":"x"}`)) // user msg, not a response
@@ -262,7 +262,7 @@ func TestDetection_AcrossAllTools(t *testing.T) {
 	require.NoError(t, err)
 
 	// filter (not exists) visits every tool, so every offending tool is captured.
-	prg, err := eng.Compile(`tools.filter(t, t.args.get("command").matchRegex("rm -rf")).size() > 0`)
+	prg, err := eng.Compile(`tool_calls.filter(t, t.args.get("command").matchRegex("rm -rf")).size() > 0`)
 	require.NoError(t, err)
 
 	spans, matched, err := eng.EvalDetection(prg, toolReq(
@@ -327,7 +327,7 @@ func TestDescriptorContent(t *testing.T) {
 	for _, v := range d.Variables {
 		vars[v.Name] = true
 	}
-	for _, want := range []string{"kind", "content", "prompt", "assistant", "output", "tools"} {
+	for _, want := range []string{"kind", "content", "prompt", "assistant", "tool_result", "tool_calls"} {
 		require.True(t, vars[want], "missing variable %q", want)
 	}
 

@@ -147,9 +147,9 @@ func TestDescriptor_EnvParity(t *testing.T) {
 			continue
 		}
 		for _, fld := range ty.Fields {
-			mustCompile(fmt.Sprintf("tools.exists(t, t.%s.present())", fld.Name))
+			mustCompile(fmt.Sprintf("tool_calls.exists(t, t.%s.present())", fld.Name))
 		}
-		mustReject(`tools.exists(t, t.definitelyNotAField.present())`)
+		mustReject(`tool_calls.exists(t, t.definitelyNotAField.present())`)
 	}
 }
 
