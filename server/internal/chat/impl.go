@@ -512,6 +512,19 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		lastMessageTimestamp = stats.LastMessageAt.Time.Format(time.RFC3339)
 	}
 
+	// Whole-generation trace-entry totals so the detail sheet's filter bar can
+	// show real counts even though messages are paginated. Scoped to the loaded
+	// generation to stay consistent with the (also generation-scoped) transcript
+	// and risk-windowed view.
+	totals, err := s.repo.GetChatEntryTotals(ctx, repo.GetChatEntryTotalsParams{
+		ChatID:     chat.ID,
+		ProjectID:  *authCtx.ProjectID,
+		Generation: generation,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat entry totals").LogError(ctx, s.logger)
+	}
+
 	var source *string
 	if isInitialLatest {
 		for i := len(latestPageRows) - 1; i >= 0; i-- {
@@ -540,11 +553,19 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		HasMoreBefore:        hasMoreBefore,
 		HasMoreAfter:         hasMoreAfter,
 		RiskSegments:         riskSegments,
-		TotalInputTokens:     nil,
-		TotalOutputTokens:    nil,
-		TotalTokens:          nil,
-		TotalCost:            nil,
-		AgentUsage:           nil,
+		Totals: &gen.ChatTotals{
+			Total:             totals.Total,
+			UserMessages:      totals.UserMessages,
+			AssistantMessages: totals.AssistantMessages,
+			ToolCalls:         totals.ToolCalls,
+			ToolResults:       totals.ToolResults,
+			RiskOnly:          totals.RiskFindings,
+		},
+		TotalInputTokens:  nil,
+		TotalOutputTokens: nil,
+		TotalTokens:       nil,
+		TotalCost:         nil,
+		AgentUsage:        nil,
 	}
 
 	if isInitialLatest {

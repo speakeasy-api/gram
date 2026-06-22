@@ -92,6 +92,10 @@ type Chat struct {
 	RiskSegments []*RiskSegment
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsage
+	// Whole-generation trace-entry totals for the returned generation. Because
+	// messages are paginated, callers must use these (not the length of
+	// `messages`) to render filter-bar counts.
+	Totals *ChatTotals
 	// The ID of the chat
 	ID string
 	// The title of the chat
@@ -191,6 +195,26 @@ type ChatOverview struct {
 	// (project-scoped, found=true). Only populated by endpoints that join risk
 	// data; absent elsewhere.
 	RiskFindingsCount *int
+}
+
+// Trace-entry counts across the entire returned generation, independent of
+// pagination. Each message maps to exactly one entry: a message carrying tool
+// calls counts as a tool call regardless of role, otherwise the role decides.
+type ChatTotals struct {
+	// Total trace entries in the generation (sum of the four entry-type counts;
+	// the `of N entries` denominator).
+	Total int64
+	// Number of user messages in the generation.
+	UserMessages int64
+	// Number of assistant messages (without tool calls) in the generation.
+	AssistantMessages int64
+	// Number of messages carrying tool calls in the generation.
+	ToolCalls int64
+	// Number of tool-result messages in the generation.
+	ToolResults int64
+	// Number of messages with an active (found, non-suppressed) risk finding in
+	// the generation.
+	RiskOnly int64
 }
 
 type ClaudeAgentUsage struct {

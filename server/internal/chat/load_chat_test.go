@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
@@ -42,6 +43,23 @@ func seedNMessages(t *testing.T, ctx context.Context, ti *chatTestInstance, chat
 		ids[i] = id
 	}
 	return ids
+}
+
+// seedTypedMessage inserts one message with an explicit role, generation, and
+// optional tool_calls JSON (nil = none), for exercising trace-entry
+// classification in the entry-total queries.
+func seedTypedMessage(t *testing.T, ctx context.Context, ti *chatTestInstance, chatID uuid.UUID, role string, generation int32, toolCalls []byte) {
+	t.Helper()
+	r := repo.New(ti.conn)
+	require.NoError(t, r.CreateChatMessageWithToolCalls(ctx, repo.CreateChatMessageWithToolCallsParams{
+		ChatID:     chatID,
+		ProjectID:  uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		Role:       role,
+		Content:    "test message",
+		ToolCalls:  toolCalls,
+		ToolCallID: pgtype.Text{String: "", Valid: false},
+		Generation: generation,
+	}))
 }
 
 // attachRiskTo creates a risk policy (once) and attaches an active finding to
@@ -248,4 +266,86 @@ func TestLoadChat_RiskOnly_Empty(t *testing.T) {
 	require.Empty(t, res.RiskSegments)
 	require.False(t, res.HasMoreBefore)
 	require.False(t, res.HasMoreAfter)
+}
+
+// TestLoadChat_EntryTotals verifies the whole-generation trace-entry totals are
+// independent of the paginated page and classify each message into exactly one
+// bucket: a message carrying a non-empty tool_calls array is a tool call
+// regardless of role, an empty array stays an assistant message, and system
+// rows are excluded from every bucket (and from the total).
+func TestLoadChat_EntryTotals(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, ctx, ti, "u", "", "totals chat")
+
+	toolCalls := []byte(`[{"id":"call_1","type":"function","function":{"name":"x"}}]`)
+	for range 3 {
+		seedTypedMessage(t, ctx, ti, chatID, "user", 0, nil)
+	}
+	seedTypedMessage(t, ctx, ti, chatID, "assistant", 0, nil)
+	seedTypedMessage(t, ctx, ti, chatID, "assistant", 0, []byte("[]")) // empty array → assistant
+	for range 4 {
+		seedTypedMessage(t, ctx, ti, chatID, "assistant", 0, toolCalls) // tool_calls → tool_call
+	}
+	seedTypedMessage(t, ctx, ti, chatID, "tool", 0, nil)
+	seedTypedMessage(t, ctx, ti, chatID, "system", 0, nil) // excluded from totals
+
+	// Tiny page so the loaded message slice can't accidentally satisfy the
+	// assertions — totals must come from the whole-generation query.
+	p := loadPayload(chatID.String())
+	p.Limit = 2
+	res, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, res.Messages, 2)
+
+	require.NotNil(t, res.Totals)
+	require.Equal(t, int64(3), res.Totals.UserMessages)
+	require.Equal(t, int64(2), res.Totals.AssistantMessages)
+	require.Equal(t, int64(4), res.Totals.ToolCalls)
+	require.Equal(t, int64(1), res.Totals.ToolResults)
+	require.Equal(t, int64(0), res.Totals.RiskOnly)
+	require.Equal(t, int64(10), res.Totals.Total, "total sums the four entry types and excludes the system row")
+	require.Equal(t, 11, res.NumMessages, "chat-wide message count still includes the system row")
+}
+
+// TestLoadChat_Totals_GenerationScoped verifies totals (entry types and risk)
+// describe the requested generation, not the whole chat, so a compacted chat's
+// latest generation doesn't inherit an older generation's findings.
+func TestLoadChat_Totals_GenerationScoped(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, ctx, ti, "u", "", "gen totals chat")
+
+	// Generation 0: 5 user messages, two carrying an active risk finding.
+	gen0 := seedNMessages(t, ctx, ti, chatID, 5) // SeedChatMessage → role=user, generation=0
+	attachRiskTo(t, ctx, ti, gen0[0], gen0[1])
+
+	// Generation 1 (the latest): 3 user messages, no findings.
+	for range 3 {
+		seedTypedMessage(t, ctx, ti, chatID, "user", 1, nil)
+	}
+
+	// Default load resolves the latest generation.
+	latest, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
+	require.NoError(t, err)
+	require.NotNil(t, latest.Totals)
+	require.Equal(t, 1, latest.Generation)
+	require.Equal(t, int64(3), latest.Totals.Total)
+	require.Equal(t, int64(3), latest.Totals.UserMessages)
+	require.Equal(t, int64(0), latest.Totals.RiskOnly, "findings live on gen 0, not the latest generation")
+
+	// Explicit older generation reports its own totals, findings included.
+	gen0Num := 0
+	p := loadPayload(chatID.String())
+	p.Generation = &gen0Num
+	older, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+	require.NotNil(t, older.Totals)
+	require.Equal(t, int64(5), older.Totals.Total)
+	require.Equal(t, int64(5), older.Totals.UserMessages)
+	require.Equal(t, int64(2), older.Totals.RiskOnly)
 }

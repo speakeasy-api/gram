@@ -67,6 +67,7 @@ import { TraceEntryIcon } from "./TraceEntryIcon";
 import {
   DEFAULT_ENABLED_ENTRY_TYPES,
   ENTRY_TYPE_META,
+  FILTERABLE_ENTRY_TYPES,
   type FilterableTraceEntryType,
   type ToolCall,
   type TraceEntryType,
@@ -1580,16 +1581,38 @@ function ChatDetailPanel({
   const duration = Math.round(
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
   );
-  const entryTypeCounts = getEntryTypeCounts(chatMessages);
-  const visibleEntryCount = getVisibleMessages({
-    messages: chatMessages,
-    enabledEntryTypes,
-    riskOnly: false,
-    riskResultsByMessage,
-  }).length;
-  // Chat-wide risk count (the full result set is loaded up-front), so the
-  // Risk-only toggle stays enabled even before any risky message is paged in.
-  const riskEntryCount = riskResultsByMessage.size;
+  // Filter-bar counts come from the server's whole-generation totals: messages
+  // are paginated, so counting the loaded page understates them (it would read
+  // "Showing 150 of 150" on a 19k-message chat). Fall back to the loaded page
+  // only if a response predates the totals field.
+  const totals = chat.totals;
+  const entryTypeCounts: Record<FilterableTraceEntryType, number> = totals
+    ? {
+        user: totals.userMessages,
+        assistant: totals.assistantMessages,
+        tool_call: totals.toolCalls,
+        tool_result: totals.toolResults,
+      }
+    : getEntryTypeCounts(chatMessages);
+  // Denominator sums the four entry types (system rows are excluded from both
+  // counts, so the fallback can't use chatMessages.length, which includes them).
+  const totalEntryCount = totals
+    ? totals.total
+    : FILTERABLE_ENTRY_TYPES.reduce(
+        (sum, type) => sum + entryTypeCounts[type],
+        0,
+      );
+  // "Showing X of Y entries": X is the sum of the currently-enabled types'
+  // totals, so toggling a type off subtracts its whole-generation count.
+  const visibleEntryCount = FILTERABLE_ENTRY_TYPES.reduce(
+    (sum, type) =>
+      enabledEntryTypes.includes(type) ? sum + entryTypeCounts[type] : sum,
+    0,
+  );
+  // Generation-scoped risk count, consistent with the risk-windowed transcript
+  // (which loads the same generation). Keeps the Risk-only toggle enabled before
+  // any risky message is paged in.
+  const riskEntryCount = totals ? totals.riskOnly : riskResultsByMessage.size;
 
   return (
     <div className="bg-background flex h-full flex-col">
@@ -1806,7 +1829,7 @@ function ChatDetailPanel({
           <EntryTypeFilterBar
             value={enabledEntryTypes}
             counts={entryTypeCounts}
-            totalCount={chatMessages.length}
+            totalCount={totalEntryCount}
             visibleCount={visibleEntryCount}
             onChange={setEnabledEntryTypes}
             riskOnly={riskOnly}

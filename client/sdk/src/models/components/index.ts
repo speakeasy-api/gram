@@ -34,6 +34,7 @@ export * from "./chat.js";
 export * from "./chatmessage.js";
 export * from "./chatoverview.js";
 export * from "./chatsummary.js";
+export * from "./chattotals.js";
 export * from "./claudeagentusage.js";
 export * from "./claudehookpayload.js";
 export * from "./claudehookresult.js";

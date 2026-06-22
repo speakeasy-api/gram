@@ -1617,3 +1617,21 @@ func unmarshalClaudeToolUsageResponseBodyToChatClaudeToolUsage(v *ClaudeToolUsag
 
 	return res
 }
+
+// unmarshalChatTotalsResponseBodyToChatChatTotals builds a value of type
+// *chat.ChatTotals from a value of type *ChatTotalsResponseBody.
+func unmarshalChatTotalsResponseBodyToChatChatTotals(v *ChatTotalsResponseBody) *chat.ChatTotals {
+	if v == nil {
+		return nil
+	}
+	res := &chat.ChatTotals{
+		Total:             *v.Total,
+		UserMessages:      *v.UserMessages,
+		AssistantMessages: *v.AssistantMessages,
+		ToolCalls:         *v.ToolCalls,
+		ToolResults:       *v.ToolResults,
+		RiskOnly:          *v.RiskOnly,
+	}
+
+	return res
+}

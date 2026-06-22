@@ -65,6 +65,10 @@ type LoadChatResponseBody struct {
 	RiskSegments []*RiskSegmentResponseBody `form:"risk_segments,omitempty" json:"risk_segments,omitempty" xml:"risk_segments,omitempty"`
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsageResponseBody `form:"agent_usage,omitempty" json:"agent_usage,omitempty" xml:"agent_usage,omitempty"`
+	// Whole-generation trace-entry totals for the returned generation. Because
+	// messages are paginated, callers must use these (not the length of
+	// `messages`) to render filter-bar counts.
+	Totals *ChatTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
 	// The ID of the chat
 	ID string `form:"id" json:"id" xml:"id"`
 	// The title of the chat
@@ -1350,6 +1354,24 @@ type ClaudeToolUsageResponseBody struct {
 	ResultSizeBytes int64 `form:"result_size_bytes" json:"result_size_bytes" xml:"result_size_bytes"`
 }
 
+// ChatTotalsResponseBody is used to define fields on response body types.
+type ChatTotalsResponseBody struct {
+	// Total trace entries in the generation (sum of the four entry-type counts;
+	// the `of N entries` denominator).
+	Total int64 `form:"total" json:"total" xml:"total"`
+	// Number of user messages in the generation.
+	UserMessages int64 `form:"user_messages" json:"user_messages" xml:"user_messages"`
+	// Number of assistant messages (without tool calls) in the generation.
+	AssistantMessages int64 `form:"assistant_messages" json:"assistant_messages" xml:"assistant_messages"`
+	// Number of messages carrying tool calls in the generation.
+	ToolCalls int64 `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
+	// Number of tool-result messages in the generation.
+	ToolResults int64 `form:"tool_results" json:"tool_results" xml:"tool_results"`
+	// Number of messages with an active (found, non-suppressed) risk finding in
+	// the generation.
+	RiskOnly int64 `form:"risk_only" json:"risk_only" xml:"risk_only"`
+}
+
 // NewListChatsResponseBody builds the HTTP response body from the result of
 // the "listChats" endpoint of the "chat" service.
 func NewListChatsResponseBody(res *chat.ListChatsResult) *ListChatsResponseBody {
@@ -1418,6 +1440,9 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 	}
 	if res.AgentUsage != nil {
 		body.AgentUsage = marshalChatAgentUsageToAgentUsageResponseBody(res.AgentUsage)
+	}
+	if res.Totals != nil {
+		body.Totals = marshalChatChatTotalsToChatTotalsResponseBody(res.Totals)
 	}
 	return body
 }

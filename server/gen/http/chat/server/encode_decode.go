@@ -1685,3 +1685,21 @@ func marshalChatClaudeToolUsageToClaudeToolUsageResponseBody(v *chat.ClaudeToolU
 
 	return res
 }
+
+// marshalChatChatTotalsToChatTotalsResponseBody builds a value of type
+// *ChatTotalsResponseBody from a value of type *chat.ChatTotals.
+func marshalChatChatTotalsToChatTotalsResponseBody(v *chat.ChatTotals) *ChatTotalsResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ChatTotalsResponseBody{
+		Total:             v.Total,
+		UserMessages:      v.UserMessages,
+		AssistantMessages: v.AssistantMessages,
+		ToolCalls:         v.ToolCalls,
+		ToolResults:       v.ToolResults,
+		RiskOnly:          v.RiskOnly,
+	}
+
+	return res
+}

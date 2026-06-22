@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: f2a9d26a7c613e173e6a2519030f6983
+  docChecksum: 523eb3751b3f317da9bda9a5afaa72cf
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -129,7 +129,7 @@ trackedFiles:
   docs/models/components/challengeresolutionresolutiontype.md:
     last_write_checksum: sha1:16b41a0d2e48e14d61e82ae01899bb393db826c3
   docs/models/components/chat.md:
-    last_write_checksum: sha1:ccfd9a02c366e2b1028ce416e433190cd5a5c482
+    last_write_checksum: sha1:3a8c442fa3603f0cdbd01ae298e82a6b3606a304
   docs/models/components/chatmessage.md:
     last_write_checksum: sha1:a98ee749dfd3ade4174ee10a8114ed2302cd1354
   docs/models/components/chatoverview.md:
@@ -138,6 +138,8 @@ trackedFiles:
     last_write_checksum: sha1:19859afeae623790ebc81cfd539c4622cda98255
   docs/models/components/chatsummarystatus.md:
     last_write_checksum: sha1:543bad7e7c81392fa16e4f5616d9b8f95dfb3f99
+  docs/models/components/chattotals.md:
+    last_write_checksum: sha1:c8d6afaecf49ad8bfa893ab4584cab0e560e6989
   docs/models/components/claudeagentusage.md:
     last_write_checksum: sha1:5af88c62df60a4bbdaeb82198e9ed5e5cdbd4703
   docs/models/components/claudehookpayload.md:
@@ -4269,13 +4271,15 @@ trackedFiles:
   src/models/components/challengeresolution.ts:
     last_write_checksum: sha1:3eee5fef5022dacd6465f10a32bc64d2c8a5d42d
   src/models/components/chat.ts:
-    last_write_checksum: sha1:376b96db824b863cf66d14b3e6e0ca9f97990ca0
+    last_write_checksum: sha1:ccb1bbc5b0a7a398c170a8b863ca671ef79874f9
   src/models/components/chatmessage.ts:
     last_write_checksum: sha1:be8ec86f472346983483df6e90d25a3b75fee7ff
   src/models/components/chatoverview.ts:
     last_write_checksum: sha1:3b6ac49ef8daabc38bf720571294d2f18592aae4
   src/models/components/chatsummary.ts:
     last_write_checksum: sha1:aff9564e3cb1d2ecaa44e06c99bc75b4fc5d7115
+  src/models/components/chattotals.ts:
+    last_write_checksum: sha1:c94a1f8c89b5516967861fee79baddc928a12a27
   src/models/components/claudeagentusage.ts:
     last_write_checksum: sha1:a3e1cb37dc3d05e4e493b28765eb8cc9535a03b3
   src/models/components/claudehookpayload.ts:
@@ -4521,7 +4525,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:c4ed96cdf785e843aa50652428ac2986f0d3e273
+    last_write_checksum: sha1:09c08939298d7c599f0b120f5ed1fd02ec6a5264
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140

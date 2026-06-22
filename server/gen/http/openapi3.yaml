@@ -35235,6 +35235,8 @@ components:
                     type: integer
                     description: Total tokens (input + output) used in this chat
                     format: int64
+                totals:
+                    $ref: '#/components/schemas/ChatTotals'
                 updated_at:
                     type: string
                     description: When the chat was last updated.
@@ -35431,6 +35433,41 @@ components:
                 - total_input_tokens
                 - total_output_tokens
                 - total_tokens
+        ChatTotals:
+            type: object
+            properties:
+                assistant_messages:
+                    type: integer
+                    description: Number of assistant messages (without tool calls) in the generation.
+                    format: int64
+                risk_only:
+                    type: integer
+                    description: Number of messages with an active (found, non-suppressed) risk finding in the generation.
+                    format: int64
+                tool_calls:
+                    type: integer
+                    description: Number of messages carrying tool calls in the generation.
+                    format: int64
+                tool_results:
+                    type: integer
+                    description: Number of tool-result messages in the generation.
+                    format: int64
+                total:
+                    type: integer
+                    description: Total trace entries in the generation (sum of the four entry-type counts; the `of N entries` denominator).
+                    format: int64
+                user_messages:
+                    type: integer
+                    description: Number of user messages in the generation.
+                    format: int64
+            description: 'Trace-entry counts across the entire returned generation, independent of pagination. Each message maps to exactly one entry: a message carrying tool calls counts as a tool call regardless of role, otherwise the role decides.'
+            required:
+                - total
+                - user_messages
+                - assistant_messages
+                - tool_calls
+                - tool_results
+                - risk_only
         ClaudeAgentUsage:
             type: object
             properties:

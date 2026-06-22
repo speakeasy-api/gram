@@ -65,6 +65,10 @@ type LoadChatResponseBody struct {
 	RiskSegments []*RiskSegmentResponseBody `form:"risk_segments,omitempty" json:"risk_segments,omitempty" xml:"risk_segments,omitempty"`
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsageResponseBody `form:"agent_usage,omitempty" json:"agent_usage,omitempty" xml:"agent_usage,omitempty"`
+	// Whole-generation trace-entry totals for the returned generation. Because
+	// messages are paginated, callers must use these (not the length of
+	// `messages`) to render filter-bar counts.
+	Totals *ChatTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
 	// The ID of the chat
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The title of the chat
@@ -1350,6 +1354,24 @@ type ClaudeToolUsageResponseBody struct {
 	ResultSizeBytes *int64 `form:"result_size_bytes,omitempty" json:"result_size_bytes,omitempty" xml:"result_size_bytes,omitempty"`
 }
 
+// ChatTotalsResponseBody is used to define fields on response body types.
+type ChatTotalsResponseBody struct {
+	// Total trace entries in the generation (sum of the four entry-type counts;
+	// the `of N entries` denominator).
+	Total *int64 `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
+	// Number of user messages in the generation.
+	UserMessages *int64 `form:"user_messages,omitempty" json:"user_messages,omitempty" xml:"user_messages,omitempty"`
+	// Number of assistant messages (without tool calls) in the generation.
+	AssistantMessages *int64 `form:"assistant_messages,omitempty" json:"assistant_messages,omitempty" xml:"assistant_messages,omitempty"`
+	// Number of messages carrying tool calls in the generation.
+	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+	// Number of tool-result messages in the generation.
+	ToolResults *int64 `form:"tool_results,omitempty" json:"tool_results,omitempty" xml:"tool_results,omitempty"`
+	// Number of messages with an active (found, non-suppressed) risk finding in
+	// the generation.
+	RiskOnly *int64 `form:"risk_only,omitempty" json:"risk_only,omitempty" xml:"risk_only,omitempty"`
+}
+
 // NewGenerateTitleRequestBody builds the HTTP request body from the payload of
 // the "generateTitle" endpoint of the "chat" service.
 func NewGenerateTitleRequestBody(p *chat.GenerateTitlePayload) *GenerateTitleRequestBody {
@@ -1578,6 +1600,9 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 	}
 	if body.AgentUsage != nil {
 		v.AgentUsage = unmarshalAgentUsageResponseBodyToChatAgentUsage(body.AgentUsage)
+	}
+	if body.Totals != nil {
+		v.Totals = unmarshalChatTotalsResponseBodyToChatChatTotals(body.Totals)
 	}
 
 	return v
@@ -2430,6 +2455,11 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	}
 	if body.AgentUsage != nil {
 		if err2 := ValidateAgentUsageResponseBody(body.AgentUsage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Totals != nil {
+		if err2 := ValidateChatTotalsResponseBody(body.Totals); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -4100,6 +4130,30 @@ func ValidateClaudeToolUsageResponseBody(body *ClaudeToolUsageResponseBody) (err
 	}
 	if body.ResultSizeBytes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("result_size_bytes", "body"))
+	}
+	return
+}
+
+// ValidateChatTotalsResponseBody runs the validations defined on
+// ChatTotalsResponseBody
+func ValidateChatTotalsResponseBody(body *ChatTotalsResponseBody) (err error) {
+	if body.Total == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
+	}
+	if body.UserMessages == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_messages", "body"))
+	}
+	if body.AssistantMessages == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assistant_messages", "body"))
+	}
+	if body.ToolCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
+	}
+	if body.ToolResults == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_results", "body"))
+	}
+	if body.RiskOnly == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("risk_only", "body"))
 	}
 	return
 }
