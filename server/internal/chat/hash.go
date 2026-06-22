@@ -106,12 +106,27 @@ func toolCallIDsFromStoredJSON(toolCallsJSON []byte) []string {
 // tool_call IDs only, so capture and replay do not need byte-identical
 // JSON serialization.
 func assistantToolCallsJSON(msg or.ChatMessages) ([]byte, error) {
-	if msg.Type != or.ChatMessagesTypeAssistant {
+	out := assistantToolCalls(msg)
+	if len(out) == 0 {
 		return nil, nil
+	}
+	bs, err := json.Marshal(out)
+	if err != nil {
+		return nil, fmt.Errorf("marshal assistant tool calls: %w", err)
+	}
+	return bs, nil
+}
+
+// assistantToolCalls extracts an incoming assistant message's tool_calls in the
+// openrouter shape. Returns nil for non-assistant messages or assistants
+// without tool_calls.
+func assistantToolCalls(msg or.ChatMessages) []openrouter.ToolCall {
+	if msg.Type != or.ChatMessagesTypeAssistant {
+		return nil
 	}
 	calls := msg.ChatAssistantMessage.GetToolCalls()
 	if len(calls) == 0 {
-		return nil, nil
+		return nil
 	}
 	out := make([]openrouter.ToolCall, len(calls))
 	for i, c := range calls {
@@ -125,9 +140,5 @@ func assistantToolCallsJSON(msg or.ChatMessages) ([]byte, error) {
 			},
 		}
 	}
-	bs, err := json.Marshal(out)
-	if err != nil {
-		return nil, fmt.Errorf("marshal assistant tool calls: %w", err)
-	}
-	return bs, nil
+	return out
 }

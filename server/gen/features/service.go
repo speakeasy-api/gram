@@ -67,6 +67,9 @@ type GetProductFeaturesResult struct {
 	SsoEnabled bool
 	// Whether SCIM/directory sync setup is enabled for the organization
 	ScimEnabled bool
+	// Whether observability mode is enabled, making generated hook plugins fully
+	// non-blocking
+	ObservabilityModeEnabled bool
 }
 
 // SetProductFeaturePayload is the payload type of the features service

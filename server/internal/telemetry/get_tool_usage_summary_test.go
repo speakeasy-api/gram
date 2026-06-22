@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -424,13 +425,18 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 	require.NoError(t, err)
 
 	spanID := uuid.New().String()[:16]
+	// Each hosted tool call is one gateway.toolCall span, so it carries a unique
+	// trace_id (recorded by ToolProxy.Do). trace_id is FixedString(32) — strip the
+	// UUID hyphens to get 32 hex chars. This is what lands the event in the
+	// trace_summaries materialized view that now backs the tool-usage queries.
+	traceID := strings.ReplaceAll(uuid.New().String(), "-", "")
 	err = ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
 		ID:                   uuid.New().String(),
 		TimeUnixNano:         p.timestamp.UnixNano(),
 		ObservedTimeUnixNano: p.timestamp.UnixNano(),
 		SeverityText:         nil,
 		Body:                 "hosted tool event",
-		TraceID:              nil,
+		TraceID:              &traceID,
 		SpanID:               &spanID,
 		Attributes:           string(attrsJSON),
 		ResourceAttributes:   "{}",

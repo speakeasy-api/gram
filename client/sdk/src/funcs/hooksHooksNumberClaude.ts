@@ -103,6 +103,11 @@ async function $do(
       explode: false,
       charEncoding: "none",
     }),
+    "Idempotency-Key": encodeSimple(
+      "Idempotency-Key",
+      payload["Idempotency-Key"],
+      { explode: false, charEncoding: "none" },
+    ),
     "X-Gram-Hook-Hostname": encodeSimple(
       "X-Gram-Hook-Hostname",
       payload["X-Gram-Hook-Hostname"],

@@ -108,6 +108,25 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     user_email SimpleAggregateFunction(any, String),
     hook_source SimpleAggregateFunction(any, String),
     skill_name SimpleAggregateFunction(any, String),
+    -- Tool-usage classification + identity cols, used to serve the unified Tool
+    -- Logs page (hosted MCP / shadow MCP / skill / local target classification and
+    -- multi-identity user resolution) directly from this MV instead of scanning raw
+    -- telemetry_logs. toolset_slug/external_user_id/user_id are materialized columns
+    -- on telemetry_logs; mcp_match/mcp_server_url are read from attributes.
+    --
+    -- These attributes are only present on a subset of a trace's rows (e.g. Cursor
+    -- MCP traces carry gram.mcp.server_url/match only on the before/after MCP
+    -- execution rows, while sibling rows in the same trace carry empty strings).
+    -- Using any() lets ClickHouse persist or merge an empty string from a sibling
+    -- row/part instead of the populated value, which would randomly misclassify a
+    -- trace as shadow/local or drop its user identity. max() ensures empty strings
+    -- ("") always lose to non-empty values during part merges, mirroring the
+    -- block_reason treatment below.
+    toolset_slug SimpleAggregateFunction(max, String),
+    external_user_id SimpleAggregateFunction(max, String),
+    user_id SimpleAggregateFunction(max, String),
+    mcp_match SimpleAggregateFunction(max, String),
+    mcp_server_url SimpleAggregateFunction(max, String),
 
     -- Aggregates
     start_time_unix_nano SimpleAggregateFunction(min, Int64),
@@ -153,6 +172,11 @@ SELECT
     any(user_email) AS user_email,
     any(hook_source) AS hook_source,
     any(skill_name) AS skill_name,
+    anyIf(toolset_slug, toolset_slug != '') AS toolset_slug,
+    anyIf(external_user_id, external_user_id != '') AS external_user_id,
+    anyIf(user_id, user_id != '') AS user_id,
+    anyIf(toString(attributes.gram.mcp.match), toString(attributes.gram.mcp.match) != '') AS mcp_match,
+    anyIf(toString(attributes.gram.mcp.server_url), toString(attributes.gram.mcp.server_url) != '') AS mcp_server_url,
     min(time_unix_nano) AS start_time_unix_nano,
     toUInt64(count(*)) AS log_count,
     anyIfState(
@@ -360,6 +384,8 @@ SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated cost/token/usage metrics broken down by user-identity and request dimensions, powering the generic telemetry.query analytics endpoint.';
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribute_metrics_summaries AS
+-- Cutoff separates live MV ingestion from one-time historical backfill.
+WITH toUnixTimestamp64Nano(toDateTime64('2026-06-20 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano
 SELECT
     gram_project_id,
     toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
@@ -397,6 +423,11 @@ SELECT
     -- Tool call count
     countIfState(startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS total_tool_calls
 FROM telemetry_logs
+WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
+  AND (
+    startsWith(gram_urn, 'claude-code:usage') OR
+    startsWith(gram_urn, 'codex:usage') OR
+    startsWith(gram_urn, 'cursor:usage'))
 GROUP BY
     gram_project_id,
     time_bucket,

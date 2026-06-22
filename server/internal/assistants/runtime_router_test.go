@@ -31,10 +31,11 @@ type stubRuntimeBackend struct {
 	imageRef   string
 	reusesIdle bool
 
-	ensureRecords []assistantRuntimeRecord
-	runTurnCount  int
-	stopCount     int
-	reapCount     int
+	ensureRecords           []assistantRuntimeRecord
+	runTurnCount            int
+	stopCount               int
+	reapCount               int
+	reapStoppedMachineCount int
 }
 
 func (s *stubRuntimeBackend) Backend() string               { return s.name }
@@ -52,7 +53,7 @@ func (s *stubRuntimeBackend) RecycleImage(_ context.Context, _ assistantRuntimeR
 	return RuntimeBackendRecycleResult{Recycled: false, BackendMetadataJSON: nil}, nil
 }
 
-func (s *stubRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord, _ uuid.UUID, _ string, _ string, _ string) error {
+func (s *stubRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord, _ uuid.UUID, _ string, _ string, _ string, _ []runtimeMCPServer) error {
 	s.runTurnCount++
 	return nil
 }
@@ -68,6 +69,11 @@ func (s *stubRuntimeBackend) Stop(_ context.Context, _ assistantRuntimeRecord) e
 
 func (s *stubRuntimeBackend) Reap(_ context.Context, _ assistantRuntimeRecord) error {
 	s.reapCount++
+	return nil
+}
+
+func (s *stubRuntimeBackend) ReapStoppedMachine(_ context.Context, _ assistantRuntimeRecord) error {
+	s.reapStoppedMachineCount++
 	return nil
 }
 

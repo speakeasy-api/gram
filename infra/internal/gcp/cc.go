@@ -44,7 +44,7 @@ func (c *ConfigConnectorPubSub) Generate(ctx context.Context) error {
 		return fmt.Errorf("descriptor set is empty: refusing to generate an empty pubsub topology")
 	}
 
-	desiredTopics, desiredSubs, err := discoverPubSubFromDescriptor(c.descriptors)
+	desiredTopics, desiredSubs, err := DiscoverPubSub(c.descriptors)
 	if err != nil {
 		return fmt.Errorf("discover pubsub topology: %w", err)
 	}

@@ -13,22 +13,17 @@ consumer that wires up handlers owns the span.
 
 from __future__ import annotations
 
-from typing import TypeVar
-
 from google.protobuf.message import Message
+from gram_infra.pubsub.subscriber import MessageCallback, MessageMetadata
 from opentelemetry import propagate, trace
 from opentelemetry.trace import StatusCode
 
-from gram_infra.pubsub.subscriber import MessageCallback, MessageMetadata
-
-from .. import attr
-
-M = TypeVar("M", bound=Message)
+from pystreams import attr
 
 _tracer = trace.get_tracer("github.com/speakeasy-api/gram/pystreams")
 
 
-def traced(
+def traced[M: Message](
     callback: MessageCallback[M],
     *,
     topic_proto_name: str,

@@ -1018,7 +1018,7 @@ func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the Cursor config uses ${env:ANALYTICS_API_KEY} for the public server.
-	cursorMCP := mock.lastPushedFiles["public-test-cursor/mcp.json"]
+	cursorMCP := mock.lastPushedFiles["cursor-plugins/public-test-cursor/mcp.json"]
 	require.NotNil(t, cursorMCP)
 
 	var cursorConfig struct {
@@ -1107,7 +1107,7 @@ func TestPluginsService_PublishPlugins_SkipsUserEnvConfigsWithoutHeaderName(t *t
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	cursorMCP := mock.lastPushedFiles["headerless-cursor/mcp.json"]
+	cursorMCP := mock.lastPushedFiles["cursor-plugins/headerless-cursor/mcp.json"]
 	require.NotNil(t, cursorMCP)
 
 	var cursorConfig struct {
@@ -1167,7 +1167,7 @@ func TestPluginsService_PublishPlugins_SkipsDisabledMCPToolsets(t *testing.T) {
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	cursorMCP := mock.lastPushedFiles["mixed-cursor/mcp.json"]
+	cursorMCP := mock.lastPushedFiles["cursor-plugins/mixed-cursor/mcp.json"]
 	require.NotNil(t, cursorMCP)
 
 	var cursorConfig struct {
@@ -1246,9 +1246,9 @@ func TestPluginsService_PublishPlugins_EmitsObservabilityPlugin(t *testing.T) {
 	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hooks.json"], "claude observability hooks/hooks.json missing")
 	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hook.sh"], "claude observability hooks/hook.sh missing")
 
-	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/.cursor-plugin/plugin.json"], "cursor observability plugin.json missing")
-	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hooks/hooks.json"], "cursor observability hooks/hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/.cursor-plugin/plugin.json"], "cursor observability plugin.json missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/hooks.json"], "cursor observability hooks/hooks.json missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
 }
 
 // PublishPlugins must succeed when the org has no custom plugins — the
@@ -1266,7 +1266,7 @@ func TestPluginsService_PublishPlugins_ObservabilityOnly(t *testing.T) {
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
 
 	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hook.sh"], "claude observability hooks/hook.sh missing")
-	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles["cursor-plugins/"+cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
 
 	for _, p := range []struct {
 		path     string
@@ -1328,7 +1328,7 @@ func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
 	// Both endpoints accept Gram-Key (Cursor requires it via Security; Claude
 	// accepts it as an optional header for plugin-driven attribution).
-	for _, path := range []string{claudeObservability + "/hooks/hook.sh", cursorObservability + "/hooks/hook.sh"} {
+	for _, path := range []string{claudeObservability + "/hooks/hook.sh", "cursor-plugins/" + cursorObservability + "/hooks/hook.sh"} {
 		script := string(mock.lastPushedFiles[path])
 		require.NotEmpty(t, script, path+" missing")
 		require.Contains(t, script, "Gram-Key: "+hooksKeyPrefix, "%s does not embed hooks key in Gram-Key", path)

@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.CodexHookResult, error) {
@@ -52,6 +53,14 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 	logger.InfoContext(ctx, "codex hook received",
 		attr.SlogEvent("codex_hook"),
 	)
+
+	// Claim the per-invocation idempotency token before persistence. A retry
+	// re-sends the same token: the decision still re-runs so the user stays
+	// blocked, but tagging the context as a duplicate suppresses the duplicate
+	// writes in recordCodexHook.
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+		ctx = withHookDuplicate(ctx)
+	}
 
 	var blockReason, userReason string
 
@@ -135,6 +144,11 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 }
 
 func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata, blockReason string) {
+	// Skip persistence for a redelivery (the token was claimed in Codex()).
+	if s.isHookDuplicate(ctx) {
+		return
+	}
+
 	if payload.HookEventName == "SessionStart" {
 		s.captureCodexMCPListSnapshot(ctx, payload)
 		if metadata.SessionID != "" && metadata.UserEmail != "" {
@@ -307,28 +321,28 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 	}
 
 	// Parse MCP tool names using the mcp__<server>__<tool> convention.
-	if strings.HasPrefix(toolName, "mcp__") {
-		parts := strings.SplitN(toolName, "__", 3)
-		if len(parts) == 3 {
-			attrs[attr.ToolCallSourceKey] = parts[1]
-			attrs[attr.ToolNameKey] = parts[2]
-			if metadata.SessionID != "" {
-				if entries, err := s.getCachedMCPList(ctx, metadata.SessionID); err == nil {
-					matched := matchCodexCachedMCPEntry(entries, toolName)
-					if matched != nil && matched.ToolPrefix != "" {
-						// Sanitized prefixes can contain "__", in which case
-						// the naive split misattributes part of the server
-						// name to the tool — recompute from the full prefix.
-						if rest, ok := strings.CutPrefix(toolName, "mcp__"+matched.ToolPrefix+"__"); ok {
-							attrs[attr.ToolCallSourceKey] = matched.ToolPrefix
-							attrs[attr.ToolNameKey] = rest
-						}
+	if server, fn, ok := toolref.AttributeTool(toolName); ok {
+		attrs[attr.ToolCallSourceKey] = server
+		attrs[attr.ToolNameKey] = fn
+		// Enrich with the cached MCP inventory: recover the true server/tool
+		// split for sanitized prefixes (which can themselves contain "__"),
+		// the resolved match key, and inventory attributes.
+		if metadata.SessionID != "" {
+			if entries, err := s.getCachedMCPList(ctx, metadata.SessionID); err == nil {
+				matched := matchCodexCachedMCPEntry(entries, toolName)
+				if matched != nil && matched.ToolPrefix != "" {
+					// Sanitized prefixes can contain "__", in which case
+					// the naive split misattributes part of the server
+					// name to the tool — recompute from the full prefix.
+					if rest, ok := strings.CutPrefix(toolName, "mcp__"+matched.ToolPrefix+"__"); ok {
+						attrs[attr.ToolCallSourceKey] = matched.ToolPrefix
+						attrs[attr.ToolNameKey] = rest
 					}
-					if v := resolvedMCPMatch(matched, parts[1]); v != "" {
-						attrs[attr.MCPMatchKey] = v
-					}
-					applyMCPInventoryAttrs(attrs, matched)
 				}
+				if v := resolvedMCPMatch(matched, server); v != "" {
+					attrs[attr.MCPMatchKey] = v
+				}
+				applyMCPInventoryAttrs(attrs, matched)
 			}
 		}
 	}

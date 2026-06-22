@@ -526,6 +526,74 @@ func TestFlyRuntimeBackendReapToleratesMissingMachine(t *testing.T) {
 	require.Equal(t, 1, apiClient.deleteCalls, "missing machine should not block app cleanup when no siblings remain")
 }
 
+func TestFlyRuntimeBackendReapStoppedMachineDestroysOnlyMachine(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:   "gram-asst-shared",
+		AppID:     "app-1",
+		AppURL:    "https://gram-asst-shared.fly.dev",
+		AppIP:     "1.2.3.4",
+		MachineID: "machine-1",
+	})
+	require.NoError(t, err)
+
+	err = backend.ReapStoppedMachine(context.Background(), assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, flapsClient.destroyCalls)
+	require.Equal(t, "machine-1", flapsClient.destroyInputs[0].ID)
+	require.True(t, flapsClient.destroyInputs[0].Kill)
+	require.Equal(t, 0, apiClient.deleteCalls, "per-thread reap must leave the app intact")
+}
+
+func TestFlyRuntimeBackendReapStoppedMachineToleratesMissingMachine(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	flapsClient.destroyErr = errors.New("not found")
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:   "gram-asst-shared",
+		MachineID: "machine-already-gone",
+	})
+	require.NoError(t, err)
+
+	err = backend.ReapStoppedMachine(context.Background(), assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, apiClient.deleteCalls)
+}
+
+func TestFlyRuntimeBackendReapStoppedMachineNoopWithoutMachineID(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName: "gram-asst-shared",
+	})
+	require.NoError(t, err)
+
+	err = backend.ReapStoppedMachine(context.Background(), assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, flapsClient.destroyCalls)
+	require.Equal(t, 0, apiClient.deleteCalls)
+}
+
 func TestFlyRuntimeBackendReapTreatsAppNotFoundAsSuccess(t *testing.T) {
 	t.Parallel()
 
@@ -1021,6 +1089,7 @@ func TestFlyRuntimeBackendRunTurnHitsThreadScopedRoute(t *testing.T) {
 	admittingThreadID := uuid.New()
 	turnThreadID := uuid.New()
 	var observedPath string
+	var observedBody runtimeTurnRequest
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -1028,6 +1097,7 @@ func TestFlyRuntimeBackendRunTurnHitsThreadScopedRoute(t *testing.T) {
 	})
 	mux.HandleFunc(fmt.Sprintf("/threads/%s/turn", turnThreadID), func(w http.ResponseWriter, r *http.Request) {
 		observedPath = r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&observedBody)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"finish_reason":"accepted"}`))
 	})
@@ -1050,8 +1120,14 @@ func TestFlyRuntimeBackendRunTurnHitsThreadScopedRoute(t *testing.T) {
 		BackendMetadataJSON: rawMetadata,
 	}
 
-	require.NoError(t, backend.RunTurn(context.Background(), rec, turnThreadID, "idem-1", "tok", "hi"))
+	servers := []runtimeMCPServer{
+		{ID: "github", URL: "https://example/mcp/github", Headers: map[string]string{"Gram-Environment": "prod"}},
+	}
+	require.NoError(t, backend.RunTurn(context.Background(), rec, turnThreadID, "idem-1", "tok", "hi", servers))
 	require.Equal(t, fmt.Sprintf("/threads/%s/turn", turnThreadID), observedPath)
+	require.Equal(t, "hi", observedBody.Input)
+	require.Equal(t, "tok", observedBody.AuthToken)
+	require.Equal(t, servers, observedBody.MCPServers)
 }
 
 func TestFlyRuntimeConfigValidateRequiresServerURL(t *testing.T) {

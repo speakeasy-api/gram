@@ -96,7 +96,7 @@ func TestStoreMessages_DeduplicatesContentAddressableWrites(t *testing.T) {
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, counting)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 
-	s := chat.NewChatMessageCaptureStrategy(testenv.NewLogger(t), conn, writer)
+	s := chat.NewChatMessageCaptureStrategy(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, writer)
 	chatID := uuid.New()
 
 	// Two user messages with identical content + one distinct system message.

@@ -8,25 +8,25 @@
 primary_region = "iad"
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "512mb"
+size = "shared-cpu-1x"
+memory = "512mb"
 
 [[services]]
-  protocol = "tcp"
-  internal_port = 4317
-  auto_stop_machines = "off"
-  auto_start_machines = true
-  min_machines_running = 1
+protocol = "tcp"
+internal_port = 4317
+auto_stop_machines = "off"
+auto_start_machines = true
+min_machines_running = 1
 
-  [[services.ports]]
-    port = 4317
+[[services.ports]]
+port = 4317
 
 [[services]]
-  protocol = "tcp"
-  internal_port = 4318
-  auto_stop_machines = "off"
-  auto_start_machines = true
-  min_machines_running = 1
+protocol = "tcp"
+internal_port = 4318
+auto_stop_machines = "off"
+auto_start_machines = true
+min_machines_running = 1
 
-  [[services.ports]]
-    port = 4318
+[[services.ports]]
+port = 4318

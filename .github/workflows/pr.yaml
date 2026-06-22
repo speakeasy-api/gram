@@ -1851,6 +1851,7 @@ jobs:
     if: always()
     needs:
       - changes
+      - format-check
       - server-build-lint
       - server-test
       - docker-build-server

@@ -13,6 +13,8 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
@@ -45,6 +47,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 )
+
+type Publishers struct {
+	PresidioAnalysis gcp.Publisher[*riskv1.PresidioAnalysis]
+	GitleaksAnalysis gcp.Publisher[*riskv1.GitleaksAnalysis]
+}
 
 type Activities struct {
 	collectOpenRouterCreditsMetrics *activities.CollectOpenRouterCreditsMetrics
@@ -86,6 +93,7 @@ type Activities struct {
 	expireAssistantThreadRuntime    *activities.ExpireAssistantThreadRuntime
 	reapStuckAssistantRuntimes      *activities.ReapStuckAssistantRuntimes
 	reapInactiveAssistantRuntimes   *activities.ReapInactiveAssistantRuntimes
+	reapStoppedAssistantRuntimes    *activities.ReapStoppedAssistantRuntimes
 	recycleAssistantRuntimeImages   *activities.RecycleAssistantRuntimeImages
 	reapSoftDeletedAssistantMems    *activities.ReapSoftDeletedAssistantMemories
 	signalAssistantCoordinator      *activities.SignalAssistantCoordinator
@@ -140,6 +148,7 @@ func NewActivities(
 	productFeatures *productfeatures.Client,
 	pluginPublisher activities.PluginPublishClient,
 	chatWriter *chat.ChatMessageWriter,
+	publishers *Publishers,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
@@ -174,7 +183,7 @@ func NewActivities(
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
-		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), riskjudge.New(logger, tracerProvider, meterProvider, chatClient), features),
+		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), riskjudge.New(logger, tracerProvider, meterProvider, chatClient), features, publishers.PresidioAnalysis, publishers.GitleaksAnalysis),
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
 		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),
@@ -183,6 +192,7 @@ func NewActivities(
 		expireAssistantThreadRuntime:    activities.NewExpireAssistantThreadRuntime(assistantsCore),
 		reapStuckAssistantRuntimes:      activities.NewReapStuckAssistantRuntimes(assistantsCore),
 		reapInactiveAssistantRuntimes:   activities.NewReapInactiveAssistantRuntimes(logger, assistantsCore),
+		reapStoppedAssistantRuntimes:    activities.NewReapStoppedAssistantRuntimes(logger, assistantsCore),
 		recycleAssistantRuntimeImages:   activities.NewRecycleAssistantRuntimeImages(logger, assistantsCore),
 		reapSoftDeletedAssistantMems:    activities.NewReapSoftDeletedAssistantMemories(logger, db),
 		signalAssistantCoordinator:      activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
@@ -412,6 +422,10 @@ func (a *Activities) ReapStuckAssistantRuntimes(ctx context.Context) (*activitie
 
 func (a *Activities) ReapInactiveAssistantRuntimes(ctx context.Context, req activities.ReapInactiveAssistantRuntimesRequest) (*activities.ReapInactiveAssistantRuntimesResult, error) {
 	return a.reapInactiveAssistantRuntimes.Do(ctx, req)
+}
+
+func (a *Activities) ReapStoppedAssistantRuntimes(ctx context.Context, req activities.ReapStoppedAssistantRuntimesRequest) (*activities.ReapStoppedAssistantRuntimesResult, error) {
+	return a.reapStoppedAssistantRuntimes.Do(ctx, req)
 }
 
 func (a *Activities) RecycleAssistantRuntimeImages(ctx context.Context) (*activities.RecycleAssistantRuntimeImagesResult, error) {

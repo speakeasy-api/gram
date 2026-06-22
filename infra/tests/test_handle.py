@@ -18,11 +18,11 @@ import anyio
 import anyio.to_thread
 import pytest
 import structlog
+from conftest import FakeMessage, FakeSubscriberClient
 from google.api_core.exceptions import NotFound
+from gram.ping.v1 import ping_pb2
 from structlog.testing import capture_logs
 
-from conftest import FakeMessage, FakeSubscriberClient
-from gram.ping.v1 import ping_pb2
 from gram_infra.pubsub import MessageMetadata, Subscriber, SubscriberHandle
 from gram_infra.pubsub.subscriber import _PortalScheduler
 
@@ -226,7 +226,8 @@ async def test_handler_cancelled_while_queued_on_limiter_is_nacked() -> None:
 
     assert queued.nacked is True
     assert queued.acked is False
-    assert blocked.acked is False and blocked.nacked is False
+    assert blocked.acked is False
+    assert blocked.nacked is False
 
 
 async def test_scheduler_shutdown_waits_for_inflight_handlers() -> None:

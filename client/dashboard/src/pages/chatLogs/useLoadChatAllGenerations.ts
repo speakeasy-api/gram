@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import type { Chat, ChatMessage } from "@gram/client/models/components";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   buildLoadChatQuery,
   useGramContext,
@@ -26,10 +27,15 @@ export function useLoadChatAllGenerations(
   chatId: string,
 ): LoadChatAllGenerationsResult {
   const client = useGramContext();
+  // Suppress 404s so empty/never-created chats fall through to the panel's
+  // "Not found" UI instead of bubbling to the page-level error boundary.
   const { data: latest, isLoading: latestLoading } = useLoadChat(
     { id: chatId },
     undefined,
-    {},
+    {
+      throwOnError: (error) =>
+        !(error instanceof GramError && error.statusCode === 404),
+    },
   );
 
   const maxGeneration = latest?.maxGeneration ?? 0;

@@ -22,16 +22,19 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/activity"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/mcpname"
+	"github.com/speakeasy-api/gram/server/internal/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 // DescribeShadowMCP returns the canonical (rule_id, description) for an
@@ -62,16 +65,31 @@ type AnalyzeBatch struct {
 	tracer          trace.Tracer
 	metrics         *riskMetrics
 	db              *pgxpool.Pool
-	scanner         *Scanner
+	scanner         *gitleaks.Scanner
 	piiScanner      PIIScanner
 	piScanner       *PromptInjectionScanner
 	shadowMCPClient *shadowmcp.Client
 	mcpMatchLookup  MCPMatchLookup
 	judge           PromptJudge
 	flags           feature.Provider
+	presidioPub     gcp.Publisher[*riskv1.PresidioAnalysis]
+	gitleaksPub     gcp.Publisher[*riskv1.GitleaksAnalysis]
 }
 
-func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner, piScanner *PromptInjectionScanner, shadowMCPClient *shadowmcp.Client, mcpMatchLookup MCPMatchLookup, judge PromptJudge, flags feature.Provider) *AnalyzeBatch {
+func NewAnalyzeBatch(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
+	db *pgxpool.Pool,
+	piiScanner PIIScanner,
+	piScanner *PromptInjectionScanner,
+	shadowMCPClient *shadowmcp.Client,
+	mcpMatchLookup MCPMatchLookup,
+	judge PromptJudge,
+	flags feature.Provider,
+	presidioPub gcp.Publisher[*riskv1.PresidioAnalysis],
+	gitleaksPub gcp.Publisher[*riskv1.GitleaksAnalysis],
+) *AnalyzeBatch {
 	if piiScanner == nil {
 		piiScanner = &StubPIIScanner{}
 	}
@@ -79,17 +97,19 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, m
 		piScanner = NewPromptInjectionScanner(logger, nil)
 	}
 	return &AnalyzeBatch{
-		logger:          logger,
+		logger:          logger.With(attr.SlogComponent("risk-analysis-dispatcher")),
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
 		metrics:         newRiskMetrics(meterProvider, logger),
 		db:              db,
-		scanner:         NewScanner(),
+		scanner:         gitleaks.NewScanner(),
 		piiScanner:      piiScanner,
 		piScanner:       piScanner,
 		shadowMCPClient: shadowMCPClient,
 		mcpMatchLookup:  mcpMatchLookup,
 		judge:           judge,
 		flags:           flags,
+		presidioPub:     presidioPub,
+		gitleaksPub:     gitleaksPub,
 	}
 }
 
@@ -288,6 +308,31 @@ func messageRowMessageType(msg repo.GetMessageContentBatchRow) (message.Type, bo
 	}
 }
 
+// publishAckTimeout bounds how long we wait on a single shadow-mode Pub/Sub
+// publish ack while draining the issued futures. Kept well under the
+// AnalyzeBatch activity's 60s HeartbeatTimeout so a transient Pub/Sub stall
+// logs and moves on instead of blocking the goroutine past the heartbeat
+// window — otherwise Temporal cancels the activity and retries the whole
+// (expensive) scan. These publishes are fire-and-forget, so a timed-out ack is
+// only a warning.
+const publishAckTimeout = 10 * time.Second
+
+// drainPublishAcks waits on each shadow-mode publish future with a bounded
+// per-ack timeout, recording a heartbeat between acks so the worker keeps
+// signaling liveness throughout the drain. warnMsg is logged (with the ack
+// error) for any publish that fails or times out.
+func drainPublishAcks(ctx context.Context, logger *slog.Logger, warnMsg string, results []gcp.PublishResult) {
+	for _, res := range results {
+		waitCtx, cancel := context.WithTimeout(ctx, publishAckTimeout)
+		_, err := res.Get(waitCtx)
+		cancel()
+		if err != nil {
+			logger.WarnContext(ctx, warnMsg, attr.SlogError(err))
+		}
+		activity.RecordHeartbeat(ctx, "publish_ack")
+	}
+}
+
 // scan runs enabled scanners concurrently. Gitleaks (CPU-bound), presidio
 // (IO-bound), and prompt-injection (CPU-bound, regex-only) all run in
 // parallel — folding the cheap prompt-injection pass under presidio's
@@ -302,8 +347,15 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	n := len(messages)
 	contents := make([]string, n)
+	msgids := make([]uuid.UUID, n)
 	for i, msg := range messages {
 		contents[i] = msg.Content
+		msgids[i] = msg.ID
+	}
+
+	requestID, err := uuid.NewV7()
+	if err != nil {
+		return nil, fmt.Errorf("generate scan request id: %w", err)
 	}
 
 	gitleaksFindings := make([][]Finding, n)
@@ -320,17 +372,64 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if slices.Contains(args.Sources, "gitleaks") {
 		wg.Go(func() {
+			// Shadow-mode publish: fire a per-message GitleaksAnalysis so the
+			// streams subscriber re-runs the same scan and publishes findings.
+			// Issue every publish first so the Pub/Sub client can batch them;
+			// the returned futures are drained afterwards (see presidio below).
+			createdAt := time.Now().UTC().Format(time.RFC3339)
+			publishResults := make([]gcp.PublishResult, len(contents))
+			for i, content := range contents {
+				publishResults[i] = a.gitleaksPub.Publish(ctx, riskv1.GitleaksAnalysis_builder{
+					RequestId:         new(requestID.String()),
+					ChatMessageId:     new(msgids[i].String()),
+					ProjectId:         new(args.ProjectID.String()),
+					OrganizationId:    &args.OrganizationID,
+					RiskPolicyId:      new(args.RiskPolicyID.String()),
+					RiskPolicyVersion: &args.PolicyVersion,
+					CreatedAt:         &createdAt,
+
+					ReplyUrn: nil, // No reply support yet; fire and forget to exercise publish flow.
+					Content:  new(content),
+				}.Build())
+			}
+			drainPublishAcks(ctx, a.logger, "failed to publish gitleaks scan request", publishResults)
+
 			results, err := a.scanner.ScanBatchParallel(contents)
 			if err != nil {
 				gitleaksErr = err
 				return
 			}
-			gitleaksFindings = results
+			for i, detections := range results {
+				gitleaksFindings[i] = fromDetections(detections)
+			}
 		})
 	}
 
 	if slices.Contains(args.Sources, "presidio") {
 		wg.Go(func() {
+			// Issue every publish first so the Pub/Sub client can batch them;
+			// the returned futures are drained afterwards. Calling Get inside
+			// the loop would block on each message's server ack before sending
+			// the next, defeating that batching.
+			createdAt := time.Now().UTC().Format(time.RFC3339)
+			publishResults := make([]gcp.PublishResult, len(contents))
+			for i, content := range contents {
+				publishResults[i] = a.presidioPub.Publish(ctx, riskv1.PresidioAnalysis_builder{
+					RequestId:         new(requestID.String()),
+					ChatMessageId:     new(msgids[i].String()),
+					ProjectId:         new(args.ProjectID.String()),
+					OrganizationId:    &args.OrganizationID,
+					RiskPolicyId:      new(args.RiskPolicyID.String()),
+					RiskPolicyVersion: &args.PolicyVersion,
+					CreatedAt:         &createdAt,
+
+					ReplyUrn: nil, // No reply support yet; fire and forget to exercise publish flow.
+					Content:  &content,
+					Entities: args.PresidioEntities,
+				}.Build())
+			}
+			drainPublishAcks(ctx, a.logger, "failed to publish presidio scan request", publishResults)
+
 			// PIIScanner may return partial results alongside an error;
 			// always consume results so successful per-text findings are
 			// preserved even when some HTTP calls failed.
@@ -706,7 +805,7 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 		}
 		// Native (non-MCP) tools don't carry the x-gram-toolset-id property
 		// and are out of scope for shadow-MCP enforcement.
-		if !mcpname.IsMCPToolName(toolName) {
+		if !toolref.IsMCPToolName(toolName) {
 			continue
 		}
 		var toolInput any
@@ -716,7 +815,7 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 				toolInput = nil
 			}
 		}
-		bareName := mcpname.MCPFunctionOf(toolName)
+		bareName := toolref.MCPFunctionOf(toolName)
 		if a.shadowMCPClient == nil {
 			continue
 		}
@@ -730,7 +829,7 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 		// attribute the hook recorded on the corresponding ClickHouse log,
 		// when one exists. The fallback keeps findings useful even if the
 		// CH lookup misses (no hook log yet, ClickHouse outage, ...).
-		match := mcpname.MCPServerOf(toolName)
+		match := toolref.MCPServerOf(toolName)
 		if match == "" {
 			match = toolName
 		}
@@ -777,7 +876,7 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 	var findings []Finding
 	for _, call := range calls {
 		toolName := call.Function.Name
-		if toolName == "" || !mcpname.IsMCPToolName(toolName) {
+		if toolName == "" || !toolref.IsMCPToolName(toolName) {
 			continue
 		}
 
@@ -788,7 +887,7 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 			}
 		}
 
-		bareName := mcpname.MCPFunctionOf(toolName)
+		bareName := toolref.MCPFunctionOf(toolName)
 		resolved, ok := a.shadowMCPClient.ResolveToolsetCall(ctx, toolInput, bareName, orgID)
 		if !ok || resolved.Tool.Annotations == nil || resolved.Tool.Annotations.DestructiveHint == nil || !*resolved.Tool.Annotations.DestructiveHint {
 			continue

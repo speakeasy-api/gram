@@ -9,7 +9,7 @@ use tokio::net::TcpListener;
 use tokio::sync::{Mutex, Notify};
 
 use crate::runtime::{
-    AppState, DEFAULT_THREAD_IDLE_TTL, build_host, ensure_thread, snapshot_threads,
+    AppState, DEFAULT_THREAD_IDLE_TTL, McpCmd, build_host, ensure_thread, snapshot_threads,
 };
 
 const IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
@@ -124,6 +124,28 @@ async fn thread_turn(
         .filter(|id| !id.is_empty())
     {
         let _ = host.assistant_id.set(assistant_id.to_string());
+    }
+
+    // Hand reconcile to the actor and proceed to enqueue. The actor runs
+    // concurrently with the agent loop, so a server added by this /turn
+    // may surface on the very next model step or on the one after,
+    // depending on whether the connect finishes before tool catalog is
+    // sampled. Either way it lands before the user notices.
+    if let Some(desired) = request.mcp_servers
+        && thread
+            .mcp_cmd_tx
+            .send(McpCmd::Reconcile { desired })
+            .await
+            .is_err()
+    {
+        // The MCP actor is gone, so we can't reconcile the thread's server set
+        // for this turn. Don't accept the turn on stale state — fail so the
+        // backend retries instead of silently running with the wrong tools.
+        tracing::warn!(thread_id = %thread_id, "mcp reconcile failed: actor channel closed");
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "mcp reconcile actor unavailable".to_string(),
+        ));
     }
 
     thread

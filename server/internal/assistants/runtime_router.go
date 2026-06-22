@@ -82,14 +82,14 @@ func (r *runtimeRouter) RecycleImage(ctx context.Context, runtime assistantRunti
 	return result, nil
 }
 
-func (r *runtimeRouter) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string) error {
+func (r *runtimeRouter) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, mcpServers []runtimeMCPServer) error {
 	b, err := r.route(runtime.Backend)
 	if err != nil {
 		return err
 	}
 	// Wrap with %w so the classifyTurnError sentinels the service matches on
 	// (ErrRuntimeUnhealthy, ErrCompletionFailed, ErrHistoryCorrupted) survive.
-	if err := b.RunTurn(ctx, runtime, threadID, idempotencyKey, authToken, prompt); err != nil {
+	if err := b.RunTurn(ctx, runtime, threadID, idempotencyKey, authToken, prompt, mcpServers); err != nil {
 		return fmt.Errorf("run turn on %s runtime: %w", runtime.Backend, err)
 	}
 	return nil
@@ -125,6 +125,17 @@ func (r *runtimeRouter) Reap(ctx context.Context, runtime assistantRuntimeRecord
 	}
 	if err := b.Reap(ctx, runtime); err != nil {
 		return fmt.Errorf("reap %s runtime: %w", runtime.Backend, err)
+	}
+	return nil
+}
+
+func (r *runtimeRouter) ReapStoppedMachine(ctx context.Context, runtime assistantRuntimeRecord) error {
+	b, err := r.route(runtime.Backend)
+	if err != nil {
+		return err
+	}
+	if err := b.ReapStoppedMachine(ctx, runtime); err != nil {
+		return fmt.Errorf("reap stopped machine of %s runtime: %w", runtime.Backend, err)
 	}
 	return nil
 }

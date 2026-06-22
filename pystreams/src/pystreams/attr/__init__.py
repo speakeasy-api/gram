@@ -1,6 +1,6 @@
 from typing import Final
 
-from opentelemetry.semconv.attributes import service_attributes, deployment_attributes
+from opentelemetry.semconv.attributes import deployment_attributes, service_attributes
 
 SERVICE_NAME = service_attributes.SERVICE_NAME
 SERVICE_VERSION = service_attributes.SERVICE_VERSION

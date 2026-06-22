@@ -12,14 +12,14 @@ import logging
 import os
 import signal
 import uuid
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 import anyio
 import structlog
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
 from google.protobuf.timestamp_pb2 import Timestamp
-
 from gram.ping.v1 import ping_pb2
+
 from gram_infra.pubsub import EmulatedPubSubBroker
 from gram_infra.pubsub.publisher import Publisher
 
@@ -73,7 +73,7 @@ async def publish_forever(publisher: Publisher[ping_pb2.Message]) -> None:
             payload=b'{"msg":"Hello, World!"}',
         )
 
-        await publisher.publish(message)
+        await publisher.publish(message).get()
         await anyio.sleep(PUBLISH_INTERVAL_SECONDS)
 
 

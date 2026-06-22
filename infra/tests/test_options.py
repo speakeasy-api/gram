@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from gram.ping.v1 import ping_pb2, processor_pb2
+
 from gram_infra.pubsub import (
     subscription_options_from_message,
     topic_options_from_message,

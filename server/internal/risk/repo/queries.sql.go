@@ -431,7 +431,7 @@ VALUES (
   , $6
   , $7
 )
-RETURNING id, project_id, organization_id, rule_id, title, description, regex, severity, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, rule_id, title, description, regex, match_config, severity, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateCustomDetectionRuleParams struct {
@@ -463,6 +463,7 @@ func (q *Queries) CreateCustomDetectionRule(ctx context.Context, arg CreateCusto
 		&i.Title,
 		&i.Description,
 		&i.Regex,
+		&i.MatchConfig,
 		&i.Severity,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -832,7 +833,7 @@ func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanal
 }
 
 const getCustomDetectionRule = `-- name: GetCustomDetectionRule :one
-SELECT id, project_id, organization_id, rule_id, title, description, regex, severity, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, rule_id, title, description, regex, match_config, severity, created_at, updated_at, deleted_at, deleted
 FROM risk_custom_detection_rules
 WHERE id = $1
   AND project_id = $2
@@ -855,6 +856,7 @@ func (q *Queries) GetCustomDetectionRule(ctx context.Context, arg GetCustomDetec
 		&i.Title,
 		&i.Description,
 		&i.Regex,
+		&i.MatchConfig,
 		&i.Severity,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1231,7 +1233,7 @@ type InsertRiskResultsParams struct {
 }
 
 const listCustomDetectionRules = `-- name: ListCustomDetectionRules :many
-SELECT id, project_id, organization_id, rule_id, title, description, regex, severity, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, rule_id, title, description, regex, match_config, severity, created_at, updated_at, deleted_at, deleted
 FROM risk_custom_detection_rules
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -1255,6 +1257,7 @@ func (q *Queries) ListCustomDetectionRules(ctx context.Context, projectID uuid.U
 			&i.Title,
 			&i.Description,
 			&i.Regex,
+			&i.MatchConfig,
 			&i.Severity,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -2735,7 +2738,7 @@ SET title = $1
 WHERE id = $5
   AND project_id = $6
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, rule_id, title, description, regex, severity, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, rule_id, title, description, regex, match_config, severity, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateCustomDetectionRuleParams struct {
@@ -2765,6 +2768,7 @@ func (q *Queries) UpdateCustomDetectionRule(ctx context.Context, arg UpdateCusto
 		&i.Title,
 		&i.Description,
 		&i.Regex,
+		&i.MatchConfig,
 		&i.Severity,
 		&i.CreatedAt,
 		&i.UpdatedAt,

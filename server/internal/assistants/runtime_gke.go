@@ -379,7 +379,7 @@ func (g *GKERuntimeBackend) waitForHealth(ctx context.Context, metadata gkeRunti
 	}
 }
 
-func (g *GKERuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string) error {
+func (g *GKERuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, mcpServers []runtimeMCPServer) error {
 	if err := validateRuntimeBackend(g, runtime.Backend); err != nil {
 		return err
 	}
@@ -394,6 +394,7 @@ func (g *GKERuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	reqBody, err := json.Marshal(runtimeTurnRequest{
 		Input:       prompt,
 		AuthToken:   authToken,
+		MCPServers:  mcpServers,
 		AssistantID: runtime.AssistantID.String(),
 	})
 	if err != nil {
@@ -438,6 +439,13 @@ func (g *GKERuntimeBackend) Stop(ctx context.Context, runtime assistantRuntimeRe
 // Reap permanently deletes the SandboxClaim, which cascades to the Sandbox and
 // pod. Idempotent: a missing claim is success.
 func (g *GKERuntimeBackend) Reap(ctx context.Context, runtime assistantRuntimeRecord) error {
+	return g.deleteClaim(ctx, runtime)
+}
+
+// ReapStoppedMachine has no machine/app split to preserve on GKE — a claim
+// owns its whole sandbox and pod, and the backend never reuses an idle one —
+// so the per-thread reap collapses to deleting the claim, same as Reap.
+func (g *GKERuntimeBackend) ReapStoppedMachine(ctx context.Context, runtime assistantRuntimeRecord) error {
 	return g.deleteClaim(ctx, runtime)
 }
 
@@ -508,7 +516,7 @@ func (g *GKERuntimeBackend) doRequest(ctx context.Context, metadata gkeRuntimeMe
 		return nil, fmt.Errorf("read gke runtime response: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("gke runtime request %s %s: status %d: %s", method, path, resp.StatusCode, strings.TrimSpace(string(respBody)))
+		return nil, &runtimeResponseError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(respBody))}
 	}
 	return respBody, nil
 }

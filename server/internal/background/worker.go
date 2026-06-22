@@ -17,6 +17,8 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -84,6 +86,7 @@ type WorkerOptions struct {
 	SvixClient                     *svix.Svix
 	ProductFeatures                *productfeatures.Client
 	PluginPublisher                *plugins.Service
+	Publishers                     *Publishers
 }
 
 func ForDeploymentProcessing(
@@ -132,6 +135,10 @@ func ForDeploymentProcessing(
 		ProductFeatures:                nil,
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
+		Publishers: &Publishers{
+			PresidioAnalysis: gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
+			GitleaksAnalysis: gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
+		},
 	}
 }
 
@@ -178,6 +185,7 @@ func NewTemporalWorker(
 		ProductFeatures:                nil,
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
+		Publishers:                     nil,
 	}
 
 	for _, o := range options {
@@ -217,6 +225,7 @@ func NewTemporalWorker(
 			ProductFeatures:                conv.Default(o.ProductFeatures, opts.ProductFeatures),
 			ClickhouseConn:                 conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
 			PluginPublisher:                conv.Default(o.PluginPublisher, opts.PluginPublisher),
+			Publishers:                     conv.Default(o.Publishers, opts.Publishers),
 		}
 	}
 
@@ -278,6 +287,7 @@ func NewTemporalWorker(
 		opts.ProductFeatures,
 		opts.PluginPublisher,
 		opts.ChatMessageWriter,
+		opts.Publishers,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -320,6 +330,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ExpireAssistantThreadRuntime)
 	temporalWorker.RegisterActivity(activities.ReapStuckAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.ReapInactiveAssistantRuntimes)
+	temporalWorker.RegisterActivity(activities.ReapStoppedAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.RecycleAssistantRuntimeImages)
 	temporalWorker.RegisterActivity(activities.ReapSoftDeletedAssistantMemories)
 	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)

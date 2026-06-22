@@ -32,6 +32,14 @@ For small edits, run the narrowest package script that proves the change. For sh
 - For data fetching and server state, use `@tanstack/react-query` instead of manual `useEffect`/`useState` patterns
 - When invalidating React Query caches after mutations, invalidate ALL relevant query keys — not just the most specific one. Different hooks may use different query key prefixes for the same data (e.g., `queryKeyInstance` vs `toolsets.getBySlug`). Use broad invalidation helpers like `invalidateAllToolset(queryClient)` to ensure all consumers refresh.
 
+### Telemetry & observability data fetching
+
+Observability surfaces — Tool Logs, insights/analytics, summary cards, counts, and filter dropdowns — are served from **pre-aggregated ClickHouse summary views** behind endpoints like `telemetry.getToolUsageSummary`, `telemetry.listToolUsageTraces`, and `telemetry.query`. **Default to these summary-backed endpoints; they're fast and are the right choice for almost every view.**
+
+Per-log detail is the rare exception. Free-text search over log bodies, arbitrary custom-attribute filters (e.g. `@user.region`), and inspecting an individual log/trace fall back to scanning the raw `telemetry_logs` table, which is slow. Only reach for those when detailed telemetry is genuinely what the user needs — not for default lists, summaries, or filter options.
+
+When you add a control that triggers the raw-log path (a free-text search box, a custom-attribute filter), tell the user it may be slower — see `SlowSearchNotice` in `LogsTools.tsx`, shown only while such a filter is active — and keep the structured filters (server, user, agent, type, date) on the fast summary path. Don't build a default-on view whose first paint requires a raw-log scan.
+
 ### Component Structure and Reuse
 
 **The core rule: every UI pattern that appears in more than two places must be centralized so it can be changed in a single location.**

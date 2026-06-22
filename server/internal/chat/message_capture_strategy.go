@@ -10,6 +10,8 @@ import (
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -26,10 +28,11 @@ const DefaultChatTitle = "New Chat"
 // ChatMessageCaptureStrategy captures completion messages to the database.
 // It implements the MessageCaptureStrategy interface.
 type ChatMessageCaptureStrategy struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	repo   *repo.Queries
-	writer *ChatMessageWriter
+	logger  *slog.Logger
+	db      *pgxpool.Pool
+	repo    *repo.Queries
+	writer  *ChatMessageWriter
+	metrics *captureMetrics
 }
 
 var _ openrouter.MessageCaptureStrategy = (*ChatMessageCaptureStrategy)(nil)
@@ -48,14 +51,16 @@ type chatCaptureSession struct {
 // NewChatMessageCaptureStrategy creates a new ChatMessageCaptureStrategy.
 func NewChatMessageCaptureStrategy(
 	logger *slog.Logger,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	writer *ChatMessageWriter,
 ) *ChatMessageCaptureStrategy {
 	return &ChatMessageCaptureStrategy{
-		logger: logger,
-		db:     db,
-		repo:   repo.New(db),
-		writer: writer,
+		logger:  logger,
+		db:      db,
+		repo:    repo.New(db),
+		writer:  writer,
+		metrics: newCaptureMetrics(meterProvider, logger),
 	}
 }
 
@@ -101,7 +106,11 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		matchedPrefix = 0
 	}
 
-	newMessages := request.Messages[matchedPrefix:]
+	// A client can replay a previous turn's aborted assistant message, whose
+	// tool_call arguments are malformed JSON. Drop it here for the same reason
+	// CaptureMessage drops the response: neither ingress may persist a row the
+	// runner can't replay.
+	newMessages := s.dropPoisonedAssistantMessages(ctx, request, projectID, request.Messages[matchedPrefix:])
 	if len(newMessages) == 0 {
 		return &chatCaptureSession{
 			generation:  generation,
@@ -306,6 +315,22 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 		return err
 	}
 
+	// A truncated/aborted completion stream can leave a tool_call with
+	// unterminated JSON arguments. The runner's normalize_history rejects such
+	// a row on replay and the turn then retries without a cap, so the poison
+	// must never enter the transcript. Drop the assistant row but still flush
+	// the preceding user/tool input, keeping the transcript tail drivable.
+	if toolName, ok := firstInvalidToolCall(response.ToolCalls); ok {
+		s.recordDroppedGeneration(ctx, request.ChatID, projectID, toolName, "dropping assistant generation with malformed tool_call arguments")
+		if len(session.pendingRows) > 0 {
+			if err := s.writer.WriteWithAssets(ctx, projectID, session.pendingRows); err != nil {
+				s.logger.ErrorContext(ctx, "failed to store chat input messages after dropping assistant generation", attr.SlogError(err))
+				return fmt.Errorf("store chat input messages: %w", err)
+			}
+		}
+		return nil
+	}
+
 	assistantRows := buildAssistantRows(request, response, projectID, toolCallsJSON, origin, userAgent, ipAddress, session.generation)
 
 	if len(session.pendingRows) == 0 {
@@ -383,6 +408,81 @@ func buildAssistantRows(
 	only.TotalTokens = totalTokens
 
 	return []repo.CreateChatMessageParams{only}
+}
+
+// firstInvalidToolCall mirrors the runner's normalize_history validation:
+// empty arguments are treated as an empty object; anything else must be valid
+// JSON. A truncated/aborted completion stream leaves unterminated JSON here.
+func firstInvalidToolCall(toolCalls []openrouter.ToolCall) (string, bool) {
+	for _, tc := range toolCalls {
+		args := tc.Function.Arguments
+		if args == "" {
+			continue
+		}
+		if !json.Valid([]byte(args)) {
+			return tc.Function.Name, true
+		}
+	}
+	return "", false
+}
+
+// recordDroppedGeneration logs and counts a generation dropped at capture
+// because the model produced malformed tool_call arguments.
+func (s *ChatMessageCaptureStrategy) recordDroppedGeneration(ctx context.Context, chatID, projectID uuid.UUID, toolName, msg string) {
+	s.logger.WarnContext(ctx, msg,
+		attr.SlogChatID(chatID.String()),
+		attr.SlogProjectID(projectID.String()),
+		attr.SlogToolName(toolName),
+	)
+	s.metrics.RecordDroppedGeneration(ctx, projectID, toolName)
+}
+
+// dropPoisonedAssistantMessages removes incoming assistant messages whose
+// tool_call arguments are malformed JSON, along with any tool results that pair
+// with the dropped calls — keeping a tool_result without its tool_use orphans
+// it and the model rejects the replay. This is the input-side counterpart to
+// the drop in CaptureMessage.
+func (s *ChatMessageCaptureStrategy) dropPoisonedAssistantMessages(ctx context.Context, request openrouter.CompletionRequest, projectID uuid.UUID, msgs []or.ChatMessages) []or.ChatMessages {
+	droppedCallIDs := make(map[string]struct{})
+	for _, msg := range msgs {
+		calls := assistantToolCalls(msg)
+		toolName, ok := firstInvalidToolCall(calls)
+		if !ok {
+			continue
+		}
+		for _, c := range calls {
+			droppedCallIDs[c.ID] = struct{}{}
+		}
+		s.recordDroppedGeneration(ctx, request.ChatID, projectID, toolName, "dropping replayed assistant message with malformed tool_call arguments")
+	}
+	if len(droppedCallIDs) == 0 {
+		return msgs
+	}
+
+	kept := make([]or.ChatMessages, 0, len(msgs))
+	for _, msg := range msgs {
+		if pairsWithDroppedCall(msg, droppedCallIDs) {
+			continue
+		}
+		kept = append(kept, msg)
+	}
+	return kept
+}
+
+// pairsWithDroppedCall reports whether msg is a dropped assistant message (one
+// of its tool_calls is in the set) or a tool result for one of those calls.
+func pairsWithDroppedCall(msg or.ChatMessages, droppedCallIDs map[string]struct{}) bool {
+	for _, c := range assistantToolCalls(msg) {
+		if _, ok := droppedCallIDs[c.ID]; ok {
+			return true
+		}
+	}
+	if tcID := openrouter.GetToolCallID(msg); tcID != nil {
+		if _, ok := droppedCallIDs[*tcID]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveSession returns the session produced by StartOrResumeChat. If the

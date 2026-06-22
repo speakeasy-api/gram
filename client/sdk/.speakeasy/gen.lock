@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 04f626c6c875e0390585880140aede0e
+  docChecksum: f703b5b6f0c00a6bd6c661787a86e963
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -335,7 +335,7 @@ trackedFiles:
   docs/models/components/externaloauthserverform.md:
     last_write_checksum: sha1:2dfca2bf1f6cf89befb98dabc7e7db5d83523c65
   docs/models/components/featurename.md:
-    last_write_checksum: sha1:b02e4d20f763c724cb16e24ba8e6374fda188c07
+    last_write_checksum: sha1:daec110d1e973f2642a98d804ddbaa107eb45f87
   docs/models/components/feedback.md:
     last_write_checksum: sha1:ef93dc1781469531617f39432611ded991048862
   docs/models/components/fetchopenapiv3fromurlform2.md:
@@ -387,7 +387,7 @@ trackedFiles:
   docs/models/components/getpluginsresult.md:
     last_write_checksum: sha1:3a3a8f8d2c90f10a3a41bba699f319bb1a56fd90
   docs/models/components/getproductfeaturesresponsebody.md:
-    last_write_checksum: sha1:d92e84a1b65e679d39db2987deb0af2af2235a68
+    last_write_checksum: sha1:3b735a3a598bd48d3c8e38df8ddeafeff33e112f
   docs/models/components/getprojectmetricssummarypayload.md:
     last_write_checksum: sha1:bab9f23a9d3f2b4b52743618c911a5e5d0a55c19
   docs/models/components/getprojectoverviewresult.md:
@@ -1007,7 +1007,7 @@ trackedFiles:
   docs/models/components/setpluginassignmentsresponsebody.md:
     last_write_checksum: sha1:eca01ab11f06f2b2dddfb170f45b2f603ea24310
   docs/models/components/setproductfeaturerequestbody.md:
-    last_write_checksum: sha1:0c074a77b235e587f90c35e5a32d039afe07bd28
+    last_write_checksum: sha1:7e08b6581a9fd3626a9adb66f17ace82da431ec9
   docs/models/components/setprojectlogoresult.md:
     last_write_checksum: sha1:48ef7841396c44c42eda6c05af08a4a0866f1fca
   docs/models/components/setsourceenvironmentlinkrequestbody.md:
@@ -2289,13 +2289,13 @@ trackedFiles:
   docs/models/operations/hasrisk.md:
     last_write_checksum: sha1:76c9013597780a0d352e7017e3408921b9d88a82
   docs/models/operations/hooksnumberclauderequest.md:
-    last_write_checksum: sha1:4563e3aae412dc5d77936eaeedbcf51d49458563
+    last_write_checksum: sha1:4e27620fc69f47403ff04f1e6e63b77183c3eb60
   docs/models/operations/hooksnumbercodexrequest.md:
-    last_write_checksum: sha1:944773a8a9a68d3111939c8aa5550002aaddf9f3
+    last_write_checksum: sha1:e06e789c2ab603f320cbc24cb8f7b6e7fd0147e0
   docs/models/operations/hooksnumbercodexsecurity.md:
     last_write_checksum: sha1:d1ca0fa9e36948e80ced7dc6fefed2d87a1848fd
   docs/models/operations/hooksnumbercursorrequest.md:
-    last_write_checksum: sha1:d7307642e9e0cc14fda73fc806cdc7f75e8afd28
+    last_write_checksum: sha1:3ef60ebc29507a4f533a3be1af7d192d39b418da
   docs/models/operations/hooksnumbercursorsecurity.md:
     last_write_checksum: sha1:a111411fdeb6fd7d0224a332c1853bd55ccf2c45
   docs/models/operations/hooksnumberlogsrequest.md:
@@ -3061,7 +3061,7 @@ trackedFiles:
   docs/models/operations/setpluginassignmentssecurity.md:
     last_write_checksum: sha1:5b06c4af538e78e085278654f258e99d8fe2060d
   docs/models/operations/setproductfeaturerequest.md:
-    last_write_checksum: sha1:465e8e48d8403c8d8ce4ef3cceff897a62868efd
+    last_write_checksum: sha1:3050c8edb12f5fef9783e986981e08c2cce1527d
   docs/models/operations/setproductfeaturesecurity.md:
     last_write_checksum: sha1:78505231e83aedf6a7f6a1af58330268eb124555
   docs/models/operations/setprojectlogorequest.md:
@@ -3717,11 +3717,11 @@ trackedFiles:
   src/funcs/featuresSet.ts:
     last_write_checksum: sha1:e7e9879ac653fabe88e32a86fdec4a034365ca33
   src/funcs/hooksHooksNumberClaude.ts:
-    last_write_checksum: sha1:1cf1633aa781baac65c29b0520a88f126ee602ff
+    last_write_checksum: sha1:c4344337cef79a7745dbc165df00f4015f25c18d
   src/funcs/hooksHooksNumberCodex.ts:
-    last_write_checksum: sha1:e3058a75a2f79ac71e553d93e458bf6223ff671d
+    last_write_checksum: sha1:a2b2f32c3fe1737f623e805a31011ffd4618b369
   src/funcs/hooksHooksNumberCursor.ts:
-    last_write_checksum: sha1:4a69502b7be3a87d37afb9603b6a28d526a6d5da
+    last_write_checksum: sha1:b45fd09626573e284c4c16ff736fd4a259762064
   src/funcs/hooksHooksNumberLogs.ts:
     last_write_checksum: sha1:f3332525a9f55f7594772f83f9c88117ca39e5cb
   src/funcs/hooksHooksNumberMetrics.ts:
@@ -4478,7 +4478,7 @@ trackedFiles:
   src/models/components/getpluginsresult.ts:
     last_write_checksum: sha1:671459cf68e9cb135cd5438c651bb35b0843b5de
   src/models/components/getproductfeaturesresponsebody.ts:
-    last_write_checksum: sha1:9f758037adb46a3b2a03a7171c9c7a443d588caa
+    last_write_checksum: sha1:eb4c5228d950273e770be0bd8ef7203c67c399e5
   src/models/components/getprojectmetricssummarypayload.ts:
     last_write_checksum: sha1:e37e5370768df11ea61585493bffcc2c0f2ac198
   src/models/components/getprojectoverviewresult.ts:
@@ -4999,7 +4999,7 @@ trackedFiles:
   src/models/components/setpluginassignmentsresponsebody.ts:
     last_write_checksum: sha1:880bca89d1b570199aa3c9161292f13052406ea9
   src/models/components/setproductfeaturerequestbody.ts:
-    last_write_checksum: sha1:27d7aa315c619e9d01ce12696fdf8d13921eace3
+    last_write_checksum: sha1:265b7c452867c2293d4c73229f5809e7f9e963d6
   src/models/components/setprojectlogoresult.ts:
     last_write_checksum: sha1:4b596a9d3ddae8d3cd24632a9dca5126ae123ada
   src/models/components/setsourceenvironmentlinkrequestbody.ts:
@@ -5545,11 +5545,11 @@ trackedFiles:
   src/models/operations/getusersessionissuer.ts:
     last_write_checksum: sha1:48d1b30f84969345f3c30a8540b7355954106781
   src/models/operations/hooksnumberclaude.ts:
-    last_write_checksum: sha1:50fbac14d8c83e0d9a19e886efaa04ba247e76d4
+    last_write_checksum: sha1:749fcbb8db219045da2c07f93a8f709633bcf17c
   src/models/operations/hooksnumbercodex.ts:
-    last_write_checksum: sha1:cde32f95a54606ad7cdf6d6844d9d8da2f64dd4f
+    last_write_checksum: sha1:0ec369fe46cb348590e56c835b4296062df7a689
   src/models/operations/hooksnumbercursor.ts:
-    last_write_checksum: sha1:d6a6e9beb2a0594b73b95bc7956c7d1f1ebbd8b7
+    last_write_checksum: sha1:b9bd6b5a83b3c36cdfe9b841d79e6a673954e7fc
   src/models/operations/hooksnumberlogs.ts:
     last_write_checksum: sha1:4a0ef004b5f7db12dc269786c10dea7f9af79b1d
   src/models/operations/hooksnumbermetrics.ts:
@@ -8561,7 +8561,7 @@ examples:
     speakeasy-default-get-product-features:
       responses:
         "200":
-          application/json: {"authz_challenge_logging_enabled": false, "logs_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "sso_enabled": false, "tool_io_logs_enabled": true, "webhooks": true}
+          application/json: {"authz_challenge_logging_enabled": false, "logs_enabled": false, "observability_mode_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "sso_enabled": false, "tool_io_logs_enabled": true, "webhooks": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
