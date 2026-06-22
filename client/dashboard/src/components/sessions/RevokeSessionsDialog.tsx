@@ -36,12 +36,14 @@ export function RevokeSessionsDialog({
     },
   });
 
-  const { reset } = bulkRevoke;
+  const { reset, isPending } = bulkRevoke;
   // Clear any prior result when the dialog closes so stale failure messaging
-  // doesn't linger across reopens.
+  // doesn't linger across reopens — but not while a batch is still in flight,
+  // or the Revoke button could re-enable and allow a duplicate submission.
+  // isPending is a dep so the reset still runs once the in-flight batch settles.
   useEffect(() => {
-    if (!open) reset();
-  }, [open, reset]);
+    if (!open && !isPending) reset();
+  }, [open, isPending, reset]);
 
   const count = sessionIds.length;
   const failedCount = bulkRevoke.data?.failedCount ?? 0;
@@ -80,10 +82,10 @@ export function RevokeSessionsDialog({
           </Button>
           <Button
             variant="destructive"
-            disabled={bulkRevoke.isPending || count === 0}
+            disabled={isPending || count === 0}
             onClick={handleRevoke}
           >
-            {bulkRevoke.isPending ? "Revoking…" : `Revoke ${count}`}
+            {isPending ? "Revoking…" : `Revoke ${count}`}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>
