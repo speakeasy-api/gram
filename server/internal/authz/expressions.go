@@ -316,16 +316,30 @@ func evaluateGrantCheckDifference(grants []Grant, base GrantCheck, exclusion Gra
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonMissingBase}, nil
 	}
 
+	// Preserve the generic set-difference behavior for explicit expressions
+	// whose base and exclusion checks prove different concrete instances.
 	if !selectorsEqual(base.instanceSelectorView(), exclusion.instanceSelectorView()) {
 		return GrantExpressionResult{Satisfied: true, Reason: GrantExpressionReasonMatched}, nil
 	}
 
-	exclusionGrant, _ := matchingAllowGrant(grants, exclusion.Check.expand())
+	exclusionGrant, _ := matchingAllowGrant(grants, expandWithoutRoot(exclusion.Check))
 	if exclusionGrant != nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonExclusionMatched}, nil
 	}
 
 	return GrantExpressionResult{Satisfied: true, Reason: GrantExpressionReasonMatched}, nil
+}
+
+func expandWithoutRoot(check Check) []Check {
+	expanded := check.expand()
+	filtered := expanded[:0]
+	for _, expandedCheck := range expanded {
+		if expandedCheck.Scope == ScopeRoot {
+			continue
+		}
+		filtered = append(filtered, expandedCheck)
+	}
+	return filtered
 }
 
 func selectorsEqual(left Selector, right Selector) bool {

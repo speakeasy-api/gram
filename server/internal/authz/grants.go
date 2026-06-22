@@ -478,13 +478,13 @@ func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, erro
 func allowGrants(grants []Grant) []Grant {
 	for _, grant := range grants {
 		if grant.Effect == PolicyEffectDeny {
-			allowGrants := make([]Grant, 0, len(grants))
+			allowOnly := make([]Grant, 0, len(grants))
 			for _, grant := range grants {
 				if grant.Effect == PolicyEffectAllow {
-					allowGrants = append(allowGrants, grant)
+					allowOnly = append(allowOnly, grant)
 				}
 			}
-			return allowGrants
+			return allowOnly
 		}
 	}
 	return grants

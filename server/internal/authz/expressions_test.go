@@ -31,6 +31,37 @@ func TestGrantExpressionEvaluate_missingBase(t *testing.T) {
 	require.Equal(t, GrantExpressionReasonMissingBase, result.Reason)
 }
 
+func TestEvaluateGrantCheck_rootGrantNotSelfExcluded(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{NewGrant(ScopeRoot, WildcardResource)}
+	cases := []struct {
+		scope      Scope
+		resourceID string
+	}{
+		{scope: ScopeMCPConnect, resourceID: "tool_a"},
+		{scope: ScopeMCPRead, resourceID: "tool_a"},
+		{scope: ScopeMCPWrite, resourceID: "tool_a"},
+		{scope: ScopeProjectRead, resourceID: "proj_123"},
+		{scope: ScopeProjectWrite, resourceID: "proj_123"},
+		{scope: ScopeOrgRead, resourceID: "org_456"},
+		{scope: ScopeOrgAdmin, resourceID: "org_456"},
+		{scope: ScopeEnvironmentRead, resourceID: "env_a"},
+		{scope: ScopeEnvironmentWrite, resourceID: "env_a"},
+	}
+
+	for _, tc := range cases {
+		t.Run(string(tc.scope), func(t *testing.T) {
+			t.Parallel()
+
+			eval, err := evaluateGrantCheck(grants, Check{Scope: tc.scope, ResourceKind: "", ResourceID: tc.resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false})
+			require.NoError(t, err)
+			require.False(t, eval.Denied)
+			require.NotNil(t, eval.Grant)
+		})
+	}
+}
+
 func TestGrantExpressionEvaluate_rejectsDenyGrantForBaseScope(t *testing.T) {
 	t.Parallel()
 
