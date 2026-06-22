@@ -9,6 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { AgentUsage, AgentUsage$inboundSchema } from "./agentusage.js";
 import { ChatMessage, ChatMessage$inboundSchema } from "./chatmessage.js";
+import { ChatTotals, ChatTotals$inboundSchema } from "./chattotals.js";
 import { RiskSegment, RiskSegment$inboundSchema } from "./risksegment.js";
 
 export type Chat = {
@@ -86,6 +87,10 @@ export type Chat = {
    */
   totalTokens?: number | undefined;
   /**
+   * Trace-entry counts across the entire returned generation, independent of pagination. Each message maps to exactly one entry: a message carrying tool calls counts as a tool call regardless of role, otherwise the role decides.
+   */
+  totals?: ChatTotals | undefined;
+  /**
    * When the chat was last updated.
    */
   updatedAt: Date;
@@ -123,6 +128,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
     total_input_tokens: z.optional(z.int()),
     total_output_tokens: z.optional(z.int()),
     total_tokens: z.optional(z.int()),
+    totals: z.optional(ChatTotals$inboundSchema),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

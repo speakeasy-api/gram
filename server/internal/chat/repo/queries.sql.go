@@ -509,6 +509,82 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 	return i, err
 }
 
+const getChatEntryTotals = `-- name: GetChatEntryTotals :one
+WITH ordered AS (
+  SELECT
+    cm.id,
+    cm.role,
+    CASE
+      WHEN cm.tool_calls IS NULL THEN false
+      WHEN jsonb_typeof(cm.tool_calls) = 'array'
+        THEN jsonb_array_length(cm.tool_calls) > 0
+      -- Some rows store tool_calls double-encoded (a JSON string holding the
+      -- array); treat any non-empty/non-"[]" string as carrying tool calls.
+      WHEN jsonb_typeof(cm.tool_calls) = 'string'
+        THEN (cm.tool_calls #>> '{}') NOT IN ('', '[]', 'null')
+      ELSE false
+    END AS has_tool_calls
+  FROM chat_messages cm
+  WHERE cm.chat_id = $2
+    AND (cm.project_id IS NULL OR cm.project_id = $1::uuid)
+    AND cm.generation = $3::integer
+)
+SELECT
+  COUNT(*) FILTER (WHERE has_tool_calls OR role IN ('user', 'assistant', 'tool'))::bigint AS total,
+  COUNT(*) FILTER (WHERE NOT has_tool_calls AND role = 'user')::bigint AS user_messages,
+  COUNT(*) FILTER (WHERE NOT has_tool_calls AND role = 'assistant')::bigint AS assistant_messages,
+  COUNT(*) FILTER (WHERE has_tool_calls)::bigint AS tool_calls,
+  COUNT(*) FILTER (WHERE NOT has_tool_calls AND role = 'tool')::bigint AS tool_results,
+  (
+    SELECT COUNT(*)::bigint FROM ordered o
+    WHERE EXISTS (
+      SELECT 1 FROM risk_results rr
+      WHERE rr.chat_message_id = o.id
+        AND rr.project_id = $1::uuid
+        AND rr.found IS TRUE
+        AND rr.excluded_at IS NULL
+        AND rr.false_positive_at IS NULL
+    )
+  )::bigint AS risk_findings
+FROM ordered
+`
+
+type GetChatEntryTotalsParams struct {
+	ProjectID  uuid.UUID
+	ChatID     uuid.UUID
+	Generation int32
+}
+
+type GetChatEntryTotalsRow struct {
+	Total             int64
+	UserMessages      int64
+	AssistantMessages int64
+	ToolCalls         int64
+	ToolResults       int64
+	RiskFindings      int64
+}
+
+// Per-generation trace-entry totals for the chat detail filter bar. The detail
+// sheet paginates messages, so counts derived from the loaded page understate
+// the chat; these totals describe the whole generation regardless of which page
+// is in view. Each message maps to exactly one entry, mirroring the client's
+// getTraceEntryType precedence: a message carrying a non-empty tool_calls array
+// is a tool call regardless of role, otherwise the role decides. risk_findings
+// counts messages with an active (found, non-suppressed) risk result.
+func (q *Queries) GetChatEntryTotals(ctx context.Context, arg GetChatEntryTotalsParams) (GetChatEntryTotalsRow, error) {
+	row := q.db.QueryRow(ctx, getChatEntryTotals, arg.ProjectID, arg.ChatID, arg.Generation)
+	var i GetChatEntryTotalsRow
+	err := row.Scan(
+		&i.Total,
+		&i.UserMessages,
+		&i.AssistantMessages,
+		&i.ToolCalls,
+		&i.ToolResults,
+		&i.RiskFindings,
+	)
+	return i, err
+}
+
 const getChatMessageStats = `-- name: GetChatMessageStats :one
 SELECT
   COUNT(*)::bigint AS total,

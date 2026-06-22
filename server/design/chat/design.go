@@ -281,8 +281,21 @@ var Chat = Type("Chat", func() {
 	Attribute("has_more_after", Boolean, "Whether newer messages exist after the last message in this page (within the returned generation). Load them with an `after_seq` cursor.")
 	Attribute("risk_segments", ArrayOf(RiskSegment), "Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment's cursors to expand it.")
 	Attribute("agent_usage", AgentUsage, "Agent-specific usage enrichment for the chat, when available.")
+	Attribute("totals", ChatTotals, "Whole-generation trace-entry totals for the returned generation. Because messages are paginated, callers must use these (not the length of `messages`) to render filter-bar counts.")
 
 	Required("messages", "generation", "max_generation", "has_more_before", "has_more_after")
+})
+
+var ChatTotals = Type("ChatTotals", func() {
+	Description("Trace-entry counts across the entire returned generation, independent of pagination. Each message maps to exactly one entry: a message carrying tool calls counts as a tool call regardless of role, otherwise the role decides.")
+	Attribute("total", Int64, "Total trace entries in the generation (sum of the four entry-type counts; the `of N entries` denominator).")
+	Attribute("user_messages", Int64, "Number of user messages in the generation.")
+	Attribute("assistant_messages", Int64, "Number of assistant messages (without tool calls) in the generation.")
+	Attribute("tool_calls", Int64, "Number of messages carrying tool calls in the generation.")
+	Attribute("tool_results", Int64, "Number of tool-result messages in the generation.")
+	Attribute("risk_only", Int64, "Number of messages with an active (found, non-suppressed) risk finding in the generation.")
+
+	Required("total", "user_messages", "assistant_messages", "tool_calls", "tool_results", "risk_only")
 })
 
 var RiskSegment = Type("RiskSegment", func() {
