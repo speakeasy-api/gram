@@ -65,7 +65,7 @@ export type CreateRiskPolicyRequestBody = {
    */
   autoName?: boolean | undefined;
   /**
-   * Custom detection rule ids to enable for this policy.
+   * Custom detection rule ids to attach as detectors: a match produces a finding.
    */
   customRuleIds?: Array<string> | undefined;
   /**

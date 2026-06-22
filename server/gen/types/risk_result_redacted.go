@@ -42,6 +42,9 @@ type RiskResultRedacted struct {
 	Confidence *float64
 	// Tags from the detection rule.
 	Tags []string
+	// All matched spans attributed to this finding, each with its match replaced
+	// by an opaque fingerprint.
+	SpansRedacted []*RiskSpanRedacted
 	// When this result was created.
 	CreatedAt string
 }

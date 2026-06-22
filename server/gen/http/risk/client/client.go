@@ -57,6 +57,10 @@ type Client struct {
 	// listRiskCategories endpoint.
 	ListRiskCategoriesDoer goahttp.Doer
 
+	// CompileExpr Doer is the HTTP client used to make requests to the compileExpr
+	// endpoint.
+	CompileExprDoer goahttp.Doer
+
 	// GetRiskUserBreakdown Doer is the HTTP client used to make requests to the
 	// getRiskUserBreakdown endpoint.
 	GetRiskUserBreakdownDoer goahttp.Doer
@@ -167,6 +171,7 @@ func NewClient(
 		ListRiskResultsByChatDoer:          doer,
 		GetRiskOverviewDoer:                doer,
 		ListRiskCategoriesDoer:             doer,
+		CompileExprDoer:                    doer,
 		GetRiskUserBreakdownDoer:           doer,
 		GetRiskRuleBreakdownDoer:           doer,
 		GetRiskPolicyStatusDoer:            doer,
@@ -430,6 +435,30 @@ func (c *Client) ListRiskCategories() goa.Endpoint {
 		resp, err := c.ListRiskCategoriesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "listRiskCategories", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CompileExpr returns an endpoint that makes HTTP requests to the risk service
+// compileExpr server.
+func (c *Client) CompileExpr() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCompileExprRequest(c.encoder)
+		decodeResponse = DecodeCompileExprResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCompileExprRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CompileExprDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "compileExpr", err)
 		}
 		return decodeResponse(resp)
 	}

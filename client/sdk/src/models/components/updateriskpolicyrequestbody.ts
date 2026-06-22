@@ -57,7 +57,7 @@ export type UpdateRiskPolicyRequestBody = {
    */
   autoName?: boolean | undefined;
   /**
-   * Custom detection rule ids to enable for this policy. Omit to preserve the current selection.
+   * Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.
    */
   customRuleIds?: Array<string> | undefined;
   /**
