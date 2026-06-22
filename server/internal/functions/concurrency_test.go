@@ -9,29 +9,32 @@ import (
 func TestConcurrencyLimits_DerivesFromSlots(t *testing.T) {
 	t.Parallel()
 	soft, hard := concurrencyLimits(8)
-	require.Equal(t, 8, hard, "hard limit equals N")
-	require.Equal(t, 5, soft, "soft limit is round(0.65*N) and strictly below N")
+	require.Equal(t, 16, hard, "hard limit is 2*N so the proxy admits a bounded queue beyond execution capacity")
+	require.Equal(t, 5, soft, "soft limit is round(0.65*N), below N for early autostart")
 }
 
-func TestConcurrencyLimits_SoftBelowHard(t *testing.T) {
+func TestConcurrencyLimits_LadderSoftBelowNBelowHard(t *testing.T) {
 	t.Parallel()
+	// The intended ordering is soft < N < hard: the runner queue (and its 429)
+	// forms between N and hard, while autostart fires at soft, below N.
 	for slots := 2; slots <= 64; slots++ {
 		soft, hard := concurrencyLimits(slots)
-		require.Equal(t, slots, hard)
-		require.Less(t, soft, hard, "soft limit must stay below hard so the proxy spreads load before saturation, slots=%d", slots)
+		require.Equal(t, 2*slots, hard, "hard is 2*N, slots=%d", slots)
+		require.Less(t, soft, slots, "soft stays below N so autostart triggers with execution headroom, slots=%d", slots)
+		require.Less(t, slots, hard, "N sits below hard so the runner holds the overflow before the proxy sheds, slots=%d", slots)
 		require.GreaterOrEqual(t, soft, 1)
 	}
 }
 
-func TestConcurrencyLimits_FloorsAtOne(t *testing.T) {
+func TestConcurrencyLimits_Floor(t *testing.T) {
 	t.Parallel()
-	// slots <= 1 is the one degenerate case where soft == hard: there is no
-	// integer strictly below 1. executionSlots never returns < 4, so this is
-	// unreachable in practice but kept correct for the standalone helper.
+	// executionSlots never returns < 4, so slots <= 1 is unreachable in practice
+	// but kept correct for the standalone helper: N floors at 1, giving hard 2 and
+	// soft 1.
 	for _, slots := range []int{0, 1} {
 		soft, hard := concurrencyLimits(slots)
-		require.Equal(t, 1, hard, "hard limit floors at 1, slots=%d", slots)
-		require.Equal(t, 1, soft, "soft limit floors at 1, slots=%d", slots)
+		require.Equal(t, 2, hard, "hard floors at 2 (2*1), slots=%d", slots)
+		require.Equal(t, 1, soft, "soft floors at 1, slots=%d", slots)
 	}
 }
 
