@@ -29,7 +29,7 @@ use tokio::sync::{OnceCell, oneshot};
 use agentkit_compaction::{AgentBuilderCompactorExt, CompactionReason, Compactor};
 
 use crate::clip::ClippedToolSource;
-use crate::compaction::{Compaction, PersistingCompactor, build_compactor};
+use crate::compaction::{Compaction, PersistingCompactor, PrimaryCompaction, build_compactor};
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_bootstrap_client, build_http};
@@ -411,24 +411,27 @@ async fn spawn_thread(
         .observer(TracingReporter::new())
         .transcript(transcript);
 
-    // Register the loop mutator(s): Threshold's own shrink-to-fit compactor, or
-    // OnTurnEnd's cache-replay mutator plus an optional mid-turn safety net. The
-    // OnTurnEnd `terminal` pass runs explicitly at turn end in `run_loop`.
+    // Register the loop mutator(s): the policy's own compactor (Threshold's
+    // shrink-to-fit, or OnTurnEnd's cache-replay mutator) plus the universal
+    // mid-turn safety fallback when present. The OnTurnEnd `terminal` pass runs
+    // explicitly at turn end in `run_loop`.
     let turn_end_compactor = match compaction {
-        Some(Compaction::Inline(compactor)) => {
-            builder = builder.compactor(compactor);
-            None
-        }
-        Some(Compaction::TurnEnd {
-            mutator,
-            terminal,
-            safety,
-        }) => {
-            builder = builder.compactor(mutator);
-            if let Some(safety) = safety {
-                builder = builder.compactor(safety);
+        Some(Compaction { primary, fallback }) => {
+            let terminal = match primary {
+                Some(PrimaryCompaction::Inline(compactor)) => {
+                    builder = builder.compactor(compactor);
+                    None
+                }
+                Some(PrimaryCompaction::TurnEnd { mutator, terminal }) => {
+                    builder = builder.compactor(mutator);
+                    Some(terminal)
+                }
+                None => None,
+            };
+            if let Some(fallback) = fallback {
+                builder = builder.compactor(fallback);
             }
-            Some(terminal)
+            terminal
         }
         None => None,
     };

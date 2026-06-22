@@ -16,9 +16,10 @@
 //! that keeps calling tools could grow the window unbounded between turn ends.
 //! Once the latest item's `usage.input_tokens` crosses the window utilisation
 //! ceiling at `AfterToolResult` (before the next inference call), compaction
-//! runs immediately instead of waiting for turn end. `Threshold` reuses its own
-//! `percent`; `OnTurnEnd` (cron) carries no percent, so the ceiling defaults to
-//! [`CRON_SAFETY_PERCENT`]. This is a safety gap, not a tunable product knob.
+//! runs immediately instead of waiting for turn end. `Threshold` bounds itself
+//! at its own `percent`; every other policy (and any future variant that
+//! forgets to) falls back to a universal backstop at [`FALLBACK_SAFETY_PERCENT`].
+//! This is a safety gap, not a tunable product knob.
 //!
 //! Strategy pipeline: drop reasoning, drop failed tool results, summarise
 //! older items through a nested agent loop on the same model. System +
@@ -56,12 +57,14 @@ const COMPACTION_SYSTEM_PROMPT: &str = "You are a compaction agent. Compress the
 
 const KEEP_RECENT: usize = 4;
 
-/// Mid-turn safety ceiling for `OnTurnEnd` (cron) threads, which carry no
-/// product-configured compaction percent. Once a turn's reported
-/// `input_tokens` crosses this share of the context window at
-/// `AfterToolResult`, compaction runs before the next inference call so a
-/// runaway turn cannot grow the window unbounded between turn ends.
-const CRON_SAFETY_PERCENT: u32 = 80;
+/// Ultimate mid-turn safety ceiling. Attached to any policy that does not bound
+/// the context window before the next inference call itself — `OnTurnEnd` today,
+/// and any future variant that forgets to. Once a turn's projected request size
+/// crosses this share of the window at `AfterToolResult`, compaction runs before
+/// the next inference call so a runaway turn cannot grow the window unbounded.
+/// Deliberately high: it is a backstop, not a product threshold, and a policy
+/// with its own (tighter) bound never reaches it.
+const FALLBACK_SAFETY_PERCENT: u32 = 80;
 
 const FALLBACK_PERCENT: NonZeroU8 = match NonZeroU8::new(60) {
     Some(n) => n,
@@ -96,6 +99,21 @@ impl CompactionPolicy {
     /// rather than inline before the next model turn.
     pub fn runs_at_turn_end(&self) -> bool {
         matches!(self, CompactionPolicy::OnTurnEnd)
+    }
+
+    /// Whether this policy needs the universal mid-turn safety fallback
+    /// ([`FALLBACK_SAFETY_PERCENT`]). `Threshold` already shrinks-to-fit
+    /// mid-turn at its own (tighter) percent, and `Off` is an explicit opt-out;
+    /// everything else — `OnTurnEnd`, and any variant added later that forgets
+    /// to bound the window before the next inference call — falls back to the
+    /// backstop, so a misconfigured policy can never run a turn unbounded.
+    fn needs_mid_turn_safety_fallback(&self) -> bool {
+        // Inverted `matches!` so a future variant defaults to needing the
+        // backstop: only Threshold (self-bounds) and Off (opt-out) skip it.
+        !matches!(
+            self,
+            CompactionPolicy::Threshold { .. } | CompactionPolicy::Off
+        )
     }
 }
 
@@ -163,16 +181,50 @@ fn token_threshold_trigger(window: u64, percent: u32, fire_at_turn_end: bool) ->
         if !relevant {
             return None;
         }
-        let last_input = transcript
+        // Project the size of the *next* request, not the last one. Provider
+        // usage is reported on the assistant turn, so at `AfterToolResult` the
+        // most recent `input_tokens` predates the tool results just appended —
+        // a single round returning large results (each clipped only at
+        // `MAX_TOOL_BYTES`) could push the next prompt over the window while the
+        // stale figure stays under threshold, defeating the safety net. Add the
+        // assistant turn's own output plus a char-based estimate of everything
+        // appended since.
+        let last_usage_idx = transcript
             .iter()
-            .rev()
-            .find_map(|i| i.usage.as_ref()?.tokens.as_ref().map(|t| t.input_tokens))?;
-        (last_input >= threshold).then(|| {
+            .rposition(|i| i.usage.as_ref().and_then(|u| u.tokens.as_ref()).is_some())?;
+        let tokens = transcript[last_usage_idx]
+            .usage
+            .as_ref()
+            .and_then(|u| u.tokens.as_ref())?;
+        let appended: u64 = transcript[last_usage_idx + 1..]
+            .iter()
+            .map(estimate_item_tokens)
+            .sum();
+        let projected = tokens.input_tokens + tokens.output_tokens + appended;
+        (projected >= threshold).then(|| {
             CompactionReason::Custom(format!(
-                "input_tokens={last_input} >= threshold={threshold} (window={window}, {percent}%, {point:?})"
+                "projected_tokens={projected} >= threshold={threshold} (window={window}, {percent}%, {point:?})"
             ))
         })
     })
+}
+
+/// Char-based token estimate (~4 chars/token) for an item whose provider usage
+/// is not yet known — the tool results appended after the last model response.
+/// Only used to project the next request size in [`token_threshold_trigger`];
+/// kinds that don't round-trip through the runner contribute nothing.
+fn estimate_item_tokens(item: &Item) -> u64 {
+    let chars: usize = item
+        .parts
+        .iter()
+        .map(|part| match part {
+            Part::Text(t) => t.text.len(),
+            Part::ToolResult(r) => tool_output_text(&r.output).len(),
+            Part::ToolCall(c) => c.input.to_string().len(),
+            _ => 0,
+        })
+        .sum();
+    (chars / 4) as u64
 }
 
 /// Returns the trigger closure for the requested policy, or `None` when
@@ -400,23 +452,32 @@ impl Compactor for CachedCompactor {
     }
 }
 
-/// What [`build_compactor`] hands back. `Threshold` shrinks-to-fit inline before
+/// What [`build_compactor`] hands back: the policy's own compaction wiring (if
+/// any) plus an optional universal mid-turn safety fallback. Both can be `None`
+/// only transiently inside `build_compactor`; a fully-`None` result is reported
+/// as `Ok(None)` instead.
+pub struct Compaction {
+    /// Policy-specific compaction, or `None` when the policy compacts via the
+    /// fallback alone (e.g. a future window-unaware variant) or not at all.
+    pub primary: Option<PrimaryCompaction>,
+    /// Universal mid-turn safety net at [`FALLBACK_SAFETY_PERCENT`]: a real
+    /// summarising pass that fires at `AfterToolResult` once the projected
+    /// request size crosses the backstop. Present for any policy that does not
+    /// bound the window mid-turn itself (see
+    /// [`CompactionPolicy::needs_mid_turn_safety_fallback`]) when the window is
+    /// known; `None` otherwise.
+    pub fallback: Option<PersistingCompactor>,
+}
+
+/// The policy's own compaction wiring. `Threshold` shrinks-to-fit inline before
 /// a model request (mid-turn or at turn end); `OnTurnEnd` pairs a `terminal`
 /// pass (run explicitly at turn end — computes, persists, caches) with a
-/// `mutator` that applies the cached result in-memory at the next turn, plus an
-/// optional `safety` compactor that summarises mid-turn when a runaway turn
-/// crosses the window ceiling.
-pub enum Compaction {
+/// `mutator` that applies the cached result in-memory at the next turn.
+pub enum PrimaryCompaction {
     Inline(PersistingCompactor),
     TurnEnd {
         mutator: CachedCompactor,
         terminal: PersistingCompactor,
-        /// Mid-turn safety net for cron threads: a real summarising pass that
-        /// fires at `AfterToolResult` once the turn crosses
-        /// [`CRON_SAFETY_PERCENT`] of the window. `None` when the window is
-        /// unknown (0), in which case the cron still compacts at turn end via
-        /// `terminal`.
-        safety: Option<PersistingCompactor>,
     },
 }
 
@@ -433,9 +494,12 @@ pub fn build_compactor(
     client: GramBootstrapClient,
     tokens: TokenRegistry,
 ) -> Result<Option<Compaction>, RunnerError> {
-    let Some(trigger) = build_trigger(policy, context_window) else {
+    let primary_trigger = build_trigger(policy, context_window);
+    let needs_fallback = context_window > 0 && policy.needs_mid_turn_safety_fallback();
+    if primary_trigger.is_none() && !needs_fallback {
+        // Off, or a window-less policy with no budget to compute against.
         return Ok(None);
-    };
+    }
     let backend_agent = Arc::new(
         Agent::builder()
             .model(compactor_adapter)
@@ -471,60 +535,60 @@ pub fn build_compactor(
             .map_err(|e| RunnerError::AgentBuild(e.to_string()))
     };
 
-    // OnTurnEnd fires at AfterTurnEnded, which agentkit only reaches when the
-    // NEXT turn is admitted — too late for a cron thread reaped between fires,
-    // and it would never even persist. So run the real compaction terminally at
-    // turn end (caching its output) and let a lightweight mutator replay the
-    // cache in-memory if and when a next turn arrives. A separate `safety`
-    // compactor summarises mid-turn (AfterToolResult @ CRON_SAFETY_PERCENT) so a
-    // single runaway turn can't outgrow the window before it ends. Threshold
-    // needs neither: its inline compactor shrinks-to-fit at both AfterToolResult
-    // and AfterTurnEnded and mutates the transcript directly.
-    if policy.runs_at_turn_end() {
-        let cache: CompactionCache = Arc::new(Mutex::new(None));
-        let terminal = PersistingCompactor::new(
+    // Policy-specific compaction. OnTurnEnd fires at AfterTurnEnded, which
+    // agentkit only reaches when the NEXT turn is admitted — too late for a cron
+    // thread reaped between fires, and it would never even persist. So run the
+    // real compaction terminally at turn end (caching its output) and let a
+    // lightweight mutator replay the cache in-memory if and when a next turn
+    // arrives. Threshold's inline compactor shrinks-to-fit at both
+    // AfterToolResult and AfterTurnEnded and mutates the transcript directly.
+    let primary = match primary_trigger {
+        None => None,
+        Some(trigger) if policy.runs_at_turn_end() => {
+            let cache: CompactionCache = Arc::new(Mutex::new(None));
+            let terminal = PersistingCompactor::new(
+                make_inner(trigger)?,
+                client.clone(),
+                tokens.clone(),
+                thread_id.to_string(),
+                Some(Arc::clone(&cache)),
+            );
+            let mutator = CachedCompactor {
+                cache,
+                trigger: on_turn_end_trigger(),
+            };
+            Some(PrimaryCompaction::TurnEnd { mutator, terminal })
+        }
+        Some(trigger) => Some(PrimaryCompaction::Inline(PersistingCompactor::new(
             make_inner(trigger)?,
             client.clone(),
             tokens.clone(),
             thread_id.to_string(),
-            Some(Arc::clone(&cache)),
-        );
-        let mutator = CachedCompactor {
-            cache,
-            trigger: on_turn_end_trigger(),
-        };
-        // Window unknown (resolver failed) → no budget to compute against, so
-        // skip the mid-turn net; the terminal pass still bounds the transcript
-        // at turn end.
-        let safety = if context_window > 0 {
-            Some(PersistingCompactor::new(
-                make_inner(token_threshold_trigger(
-                    context_window,
-                    CRON_SAFETY_PERCENT,
-                    false,
-                ))?,
-                client,
-                tokens,
-                thread_id.to_string(),
-                None,
-            ))
-        } else {
-            None
-        };
-        Ok(Some(Compaction::TurnEnd {
-            mutator,
-            terminal,
-            safety,
-        }))
-    } else {
-        Ok(Some(Compaction::Inline(PersistingCompactor::new(
-            make_inner(trigger)?,
+            None,
+        ))),
+    };
+
+    // Universal mid-turn backstop: a real summarising pass at
+    // FALLBACK_SAFETY_PERCENT, fired at AfterToolResult, for any policy that
+    // does not bound the window mid-turn itself. Threshold opts out (it
+    // self-bounds tighter); a forgotten future variant opts in by default.
+    let fallback = if needs_fallback {
+        Some(PersistingCompactor::new(
+            make_inner(token_threshold_trigger(
+                context_window,
+                FALLBACK_SAFETY_PERCENT,
+                false,
+            ))?,
             client,
             tokens,
             thread_id.to_string(),
             None,
-        ))))
-    }
+        ))
+    } else {
+        None
+    };
+
+    Ok(Some(Compaction { primary, fallback }))
 }
 
 /// Converts an agentkit transcript back into the wire shape the server
@@ -692,6 +756,44 @@ mod tests {
         let trigger = token_threshold_trigger(1_000, 80, false);
         let transcript = vec![Item::text(ItemKind::User, "no usage")];
         assert!(trigger(&transcript, MutationPoint::AfterToolResult).is_none());
+    }
+
+    #[test]
+    fn token_threshold_trigger_projects_appended_tool_results() {
+        use agentkit_core::{Part, ToolOutput, ToolResultPart};
+        // input_tokens (700) is under the 800 ceiling, but a large tool result
+        // appended this round projects the next request over it. Reading the
+        // stale input_tokens alone would miss this and let the turn run on.
+        let trigger = token_threshold_trigger(1_000, 80, false);
+        let big = "x".repeat(4_000); // ~1000 tokens at ~4 chars/token
+        let transcript = vec![
+            item_with_input_tokens(700),
+            Item::new(
+                ItemKind::Tool,
+                vec![Part::ToolResult(ToolResultPart::success(
+                    "c1",
+                    ToolOutput::text(big),
+                ))],
+            ),
+        ];
+        assert!(
+            trigger(&transcript, MutationPoint::AfterToolResult).is_some(),
+            "must project appended tool-result growth, not just stale input_tokens"
+        );
+    }
+
+    #[test]
+    fn needs_mid_turn_safety_fallback_by_policy() {
+        // Threshold self-bounds mid-turn; Off opts out; OnTurnEnd (and any
+        // future variant) gets the backstop.
+        assert!(
+            !CompactionPolicy::Threshold {
+                percent: NonZeroU8::new(60).unwrap(),
+            }
+            .needs_mid_turn_safety_fallback()
+        );
+        assert!(!CompactionPolicy::Off.needs_mid_turn_safety_fallback());
+        assert!(CompactionPolicy::OnTurnEnd.needs_mid_turn_safety_fallback());
     }
 
     #[test]
