@@ -334,24 +334,45 @@ func (s *Service) handleConfigChange(ctx context.Context, payload *gen.ClaudePay
 //     .mcp.json files inside cowork (no `claude` CLI available). Parsed
 //     by ParseCoworkMCPInventory.
 func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.ClaudePayload) {
-	if payload.SessionID == nil || *payload.SessionID == "" || payload.AdditionalData == nil {
+	if payload.SessionID == nil || *payload.SessionID == "" {
 		return
 	}
+	entries, variant, ok := s.parseMCPInventoryFromPayload(ctx, payload)
+	if !ok {
+		return
+	}
+	s.cacheMCPListSnapshot(ctx, *payload.SessionID, entries, variant)
+}
 
-	var entries []MCPServerEntry
-	var variant string
+// parseMCPInventoryFromPayload extracts the MCP inventory carried in the hook
+// payload's additional_data, returning the parsed entries, the detected agent
+// variant, and whether an inventory was present at all. It does not touch the
+// cache, so it is safe to call from both the SessionStart/ConfigChange capture
+// path and the PreToolUse enforcement path (which ships the same fields,
+// replayed from the session inventory file written at SessionStart — see
+// renderHookScript / renderClaudeMCPInventoryScript).
+//
+// Two payload shapes are supported, set by the hook script depending on the
+// execution environment it detected:
+//   - additional_data.mcp_inventory_claude_code: raw text from
+//     `claude mcp list`. Parsed by ParseClaudeMCPList.
+//   - additional_data.mcp_inventory_cowork: structured array scraped from
+//     .mcp.json files inside cowork (no `claude` CLI available). Parsed
+//     by ParseCoworkMCPInventory.
+func (s *Service) parseMCPInventoryFromPayload(ctx context.Context, payload *gen.ClaudePayload) ([]MCPServerEntry, string, bool) {
+	if payload.AdditionalData == nil {
+		return nil, "", false
+	}
 	switch {
 	case payload.AdditionalData["mcp_inventory_claude_code"] != nil:
 		raw, ok := payload.AdditionalData["mcp_inventory_claude_code"].(string)
 		if !ok || raw == "" {
-			return
+			return nil, "", false
 		}
-		entries = ParseClaudeMCPList(raw)
-		variant = agentVariantClaudeCode
+		return ParseClaudeMCPList(raw), agentVariantClaudeCode, true
 	case payload.AdditionalData["mcp_inventory_cowork"] != nil:
 		raw := payload.AdditionalData["mcp_inventory_cowork"]
-		entries = ParseCoworkMCPInventory(raw)
-		variant = agentVariantCowork
+		entries := ParseCoworkMCPInventory(raw)
 		// Diagnostic: cmux's per-run config has evolved its field names
 		// across versions, so when the inventory ships but every entry
 		// comes out without a ConnectorUUID we'd silently fall back to
@@ -366,17 +387,28 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 			}
 		}
 		if len(entries) > 0 && !anyConnectorUUID {
+			sessionID := ""
+			if payload.SessionID != nil {
+				sessionID = *payload.SessionID
+			}
 			s.logger.WarnContext(ctx, "cowork mcp inventory has no connector_uuid on any entry",
 				attr.SlogEvent("claude_hook_cowork_inventory_missing_uuid"),
-				attr.SlogGenAIConversationID(*payload.SessionID),
+				attr.SlogGenAIConversationID(sessionID),
 				attr.SlogValueAny(raw),
 			)
 		}
+		return entries, agentVariantCowork, true
 	default:
-		return
+		return nil, "", false
 	}
+}
 
-	key := sessionMCPListCacheKey(*payload.SessionID)
+// cacheMCPListSnapshot stores the parsed inventory and agent variant under the
+// session's cache keys. Shared by the SessionStart/ConfigChange capture path
+// and the PreToolUse enforcement resolver, so a payload-carried inventory
+// self-heals the cache that the best-effort telemetry path later reads.
+func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, entries []MCPServerEntry, variant string) {
+	key := sessionMCPListCacheKey(sessionID)
 	if err := s.cache.Set(ctx, key, entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
 			attr.SlogEvent("claude_hook_mcp_list_cache_set_failed"),
@@ -385,13 +417,31 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 		return
 	}
 
-	variantKey := sessionAgentVariantCacheKey(*payload.SessionID)
+	variantKey := sessionAgentVariantCacheKey(sessionID)
 	if err := s.cache.Set(ctx, variantKey, variant, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache session agent variant",
 			attr.SlogEvent("claude_hook_agent_variant_cache_set_failed"),
 			attr.SlogError(err),
 		)
 	}
+}
+
+// resolveMCPListForEnforcement returns the MCP inventory the PreToolUse
+// shadow-MCP guard should enforce against. It prefers the inventory carried in
+// the request payload — replayed from the session inventory file that
+// hook.sh attaches on every PreToolUse — because that is self-contained and
+// immune to the SessionStart-snapshot race that DNO-286 reported. When the
+// payload carries an inventory it is also written back to the cache so the
+// best-effort telemetry annotation path heals on subsequent events. When the
+// payload has none (e.g. the inventory file did not exist yet on a brand-new
+// session), it falls back to the cached SessionStart snapshot; callers treat a
+// returned error as fail-closed.
+func (s *Service) resolveMCPListForEnforcement(ctx context.Context, payload *gen.ClaudePayload, sessionID string) ([]MCPServerEntry, error) {
+	if entries, variant, ok := s.parseMCPInventoryFromPayload(ctx, payload); ok {
+		s.cacheMCPListSnapshot(ctx, sessionID, entries, variant)
+		return entries, nil
+	}
+	return s.getCachedMCPList(ctx, sessionID)
 }
 
 // refreshMCPListTTL extends the MCP list cache TTL for the session if the
@@ -701,11 +751,14 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		return result, nil
 	}
 
-	// Look up the cached `claude mcp list` snapshot captured at SessionStart.
-	// If it's missing we can't enforce the policy — deny with a retry-or-
-	// restart message so the user knows the guard is fail-closed rather
-	// than silently allowing.
-	entries, cacheErr := s.getCachedMCPList(ctx, sessionID)
+	// Resolve the `claude mcp list` inventory to enforce against. The hook
+	// script replays the SessionStart inventory file on every PreToolUse, so
+	// this normally comes straight from the request payload and is immune to
+	// the SessionStart-snapshot race (DNO-286); it falls back to the cached
+	// snapshot only when the payload carried none. If neither is available we
+	// can't enforce the policy — deny with a retry-or-restart message so the
+	// user knows the guard is fail-closed rather than silently allowing.
+	entries, cacheErr := s.resolveMCPListForEnforcement(ctx, payload, sessionID)
 	if cacheErr != nil {
 		auditReason := "missing MCP list snapshot for session"
 		userReason := "Speakeasy blocked this tool call: MCP server configuration is not available yet. Please retry in a moment, or restart Claude Code if the issue persists."

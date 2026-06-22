@@ -466,6 +466,91 @@ func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 	assert.Equal(t, "allow", *output.PermissionDecision)
 }
 
+// DNO-286: the blocking PreToolUse guard must enforce against the inventory
+// carried in the request payload — replayed from the SessionStart inventory
+// file by hook.sh — not only the server-side cache. Here no snapshot is
+// cached, yet a payload-supplied inventory that resolves the tool's server to
+// a Gram-hosted URL must ALLOW, proving the payload path is consulted. Before
+// the fix this session would have denied with the retry/restart message
+// because the cache races the async SessionStart snapshot.
+func TestClaude_PreToolUse_EnforcesFromPayloadInventoryWithoutCache(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__gram__do_thing"
+	toolUseID := "toolu_payload_inventory"
+	userEmail := "claude-payload-inv@example.com"
+
+	// No cache.Set — the inventory arrives only in the payload.
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+		AdditionalData: map[string]any{
+			"mcp_inventory_claude_code": "gram: https://app.getgram.ai/mcp/team-foo (HTTP) - connected",
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "allow", *output.PermissionDecision,
+		"payload-supplied inventory must drive enforcement even with no cached snapshot")
+
+	// The payload inventory also self-heals the cache, so the best-effort
+	// telemetry annotation path finds the snapshot on subsequent events.
+	cached, cacheErr := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, cacheErr, "payload inventory should be written back to the cache")
+	require.Len(t, cached, 1)
+	assert.Equal(t, "https://app.getgram.ai/mcp/team-foo", cached[0].URL)
+}
+
+// A payload-supplied inventory that resolves the server to a non-Gram URL must
+// block with the shadow-MCP policy decision — not the "snapshot unavailable"
+// retry/restart message — confirming the inventory was consumed for
+// enforcement rather than triggering the fail-closed cache-miss branch.
+func TestClaude_PreToolUse_PayloadInventoryBlocksNonGramServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__notion__search"
+	toolUseID := "toolu_payload_inventory_nongram"
+	userEmail := "claude-payload-inv-nongram@example.com"
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+		AdditionalData: map[string]any{
+			"mcp_inventory_claude_code": "notion: https://mcp.notion.com/mcp (HTTP) - connected",
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision)
+	require.NotNil(t, output.PermissionDecisionReason)
+	assert.NotContains(t, *output.PermissionDecisionReason, "restart Claude Code",
+		"a payload inventory was supplied, so the block must come from the policy, not the cache-miss fail-closed path")
+}
+
 func TestMergeClaudeAuthContextMetadata_DoesNotSelectUserID(t *testing.T) {
 	t.Parallel()
 

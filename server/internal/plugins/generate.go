@@ -1319,6 +1319,41 @@ if type gram_enrich_identity_payload >/dev/null 2>&1; then
   payload=$(gram_enrich_identity_payload "$payload")
 fi
 
+# PreToolUse only: replay the MCP inventory captured at SessionStart from its
+# per-session file (written by mcp_inventory.sh) so the server can enforce
+# shadow-MCP policy without racing the async SessionStart snapshot it caches
+# server-side (DNO-286). Other events never read the file, keeping them cheap;
+# an absent file is a no-op and the server falls back to its cached snapshot.
+if command -v python3 >/dev/null 2>&1; then
+  merged=$(printf '%%s' "$payload" | PAYLOAD_TMPDIR="${TMPDIR:-/tmp}" python3 -c '
+import json, os, re, sys
+raw = sys.stdin.read()
+try:
+    data = json.loads(raw)
+except Exception:
+    sys.stdout.write(raw)
+    raise SystemExit
+if data.get("hook_event_name") == "PreToolUse":
+    sid = re.sub(r"[^A-Za-z0-9_-]", "", str(data.get("session_id") or ""))[:128]
+    fp = os.path.join(os.environ.get("PAYLOAD_TMPDIR", "/tmp"), "gram-hooks", "mcp-" + sid + ".json") if sid else ""
+    if fp and os.path.isfile(fp):
+        try:
+            with open(fp, encoding="utf-8") as rf:
+                frag = json.load(rf)
+        except Exception:
+            frag = None
+        if isinstance(frag, dict):
+            ad = data.get("additional_data")
+            if not isinstance(ad, dict):
+                ad = {}
+            # Do not clobber an inventory the caller already supplied.
+            for k, v in frag.items():
+                ad.setdefault(k, v)
+            data["additional_data"] = ad
+sys.stdout.write(json.dumps(data))
+') && [ -n "$merged" ] && payload="$merged"
+fi
+
 hook_hostname=$(hostname 2>/dev/null || true)
 hook_hostname_header=()
 if [ -n "$hook_hostname" ]; then
@@ -1517,23 +1552,55 @@ fi
 enriched=$(MCP_CC="$mcp_inventory_claude_code" \
            MCP_CW="$mcp_inventory_cowork" \
            PAYLOAD="$payload" \
+           PAYLOAD_TMPDIR="${TMPDIR:-/tmp}" \
            python3 -c '
-import json, os, sys
+import json, os, re, sys, time
 try:
     p = json.loads(os.environ["PAYLOAD"])
 except Exception:
     sys.exit(1)
 ad = p.get("additional_data") or {}
+frag = {}
 cc = os.environ.get("MCP_CC", "")
 if cc:
     ad["mcp_inventory_claude_code"] = cc
+    frag["mcp_inventory_claude_code"] = cc
 try:
     cw = json.loads(os.environ.get("MCP_CW", "null"))
 except Exception:
     cw = None
 if cw is not None:
     ad["mcp_inventory_cowork"] = cw
+    frag["mcp_inventory_cowork"] = cw
 p["additional_data"] = ad
+# Persist the inventory fragment to a per-session file so the blocking
+# PreToolUse hook can replay it in its own payload, instead of depending on
+# the server having cached this async SessionStart snapshot in time (DNO-286).
+# The file holds exactly the additional_data keys the server already parses.
+sid = re.sub(r"[^A-Za-z0-9_-]", "", str(p.get("session_id") or ""))[:128]
+if sid and frag:
+    base = os.path.join(os.environ.get("PAYLOAD_TMPDIR", "/tmp"), "gram-hooks")
+    try:
+        os.makedirs(base, mode=0o700, exist_ok=True)
+        # Prune snapshots older than 24h so session files do not accumulate.
+        now = time.time()
+        for fn in os.listdir(base):
+            if not fn.startswith("mcp-"):
+                continue
+            stale = os.path.join(base, fn)
+            try:
+                if now - os.path.getmtime(stale) > 86400:
+                    os.remove(stale)
+            except OSError:
+                pass
+        dest = os.path.join(base, "mcp-" + sid + ".json")
+        tmp = dest + ".tmp"
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as wf:
+            json.dump(frag, wf)
+        os.replace(tmp, dest)
+    except OSError:
+        pass
 print(json.dumps(p))
 ') || enriched="$payload"
 
