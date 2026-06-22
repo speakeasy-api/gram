@@ -130,6 +130,7 @@ func NewObserver(
 		piiScanner:       nil,
 		piScanner:        nil,
 		flags:            nil,
+		celEng:           nil,
 	}
 }
 

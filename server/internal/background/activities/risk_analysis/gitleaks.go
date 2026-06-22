@@ -87,5 +87,7 @@ func fromDetection(d gitleaks.Detection) Finding {
 		Confidence:       d.Confidence,
 		DeadLetterReason: "",
 		toolCallID:       "",
+		field:            "",
+		path:             "",
 	}
 }

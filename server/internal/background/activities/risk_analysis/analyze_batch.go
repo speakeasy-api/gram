@@ -75,7 +75,7 @@ type AnalyzeBatch struct {
 	flags           feature.Provider
 	presidioPub     gcp.Publisher[*riskv1.PresidioAnalysis]
 	gitleaksPub     gcp.Publisher[*riskv1.GitleaksAnalysis]
-	celEng          *celenv.Engine // shared CEL env, injected at construction
+	celEng          *celenv.Engine
 }
 
 func NewAnalyzeBatch(

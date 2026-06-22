@@ -682,9 +682,10 @@ func TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex(t *testing.T) {
 	require.Empty(t, rows)
 }
 
-// A match_config rule targeting tool_server flags a tool-request message whose
-// MCP server matches, exercising the DB → customRuleMessageView → engine path.
-func TestAnalyzeBatch_CustomDetectionRuleMatchConfigToolServer(t *testing.T) {
+// A CEL detection rule targeting the tool server flags a tool-request message
+// whose MCP server matches, exercising the DB → customRuleMessageView → engine
+// path.
+func TestAnalyzeBatch_CustomDetectionRuleToolServer(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)

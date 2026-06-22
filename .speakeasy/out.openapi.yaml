@@ -44136,7 +44136,7 @@ components:
           format: int64
         field:
           type: string
-          description: The message field this span matched, in author-facing form (content, prompt, assistant, output, or tool.name/tool.server/tool.function/tool.args). Empty for detectors that don't attribute a field (e.g. gitleaks, presidio).
+          description: The message field this span matched, in author-facing form (content, prompt, assistant, tool_result, or tool.name/tool.server/tool.function/tool.args). Empty for detectors that don't attribute a field (e.g. gitleaks, presidio).
         match:
           type: string
           description: The matched secret or sensitive data for this span.

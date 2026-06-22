@@ -14,7 +14,7 @@ export type RiskSpan = {
    */
   endPos?: number | undefined;
   /**
-   * The message field this span matched, in author-facing form (content, prompt, assistant, output, or tool.name/tool.server/tool.function/tool.args). Empty for detectors that don't attribute a field (e.g. gitleaks, presidio).
+   * The message field this span matched, in author-facing form (content, prompt, assistant, tool_result, or tool.name/tool.server/tool.function/tool.args). Empty for detectors that don't attribute a field (e.g. gitleaks, presidio).
    */
   field?: string | undefined;
   /**

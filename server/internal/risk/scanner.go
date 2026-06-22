@@ -120,7 +120,7 @@ type Scanner struct {
 	judge      ra.PromptJudge             // nil-safe; guarded at the call site
 	flags      feature.Provider           // nil disables prompt_based enforcement
 	metrics    *scannerMetrics
-	celEng     *celenv.Engine // shared CEL env, injected at construction
+	celEng     *celenv.Engine
 }
 
 // NewScanner creates a RiskScanner. piiScanner may be nil if Presidio

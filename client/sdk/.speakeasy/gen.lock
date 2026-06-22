@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: de5a6d7469e846e429c90ae76ef0d253
+  docChecksum: ac772634f88af7dd99d3990e46107af1
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -937,7 +937,7 @@ trackedFiles:
   docs/models/components/riskrulebreakdownresult.md:
     last_write_checksum: sha1:c1e2229fa35d47b5a96d056c40f66ea1fdb6d2ff
   docs/models/components/riskspan.md:
-    last_write_checksum: sha1:e1881066fb5115acdbab080c9d5c1159b0bd5720
+    last_write_checksum: sha1:3c8d13c3a8bd58baf0d10ddcbe326d146c137c32
   docs/models/components/riskspanredacted.md:
     last_write_checksum: sha1:9e70001c47cb1598313f2d293c3655db67aaf3fb
   docs/models/components/riskuserbreakdownresult.md:
@@ -4991,7 +4991,7 @@ trackedFiles:
   src/models/components/riskrulebreakdownresult.ts:
     last_write_checksum: sha1:6a9605a763b84d7f6ebc4d1fdc5e786c11ca2de6
   src/models/components/riskspan.ts:
-    last_write_checksum: sha1:a6789cd4239314c92f648097046087554c7749e3
+    last_write_checksum: sha1:7fc5b5e85e8c1bb11567a0cf4069a28f02532eb1
   src/models/components/riskspanredacted.ts:
     last_write_checksum: sha1:7d5f7a72db5fe08c954d438589112ea8b707a266
   src/models/components/riskuserbreakdownresult.ts:

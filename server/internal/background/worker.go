@@ -256,7 +256,7 @@ func NewTemporalWorker(
 	// on rather than failing worker startup.
 	celEng, celErr := celenv.New()
 	if celErr != nil {
-		logger.Error("build CEL engine for risk activities", attr.SlogError(celErr))
+		logger.ErrorContext(context.Background(), "build CEL engine for risk activities", attr.SlogError(celErr))
 	}
 
 	activities := NewActivities(
