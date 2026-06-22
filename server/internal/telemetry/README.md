@@ -370,7 +370,7 @@ Key testing patterns:
 - Use `testenv.Launch()` in `TestMain` to set up infrastructure
 - Create helper functions for inserting test data
 - Use table-driven tests with descriptive names
-- Use `require.Eventually` after inserts to handle ClickHouse eventual consistency — **do not use `time.Sleep`**. This is enforced by the `forbidigo` lint rule `GG013`, currently scoped to this package via `path-except` in `server/.golangci.yaml`.
+- After inserts, wait for ClickHouse eventual consistency by polling with `require.EventuallyWithT`, never `time.Sleep` (see the `golang` skill for the repo-wide convention and its `forbidigo` enforcement).
 
 ## Data Models
 
