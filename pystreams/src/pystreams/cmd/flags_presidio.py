@@ -42,7 +42,7 @@ def presidio_options() -> Sequence[click.Option]:
         click.Option(
             ["--scan-timeout"],
             type=float,
-            default=30.0,
+            default=60.0,
             envvar="GRAM_PYSTREAMS_SCAN_TIMEOUT",
             help=(
                 "Seconds a single scan may run before it is treated as a failure "
