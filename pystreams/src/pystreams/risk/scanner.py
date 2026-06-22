@@ -198,7 +198,7 @@ class ProcessPoolScanner(_AsyncCloseable):
         self,
         executor: ProcessPoolExecutor,
         *,
-        scan_timeout: float | None = 30.0,
+        scan_timeout: float | None = 300.0,
         wait_limiter: anyio.CapacityLimiter | None = None,
     ):
         self._executor = executor
@@ -214,7 +214,7 @@ class ProcessPoolScanner(_AsyncCloseable):
         *,
         max_workers: int = 4,
         max_tasks_per_child: int | None = 1000,
-        scan_timeout: float | None = 30.0,
+        scan_timeout: float | None = 300.0,
     ) -> ProcessPoolScanner:
         """Build the pool and eagerly warm every worker's analyzer.
 
