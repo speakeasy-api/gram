@@ -411,16 +411,23 @@ async fn spawn_thread(
         .observer(TracingReporter::new())
         .transcript(transcript);
 
-    // Register the loop mutator: Threshold's own shrink-to-fit compactor, or
-    // OnTurnEnd's cache-replay mutator. The OnTurnEnd `terminal` pass runs
-    // explicitly at turn end in `run_loop`.
+    // Register the loop mutator(s): Threshold's own shrink-to-fit compactor, or
+    // OnTurnEnd's cache-replay mutator plus an optional mid-turn safety net. The
+    // OnTurnEnd `terminal` pass runs explicitly at turn end in `run_loop`.
     let turn_end_compactor = match compaction {
         Some(Compaction::Inline(compactor)) => {
             builder = builder.compactor(compactor);
             None
         }
-        Some(Compaction::TurnEnd { mutator, terminal }) => {
+        Some(Compaction::TurnEnd {
+            mutator,
+            terminal,
+            safety,
+        }) => {
             builder = builder.compactor(mutator);
+            if let Some(safety) = safety {
+                builder = builder.compactor(safety);
+            }
             Some(terminal)
         }
         None => None,

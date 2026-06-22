@@ -11,6 +11,15 @@
 //!   utilisation.
 //! * `Off` — never compact.
 //!
+//! Independent of the policy, a mid-turn safety net guards against a single
+//! runaway turn — the loop does not bound max turns, so without this a turn
+//! that keeps calling tools could grow the window unbounded between turn ends.
+//! Once the latest item's `usage.input_tokens` crosses the window utilisation
+//! ceiling at `AfterToolResult` (before the next inference call), compaction
+//! runs immediately instead of waiting for turn end. `Threshold` reuses its own
+//! `percent`; `OnTurnEnd` (cron) carries no percent, so the ceiling defaults to
+//! [`CRON_SAFETY_PERCENT`]. This is a safety gap, not a tunable product knob.
+//!
 //! Strategy pipeline: drop reasoning, drop failed tool results, summarise
 //! older items through a nested agent loop on the same model. System +
 //! context items and the most recent few turns are preserved.
@@ -29,7 +38,7 @@ use agentkit_adapter_completions::CompletionsAdapter;
 use agentkit_compaction::{
     AgentCompactor, CompactionError, CompactionPipeline, CompactionReason, Compactor,
     DropFailedToolResultsStrategy, DropReasoningStrategy, StrategyCompactor,
-    SummarizeOlderStrategy, TriggerFn, context_window_trigger,
+    SummarizeOlderStrategy, TriggerFn,
 };
 use agentkit_core::{Item, ItemKind, Part, SessionId, ToolOutput, TurnCancellation};
 use agentkit_loop::{Agent, MutationPoint};
@@ -46,6 +55,13 @@ use crate::wire::{RunnerMessage, RunnerToolCall};
 const COMPACTION_SYSTEM_PROMPT: &str = "You are a compaction agent. Compress the transcript that follows into a durable context note for an assistant that has lost the original messages. Preserve every named person, every year and date, every place, every decision the assistant committed to, every tool the assistant invoked, and every actionable fact in the tool results. Drop chatter, narration, and chain-of-thought. Return only the compacted note as plain text.";
 
 const KEEP_RECENT: usize = 4;
+
+/// Mid-turn safety ceiling for `OnTurnEnd` (cron) threads, which carry no
+/// product-configured compaction percent. Once a turn's reported
+/// `input_tokens` crosses this share of the context window at
+/// `AfterToolResult`, compaction runs before the next inference call so a
+/// runaway turn cannot grow the window unbounded between turn ends.
+const CRON_SAFETY_PERCENT: u32 = 80;
 
 const FALLBACK_PERCENT: NonZeroU8 = match NonZeroU8::new(60) {
     Some(n) => n,
@@ -115,8 +131,8 @@ impl<'de> Deserialize<'de> for CompactionPolicy {
 }
 
 /// Trigger that fires at every `AfterTurnEnded` regardless of transcript
-/// size. Symmetric with [`context_window_trigger`] except for the
-/// utilisation check.
+/// size. The utilisation check is intentionally absent — `OnTurnEnd` compacts
+/// unconditionally at turn end.
 fn on_turn_end_trigger() -> TriggerFn {
     Box::new(move |_transcript: &[Item], point: MutationPoint| {
         if point != MutationPoint::AfterTurnEnded {
@@ -126,9 +142,47 @@ fn on_turn_end_trigger() -> TriggerFn {
     })
 }
 
+/// Token-utilisation trigger. Fires when the most recent transcript item's
+/// reported `usage.tokens.input_tokens` reaches `percent` of the context
+/// window. Always fires at `AfterToolResult` — the mid-turn safety net, run
+/// before the next inference call — and additionally at `AfterTurnEnded` when
+/// `fire_at_turn_end` is set. `percent` is clamped to `1..=100`.
+///
+/// Runner-side replacement for `agentkit_compaction::context_window_trigger`,
+/// which only fires at `AfterTurnEnded`; the extra `AfterToolResult` arm is
+/// what bounds a runaway turn when max turns are unbounded.
+fn token_threshold_trigger(window: u64, percent: u32, fire_at_turn_end: bool) -> TriggerFn {
+    let percent = percent.clamp(1, 100);
+    let threshold = window.saturating_mul(u64::from(percent)) / 100;
+    Box::new(move |transcript: &[Item], point: MutationPoint| {
+        let relevant = match point {
+            MutationPoint::AfterToolResult => true,
+            MutationPoint::AfterTurnEnded => fire_at_turn_end,
+            _ => false,
+        };
+        if !relevant {
+            return None;
+        }
+        let last_input = transcript
+            .iter()
+            .rev()
+            .find_map(|i| i.usage.as_ref()?.tokens.as_ref().map(|t| t.input_tokens))?;
+        (last_input >= threshold).then(|| {
+            CompactionReason::Custom(format!(
+                "input_tokens={last_input} >= threshold={threshold} (window={window}, {percent}%, {point:?})"
+            ))
+        })
+    })
+}
+
 /// Returns the trigger closure for the requested policy, or `None` when
 /// compaction should be disabled entirely (`Off`, or `Threshold` without a
 /// known context window).
+///
+/// `Threshold` fires at both `AfterToolResult` and `AfterTurnEnded`, so it
+/// shrinks-to-fit mid-turn as well as at turn end. `OnTurnEnd`'s mid-turn safety
+/// net is a separate compactor (see [`build_compactor`]), so its trigger here
+/// only covers the unconditional turn-end pass.
 fn build_trigger(policy: &CompactionPolicy, context_window: u64) -> Option<TriggerFn> {
     match policy {
         CompactionPolicy::Off => None,
@@ -136,9 +190,10 @@ fn build_trigger(policy: &CompactionPolicy, context_window: u64) -> Option<Trigg
             if context_window == 0 {
                 return None;
             }
-            Some(context_window_trigger(
+            Some(token_threshold_trigger(
                 context_window,
                 u32::from(percent.get()),
+                true,
             ))
         }
         CompactionPolicy::OnTurnEnd => Some(on_turn_end_trigger()),
@@ -346,14 +401,22 @@ impl Compactor for CachedCompactor {
 }
 
 /// What [`build_compactor`] hands back. `Threshold` shrinks-to-fit inline before
-/// a model request; `OnTurnEnd` pairs a `terminal` pass (run explicitly at turn
-/// end — computes, persists, caches) with a `mutator` that applies the cached
-/// result in-memory at the next turn.
+/// a model request (mid-turn or at turn end); `OnTurnEnd` pairs a `terminal`
+/// pass (run explicitly at turn end — computes, persists, caches) with a
+/// `mutator` that applies the cached result in-memory at the next turn, plus an
+/// optional `safety` compactor that summarises mid-turn when a runaway turn
+/// crosses the window ceiling.
 pub enum Compaction {
     Inline(PersistingCompactor),
     TurnEnd {
         mutator: CachedCompactor,
         terminal: PersistingCompactor,
+        /// Mid-turn safety net for cron threads: a real summarising pass that
+        /// fires at `AfterToolResult` once the turn crosses
+        /// [`CRON_SAFETY_PERCENT`] of the window. `None` when the window is
+        /// unknown (0), in which case the cron still compacts at turn end via
+        /// `terminal`.
+        safety: Option<PersistingCompactor>,
     },
 }
 
@@ -380,40 +443,49 @@ pub fn build_compactor(
             .build()
             .map_err(|e| RunnerError::AgentBuild(e.to_string()))?,
     );
-    let backend = AgentCompactor::builder()
-        .agent(backend_agent)
-        .session_id(SessionId::from(format!("{chat_id}-compactor")))
-        .system_prompt(COMPACTION_SYSTEM_PROMPT)
-        .build()
-        .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
-    let inner = StrategyCompactor::builder()
-        .trigger(trigger)
-        .strategy(
-            CompactionPipeline::new()
-                .with_strategy(DropReasoningStrategy::new())
-                .with_strategy(DropFailedToolResultsStrategy::new())
-                .with_strategy(
-                    SummarizeOlderStrategy::new(KEEP_RECENT)
-                        .preserve_kind(ItemKind::System)
-                        .preserve_kind(ItemKind::Context),
-                ),
-        )
-        .backend(backend)
-        .build()
-        .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
+    // Each compaction pass owns its own trigger, so it needs its own
+    // StrategyCompactor; they all share one backend sub-agent. The Threshold
+    // path builds one (inline); the cron path builds two — the terminal
+    // turn-end pass and the mid-turn safety net.
+    let make_inner = |trigger: TriggerFn| -> Result<StrategyCompactor, RunnerError> {
+        let backend = AgentCompactor::builder()
+            .agent(Arc::clone(&backend_agent))
+            .session_id(SessionId::from(format!("{chat_id}-compactor")))
+            .system_prompt(COMPACTION_SYSTEM_PROMPT)
+            .build()
+            .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
+        StrategyCompactor::builder()
+            .trigger(trigger)
+            .strategy(
+                CompactionPipeline::new()
+                    .with_strategy(DropReasoningStrategy::new())
+                    .with_strategy(DropFailedToolResultsStrategy::new())
+                    .with_strategy(
+                        SummarizeOlderStrategy::new(KEEP_RECENT)
+                            .preserve_kind(ItemKind::System)
+                            .preserve_kind(ItemKind::Context),
+                    ),
+            )
+            .backend(backend)
+            .build()
+            .map_err(|e| RunnerError::AgentBuild(e.to_string()))
+    };
 
     // OnTurnEnd fires at AfterTurnEnded, which agentkit only reaches when the
     // NEXT turn is admitted — too late for a cron thread reaped between fires,
     // and it would never even persist. So run the real compaction terminally at
     // turn end (caching its output) and let a lightweight mutator replay the
-    // cache in-memory if and when a next turn arrives. Threshold needs neither:
-    // it shrinks-to-fit inline and mutates the transcript directly.
+    // cache in-memory if and when a next turn arrives. A separate `safety`
+    // compactor summarises mid-turn (AfterToolResult @ CRON_SAFETY_PERCENT) so a
+    // single runaway turn can't outgrow the window before it ends. Threshold
+    // needs neither: its inline compactor shrinks-to-fit at both AfterToolResult
+    // and AfterTurnEnded and mutates the transcript directly.
     if policy.runs_at_turn_end() {
         let cache: CompactionCache = Arc::new(Mutex::new(None));
         let terminal = PersistingCompactor::new(
-            inner,
-            client,
-            tokens,
+            make_inner(trigger)?,
+            client.clone(),
+            tokens.clone(),
             thread_id.to_string(),
             Some(Arc::clone(&cache)),
         );
@@ -421,10 +493,32 @@ pub fn build_compactor(
             cache,
             trigger: on_turn_end_trigger(),
         };
-        Ok(Some(Compaction::TurnEnd { mutator, terminal }))
+        // Window unknown (resolver failed) → no budget to compute against, so
+        // skip the mid-turn net; the terminal pass still bounds the transcript
+        // at turn end.
+        let safety = if context_window > 0 {
+            Some(PersistingCompactor::new(
+                make_inner(token_threshold_trigger(
+                    context_window,
+                    CRON_SAFETY_PERCENT,
+                    false,
+                ))?,
+                client,
+                tokens,
+                thread_id.to_string(),
+                None,
+            ))
+        } else {
+            None
+        };
+        Ok(Some(Compaction::TurnEnd {
+            mutator,
+            terminal,
+            safety,
+        }))
     } else {
         Ok(Some(Compaction::Inline(PersistingCompactor::new(
-            inner,
+            make_inner(trigger)?,
             client,
             tokens,
             thread_id.to_string(),
@@ -551,6 +645,66 @@ mod tests {
 
     fn parse(json: &str) -> CompactionPolicy {
         serde_json::from_str(json).expect("CompactionPolicy::deserialize never errors")
+    }
+
+    fn item_with_input_tokens(n: u64) -> Item {
+        use agentkit_core::{TokenUsage, Usage};
+        Item::text(ItemKind::Assistant, "x").with_usage(Usage::new(TokenUsage::new(n, 0)))
+    }
+
+    #[test]
+    fn token_threshold_trigger_fires_mid_turn_when_over() {
+        // 80% of 1000 = 800; 900 input_tokens at AfterToolResult must fire.
+        let trigger = token_threshold_trigger(1_000, 80, false);
+        let transcript = vec![item_with_input_tokens(900)];
+        assert!(
+            trigger(&transcript, MutationPoint::AfterToolResult).is_some(),
+            "must compact mid-turn once over the ceiling"
+        );
+    }
+
+    #[test]
+    fn token_threshold_trigger_mid_turn_under_ceiling_is_none() {
+        let trigger = token_threshold_trigger(1_000, 80, false);
+        let transcript = vec![item_with_input_tokens(700)];
+        assert!(trigger(&transcript, MutationPoint::AfterToolResult).is_none());
+    }
+
+    #[test]
+    fn token_threshold_trigger_skips_turn_end_when_disabled() {
+        // The cron safety net is mid-turn only; turn end is the terminal pass.
+        let trigger = token_threshold_trigger(1_000, 80, false);
+        let transcript = vec![item_with_input_tokens(900)];
+        assert!(trigger(&transcript, MutationPoint::AfterTurnEnded).is_none());
+    }
+
+    #[test]
+    fn token_threshold_trigger_fires_at_both_points_when_enabled() {
+        // Threshold compacts mid-turn AND at turn end at the same percent.
+        let trigger = token_threshold_trigger(1_000, 60, true);
+        let transcript = vec![item_with_input_tokens(650)];
+        assert!(trigger(&transcript, MutationPoint::AfterToolResult).is_some());
+        assert!(trigger(&transcript, MutationPoint::AfterTurnEnded).is_some());
+    }
+
+    #[test]
+    fn token_threshold_trigger_without_usage_is_none() {
+        let trigger = token_threshold_trigger(1_000, 80, false);
+        let transcript = vec![Item::text(ItemKind::User, "no usage")];
+        assert!(trigger(&transcript, MutationPoint::AfterToolResult).is_none());
+    }
+
+    #[test]
+    fn build_trigger_threshold_also_fires_mid_turn() {
+        let policy = CompactionPolicy::Threshold {
+            percent: NonZeroU8::new(60).unwrap(),
+        };
+        let trigger = build_trigger(&policy, 1_000).expect("threshold + window => trigger");
+        let transcript = vec![item_with_input_tokens(700)];
+        assert!(
+            trigger(&transcript, MutationPoint::AfterToolResult).is_some(),
+            "Threshold must also compact mid-turn (safety net)"
+        );
     }
 
     #[tokio::test]
