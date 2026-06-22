@@ -1227,11 +1227,18 @@ func newStartCommand() *cli.Command {
 
 				logger.InfoContext(ctx, "shutting down server")
 
-				graceCtx, graceCancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownDrainTimeout)
+				graceCtx, graceCancel := context.WithTimeoutCause(
+					context.WithoutCancel(ctx),
+					shutdownDrainTimeout,
+					errors.New("graceful shutdown timed out"),
+				)
 				defer graceCancel()
 
 				if err := srv.Shutdown(graceCtx); err != nil {
-					logger.ErrorContext(ctx, "failed to shutdown development server", attr.SlogError(err))
+					if gerr := context.Cause(graceCtx); gerr != nil {
+						err = errors.Join(err, gerr)
+					}
+					logger.ErrorContext(ctx, "failed to shutdown server", attr.SlogError(err))
 				}
 			})
 
@@ -1296,8 +1303,13 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
-			cancel()
+			// ListenAndServe returns ErrServerClosed the instant srv.Shutdown is
+			// called, not when the drain finishes. Wait for the drain goroutine to
+			// fully complete before cancelling ctx: ctx is the server's BaseContext,
+			// so cancelling it here would cancel every in-flight request mid-drain
+			// and they would abort with context.Canceled instead of completing.
 			group.Wait()
+			cancel()
 
 			return nil
 		},
