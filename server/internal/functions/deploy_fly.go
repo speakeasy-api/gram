@@ -749,7 +749,10 @@ func (f *FlyRunner) launchN(ctx context.Context, logger *slog.Logger, appName st
 				return
 			}
 
-			if err := flapsc.Wait(ctx, appName, m, "started", 30*time.Second); err != nil {
+			// Every deploy creates a brand-new app, so the runner image (tagged
+			// per server version) is always a cold pull on the first machine.
+			// 30s was too tight and misread cold pulls as failures.
+			if err := flapsc.Wait(ctx, appName, m, "started", 60*time.Second); err != nil {
 				errCh <- fmt.Errorf("waiting for machine %s to start: %w", m.ID, err)
 				return
 			}
