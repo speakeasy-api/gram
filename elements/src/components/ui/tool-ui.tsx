@@ -355,17 +355,15 @@ function findMatchHits(text: string, values: string[]): MatchHit[] {
       idx = text.indexOf(value, from);
     }
   });
-  hits.sort((a, b) => a.start - b.start || a.matchIndex - b.matchIndex);
+  hits.sort((a, b) => a.start - b.start);
+  // Coalesce overlapping ranges so the renderer's sequential, non-overlapping
+  // slice walk stays correct. A merged range keeps the first hit's matchIndex
+  // (overlapping distinct findings are rare; correct rendering wins).
   const merged: MatchHit[] = [];
   for (const hit of hits) {
     const last = merged[merged.length - 1];
-    // Only coalesce overlapping ranges from the SAME finding — merging across
-    // findings would drop a matchIndex and mislabel the active match/exclusion.
-    if (last && hit.matchIndex === last.matchIndex && hit.start <= last.end) {
-      last.end = Math.max(last.end, hit.end);
-    } else {
-      merged.push({ ...hit });
-    }
+    if (last && hit.start <= last.end) last.end = Math.max(last.end, hit.end);
+    else merged.push({ ...hit });
   }
   return merged;
 }
