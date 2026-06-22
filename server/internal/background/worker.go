@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -249,6 +250,15 @@ func NewTemporalWorker(
 		MaxConcurrentActivityExecutionSize: perPodAIUsagePollerConcurrency,
 	})
 
+	// The CEL engine is immutable + thread-safe; build one for this worker's
+	// risk activities and pass it down. Construction is deterministic and only
+	// fails on a malformed descriptor (a bug caught by tests), so log and carry
+	// on rather than failing worker startup.
+	celEng, celErr := celenv.New()
+	if celErr != nil {
+		logger.Error("build CEL engine for risk activities", attr.SlogError(celErr))
+	}
+
 	activities := NewActivities(
 		logger,
 		tracerProvider,
@@ -288,6 +298,7 @@ func NewTemporalWorker(
 		opts.PluginPublisher,
 		opts.ChatMessageWriter,
 		opts.Publishers,
+		celEng,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)

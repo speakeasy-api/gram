@@ -6,11 +6,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 )
 
 func celRules(t *testing.T, rules ...CustomDetectionRule) []CompiledCELRule {
 	t.Helper()
-	eng, err := CELEngine()
+	eng, err := celenv.New()
 	require.NoError(t, err)
 	compiled, err := CompileCELRules(eng, rules)
 	require.NoError(t, err)
@@ -19,7 +20,7 @@ func celRules(t *testing.T, rules ...CustomDetectionRule) []CompiledCELRule {
 
 func scanCEL(t *testing.T, view MessageView, rules []CompiledCELRule) []Finding {
 	t.Helper()
-	eng, err := CELEngine()
+	eng, err := celenv.New()
 	require.NoError(t, err)
 	findings, err := ScanCELRules(eng, view, rules)
 	require.NoError(t, err)

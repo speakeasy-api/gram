@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
@@ -119,6 +120,7 @@ type Scanner struct {
 	judge      ra.PromptJudge             // nil-safe; guarded at the call site
 	flags      feature.Provider           // nil disables prompt_based enforcement
 	metrics    *scannerMetrics
+	celEng     *celenv.Engine // shared CEL env, injected at construction
 }
 
 // NewScanner creates a RiskScanner. piiScanner may be nil if Presidio
@@ -128,7 +130,7 @@ type Scanner struct {
 // real-time hook path; returns an error if the detector cannot be built
 // (init relies on viper global state and should never realistically fail,
 // but propagating the error keeps startup honest).
-func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, piScanner *ra.PromptInjectionScanner, judge ra.PromptJudge, flags feature.Provider, meterProvider metric.MeterProvider) (*Scanner, error) {
+func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, piScanner *ra.PromptInjectionScanner, judge ra.PromptJudge, flags feature.Provider, meterProvider metric.MeterProvider, celEng *celenv.Engine) (*Scanner, error) {
 	gitleaksScanner, err := ra.NewGitleaksScanner()
 	if err != nil {
 		return nil, fmt.Errorf("create gitleaks scanner: %w", err)
@@ -148,6 +150,7 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 		judge:      judge,
 		flags:      flags,
 		metrics:    newScannerMetrics(meterProvider, logger),
+		celEng:     celEng,
 	}, nil
 }
 
@@ -357,10 +360,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 
 	// Policy application gates detection: include narrows scope (alongside
 	// message_types); exempt takes the message out of the policy.
-	eng, err := ra.CELEngine()
-	if err != nil {
-		return nil, fmt.Errorf("build cel engine: %w", err)
-	}
+	eng := s.celEng
 	app, err := ra.CompileScope(eng, policy.ScopeInclude.String, policy.ScopeExempt.String)
 	if err != nil {
 		return nil, fmt.Errorf("compile policy scope: %w", err)
@@ -575,18 +575,15 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, v
 			continue
 		}
 		customRules = append(customRules, ra.CustomDetectionRule{
-			RuleID:       rule.RuleID,
-			Title:        rule.Title,
-			Description:  rule.Description,
+			RuleID:        rule.RuleID,
+			Title:         rule.Title,
+			Description:   rule.Description,
 			DetectionExpr: rule.DetectionExpr.String,
-			Regex:        rule.Regex.String,
+			Regex:         rule.Regex.String,
 		})
 	}
 
-	eng, err := ra.CELEngine()
-	if err != nil {
-		return nil, fmt.Errorf("build cel engine: %w", err)
-	}
+	eng := s.celEng
 	compiled, err := ra.CompileCELRules(eng, customRules)
 	if err != nil {
 		return nil, fmt.Errorf("compile custom detection rules: %w", err)

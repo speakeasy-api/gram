@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/google/cel-go/cel"
 
@@ -15,16 +14,11 @@ import (
 // backed by internal/risk/celenv. Rules store a CEL detection predicate
 // (detection_expr, legacy regex evaluated as content.matchRegex(regex)); policies
 // store CEL scope predicates (scope_include / scope_exempt).
-
-// celEngine is the shared, immutable CEL environment, built once. Eval is
-// thread-safe, so a single engine serves the batch analyzer and the realtime
-// scanner concurrently.
-var celEngine = sync.OnceValues(celenv.New)
-
-// CELEngine returns the shared CEL engine.
-func CELEngine() (*celenv.Engine, error) {
-	return celEngine()
-}
+//
+// The CEL engine is immutable and Eval is thread-safe, so a single instance is
+// constructed once at each composition root (server start, worker activities)
+// and injected into the consumers (Scanner, Service, AnalyzeBatch) rather than
+// reached through a package global.
 
 // celMessage adapts the structured MessageView into the celenv input model.
 func celMessage(view MessageView) celenv.Message {

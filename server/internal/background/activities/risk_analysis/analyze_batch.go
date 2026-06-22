@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
@@ -74,6 +75,7 @@ type AnalyzeBatch struct {
 	flags           feature.Provider
 	presidioPub     gcp.Publisher[*riskv1.PresidioAnalysis]
 	gitleaksPub     gcp.Publisher[*riskv1.GitleaksAnalysis]
+	celEng          *celenv.Engine // shared CEL env, injected at construction
 }
 
 func NewAnalyzeBatch(
@@ -89,6 +91,7 @@ func NewAnalyzeBatch(
 	flags feature.Provider,
 	presidioPub gcp.Publisher[*riskv1.PresidioAnalysis],
 	gitleaksPub gcp.Publisher[*riskv1.GitleaksAnalysis],
+	celEng *celenv.Engine,
 ) *AnalyzeBatch {
 	if piiScanner == nil {
 		piiScanner = &StubPIIScanner{}
@@ -110,6 +113,7 @@ func NewAnalyzeBatch(
 		flags:           flags,
 		presidioPub:     presidioPub,
 		gitleaksPub:     gitleaksPub,
+		celEng:          celEng,
 	}
 }
 
@@ -193,10 +197,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	// and supersedes the coarse message_types filter; exempt takes a matched
 	// message out of the policy entirely. Computed once, applied to the source
 	// scanners and the judge.
-	eng, err := CELEngine()
-	if err != nil {
-		return nil, fmt.Errorf("build cel engine: %w", err)
-	}
+	eng := a.celEng
 	app, err := CompileScope(eng, policy.ScopeInclude.String, policy.ScopeExempt.String)
 	if err != nil {
 		return nil, fmt.Errorf("compile policy scope: %w", err)
@@ -491,11 +492,7 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if len(customRules) > 0 {
 		wg.Go(func() {
-			eng, err := CELEngine()
-			if err != nil {
-				customErr = err
-				return
-			}
+			eng := a.celEng
 			for i, msg := range messages {
 				findings, err := ScanCELRules(eng, a.customRuleMessageView(ctx, msg), customRules)
 				if err != nil {
@@ -774,18 +771,15 @@ func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.
 			continue
 		}
 		customRules = append(customRules, CustomDetectionRule{
-			RuleID:       rule.RuleID,
-			Title:        rule.Title,
-			Description:  rule.Description,
+			RuleID:        rule.RuleID,
+			Title:         rule.Title,
+			Description:   rule.Description,
 			DetectionExpr: rule.DetectionExpr.String,
-			Regex:        rule.Regex.String,
+			Regex:         rule.Regex.String,
 		})
 	}
 
-	eng, err := CELEngine()
-	if err != nil {
-		return nil, fmt.Errorf("build cel engine: %w", err)
-	}
+	eng := a.celEng
 	compiled, err := CompileCELRules(eng, customRules)
 	if err != nil {
 		return nil, err

@@ -95,6 +95,9 @@ type Service struct {
 	// playground returns an "unsupported" response for that scanner family.
 	piiScanner ra.PIIScanner
 	piScanner  *ra.PromptInjectionScanner
+	// celEng is the shared CEL env, injected at construction; used to compile
+	// and validate scope/detection expressions. nil in the lightweight observer.
+	celEng *celenv.Engine
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -146,6 +149,7 @@ func NewService(
 	piiScanner ra.PIIScanner,
 	piScanner *ra.PromptInjectionScanner,
 	flags feature.Provider,
+	celEng *celenv.Engine,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -166,6 +170,7 @@ func NewService(
 		piiScanner:       piiScanner,
 		piScanner:        piScanner,
 		flags:            flags,
+		celEng:           celEng,
 	}
 }
 
@@ -329,10 +334,10 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 
 	// Scope predicates (CEL) apply to both standard and prompt policies, so they
 	// are not gated by policyType like the detection fields.
-	if err := validateScopeExpr(payload.ScopeInclude); err != nil {
+	if err := validateScopeExpr(s.celEng, payload.ScopeInclude); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid scope_include")
 	}
-	if err := validateScopeExpr(payload.ScopeExempt); err != nil {
+	if err := validateScopeExpr(s.celEng, payload.ScopeExempt); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid scope_exempt")
 	}
 
@@ -533,14 +538,14 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	// Scope predicates (CEL): omit to preserve; send (possibly empty) to replace.
 	scopeInclude := current.ScopeInclude
 	if payload.ScopeInclude != nil {
-		if err := validateScopeExpr(payload.ScopeInclude); err != nil {
+		if err := validateScopeExpr(s.celEng, payload.ScopeInclude); err != nil {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid scope_include")
 		}
 		scopeInclude = conv.PtrToPGText(payload.ScopeInclude)
 	}
 	scopeExempt := current.ScopeExempt
 	if payload.ScopeExempt != nil {
-		if err := validateScopeExpr(payload.ScopeExempt); err != nil {
+		if err := validateScopeExpr(s.celEng, payload.ScopeExempt); err != nil {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid scope_exempt")
 		}
 		scopeExempt = conv.PtrToPGText(payload.ScopeExempt)
@@ -1497,10 +1502,7 @@ func (s *Service) CompileExpr(ctx context.Context, payload *gen.CompileExprPaylo
 	if expr == "" {
 		return &gen.ExprCompileResult{OK: true, Error: ""}, nil
 	}
-	eng, err := ra.CELEngine()
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build cel engine")
-	}
+	eng := s.celEng
 	if _, err := eng.Compile(expr); err != nil {
 		return &gen.ExprCompileResult{OK: false, Error: err.Error()}, nil
 	}
@@ -1710,7 +1712,7 @@ func (s *Service) CreateCustomDetectionRule(ctx context.Context, payload *gen.Cr
 	if severity == "" {
 		severity = "medium"
 	}
-	if err := validateCustomDetectionRule(ruleID, title, detectionExpr, severity); err != nil {
+	if err := validateCustomDetectionRule(s.celEng, ruleID, title, detectionExpr, severity); err != nil {
 		return nil, err
 	}
 
@@ -1814,7 +1816,7 @@ func (s *Service) UpdateCustomDetectionRule(ctx context.Context, payload *gen.Up
 		description = strings.TrimSpace(*payload.Description)
 	}
 	detectionExpr := strings.TrimSpace(conv.PtrValOr(payload.DetectionExpr, ""))
-	if err := validateCustomDetectionRuleFields(title, detectionExpr, payload.Severity); err != nil {
+	if err := validateCustomDetectionRuleFields(s.celEng, title, detectionExpr, payload.Severity); err != nil {
 		return nil, err
 	}
 
@@ -2006,18 +2008,18 @@ func validateMessageTypes(messageTypes []string) error {
 	return nil
 }
 
-func validateCustomDetectionRule(ruleID, title, detectionExpr, severity string) error {
+func validateCustomDetectionRule(eng *celenv.Engine, ruleID, title, detectionExpr, severity string) error {
 	if !customRuleIDPattern.MatchString(ruleID) {
 		return oops.E(oops.CodeInvalid, nil, "rule_id must match custom.[a-z0-9_]+")
 	}
-	return validateCustomDetectionRuleFields(title, detectionExpr, severity)
+	return validateCustomDetectionRuleFields(eng, title, detectionExpr, severity)
 }
 
-func validateCustomDetectionRuleFields(title, detectionExpr, severity string) error {
+func validateCustomDetectionRuleFields(eng *celenv.Engine, title, detectionExpr, severity string) error {
 	if title == "" {
 		return oops.E(oops.CodeInvalid, nil, "title must not be empty")
 	}
-	if err := validateExpr(detectionExpr); err != nil {
+	if err := validateExpr(eng, detectionExpr); err != nil {
 		return oops.E(oops.CodeInvalid, err, "detection_expr is invalid")
 	}
 	if !customRuleSeverityAllow[severity] {
@@ -2028,13 +2030,9 @@ func validateCustomDetectionRuleFields(title, detectionExpr, severity string) er
 
 // validateExpr compiles a CEL predicate (scope or detection) so an invalid
 // expression is rejected at save time. Empty is valid.
-func validateExpr(expr string) error {
+func validateExpr(eng *celenv.Engine, expr string) error {
 	if strings.TrimSpace(expr) == "" {
 		return nil
-	}
-	eng, err := ra.CELEngine()
-	if err != nil {
-		return fmt.Errorf("build cel engine: %w", err)
 	}
 	if _, err := eng.Compile(expr); err != nil {
 		return fmt.Errorf("compile cel: %w", err)
@@ -2043,11 +2041,11 @@ func validateExpr(expr string) error {
 }
 
 // validateScopeExpr validates an optional CEL scope predicate from a payload.
-func validateScopeExpr(expr *string) error {
+func validateScopeExpr(eng *celenv.Engine, expr *string) error {
 	if expr == nil {
 		return nil
 	}
-	return validateExpr(*expr)
+	return validateExpr(eng, *expr)
 }
 
 func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
@@ -2171,7 +2169,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	if parsed.DetectionExpr == "" {
 		return nil, fmt.Errorf("model returned empty detection_expr")
 	}
-	if err := validateExpr(parsed.DetectionExpr); err != nil {
+	if err := validateExpr(s.celEng, parsed.DetectionExpr); err != nil {
 		return nil, fmt.Errorf("model returned invalid detection_expr: %w", err)
 	}
 	if !customRuleSeverityAllow[parsed.Severity] {
@@ -2323,10 +2321,7 @@ func (s *Service) testCustomRule(ruleID, detectionExpr, text string) (*gen.TestD
 		}, nil
 	}
 
-	eng, err := ra.CELEngine()
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build cel engine")
-	}
+	eng := s.celEng
 	// The playground only has pasted text, so it evaluates against a user
 	// message (content/prompt populated, no tool calls). Tool-targeted rules
 	// simply won't match here; save them and run analysis to see matches.
