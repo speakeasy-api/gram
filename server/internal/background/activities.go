@@ -60,7 +60,6 @@ type Activities struct {
 	pollAIData                      *activities.PollAIData
 	customDomainIngress             *activities.CustomDomainIngress
 	defaultCustomDomainProvisioner  k8s.ProvisionerKind
-	fallbackModelUsageTracking      *activities.FallbackModelUsageTracking
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
 	correlateClaudePrompts          *activities.CorrelateClaudePrompts
@@ -150,8 +149,6 @@ func NewActivities(
 	chatWriter *chat.ChatMessageWriter,
 	publishers *Publishers,
 ) *Activities {
-	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
-
 	return &Activities{
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -159,7 +156,6 @@ func NewActivities(
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient, defaultCustomDomainProvisioner),
 		defaultCustomDomainProvisioner:  defaultCustomDomainProvisioner,
-		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		correlateClaudePrompts:          activities.NewCorrelateClaudePrompts(logger, db, chConn),
@@ -308,10 +304,6 @@ func (a *Activities) GenerateToolsetEmbeddings(ctx context.Context, input activi
 
 func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyAppsRequest) (*activities.ReapFlyAppsResult, error) {
 	return a.reapFlyApps.Do(ctx, req)
-}
-
-func (a *Activities) FallbackModelUsageTracking(ctx context.Context, input activities.FallbackModelUsageTrackingArgs) error {
-	return a.fallbackModelUsageTracking.Do(ctx, input)
 }
 
 func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.GenerateChatTitleArgs) error {

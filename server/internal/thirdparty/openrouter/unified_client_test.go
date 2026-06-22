@@ -56,10 +56,6 @@ func (m *mockProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID str
 	return currentLimit, nil
 }
 
-func (m *mockProvisioner) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
-	return nil, nil
-}
-
 type mockMessageCaptureStrategy struct {
 	mu                   sync.Mutex
 	startOrResumeCalled  bool
@@ -92,18 +88,18 @@ type mockUsageTrackingStrategy struct {
 	mu               sync.Mutex
 	trackUsageCalled bool
 	trackUsageError  error
-	generationID     string
+	usage            *ModelUsage
 	orgID            string
 	projectID        string
 	source           billing.ModelUsageSource
 	chatID           string
 }
 
-func (m *mockUsageTrackingStrategy) TrackUsage(ctx context.Context, generationID, orgID, projectID string, source billing.ModelUsageSource, chatID string) error {
+func (m *mockUsageTrackingStrategy) TrackUsage(ctx context.Context, usage *ModelUsage, orgID, projectID string, source billing.ModelUsageSource, chatID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.trackUsageCalled = true
-	m.generationID = generationID
+	m.usage = usage
 	m.orgID = orgID
 	m.projectID = projectID
 	m.source = source
@@ -179,7 +175,14 @@ func TestChatClient_GetCompletion(t *testing.T) {
 			"usage": {
 				"prompt_tokens": 10,
 				"completion_tokens": 5,
-				"total_tokens": 15
+				"total_tokens": 15,
+				"cost": 0.00125,
+				"cost_details": {
+					"upstream_inference_cost": 0.0008,
+					"cache_discount": -0.0001
+				},
+				"prompt_tokens_details": {"cached_tokens": 3},
+				"completion_tokens_details": {"reasoning_tokens": 2}
 			}
 		}`))
 	}))
@@ -238,6 +241,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	assert.Equal(t, 10, resp.Usage.PromptTokens)
 	assert.Equal(t, 5, resp.Usage.CompletionTokens)
 	assert.Equal(t, 15, resp.Usage.TotalTokens)
+	assert.InDelta(t, 0.00125, resp.Usage.Cost, 1e-9)
 
 	// Give async operations time to complete
 	time.Sleep(100 * time.Millisecond)
@@ -249,9 +253,18 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	assert.True(t, titleGenerator.called, "ScheduleChatTitleGeneration should be called")
 	assert.True(t, telemetryLogger.called, "CreateLog should be called")
 
-	// Verify captured data
+	// Verify captured data — inline usage payload flows through to the tracker.
 	assert.Equal(t, "msg_123", captureStrategy.capturedResponse.MessageID)
-	assert.Equal(t, "msg_123", trackingStrategy.generationID)
+	require.NotNil(t, trackingStrategy.usage)
+	assert.Equal(t, "openai/gpt-5.4", trackingStrategy.usage.Model)
+	assert.Equal(t, 10, trackingStrategy.usage.TokensPrompt)
+	assert.Equal(t, 5, trackingStrategy.usage.TokensCompletion)
+	require.NotNil(t, trackingStrategy.usage.TotalCost)
+	assert.InDelta(t, 0.00125, *trackingStrategy.usage.TotalCost, 1e-9)
+	assert.InDelta(t, 0.0008, trackingStrategy.usage.UpstreamInferenceCost, 1e-9)
+	assert.InDelta(t, -0.0001, trackingStrategy.usage.CacheDiscount, 1e-9)
+	assert.Equal(t, 3, trackingStrategy.usage.NativeTokensCached)
+	assert.Equal(t, 2, trackingStrategy.usage.NativeTokensReasoning)
 	assert.Equal(t, "test-org", trackingStrategy.orgID)
 	assert.Equal(t, projectID.String(), trackingStrategy.projectID)
 	assert.Equal(t, chatID.String(), titleGenerator.chatID)

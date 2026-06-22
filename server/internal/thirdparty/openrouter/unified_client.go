@@ -227,12 +227,16 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 		}
 	}
 
-	// Apply usage tracking strategy (async)
+	// Apply usage tracking strategy (async). OpenRouter ships the full usage
+	// payload (cost + cost_details + token detail subobjects) inline on every
+	// completion, so we hand the strategy the decoded ModelUsage directly
+	// instead of polling /v1/generation.
 	if c.usageTrackingStrategy != nil {
+		modelUsage := response.Usage.ToModelUsage(response.Model)
 		go func() {
 			if err := c.usageTrackingStrategy.TrackUsage(
 				context.WithoutCancel(ctx),
-				response.MessageID,
+				modelUsage,
 				req.OrgID,
 				req.ProjectID,
 				req.UsageSource,
@@ -363,9 +367,13 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	message := chatResp.Choices[0].Message
 	finishReason := chatResp.Choices[0].FinishReason
 	usage := Usage{
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		TotalTokens:      0,
+		PromptTokens:            0,
+		CompletionTokens:        0,
+		TotalTokens:             0,
+		Cost:                    0,
+		CostDetails:             nil,
+		PromptTokensDetails:     nil,
+		CompletionTokensDetails: nil,
 	}
 	if chatResp.Usage != nil {
 		usage = *chatResp.Usage
@@ -452,9 +460,17 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		messageID:            "",
 		model:                "",
 		finishReason:         nil,
-		usage:                Usage{PromptTokens: 0, CompletionTokens: 0, TotalTokens: 0},
-		usageSet:             false,
-		isDone:               false,
+		usage: Usage{
+			PromptTokens:            0,
+			CompletionTokens:        0,
+			TotalTokens:             0,
+			Cost:                    0,
+			CostDetails:             nil,
+			PromptTokensDetails:     nil,
+			CompletionTokensDetails: nil,
+		},
+		usageSet: false,
+		isDone:   false,
 	}
 
 	return streamReader, nil

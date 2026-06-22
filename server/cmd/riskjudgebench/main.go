@@ -283,9 +283,6 @@ func (d *devProvisioner) GetKeyUsage(_ context.Context, _ string) (float64, *int
 func (d *devProvisioner) ReconcileMonthlyCredits(_ context.Context, _ string, currentLimit int64, _ *int64) (int64, error) {
 	return currentLimit, nil
 }
-func (d *devProvisioner) GetModelUsage(_ context.Context, _ string, _ string) (*openrouter.ModelUsage, error) {
-	return nil, fmt.Errorf("not implemented in bench")
-}
 
 var _ openrouter.Provisioner = (*devProvisioner)(nil)
 

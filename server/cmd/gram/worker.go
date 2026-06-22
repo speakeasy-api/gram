@@ -593,7 +593,7 @@ func newWorkerCommand() *cli.Command {
 				guardianPolicy,
 				openRouter,
 				captureStrategy,
-				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
+				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				telemetryLogger,
 			)
