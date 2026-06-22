@@ -181,21 +181,53 @@ func (m *ChallengeManager) ResolveAccessTokens(
 	return tokens, nil
 }
 
-// validateAndRefresh returns the upstream access token for sess,
-// refreshing via the upstream /token endpoint when the stored access
-// token has expired and a refresh_token is present.
+// defaultNoExpiryRefreshInterval is the application-layer cadence at which a
+// token whose upstream omitted expires_in but still handed us a refresh token
+// is re-validated by attempting a refresh. The provider gave a renewal path
+// without a stated lifetime, so we do not trust the token forever: it is
+// served for this long past its last issuance (updated_at), then refreshed.
+// Mirrors the historical fabricated now+1h expiry without persisting one in
+// the database. A default for now; likely to become configurable.
+const defaultNoExpiryRefreshInterval = time.Hour
+
+// validateAndRefresh returns the upstream access token for sess, refreshing
+// via the upstream /token endpoint when the token is past its usable window
+// and a refresh_token is present.
+//
+// The usable window depends on what the upstream told us:
+//   - access_expires_at set: the upstream-stated expiry governs.
+//   - NULL with no refresh token: non-expiring (e.g. Slack non-rotating
+//     xoxp) — served indefinitely.
+//   - NULL with a refresh token: no stated lifetime but a renewal path, so
+//     served until updated_at + defaultNoExpiryRefreshInterval, then refreshed.
 func (m *ChallengeManager) validateAndRefresh(
 	ctx context.Context,
 	sess remotesessions_repo.RemoteSession,
 ) (string, error) {
-	if sess.AccessExpiresAt.Valid && sess.AccessExpiresAt.Time.After(time.Now()) {
+	hasRefresh := sess.RefreshTokenEncrypted.Valid && sess.RefreshTokenEncrypted.String != ""
+
+	// usableUntil is the instant after which we stop serving the stored access
+	// token as-is; nil means "never" (non-expiring).
+	var usableUntil *time.Time
+	switch {
+	case sess.AccessExpiresAt.Valid:
+		usableUntil = &sess.AccessExpiresAt.Time
+	case hasRefresh:
+		deadline := sess.UpdatedAt.Time.Add(defaultNoExpiryRefreshInterval)
+		usableUntil = &deadline
+	default:
+		usableUntil = nil
+	}
+
+	if usableUntil == nil || usableUntil.After(time.Now()) {
 		plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
 		if err != nil {
 			return "", fmt.Errorf("decrypt access token: %w", err)
 		}
 		return plain, nil
 	}
-	if !sess.RefreshTokenEncrypted.Valid || sess.RefreshTokenEncrypted.String == "" {
+
+	if !hasRefresh {
 		return "", ErrNoValidToken
 	}
 	return m.refreshAccessToken(ctx, sess)
@@ -306,9 +338,12 @@ func refreshSessionTokens(
 		newRefreshEnc = conv.PtrToPGText(&v)
 	}
 
-	accessExpires := time.Now().Add(1 * time.Hour)
+	// expires_in absent ⇒ NULL (no known expiry), matching exchangeCode. Never
+	// fabricate a deadline the upstream did not assert.
+	var accessExpires *time.Time
 	if tok.ExpiresIn > 0 {
-		accessExpires = time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
+		v := time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
+		accessExpires = &v
 	}
 	refreshExpires := sess.RefreshExpiresAt
 	if tok.RefreshExpiresIn > 0 {
@@ -321,7 +356,7 @@ func refreshSessionTokens(
 		UserSessionIssuerID:   sess.UserSessionIssuerID,
 		RemoteSessionClientID: sess.RemoteSessionClientID,
 		AccessTokenEncrypted:  accessEnc,
-		AccessExpiresAt:       conv.ToPGTimestamptz(accessExpires),
+		AccessExpiresAt:       conv.PtrToPGTimestamptz(accessExpires),
 		RefreshTokenEncrypted: newRefreshEnc,
 		RefreshExpiresAt:      refreshExpires,
 		Scopes:                sess.Scopes,
