@@ -66,14 +66,16 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 
 	var blockReason, userReason string
 
-	codexEvent, err := codexevents.Normalize(authCtx, payload, hookevents.Identity{
+	codexEvent, err := codexevents.Normalize(authCtx, payload, hookevents.EventContext{
 		OrganizationID: orgID,
 		ProjectID:      *authCtx.ProjectID,
-		UserID:         metadata.UserID,
-		UserEmail:      metadata.UserEmail,
+		User: hookevents.User{
+			ID:    metadata.UserID,
+			Email: metadata.UserEmail,
+		},
 	}, time.Now())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize codex hook event: %w", err)
 	}
 
 	if codexEvent != nil {

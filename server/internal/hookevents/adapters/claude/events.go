@@ -9,17 +9,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 )
 
-func Normalize(authCtx *contextvalues.AuthContext, payload *gen.ClaudePayload, identity hookevents.Identity, timestamp time.Time) (any, error) {
+func Normalize(authCtx *contextvalues.AuthContext, payload *gen.ClaudePayload, eventContext hookevents.EventContext, timestamp time.Time) (any, error) {
 	if payload == nil {
 		return nil, nil
 	}
 
 	base := hookevents.Event{
 		Provider:       hookevents.ProviderClaude,
+		Type:           "",
 		RawEventType:   payload.HookEventName,
 		Timestamp:      timestamp,
 		AuthContext:    authCtx,
-		Identity:       identity,
+		Context:        eventContext,
 		ConversationID: conv.PtrValOr(payload.SessionID, ""),
 		Raw:            payload,
 	}

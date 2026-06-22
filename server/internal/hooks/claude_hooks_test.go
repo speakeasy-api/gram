@@ -77,9 +77,9 @@ func TestNormalizeClaudeHookEvent_PrefersAuthContextProjectOverCachedMetadata(t 
 	require.NotNil(t, normalized)
 	got, ok := normalized.(*hookevents.UserPromptSubmit)
 	require.True(t, ok)
-	assert.Equal(t, authCtx.ActiveOrganizationID, got.OrganizationID)
-	assert.Equal(t, *authCtx.ProjectID, got.ProjectID)
-	assert.Empty(t, got.UserID)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.Context.OrganizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.Context.ProjectID)
+	assert.Empty(t, got.Context.User.ID)
 }
 
 func TestNormalizeClaudeHookEvent_AllowsMissingUserEmail(t *testing.T) {
@@ -105,10 +105,10 @@ func TestNormalizeClaudeHookEvent_AllowsMissingUserEmail(t *testing.T) {
 	require.NotNil(t, normalized)
 	got, ok := normalized.(*hookevents.UserPromptSubmit)
 	require.True(t, ok)
-	assert.Equal(t, authCtx.ActiveOrganizationID, got.OrganizationID)
-	assert.Equal(t, *authCtx.ProjectID, got.ProjectID)
-	assert.Empty(t, got.UserID)
-	assert.Empty(t, got.UserEmail)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.Context.OrganizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.Context.ProjectID)
+	assert.Empty(t, got.Context.User.ID)
+	assert.Empty(t, got.Context.User.Email)
 }
 
 func TestNormalizeClaudeHookEvent_ResolvesPayloadEmailBeforeAuthUserID(t *testing.T) {
@@ -133,10 +133,10 @@ func TestNormalizeClaudeHookEvent_ResolvesPayloadEmailBeforeAuthUserID(t *testin
 	require.NotNil(t, normalized)
 	got, ok := normalized.(*hookevents.UserPromptSubmit)
 	require.True(t, ok)
-	assert.Equal(t, authCtx.ActiveOrganizationID, got.OrganizationID)
-	assert.Equal(t, *authCtx.ProjectID, got.ProjectID)
-	assert.Equal(t, userID, got.UserID)
-	assert.Equal(t, userEmail, got.UserEmail)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.Context.OrganizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.Context.ProjectID)
+	assert.Equal(t, userID, got.Context.User.ID)
+	assert.Equal(t, userEmail, got.Context.User.Email)
 }
 
 func TestNormalizeClaudeHookEvent_ResolvesAuthContextActorFromCachedEmail(t *testing.T) {
@@ -173,10 +173,10 @@ func TestNormalizeClaudeHookEvent_ResolvesAuthContextActorFromCachedEmail(t *tes
 	require.NotNil(t, normalized)
 	got, ok := normalized.(*hookevents.UserPromptSubmit)
 	require.True(t, ok)
-	assert.Equal(t, authCtx.ActiveOrganizationID, got.OrganizationID)
-	assert.Equal(t, *authCtx.ProjectID, got.ProjectID)
-	assert.Equal(t, userID, got.UserID)
-	assert.Equal(t, userEmail, got.UserEmail)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.Context.OrganizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.Context.ProjectID)
+	assert.Equal(t, userID, got.Context.User.ID)
+	assert.Equal(t, userEmail, got.Context.User.Email)
 }
 
 // When the request authenticated via Gram-Key + Gram-Project, handlePreToolUse

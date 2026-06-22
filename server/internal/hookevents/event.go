@@ -35,20 +35,24 @@ const (
 	EventTypeNotification        EventType = "notification"
 )
 
-type Identity struct {
+type User struct {
+	ID    string
+	Email string
+}
+
+type EventContext struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
-	UserID         string
-	UserEmail      string
+	User           User
 }
 
 type Event struct {
-	Provider     Provider
-	Type         EventType
-	RawEventType string
-	Timestamp    time.Time
-	AuthContext  *contextvalues.AuthContext
-	Identity
+	Provider       Provider
+	Type           EventType
+	RawEventType   string
+	Timestamp      time.Time
+	AuthContext    *contextvalues.AuthContext
+	Context        EventContext
 	ConversationID string
 	Raw            any
 }

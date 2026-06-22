@@ -310,18 +310,29 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 
 func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.ClaudePayload, timestamp time.Time) (any, error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	identity := hookevents.Identity{}
+	eventContext := hookevents.EventContext{
+		OrganizationID: "",
+		ProjectID:      uuid.Nil,
+		User: hookevents.User{
+			ID:    "",
+			Email: "",
+		},
+	}
 	if authCtx != nil && authCtx.ProjectID != nil {
-		identity.OrganizationID = authCtx.ActiveOrganizationID
-		identity.ProjectID = *authCtx.ProjectID
-		identity.UserID = authCtx.UserID
+		eventContext.OrganizationID = authCtx.ActiveOrganizationID
+		eventContext.ProjectID = *authCtx.ProjectID
+		eventContext.User.ID = authCtx.UserID
 		if authCtx.Email != nil {
-			identity.UserEmail = strings.TrimSpace(*authCtx.Email)
+			eventContext.User.Email = strings.TrimSpace(*authCtx.Email)
 		}
 	}
 
 	if payload == nil {
-		return claudeevents.Normalize(authCtx, payload, identity, timestamp)
+		event, err := claudeevents.Normalize(authCtx, payload, eventContext, timestamp)
+		if err != nil {
+			return nil, fmt.Errorf("normalize claude hook event: %w", err)
+		}
+		return event, nil
 	}
 
 	sessionID := conv.PtrValOr(payload.SessionID, "")
@@ -329,17 +340,23 @@ func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.Cla
 		metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")))
 		if err == nil {
 			if projectID, parseErr := uuid.Parse(metadata.ProjectID); parseErr == nil {
-				identity = hookevents.Identity{
+				eventContext = hookevents.EventContext{
 					OrganizationID: metadata.GramOrgID,
 					ProjectID:      projectID,
-					UserID:         metadata.UserID,
-					UserEmail:      strings.TrimSpace(metadata.UserEmail),
+					User: hookevents.User{
+						ID:    metadata.UserID,
+						Email: strings.TrimSpace(metadata.UserEmail),
+					},
 				}
 			}
 		}
 	}
 
-	return claudeevents.Normalize(authCtx, payload, identity, timestamp)
+	event, err := claudeevents.Normalize(authCtx, payload, eventContext, timestamp)
+	if err != nil {
+		return nil, fmt.Errorf("normalize claude hook event: %w", err)
+	}
+	return event, nil
 }
 
 func claudePayloadFromEvent(ev hookevents.Event) *gen.ClaudePayload {

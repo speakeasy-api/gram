@@ -33,24 +33,27 @@ func TestNormalize_PreToolUse(t *testing.T) {
 		UserEmail:     &userEmail,
 		ToolName:      &toolName,
 		ToolInput:     toolInput,
-	}, hookevents.Identity{
+	}, hookevents.EventContext{
 		OrganizationID: "org-id",
 		ProjectID:      projectID,
-		UserID:         "user-id",
-		UserEmail:      userEmail,
+		User: hookevents.User{
+			ID:    "user-id",
+			Email: userEmail,
+		},
 	}, timestamp)
 	require.NoError(t, err)
 	require.NotNil(t, ev)
 
-	toolEvent := ev.(*hookevents.BeforeToolUse)
+	toolEvent, ok := ev.(*hookevents.BeforeToolUse)
+	require.True(t, ok)
 	assert.Equal(t, hookevents.ProviderCodex, toolEvent.Provider)
 	assert.Equal(t, hookevents.EventTypeBeforeToolUse, toolEvent.Type)
 	assert.Equal(t, "PreToolUse", toolEvent.RawEventType)
 	assert.Equal(t, timestamp, toolEvent.Timestamp)
-	assert.Equal(t, "org-id", toolEvent.OrganizationID)
-	assert.Equal(t, projectID, toolEvent.ProjectID)
-	assert.Equal(t, "user-id", toolEvent.UserID)
-	assert.Equal(t, userEmail, toolEvent.UserEmail)
+	assert.Equal(t, "org-id", toolEvent.Context.OrganizationID)
+	assert.Equal(t, projectID, toolEvent.Context.ProjectID)
+	assert.Equal(t, "user-id", toolEvent.Context.User.ID)
+	assert.Equal(t, userEmail, toolEvent.Context.User.Email)
 	assert.Equal(t, sessionID, toolEvent.ConversationID)
 	assert.Equal(t, toolName, toolEvent.ToolName)
 	assert.Equal(t, toolInput, toolEvent.ToolInput)
@@ -59,7 +62,7 @@ func TestNormalize_PreToolUse(t *testing.T) {
 func TestNormalize_UnknownEvent(t *testing.T) {
 	t.Parallel()
 
-	ev, err := Normalize(nil, &gen.CodexPayload{HookEventName: "SomethingNew"}, hookevents.Identity{}, time.Now())
+	ev, err := Normalize(nil, &gen.CodexPayload{HookEventName: "SomethingNew"}, hookevents.EventContext{}, time.Now())
 	require.NoError(t, err)
 	assert.Nil(t, ev)
 }

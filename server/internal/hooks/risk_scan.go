@@ -54,11 +54,11 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 		return nil
 	}
 
-	if ev.OrganizationID == "" || ev.ProjectID == uuid.Nil {
+	if ev.Context.OrganizationID == "" || ev.Context.ProjectID == uuid.Nil {
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, ev.OrganizationID, ev.ProjectID, ev.UserID, text, messageType, toolName)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, text, messageType, toolName)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for hook event",
 			attr.SlogError(err),

@@ -9,17 +9,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 )
 
-func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CursorPayload, identity hookevents.Identity, timestamp time.Time) (any, error) {
+func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CursorPayload, eventContext hookevents.EventContext, timestamp time.Time) (any, error) {
 	if payload == nil {
 		return nil, nil
 	}
 
 	base := hookevents.Event{
 		Provider:       hookevents.ProviderCursor,
+		Type:           "",
 		RawEventType:   payload.HookEventName,
 		Timestamp:      timestamp,
 		AuthContext:    authCtx,
-		Identity:       identity,
+		Context:        eventContext,
 		ConversationID: conv.PtrValOr(payload.ConversationID, ""),
 		Raw:            payload,
 	}
@@ -65,7 +66,7 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CursorPayload, i
 			ToolOutput: payload.ToolResponse,
 		}), nil
 	case "stop":
-		return hookevents.NewStop(base, hookevents.StopParams{}), nil
+		return hookevents.NewStop(base, hookevents.StopParams{LastAssistantMessage: ""}), nil
 	default:
 		return nil, nil
 	}

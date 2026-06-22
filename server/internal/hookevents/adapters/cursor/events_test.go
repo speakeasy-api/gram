@@ -33,24 +33,27 @@ func TestNormalize_BeforeMCPExecution(t *testing.T) {
 		UserEmail:      &userEmail,
 		ToolName:       &toolName,
 		ToolInput:      toolInput,
-	}, hookevents.Identity{
+	}, hookevents.EventContext{
 		OrganizationID: "org-id",
 		ProjectID:      projectID,
-		UserID:         "user-id",
-		UserEmail:      userEmail,
+		User: hookevents.User{
+			ID:    "user-id",
+			Email: userEmail,
+		},
 	}, timestamp)
 	require.NoError(t, err)
 	require.NotNil(t, ev)
 
-	toolEvent := ev.(*hookevents.BeforeMCPExecution)
+	toolEvent, ok := ev.(*hookevents.BeforeMCPExecution)
+	require.True(t, ok)
 	assert.Equal(t, hookevents.ProviderCursor, toolEvent.Provider)
 	assert.Equal(t, hookevents.EventTypeBeforeMCPExecution, toolEvent.Type)
 	assert.Equal(t, "beforeMCPExecution", toolEvent.RawEventType)
 	assert.Equal(t, timestamp, toolEvent.Timestamp)
-	assert.Equal(t, "org-id", toolEvent.OrganizationID)
-	assert.Equal(t, projectID, toolEvent.ProjectID)
-	assert.Equal(t, "user-id", toolEvent.UserID)
-	assert.Equal(t, userEmail, toolEvent.UserEmail)
+	assert.Equal(t, "org-id", toolEvent.Context.OrganizationID)
+	assert.Equal(t, projectID, toolEvent.Context.ProjectID)
+	assert.Equal(t, "user-id", toolEvent.Context.User.ID)
+	assert.Equal(t, userEmail, toolEvent.Context.User.Email)
 	assert.Equal(t, conversationID, toolEvent.ConversationID)
 	assert.Equal(t, toolName, toolEvent.ToolName)
 	assert.Equal(t, toolInput, toolEvent.ToolInput)
@@ -59,7 +62,7 @@ func TestNormalize_BeforeMCPExecution(t *testing.T) {
 func TestNormalize_UnknownEvent(t *testing.T) {
 	t.Parallel()
 
-	ev, err := Normalize(nil, &gen.CursorPayload{HookEventName: "somethingNew"}, hookevents.Identity{}, time.Now())
+	ev, err := Normalize(nil, &gen.CursorPayload{HookEventName: "somethingNew"}, hookevents.EventContext{}, time.Now())
 	require.NoError(t, err)
 	assert.Nil(t, ev)
 }
