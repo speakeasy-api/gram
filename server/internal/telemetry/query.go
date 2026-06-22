@@ -21,6 +21,11 @@ import (
 // anything finer would just return sparse hourly data.
 const minIntervalSeconds int64 = 3600
 
+const (
+	defaultQuerySortBy = "total_cost"
+	defaultQueryTopN   = 10
+)
+
 // otherGroupLabel is the default synthetic group value that holds the rolled-up
 // remainder beyond top_n. If a real group already uses this value, the response
 // picks a suffixed label so the synthetic rollup cannot collide with user data.
@@ -71,6 +76,14 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	if payload.GroupBy != nil {
 		groupBy = *payload.GroupBy
 	}
+	sortBy := payload.SortBy
+	if sortBy == "" {
+		sortBy = defaultQuerySortBy
+	}
+	topN := payload.TopN
+	if topN == 0 {
+		topN = defaultQueryTopN
+	}
 
 	interval := calculateInterval(timeStart, timeEnd)
 	if payload.GranularitySeconds != nil && *payload.GranularitySeconds > 0 {
@@ -82,6 +95,9 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 
 	filters := make([]repo.AttributeMetricsFilter, 0, len(payload.Filters))
 	for _, f := range payload.Filters {
+		if f == nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "filters must not contain null entries")
+		}
 		filters = append(filters, repo.AttributeMetricsFilter{Dimension: f.Dimension, Values: f.Values})
 	}
 
@@ -90,7 +106,7 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 		TimeStart:       timeStart,
 		TimeEnd:         timeEnd,
 		GroupBy:         groupBy,
-		SortBy:          payload.SortBy,
+		SortBy:          sortBy,
 		Filters:         filters,
 		IntervalSeconds: interval,
 	}
@@ -104,7 +120,7 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "error running analytics timeseries query")
 	}
 
-	return buildQueryResult(groupBy, interval, timeStart, timeEnd, payload.TopN, tableRows, tsRows), nil
+	return buildQueryResult(groupBy, interval, timeStart, timeEnd, topN, tableRows, tsRows), nil
 }
 
 // ListSessions returns org-scoped chat sessions for a filtered analytics slice.
