@@ -3,6 +3,7 @@ package throttle
 import (
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -27,34 +28,42 @@ func TestThrottle_LeadingEdge(t *testing.T) {
 func TestThrottle_TrailingFire(t *testing.T) {
 	t.Parallel()
 
-	var trailingCount atomic.Int64
-	throttle := New[string, string](
-		50*time.Millisecond,
-		func(v string) string { return v },
-		func(v string) error { trailingCount.Add(1); return nil },
-	)
+	synctest.Test(t, func(t *testing.T) {
+		var trailingCount atomic.Int64
+		throttle := New[string, string](
+			50*time.Millisecond,
+			func(v string) string { return v },
+			func(v string) error { trailingCount.Add(1); return nil },
+		)
 
-	throttle.Do("x")
-	throttle.Do("x") // suppressed, marks pending
+		throttle.Do("x")
+		throttle.Do("x") // suppressed, marks pending
 
-	time.Sleep(100 * time.Millisecond)
-	assert.Equal(t, int64(1), trailingCount.Load(), "trailing callback should fire once")
+		// Advance the fake clock past the cooldown so the trailing timer fires.
+		time.Sleep(100 * time.Millisecond) //nolint:forbidigo // GG013: advances the synctest fake clock instantly (the only way to move past a timer inside a synctest.Test bubble); this exemption is valid ONLY within synctest.Test — do not copy it to a real-time time.Sleep
+		synctest.Wait()
+		assert.Equal(t, int64(1), trailingCount.Load(), "trailing callback should fire once")
+	})
 }
 
 func TestThrottle_NoTrailingWithoutPending(t *testing.T) {
 	t.Parallel()
 
-	var trailingCount atomic.Int64
-	throttle := New[int, int](
-		50*time.Millisecond,
-		func(v int) int { return v },
-		func(v int) error { trailingCount.Add(1); return nil },
-	)
+	synctest.Test(t, func(t *testing.T) {
+		var trailingCount atomic.Int64
+		throttle := New[int, int](
+			50*time.Millisecond,
+			func(v int) int { return v },
+			func(v int) error { trailingCount.Add(1); return nil },
+		)
 
-	throttle.Do(42) // leading fire, no subsequent calls
+		throttle.Do(42) // leading fire, no subsequent calls
 
-	time.Sleep(100 * time.Millisecond)
-	assert.Equal(t, int64(0), trailingCount.Load(), "no trailing when nothing was pending")
+		// Advance the fake clock past the cooldown; with nothing pending, no fire.
+		time.Sleep(100 * time.Millisecond) //nolint:forbidigo // GG013: advances the synctest fake clock instantly (the only way to move past a timer inside a synctest.Test bubble); this exemption is valid ONLY within synctest.Test — do not copy it to a real-time time.Sleep
+		synctest.Wait()
+		assert.Equal(t, int64(0), trailingCount.Load(), "no trailing when nothing was pending")
+	})
 }
 
 func TestThrottle_FlushFiresPending(t *testing.T) {
@@ -127,17 +136,19 @@ func TestThrottle_FlushMultipleKeys(t *testing.T) {
 func TestThrottle_ResetsAfterCooldown(t *testing.T) {
 	t.Parallel()
 
-	throttle := New[string, string](
-		50*time.Millisecond,
-		func(v string) string { return v },
-		func(v string) error { return nil },
-	)
+	synctest.Test(t, func(t *testing.T) {
+		throttle := New[string, string](
+			50*time.Millisecond,
+			func(v string) string { return v },
+			func(v string) error { return nil },
+		)
 
-	assert.True(t, throttle.Do("k"))
-	assert.False(t, throttle.Do("k")) // marks pending → trailing fires at 50ms, resets timer
+		assert.True(t, throttle.Do("k"))
+		assert.False(t, throttle.Do("k")) // marks pending → trailing fires at 50ms, resets timer
 
-	// Wait for both the trailing fire (50ms) and its cooldown (another 50ms).
-	time.Sleep(150 * time.Millisecond)
-
-	assert.True(t, throttle.Do("k"), "should fire again after cooldown expires")
+		// Advance past both the trailing fire (50ms) and its cooldown (another 50ms).
+		time.Sleep(150 * time.Millisecond) //nolint:forbidigo // GG013: advances the synctest fake clock instantly (the only way to move past a timer inside a synctest.Test bubble); this exemption is valid ONLY within synctest.Test — do not copy it to a real-time time.Sleep
+		synctest.Wait()
+		assert.True(t, throttle.Do("k"), "should fire again after cooldown expires")
+	})
 }

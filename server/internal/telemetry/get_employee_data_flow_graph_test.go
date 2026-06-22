@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -167,59 +168,89 @@ func TestGetEmployeeDataFlowGraph_WithHookToolCalls(t *testing.T) {
 		},
 	})
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
-	result, err := ti.service.GetEmployeeDataFlowGraph(ctx, &gen.GetEmployeeDataFlowGraphPayload{
-		From:   from,
-		To:     to,
-		UserID: &userID,
-	})
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetEmployeeDataFlowGraph(ctx, &gen.GetEmployeeDataFlowGraphPayload{
+			From:   from,
+			To:     to,
+			UserID: &userID,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.NotEmpty(c, res.Nodes)
 
-	originNode := findEmployeeDataFlowNode(result.Nodes, "origin", originHostname)
-	require.NotNil(t, originNode)
-	require.Equal(t, int64(3), originNode.TotalCalls)
-	require.Nil(t, findEmployeeDataFlowNode(result.Nodes, "origin", "https://api.github.com/mcp"))
+		// Guard every node/edge lookup before dereferencing: assert.NotNil only
+		// records a failure, so without an early return a nil hit on a not-yet-
+		// converged poll iteration would panic and abort the whole test.
+		originNode := findEmployeeDataFlowNode(res.Nodes, "origin", originHostname)
+		if !assert.NotNil(c, originNode) {
+			return
+		}
+		assert.Equal(c, int64(3), originNode.TotalCalls)
+		assert.Nil(c, findEmployeeDataFlowNode(res.Nodes, "origin", "https://api.github.com/mcp"))
 
-	githubNode := findEmployeeDataFlowNode(result.Nodes, "server", "GitHub")
-	require.NotNil(t, githubNode)
-	require.NotNil(t, githubNode.ServerClass)
-	require.Equal(t, "external", *githubNode.ServerClass)
-	require.Equal(t, int64(2), githubNode.TotalCalls)
+		githubNode := findEmployeeDataFlowNode(res.Nodes, "server", "GitHub")
+		if !assert.NotNil(c, githubNode) {
+			return
+		}
+		if !assert.NotNil(c, githubNode.ServerClass) {
+			return
+		}
+		assert.Equal(c, "external", *githubNode.ServerClass)
+		assert.Equal(c, int64(2), githubNode.TotalCalls)
 
-	localNode := findEmployeeDataFlowNode(result.Nodes, "server", "local")
-	require.NotNil(t, localNode)
-	require.NotNil(t, localNode.ServerClass)
-	require.Equal(t, "local", *localNode.ServerClass)
-	require.Equal(t, int64(1), localNode.TotalCalls)
+		localNode := findEmployeeDataFlowNode(res.Nodes, "server", "local")
+		if !assert.NotNil(c, localNode) {
+			return
+		}
+		if !assert.NotNil(c, localNode.ServerClass) {
+			return
+		}
+		assert.Equal(c, "local", *localNode.ServerClass)
+		assert.Equal(c, int64(1), localNode.TotalCalls)
 
-	cursorNode := findEmployeeDataFlowNode(result.Nodes, "client", "cursor")
-	require.NotNil(t, cursorNode)
-	require.Equal(t, int64(2), cursorNode.TotalCalls)
+		cursorNode := findEmployeeDataFlowNode(res.Nodes, "client", "cursor")
+		if !assert.NotNil(c, cursorNode) {
+			return
+		}
+		assert.Equal(c, int64(2), cursorNode.TotalCalls)
 
-	edge := findEmployeeDataFlowEdge(result.Edges, originNode.ID, cursorNode.ID)
-	require.NotNil(t, edge)
-	require.Equal(t, int64(2), edge.CallCount)
+		edge := findEmployeeDataFlowEdge(res.Edges, originNode.ID, cursorNode.ID)
+		if !assert.NotNil(c, edge) {
+			return
+		}
+		assert.Equal(c, int64(2), edge.CallCount)
 
-	listIssuesNode := findEmployeeDataFlowNode(result.Nodes, "tool", "list_issues")
-	require.NotNil(t, listIssuesNode)
-	edge = findEmployeeDataFlowEdge(result.Edges, githubNode.ID, listIssuesNode.ID)
-	require.NotNil(t, edge)
-	require.Equal(t, int64(1), edge.CallCount)
-	require.Equal(t, int64(1), edge.SuccessCount)
-	require.Equal(t, int64(0), edge.FailureCount)
+		listIssuesNode := findEmployeeDataFlowNode(res.Nodes, "tool", "list_issues")
+		if !assert.NotNil(c, listIssuesNode) {
+			return
+		}
+		edge = findEmployeeDataFlowEdge(res.Edges, githubNode.ID, listIssuesNode.ID)
+		if !assert.NotNil(c, edge) {
+			return
+		}
+		assert.Equal(c, int64(1), edge.CallCount)
+		assert.Equal(c, int64(1), edge.SuccessCount)
+		assert.Equal(c, int64(0), edge.FailureCount)
 
-	createIssueNode := findEmployeeDataFlowNode(result.Nodes, "tool", "create_issue")
-	require.NotNil(t, createIssueNode)
-	edge = findEmployeeDataFlowEdge(result.Edges, githubNode.ID, createIssueNode.ID)
-	require.NotNil(t, edge)
-	require.Equal(t, int64(1), edge.CallCount)
-	require.Equal(t, int64(0), edge.SuccessCount)
-	require.Equal(t, int64(1), edge.FailureCount)
+		createIssueNode := findEmployeeDataFlowNode(res.Nodes, "tool", "create_issue")
+		if !assert.NotNil(c, createIssueNode) {
+			return
+		}
+		edge = findEmployeeDataFlowEdge(res.Edges, githubNode.ID, createIssueNode.ID)
+		if !assert.NotNil(c, edge) {
+			return
+		}
+		assert.Equal(c, int64(1), edge.CallCount)
+		assert.Equal(c, int64(0), edge.SuccessCount)
+		assert.Equal(c, int64(1), edge.FailureCount)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func findEmployeeDataFlowNode(nodes []*gen.EmployeeDataFlowNode, tier, label string) *gen.EmployeeDataFlowNode {

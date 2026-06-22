@@ -36,5 +36,5 @@ def test_mismatched_pair_raises(monkeypatch) -> None:
 
     monkeypatch.setattr(discover, "require_topic_options", fake_require_topic_options)
 
-    with pytest.raises(ValueError, match="declares topic 'gram.ping.v1.Message'"):
+    with pytest.raises(ValueError, match=r"declares topic 'gram\.ping\.v1\.Message'"):
         require_subscription_for_message(ping_pb2.Message, processor_pb2.Processor)

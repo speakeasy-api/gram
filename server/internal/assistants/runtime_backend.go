@@ -44,7 +44,10 @@ type RuntimeBackend interface {
 	// RunTurn delivers a turn for `threadID` to the runner backing
 	// `runtime`. The call lands on /threads/{threadID}/turn so the
 	// runner can dispatch to the right per-thread tokio task.
-	RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string) error
+	// mcpServers carries the assistant's current MCP set so the runner
+	// can reconcile newly attached or detached servers into a live
+	// thread without re-running the full thread bootstrap.
+	RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, mcpServers []runtimeMCPServer) error
 	Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error)
 	// Stop halts the active runtime so it can be re-admitted later. Backends
 	// may keep persisted state (e.g. Fly app + IP) intact for warm reuse.
@@ -53,6 +56,11 @@ type RuntimeBackend interface {
 	// (e.g. deletes the Fly app). Idempotent: must succeed when the resource
 	// is already gone. Distinct from Stop, which may preserve state for reuse.
 	Reap(ctx context.Context, runtime assistantRuntimeRecord) error
+	// ReapStoppedMachine tears down only this thread's machine slot, leaving
+	// the surrounding app (and any sibling threads' machines) untouched. Used
+	// by the per-thread janitor so the next admit for this thread can cold-
+	// launch into the same app and keep its IP and secrets. Idempotent.
+	ReapStoppedMachine(ctx context.Context, runtime assistantRuntimeRecord) error
 }
 
 type RuntimeBackendEnsureResult struct {

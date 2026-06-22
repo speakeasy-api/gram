@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpname"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 // Cursor is the endpoint for Cursor hook events
@@ -69,6 +70,14 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	logger.InfoContext(ctx, "cursor hook received",
 		attr.SlogEvent("cursor_hook"),
 	)
+
+	// Claim the per-invocation idempotency token before persistence. A retry
+	// re-sends the same token: the decision still re-runs so the user stays
+	// blocked, but tagging the context as a duplicate suppresses the duplicate
+	// writes in recordCursorHook.
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+		ctx = withHookDuplicate(ctx)
+	}
 
 	result := &gen.CursorHookResult{
 		Permission:        nil,
@@ -189,6 +198,11 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string, blockReason string) {
 	if payload.ConversationID == nil || *payload.ConversationID == "" {
 		s.logger.WarnContext(ctx, "Cursor event called without conversation ID")
+		return
+	}
+
+	// Skip persistence for a redelivery (the token was claimed in Cursor()).
+	if s.isHookDuplicate(ctx) {
 		return
 	}
 
@@ -433,7 +447,7 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 	// "MCP:" prefix (which AttributeTool also recognizes) is handled separately
 	// below, so guard on the mcp__ prefix to keep that split exclusive.
 	if strings.HasPrefix(toolName, "mcp__") {
-		if server, fn, ok := mcpname.AttributeTool(toolName); ok {
+		if server, fn, ok := toolref.AttributeTool(toolName); ok {
 			attrs[attr.ToolCallSourceKey] = server
 			attrs[attr.ToolNameKey] = fn
 		}

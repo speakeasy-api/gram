@@ -31,6 +31,7 @@ pkl = "0.31.0"
 "github:gotestyourself/gotestsum" = "1.13.0"
 buf = "1.69.0"
 ruff = "0.15.16"
+"github:ast-grep/ast-grep" = "0.43.0"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
@@ -162,6 +163,9 @@ GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 # GRAM_PLUGINS_GITHUB_INSTALLATION_ID = ""
 GRAM_PYSTREAMS_CONTROL_PORT = "8089"
 GRAM_PYSTREAMS_CONTROL_HOST = "127.0.0.1"
+## Raise on blocking code detected on the pystreams event loop (aiocop). On by
+## default locally; unset in production. Set to "" in mise.local.toml to disable.
+GRAM_PYSTREAMS_DETECT_BLOCKING = "1"
 
 ##########################
 ## Observability config ##

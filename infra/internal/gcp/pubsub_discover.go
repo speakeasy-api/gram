@@ -21,6 +21,16 @@ const (
 	dlqSuffix      = "-dlq"
 	maxTopicIDLen  = 255
 
+	// deprecatedLabelKey is the metadata label key stamped on topics and
+	// subscriptions whose marker message carries the standard protobuf
+	// `option deprecated = true`. Its value is always "true".
+	deprecatedLabelKey = "deprecated"
+
+	// deprecatedLabelValue is the value stamped under deprecatedLabelKey. GCP
+	// label values must match [\p{Ll}\p{Lo}\p{N}_-]{0,63}, which "true"
+	// satisfies.
+	deprecatedLabelValue = "true"
+
 	// GCP requires a dead-letter policy's max delivery attempts to fall within
 	// this inclusive range; values outside it are rejected at reconcile time.
 	minDeliveryAttempts = 5
@@ -71,7 +81,7 @@ type DesiredSubscription struct {
 	ProtoMessage        string
 }
 
-func discoverPubSubFromDescriptor(descriptorBytes []byte) ([]DesiredTopic, []DesiredSubscription, error) {
+func DiscoverPubSub(descriptorBytes []byte) ([]DesiredTopic, []DesiredSubscription, error) {
 	var descriptorSet descriptorpb.FileDescriptorSet
 
 	if err := proto.Unmarshal(descriptorBytes, &descriptorSet); err != nil {
@@ -162,6 +172,16 @@ func SubscriptionOptionsFromMessage(message protoreflect.MessageDescriptor) (*pu
 	return subOptions, true
 }
 
+// messageDeprecated reports whether the marker message carries the standard
+// protobuf `option deprecated = true` message option.
+func messageDeprecated(message protoreflect.MessageDescriptor) bool {
+	options, ok := message.Options().(*descriptorpb.MessageOptions)
+	if !ok || options == nil {
+		return false
+	}
+	return options.GetDeprecated()
+}
+
 func ResolveSubscriptionName(message protoreflect.MessageDescriptor, opts *pubsubv1.SubscriptionOptions) string {
 	name := strings.TrimSpace(opts.GetName())
 	if name == "" {
@@ -196,6 +216,9 @@ func desiredTopicFromOptions(message protoreflect.MessageDescriptor, topicOption
 	labels := make(map[string]string, len(inlabels)+1)
 	maps.Copy(labels, inlabels)
 	labels["managed_by"] = managedByLabel
+	if messageDeprecated(message) {
+		labels[deprecatedLabelKey] = deprecatedLabelValue
+	}
 
 	return DesiredTopic{
 		Name:         ResolveTopicName(message, topicOptions),
@@ -210,6 +233,9 @@ func desiredSubscriptionFromOptions(message protoreflect.MessageDescriptor, subO
 	labels := make(map[string]string, len(inlabels)+1)
 	maps.Copy(labels, inlabels)
 	labels["managed_by"] = managedByLabel
+	if messageDeprecated(message) {
+		labels[deprecatedLabelKey] = deprecatedLabelValue
+	}
 
 	subName := ResolveSubscriptionName(message, subOptions)
 
@@ -365,13 +391,20 @@ func dedupeAndValidate(topics []DesiredTopic, subs []DesiredSubscription) ([]Des
 			)
 		}
 
+		dlqLabels := map[string]string{
+			"managed_by": managedByLabel,
+			"dlq_for":    sub.Name,
+		}
+		// A DLQ inherits its subscription's deprecation: marking the consumer
+		// deprecated should mark its dead-letter sink the same way.
+		if sub.Labels[deprecatedLabelKey] == deprecatedLabelValue {
+			dlqLabels[deprecatedLabelKey] = deprecatedLabelValue
+		}
+
 		dlqTopic := DesiredTopic{
-			Name:      sub.DeadLetterTopic,
-			Retention: 0,
-			Labels: map[string]string{
-				"managed_by": managedByLabel,
-				"dlq_for":    sub.Name,
-			},
+			Name:         sub.DeadLetterTopic,
+			Retention:    0,
+			Labels:       dlqLabels,
 			ProtoMessage: sub.ProtoMessage,
 		}
 		topicByName[dlqTopic.Name] = dlqTopic

@@ -17,7 +17,7 @@ import (
 
 // BuildClaudePayload builds the payload for the hooks claude endpoint from CLI
 // flags.
-func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, hooksClaudeProjectSlugInput string, hooksClaudeHookHostname string) (*hooks.ClaudePayload, error) {
+func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, hooksClaudeProjectSlugInput string, hooksClaudeHookHostname string, hooksClaudeIdempotencyKey string) (*hooks.ClaudePayload, error) {
 	var err error
 	var body ClaudeRequestBody
 	{
@@ -48,6 +48,12 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 	{
 		if hooksClaudeHookHostname != "" {
 			hookHostname = &hooksClaudeHookHostname
+		}
+	}
+	var idempotencyKey *string
+	{
+		if hooksClaudeIdempotencyKey != "" {
+			idempotencyKey = &hooksClaudeIdempotencyKey
 		}
 	}
 	v := &hooks.ClaudePayload{
@@ -83,13 +89,14 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.HookHostname = hookHostname
+	v.IdempotencyKey = idempotencyKey
 
 	return v, nil
 }
 
 // BuildCursorPayload builds the payload for the hooks cursor endpoint from CLI
 // flags.
-func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, hooksCursorProjectSlugInput string, hooksCursorHookHostname string) (*hooks.CursorPayload, error) {
+func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, hooksCursorProjectSlugInput string, hooksCursorHookHostname string, hooksCursorIdempotencyKey string) (*hooks.CursorPayload, error) {
 	var err error
 	var body CursorRequestBody
 	{
@@ -114,6 +121,12 @@ func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, h
 	{
 		if hooksCursorHookHostname != "" {
 			hookHostname = &hooksCursorHookHostname
+		}
+	}
+	var idempotencyKey *string
+	{
+		if hooksCursorIdempotencyKey != "" {
+			idempotencyKey = &hooksCursorIdempotencyKey
 		}
 	}
 	v := &hooks.CursorPayload{
@@ -157,13 +170,14 @@ func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, h
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.HookHostname = hookHostname
+	v.IdempotencyKey = idempotencyKey
 
 	return v, nil
 }
 
 // BuildCodexPayload builds the payload for the hooks codex endpoint from CLI
 // flags.
-func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hooksCodexProjectSlugInput string, hooksCodexHookHostname string) (*hooks.CodexPayload, error) {
+func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hooksCodexProjectSlugInput string, hooksCodexHookHostname string, hooksCodexIdempotencyKey string) (*hooks.CodexPayload, error) {
 	var err error
 	var body CodexRequestBody
 	{
@@ -196,6 +210,12 @@ func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hook
 			hookHostname = &hooksCodexHookHostname
 		}
 	}
+	var idempotencyKey *string
+	{
+		if hooksCodexIdempotencyKey != "" {
+			idempotencyKey = &hooksCodexIdempotencyKey
+		}
+	}
 	v := &hooks.CodexPayload{
 		HookEventName:        body.HookEventName,
 		SessionID:            body.SessionID,
@@ -221,6 +241,7 @@ func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hook
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.HookHostname = hookHostname
+	v.IdempotencyKey = idempotencyKey
 
 	return v, nil
 }

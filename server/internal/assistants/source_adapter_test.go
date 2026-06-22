@@ -44,3 +44,74 @@ func TestComposeInstructions_SlackIncludesRespondDecisionGuidance(t *testing.T) 
 	require.Contains(t, instructions, "Never post a message explaining a tool error")
 	require.NotContains(t, instructions, "calling platform_slack_set_thread_status with status set to an empty string")
 }
+
+func TestLinearAdapterDecodeTurnInlinesEventData(t *testing.T) {
+	t.Parallel()
+
+	// The normalized payload carries the Linear entity snapshot under `data`.
+	// The turn must inline it so the assistant can read the issue/comment
+	// fields the "inspect the event data" instruction tells it to act on.
+	got, err := linearAdapter{}.DecodeTurn(assistantThreadEventRecord{
+		EventID:               "evt-1",
+		NormalizedPayloadJSON: []byte(`{"event_type":"Comment.create","url":"https://linear.app/x/issue/ABC-1","data":{"id":"c1","body":"please look at this"}}`),
+	})
+	require.NoError(t, err)
+	require.Contains(t, got, "Comment.create")
+	require.Contains(t, got, "<event-data>")
+	require.Contains(t, got, `"body":"please look at this"`)
+	require.Contains(t, got, "Inspect the event data")
+}
+
+func TestLinearAdapterDecodeTurnInlinesUpdatedFrom(t *testing.T) {
+	t.Parallel()
+
+	// On an update, the prior values of the changed fields must reach the turn
+	// so the assistant can act on the specific transition (e.g. a status change).
+	got, err := linearAdapter{}.DecodeTurn(assistantThreadEventRecord{
+		EventID:               "evt-1",
+		NormalizedPayloadJSON: []byte(`{"event_type":"Issue.update","data":{"id":"i1"},"updated_from":{"stateId":"old-state"}}`),
+	})
+	require.NoError(t, err)
+	require.Contains(t, got, "<changed-fields-previous-values>")
+	require.Contains(t, got, `"stateId":"old-state"`)
+}
+
+func TestLinearAdapterDecodeTurnOmitsEmptyData(t *testing.T) {
+	t.Parallel()
+
+	got, err := linearAdapter{}.DecodeTurn(assistantThreadEventRecord{
+		EventID:               "evt-1",
+		NormalizedPayloadJSON: []byte(`{"event_type":"Issue.update"}`),
+	})
+	require.NoError(t, err)
+	require.NotContains(t, got, "<event-data>")
+}
+
+func TestGitHubAdapterDecodeTurnInlinesRawPayload(t *testing.T) {
+	t.Parallel()
+
+	// The normalized payload carries the raw GitHub webhook body under
+	// `payload`. The turn must inline it so the assistant can read the PR /
+	// comment / review fields it needs to act on.
+	got, err := githubAdapter{}.DecodeTurn(assistantThreadEventRecord{
+		EventID:               "evt-1",
+		NormalizedPayloadJSON: []byte(`{"event_type":"issue_comment","action":"created","repo":"octocat/Hello-World","number":42,"payload":{"comment":{"body":"ship it"}}}`),
+	})
+	require.NoError(t, err)
+	require.Contains(t, got, "issue_comment")
+	require.Contains(t, got, "octocat/Hello-World")
+	require.Contains(t, got, "<event-payload>")
+	require.Contains(t, got, `"body":"ship it"`)
+	require.Contains(t, got, "Inspect the event payload")
+}
+
+func TestGitHubAdapterDecodeTurnOmitsEmptyPayload(t *testing.T) {
+	t.Parallel()
+
+	got, err := githubAdapter{}.DecodeTurn(assistantThreadEventRecord{
+		EventID:               "evt-1",
+		NormalizedPayloadJSON: []byte(`{"event_type":"star","repo":"octocat/Hello-World"}`),
+	})
+	require.NoError(t, err)
+	require.NotContains(t, got, "<event-payload>")
+}

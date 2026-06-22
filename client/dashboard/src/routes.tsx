@@ -25,7 +25,6 @@ import Environments, {
   EnvironmentsRoot,
 } from "./pages/environments/Environments";
 import Home from "./pages/home/Home";
-import TelemetryQueryDemo from "./pages/demo/TelemetryQuery";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
@@ -35,13 +34,13 @@ import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import {
-  InsightsAgentsPage,
   InsightsEmployeeDetailPage,
   InsightsEmployeesLayout,
   InsightsEmployeesPage,
   InsightsHooksPage,
   InsightsRoot,
 } from "./pages/insights/Insights";
+import Costs from "./pages/costs/Costs";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
@@ -416,14 +415,8 @@ const ROUTE_STRUCTURE = {
     component: InsightsRoot,
     indexComponent: InsightsHooksPage,
   },
-  telemetryQueryDemo: {
-    title: "Analytics Query (demo)",
-    url: "telemetry-query-demo",
-    icon: "flask-conical",
-    component: TelemetryQueryDemo,
-  },
   employees: {
-    title: "Employees",
+    title: "Employee Enrollment",
     url: "employees",
     icon: "users",
     component: InsightsEmployeesLayout,
@@ -440,7 +433,17 @@ const ROUTE_STRUCTURE = {
     title: "Costs",
     url: "costs",
     icon: "credit-card",
-    component: InsightsAgentsPage,
+    component: Costs,
+    subPages: {
+      // Catch-all so the drill path (`/costs/Division~R&D/Department~Eng/…`)
+      // renders the same explorer at any depth. CostsExplorer reads the drill
+      // levels from the pathname; no per-depth route definition is needed.
+      drill: {
+        title: "Costs",
+        url: "*",
+        component: Costs,
+      },
+    },
   },
   logs: {
     title: "Tool Logs",
@@ -601,6 +604,18 @@ export const useRoutes = (overrides?: {
   const matchesCurrent = (url: string) => {
     const urlParts = url.split("/").filter(Boolean);
     const currentParts = location.pathname.split("/").filter(Boolean);
+
+    // Splat routes (trailing `*`, e.g. the costs drill) match any deeper path
+    // that shares their prefix — keeps the sidebar item active while drilling.
+    if (urlParts[urlParts.length - 1] === "*") {
+      const prefix = urlParts.slice(0, -1);
+      return (
+        currentParts.length >= prefix.length &&
+        prefix.every(
+          (part, index) => part === currentParts[index] || part.startsWith(":"),
+        )
+      );
+    }
 
     if (urlParts.length !== currentParts.length) {
       return false;

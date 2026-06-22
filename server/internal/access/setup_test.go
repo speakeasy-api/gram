@@ -141,6 +141,14 @@ func (p prefixedTestCache) Set(ctx context.Context, key string, value any, ttl t
 	return nil
 }
 
+func (p prefixedTestCache) Add(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+	ok, err := p.cache.Add(ctx, p.key(key), ttl)
+	if err != nil {
+		return false, fmt.Errorf("add prefixed test cache: %w", err)
+	}
+	return ok, nil
+}
+
 func (p prefixedTestCache) Update(ctx context.Context, key string, value any) error {
 	if err := p.cache.Update(ctx, p.key(key), value); err != nil {
 		return fmt.Errorf("update prefixed test cache: %w", err)

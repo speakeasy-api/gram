@@ -359,6 +359,10 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		var (
 			id                string
 			generation        *int
+			limit             int
+			beforeSeq         *int64
+			afterSeq          *int64
+			riskOnly          bool
 			sessionToken      *string
 			projectSlugInput  *string
 			chatSessionsToken *string
@@ -385,6 +389,64 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 				err = goa.MergeErrors(err, goa.InvalidRangeError("generation", *generation, 0, true))
 			}
 		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw == "" {
+				limit = 50
+			} else {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				limit = int(v)
+			}
+		}
+		if limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+		}
+		if limit > 200 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+		}
+		{
+			beforeSeqRaw := qp.Get("before_seq")
+			if beforeSeqRaw != "" {
+				v, err2 := strconv.ParseInt(beforeSeqRaw, 10, 64)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("before_seq", beforeSeqRaw, "integer"))
+				}
+				beforeSeq = &v
+			}
+		}
+		if beforeSeq != nil {
+			if *beforeSeq < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("before_seq", *beforeSeq, 1, true))
+			}
+		}
+		{
+			afterSeqRaw := qp.Get("after_seq")
+			if afterSeqRaw != "" {
+				v, err2 := strconv.ParseInt(afterSeqRaw, 10, 64)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("after_seq", afterSeqRaw, "integer"))
+				}
+				afterSeq = &v
+			}
+		}
+		if afterSeq != nil {
+			if *afterSeq < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("after_seq", *afterSeq, 1, true))
+			}
+		}
+		{
+			riskOnlyRaw := qp.Get("risk_only")
+			if riskOnlyRaw != "" {
+				v, err2 := strconv.ParseBool(riskOnlyRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("risk_only", riskOnlyRaw, "boolean"))
+				}
+				riskOnly = v
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -400,7 +462,7 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if err != nil {
 			return payload, err
 		}
-		payload = NewLoadChatPayload(id, generation, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewLoadChatPayload(id, generation, limit, beforeSeq, afterSeq, riskOnly, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1489,6 +1551,7 @@ func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *Ch
 func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatMessageResponseBody {
 	res := &ChatMessageResponseBody{
 		ID:             v.ID,
+		Seq:            v.Seq,
 		Role:           v.Role,
 		Content:        v.Content,
 		Model:          v.Model,
@@ -1500,6 +1563,22 @@ func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatM
 		ExternalUserID: v.ExternalUserID,
 		CreatedAt:      v.CreatedAt,
 		Generation:     v.Generation,
+	}
+
+	return res
+}
+
+// marshalChatRiskSegmentToRiskSegmentResponseBody builds a value of type
+// *RiskSegmentResponseBody from a value of type *chat.RiskSegment.
+func marshalChatRiskSegmentToRiskSegmentResponseBody(v *chat.RiskSegment) *RiskSegmentResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &RiskSegmentResponseBody{
+		FirstSeq:      v.FirstSeq,
+		LastSeq:       v.LastSeq,
+		HasMoreBefore: v.HasMoreBefore,
+		HasMoreAfter:  v.HasMoreAfter,
 	}
 
 	return res
@@ -1602,6 +1681,24 @@ func marshalChatClaudeToolUsageToClaudeToolUsageResponseBody(v *chat.ClaudeToolU
 		ToolName:        v.ToolName,
 		InputSizeBytes:  v.InputSizeBytes,
 		ResultSizeBytes: v.ResultSizeBytes,
+	}
+
+	return res
+}
+
+// marshalChatChatTotalsToChatTotalsResponseBody builds a value of type
+// *ChatTotalsResponseBody from a value of type *chat.ChatTotals.
+func marshalChatChatTotalsToChatTotalsResponseBody(v *chat.ChatTotals) *ChatTotalsResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ChatTotalsResponseBody{
+		Total:             v.Total,
+		UserMessages:      v.UserMessages,
+		AssistantMessages: v.AssistantMessages,
+		ToolCalls:         v.ToolCalls,
+		ToolResults:       v.ToolResults,
+		RiskOnly:          v.RiskOnly,
 	}
 
 	return res

@@ -2958,6 +2958,12 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   disabled_rules TEXT[],
   custom_rule_ids TEXT[] NOT NULL DEFAULT '{}',
   message_types TEXT[],
+  -- Fine-grained applicability as CEL boolean expressions over message fields
+  -- (see internal/risk/celenv). A policy applies when scope_include is true (or
+  -- NULL = all) AND scope_exempt is not true. scope_include generalizes
+  -- message_types; NULL falls back to those cards.
+  scope_include TEXT,
+  scope_exempt TEXT,
   action TEXT NOT NULL DEFAULT 'flag',
   audience_type TEXT NOT NULL DEFAULT 'everyone',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
@@ -2998,7 +3004,19 @@ CREATE TABLE IF NOT EXISTS risk_custom_detection_rules (
   rule_id TEXT NOT NULL,
   title TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
+  -- Legacy single-pattern matcher. Superseded by detection_expr; retained
+  -- (nullable) so existing rules keep evaluating until a later contract
+  -- migration drops it (after its readers are gone).
   regex TEXT,
+  -- Legacy structured matcher: an ANDed/ORed list of {target, op, value,
+  -- path?} conditions over message targets (content, user_prompt, tool_server,
+  -- tool_function, tool_args, ...). Also superseded by detection_expr and
+  -- retained until that same contract migration; new rules leave this NULL.
+  match_config JSONB,
+  -- CEL detection predicate, evaluated by internal/risk/celenv. A true verdict
+  -- produces a finding. NULL means no CEL matcher is configured, in which case
+  -- the rule falls back to its legacy match_config / regex columns.
+  detection_expr TEXT,
   severity TEXT NOT NULL DEFAULT 'medium',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3075,6 +3093,11 @@ CREATE TABLE IF NOT EXISTS risk_results (
   end_pos INT,
   confidence DOUBLE PRECISION,
   tags TEXT[],
+
+  -- All matched spans attributed to this one finding, as a JSON array of
+  -- {match,field,path,start_pos,end_pos}. match/start_pos/end_pos above mirror
+  -- the primary (first) span; spans is the full set. NULL for legacy/empty rows.
+  spans jsonb,
 
   -- Populated on rows that represent a message the scanner could not analyze
   -- after exhausting its retry budget

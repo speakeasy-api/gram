@@ -73,8 +73,6 @@ export default function Sources(): JSX.Element {
   const telemetry = useTelemetry();
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
-  const isRemoteMcpEnabled =
-    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
 
   const {
     data: deploymentResult,
@@ -83,15 +81,12 @@ export default function Sources(): JSX.Element {
   } = useLatestDeployment();
   const { data: assets, refetch: refetchAssets } = useListAssets();
   const { data: remoteMcpServersResult, isLoading: isLoadingRemoteMcp } =
-    useRemoteMcpServers(undefined, undefined, {
-      enabled: isRemoteMcpEnabled,
-    });
+    useRemoteMcpServers();
   const catalogIconMap = useCatalogIconMap();
   const deployment = deploymentResult?.deployment;
   // Remote MCP sources aren't deployment-bound, so the page isn't ready until
   // both queries have resolved.
-  const isLoading =
-    isLoadingDeployment || (isRemoteMcpEnabled && isLoadingRemoteMcp);
+  const isLoading = isLoadingDeployment || isLoadingRemoteMcp;
 
   const [viewMode, setViewMode] = useViewMode();
   const toolCountsBySource = useToolCountsBySource();
@@ -336,24 +331,22 @@ export default function Sources(): JSX.Element {
                         </span>
                       </div>
                     </DropdownMenuItem>
-                    {isRemoteMcpEnabled && (
-                      <DropdownMenuItem
-                        onSelect={() => routes.sources.addRemoteMcp.goTo()}
-                        className="flex cursor-pointer items-start gap-3 rounded-md p-2"
-                      >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
-                          <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium">
-                            Custom remote server
-                          </span>
-                          <span className="text-muted-foreground text-xs">
-                            Add existing remote servers by URL
-                          </span>
-                        </div>
-                      </DropdownMenuItem>
-                    )}
+                    <DropdownMenuItem
+                      onSelect={() => routes.sources.addRemoteMcp.goTo()}
+                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
+                        <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium">
+                          Custom remote server
+                        </span>
+                        <span className="text-muted-foreground text-xs">
+                          Add existing remote servers by URL
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 )}
               </DropdownMenu>

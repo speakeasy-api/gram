@@ -13,12 +13,64 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpname"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 )
+
+// hookDuplicateContextKey marks a request whose idempotency token was already
+// claimed by an earlier delivery (a retry). Write side-effects that run outside
+// the persistence path — block-reason telemetry, shadow-MCP findings — check it
+// so a retried *blocked* hook doesn't duplicate dashboard rows even though it
+// still re-derives and returns the same block decision.
+type hookDuplicateContextKey struct{}
+
+// withHookDuplicate tags ctx as a redelivery so downstream write side-effects
+// can skip themselves.
+func withHookDuplicate(ctx context.Context) context.Context {
+	return context.WithValue(ctx, hookDuplicateContextKey{}, true)
+}
+
+// isHookDuplicate reports whether ctx was tagged as a redelivery.
+func (s *Service) isHookDuplicate(ctx context.Context) bool {
+	dup, _ := ctx.Value(hookDuplicateContextKey{}).(bool)
+	return dup
+}
+
+// claimHookIdempotency reports whether this delivery should be persisted. The
+// sender stamps one idempotency token per hook invocation and reuses it across
+// retries, so a transient reset that triggers a retry re-sends the same token.
+// The first delivery wins the set-if-absent guard and persists; every repeat
+// is a no-op. An empty token (older plugins, OTEL-only flows) always persists —
+// there is nothing to dedupe on. A cache error fails open: dropping a hook is
+// worse than the rare duplicate a backend blip might cause.
+func (s *Service) claimHookIdempotency(ctx context.Context, token string) bool {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return true
+	}
+	// The claim must outlive the request: a transient reset cancels the request
+	// context, and the retry that re-sends the same token would otherwise also
+	// find an unwritten marker (the canceled SETNX returns an error → fail open
+	// → true) and persist a second time. WithoutCancel keeps the marker write
+	// running so the retry actually loses the guard.
+	claimed, err := s.cache.Add(context.WithoutCancel(ctx), hookIdempotencyCacheKey(token), hookIdempotencyTTL)
+	if err != nil {
+		s.logger.WarnContext(ctx, "hook idempotency guard failed; persisting anyway",
+			attr.SlogEvent("hook_idempotency_guard_failed"),
+			attr.SlogError(err),
+		)
+		return true
+	}
+	if !claimed {
+		s.logger.InfoContext(ctx, "skipping duplicate hook delivery",
+			attr.SlogEvent("hook_idempotency_duplicate"),
+		)
+	}
+	return claimed
+}
 
 // bufferHook stores a hook payload in Redis for later processing using atomic RPUSH
 func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen.ClaudePayload) error {
@@ -148,7 +200,7 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	}
 
 	// Parse MCP tool names
-	if server, fn, ok := mcpname.AttributeTool(toolName); ok {
+	if server, fn, ok := toolref.AttributeTool(toolName); ok {
 		attrs[attr.ToolCallSourceKey] = server
 		attrs[attr.ToolNameKey] = fn
 	}

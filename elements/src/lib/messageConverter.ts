@@ -71,6 +71,8 @@ export type GramChatContent = string | GramChatContentPart[];
  */
 export interface GramChatMessage {
   id: string;
+  // Monotonic sequence number; used as the keyset cursor when paging chat.load.
+  seq?: number;
   model: string;
   created_at: Date | string;
   role: "system" | "developer" | "user" | "assistant" | "tool";
@@ -92,6 +94,9 @@ export interface GramChat {
   messages: GramChatMessage[];
   createdAt: Date | string;
   updatedAt: Date | string;
+  // chat.load paginates by seq keyset; true when older messages remain before
+  // the first message in `messages` (snake_case to match the wire payload).
+  has_more_before?: boolean;
 }
 
 /**

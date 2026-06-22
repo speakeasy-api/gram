@@ -2,6 +2,7 @@ package usage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -9,6 +10,7 @@ import (
 	"net/url"
 	"slices"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/server/gen/http/usage/server"
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
@@ -137,7 +139,10 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 	}
 
 	existingOrgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, webhookPayload.Data.Customer.ExternalID)
-	if err != nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, err, "no organization found with polar external id").LogWarn(ctx, logger, attr.SlogOrganizationID(webhookPayload.Data.Customer.ExternalID))
+	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").LogError(ctx, logger)
 	}
 

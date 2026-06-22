@@ -257,6 +257,15 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 		}
 	}
 
+	// Claim the per-invocation idempotency token once, before persistence and
+	// the block side-effects in the handlers below. A retry re-sends the same
+	// token: the decision (scan) still re-runs so the user stays blocked, but
+	// tagging the context as a duplicate suppresses the duplicate writes
+	// (persistence, block-reason telemetry, shadow-MCP findings).
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+		ctx = withHookDuplicate(ctx)
+	}
+
 	s.recordHook(ctx, payload)
 
 	claudeEvent, err := s.normalizeClaudeHookEvent(ctx, payload, time.Now())
@@ -507,6 +516,11 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 		logger.WarnContext(ctx, "Tool event called without session ID",
 			attr.SlogEvent("claude_hook_no_session"),
 		)
+		return
+	}
+
+	// Skip persistence for a redelivery (the token was claimed in Claude()).
+	if s.isHookDuplicate(ctx) {
 		return
 	}
 
@@ -916,7 +930,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 	serverPrefix string,
 	detail string,
 ) {
-	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil {
+	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) {
 		return
 	}
 
@@ -1013,7 +1027,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 // gram.hook.block_reason. trace_summaries_mv aggregates with max(), so the
 // trace will surface as blocked regardless of which row arrives first.
 func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, reason string) {
-	if s.telemetryLogger == nil || reason == "" {
+	if s.telemetryLogger == nil || reason == "" || s.isHookDuplicate(ctx) {
 		return
 	}
 

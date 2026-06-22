@@ -1,7 +1,7 @@
 import { assert } from "@/lib/utils";
 import type { MCPServerEntry } from "@/types";
 import { ToolsFilter } from "@/types";
-import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
+import { createMCPClient } from "@ai-sdk/mcp";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
 import { trackError } from "@/lib/errorTracking";

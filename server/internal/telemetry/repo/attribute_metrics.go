@@ -229,6 +229,35 @@ func attributeDimensionValuesExpr(groupBy string) string {
 	return "map(" + strings.Join(parts, ", ") + ") AS dimension_values"
 }
 
+// arrayDimFilter builds the WHERE predicate for an Array(String) dimension.
+// An empty array is grouped under the "" ("(unset)") bucket — see the
+// empty→[”] mapping in attributeGroupValueExpr — so a requested "" value must
+// match array emptiness, not a literal "" element: hasAny never matches an
+// empty array. Non-empty requested values keep using hasAny; when both are
+// present they combine with OR so the "(unset)" row stays drillable for arrays.
+func arrayDimFilter(column string, values []string) squirrel.Sqlizer {
+	hasEmpty := false
+	nonEmpty := make([]string, 0, len(values))
+	for _, v := range values {
+		if v == "" {
+			hasEmpty = true
+			continue
+		}
+		nonEmpty = append(nonEmpty, v)
+	}
+	emptyPred := squirrel.Expr("empty(" + column + ")")
+	if len(nonEmpty) == 0 {
+		// Only "(unset)" requested → match rows whose array is empty.
+		return emptyPred
+	}
+	// hasAny(col, [v1, v2, ...]); clickhouse-go binds the slice as an array arg.
+	hasAnyPred := squirrel.Expr("hasAny("+column+", ?)", nonEmpty)
+	if !hasEmpty {
+		return hasAnyPred
+	}
+	return squirrel.Or{hasAnyPred, emptyPred}
+}
+
 // applyAttributeFilters adds the WHERE predicates for the supplied filters.
 func applyAttributeFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFilter) (squirrel.SelectBuilder, error) {
 	for _, f := range filters {
@@ -241,8 +270,7 @@ func applyAttributeFilters(sb squirrel.SelectBuilder, filters []AttributeMetrics
 		}
 		switch dim.kind {
 		case attributeDimArray:
-			// hasAny(col, [v1, v2, ...]); clickhouse-go binds the slice as an array arg.
-			sb = sb.Where(squirrel.Expr("hasAny("+dim.column+", ?)", f.Values))
+			sb = sb.Where(arrayDimFilter(dim.column, f.Values))
 		case attributeDimScalar, attributeDimProject:
 			sb = sb.Where(squirrel.Eq{dim.column: f.Values})
 		default:

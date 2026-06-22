@@ -30,20 +30,21 @@ When plugins are published, all platform configs land in a single repo. The root
 │       ├── hooks.json
 │       └── hook.sh
 │
-├── <org-slug>-observability-cursor/   # Cursor observability plugin
-│   ├── .cursor-plugin/plugin.json
-│   ├── mcp.json
-│   └── hooks/
-│       ├── hooks.json
-│       └── hook.sh
-│
 ├── <plugin-slug>/                     # Claude plugin (one per plugin)
 │   ├── .claude-plugin/plugin.json
 │   └── .mcp.json
 │
-├── <plugin-slug>-cursor/              # Cursor plugin (one per plugin)
-│   ├── .cursor-plugin/plugin.json
-│   └── mcp.json
+├── cursor-plugins/                    # All Cursor plugins (marketplace pluginRoot)
+│   ├── <org-slug>-observability-cursor/   # Cursor observability plugin
+│   │   ├── .cursor-plugin/plugin.json
+│   │   ├── mcp.json
+│   │   └── hooks/
+│   │       ├── hooks.json
+│   │       └── hook.sh
+│   │
+│   └── <plugin-slug>-cursor/              # Cursor plugin (one per plugin)
+│       ├── .cursor-plugin/plugin.json
+│       └── mcp.json
 │
 └── <plugin-slug>-codex/               # Codex plugin (one per plugin)
     ├── .codex-plugin/plugin.json
@@ -51,11 +52,15 @@ When plugins are published, all platform configs land in a single repo. The root
     └── plugin.json
 ```
 
+Cursor plugins are grouped under the `cursor-plugins/` subdirectory, declared via
+`metadata.pluginRoot` in the Cursor `marketplace.json`. Plugin `source` values are
+then resolved relative to that root (bare names, no `./` prefix).
+
 ## Marketplace manifests
 
 Each platform has a top-level `marketplace.json` that lists all plugins in the repo.
 
-**Claude / Cursor** (`marketplace.json`):
+**Claude** (`.claude-plugin/marketplace.json`):
 
 ```json
 {
@@ -65,6 +70,24 @@ Each platform has a top-level `marketplace.json` that lists all plugins in the r
     {
       "name": "<plugin-slug>",
       "source": "./<plugin-slug>",
+      "description": "Plugin description"
+    }
+  ]
+}
+```
+
+**Cursor** (`.cursor-plugin/marketplace.json`) — plugins live under `cursor-plugins/`,
+declared via `metadata.pluginRoot`; `source` values are bare names relative to that root:
+
+```json
+{
+  "name": "<org-slug>-gram",
+  "owner": { "name": "Org Name", "email": "" },
+  "metadata": { "pluginRoot": "cursor-plugins" },
+  "plugins": [
+    {
+      "name": "<plugin-slug>-cursor",
+      "source": "<plugin-slug>-cursor",
       "description": "Plugin description"
     }
   ]
@@ -154,7 +177,7 @@ For public servers, headers are omitted and an env var reference is used for aut
 
 ## Cursor plugin
 
-Directory: `<plugin-slug>-cursor/`
+Directory: `cursor-plugins/<plugin-slug>-cursor/`
 
 ### `.cursor-plugin/plugin.json`
 
@@ -273,7 +296,7 @@ curl -s -X POST \
 
 ### Cursor observability
 
-Directory: `<org-slug>-observability-cursor/`
+Directory: `cursor-plugins/<org-slug>-observability-cursor/`
 
 Cursor's hook events differ from Claude's — they use camelCase and Cursor-specific names:
 

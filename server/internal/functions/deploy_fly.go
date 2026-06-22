@@ -12,6 +12,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -628,31 +629,22 @@ func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *rep
 	return nil
 }
 
-// concurrencyLimits derives Fly proxy concurrency soft and hard limits from the
-// machine's memory allocation. The hard limit caps the maximum concurrent
-// connections the Fly proxy will route to a single machine; the soft limit
-// triggers traffic deprioritization so the proxy can spread load before hitting
-// the hard cap.
-func concurrencyLimits(memoryMB int) (softLimit, hardLimit int) {
-	hardLimit = max(memoryMB/48, 4)
-	softLimit = max(hardLimit*1/5, 2)
-	return softLimit, hardLimit
-}
-
 func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, files []*fly.File, baseMetadata map[string]string) *fly.MachineConfig {
 	machineMeta := maps.Clone(baseMetadata)
 	machineMeta[fly.MachineConfigMetadataKeyFlyProcessGroup] = "gram_functions_runner"
 
 	mem := conv.Default(min(maxMachineMemoryMiB, max(0, req.MemoryMiB)), defaultMachineMemoryMiB)
-	softLimit, hardLimit := concurrencyLimits(mem)
+	slots := executionSlots(req.Runtime, mem)
+	softLimit, hardLimit := concurrencyLimits(slots)
 
 	return &fly.MachineConfig{
 		Image: image,
 		Env: map[string]string{
-			"GRAM_SERVER_URL":    f.serverURL.String(),
-			"GRAM_DEPLOYMENT_ID": req.DeploymentID.String(),
-			"GRAM_FUNCTION_ID":   req.FunctionID.String(),
-			"GRAM_PROJECT_ID":    req.ProjectID.String(),
+			"GRAM_SERVER_URL":               f.serverURL.String(),
+			"GRAM_DEPLOYMENT_ID":            req.DeploymentID.String(),
+			"GRAM_FUNCTION_ID":              req.FunctionID.String(),
+			"GRAM_PROJECT_ID":               req.ProjectID.String(),
+			"GRAM_FUNCTION_MAX_CONCURRENCY": strconv.Itoa(slots),
 		},
 		Guest: &fly.MachineGuest{
 			CPUKind:       "shared",

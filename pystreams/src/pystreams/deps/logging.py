@@ -2,10 +2,11 @@ import logging
 import os
 from typing import Any
 
-from opentelemetry import trace
-from .. import attr
 import structlog
+from opentelemetry import trace
 from structlog.typing import EventDict, Processor, WrappedLogger
+
+from pystreams import attr
 
 
 def _add_open_telemetry_spans(_, __, event_dict):

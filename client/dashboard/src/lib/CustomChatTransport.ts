@@ -43,7 +43,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
 
     const result = streamText({
       model: this.config.model,
-      messages: convertToModelMessages(messages),
+      messages: await convertToModelMessages(messages),
       tools,
       temperature: this.config.temperature,
       maxOutputTokens: this.config.maxGeneratedTokens,

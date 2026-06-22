@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -20,14 +21,9 @@ const claudeOTELLogsURN = "claude-code:otel:logs"
 
 // Logs handles authenticated OTEL logs data from Claude Code.
 func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
-	claudeMetadata := extractSessionMetadata(payload)
-
 	logger := s.logger.With(
 		attr.SlogHookSource("claude"),
 		attr.SlogHookEvent("Logs"),
-		attr.SlogServiceName(claudeMetadata.ServiceName),
-		attr.SlogGenAIConversationID(claudeMetadata.SessionID),
-		attr.SlogAuthUserEmail(claudeMetadata.UserEmail),
 	)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -58,37 +54,64 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 
 	s.writeClaudeOTELLogsToClickHouse(ctx, payload, orgID, projectID)
 
-	if claudeMetadata.SessionID == "" {
+	sessions := extractSessionMetadata(payload)
+	if len(sessions) == 0 {
 		logger.WarnContext(ctx, "claude OTEL logs payload contained no session ID",
 			attr.SlogEvent("claude_logs_no_session"),
 		)
 		return nil
 	}
 
-	userID := s.resolveUserByEmail(ctx, claudeMetadata.UserEmail, orgID)
+	// Resolve each distinct user once per payload. A re-batching collector can
+	// repeat the same identity across sessions, so memoize on the normalized
+	// email (the same key resolveUserByEmail queries with) to issue the minimal
+	// set of database lookups.
+	userIDByEmail := make(map[string]string)
+	for i := range sessions {
+		session := sessions[i]
 
-	completeMetadata := SessionMetadata{
-		SessionID:   claudeMetadata.SessionID,
-		ServiceName: claudeMetadata.ServiceName,
-		UserEmail:   claudeMetadata.UserEmail,
-		UserID:      userID,
-		ClaudeOrgID: claudeMetadata.ClaudeOrgID,
-		GramOrgID:   orgID,
-		ProjectID:   projectID,
-	}
+		userID := ""
+		if session.UserEmail != "" {
+			lookup := conv.NormalizeEmail(session.UserEmail)
+			id, ok := userIDByEmail[lookup]
+			if !ok {
+				id = s.resolveUserByEmail(ctx, session.UserEmail, orgID)
+				userIDByEmail[lookup] = id
+			}
+			userID = id
+		}
 
-	if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
-		logger.ErrorContext(ctx, "Failed to store session metadata",
-			attr.SlogEvent("claude_logs_cache_set_failed"),
-			attr.SlogError(err),
+		completeMetadata := SessionMetadata{
+			SessionID:   session.SessionID,
+			ServiceName: session.ServiceName,
+			UserEmail:   session.UserEmail,
+			UserID:      userID,
+			ClaudeOrgID: session.ClaudeOrgID,
+			GramOrgID:   orgID,
+			ProjectID:   projectID,
+		}
+
+		sessionLogger := logger.With(
+			attr.SlogServiceName(session.ServiceName),
+			attr.SlogGenAIConversationID(session.SessionID),
+			attr.SlogAuthUserEmail(session.UserEmail),
+		)
+
+		// Process each session independently so a single cache failure does not
+		// abort flushing the remaining sessions in the batch.
+		if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
+			sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
+				attr.SlogEvent("claude_logs_cache_set_failed"),
+				attr.SlogError(err),
+			)
+		}
+
+		s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
+
+		sessionLogger.InfoContext(ctx, "Stored session metadata",
+			attr.SlogEvent("session_validated"),
 		)
 	}
-
-	s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
-
-	logger.InfoContext(ctx, "Stored session metadata",
-		attr.SlogEvent("session_validated"),
-	)
 
 	return nil
 }
@@ -100,62 +123,77 @@ type claudeLogMetadata struct {
 	ClaudeOrgID string
 }
 
-func extractSessionMetadata(payload *gen.LogsPayload) claudeLogMetadata {
-	metadata := claudeLogMetadata{
-		SessionID:   "",
-		ServiceName: "",
-		UserEmail:   "",
-		ClaudeOrgID: "",
-	}
+// extractSessionMetadata partitions an OTLP logs payload into one metadata
+// entry per distinct session.id, in first-seen order. A single Claude Code CLI
+// process emits one session per payload, but an OpenTelemetry Collector or
+// gateway can re-batch records from many sessions into one export. Keying by
+// session keeps each session's identity isolated so the caller never seeds one
+// session with another session's user.email / organization.id.
+func extractSessionMetadata(payload *gen.LogsPayload) []claudeLogMetadata {
 	if payload == nil {
-		return metadata
+		return nil
 	}
 
-	// Iterate through all resource logs
+	ordered := make([]claudeLogMetadata, 0)
+	indexBySession := make(map[string]int)
+
 	for _, resourceLog := range payload.ResourceLogs {
 		if resourceLog == nil {
 			continue
 		}
 
-		// Extract service name from resource attributes
-		metadata.ServiceName = extractResourceAttribute(resourceLog.Resource, "service.name")
+		serviceName := extractResourceAttribute(resourceLog.Resource, "service.name")
 
-		// Iterate through all scope logs
 		for _, scopeLog := range resourceLog.ScopeLogs {
 			if scopeLog == nil {
 				continue
 			}
 
-			// Iterate through all log records
 			for _, logRecord := range scopeLog.LogRecords {
 				if logRecord == nil {
 					continue
 				}
 
-				// Extract session data
 				data := extractLogData(logRecord)
-
 				if data.SessionID == "" {
 					continue
 				}
 
-				// Store session metadata in Redis. Claude Code batches many log
-				// records per session, but user.email / organization.id only ride
-				// on some event types (e.g. api_request, not tool events). Assign
-				// only non-empty values so a later emailless record in the batch
-				// does not clobber an email already extracted from an earlier one.
-				metadata.SessionID = data.SessionID
+				idx, ok := indexBySession[data.SessionID]
+				if !ok {
+					ordered = append(ordered, claudeLogMetadata{
+						SessionID:   data.SessionID,
+						ServiceName: serviceName,
+						UserEmail:   "",
+						ClaudeOrgID: "",
+					})
+					indexBySession[data.SessionID] = len(ordered) - 1
+					idx = len(ordered) - 1
+				}
+
+				// Claude Code batches many log records per session, but
+				// user.email / organization.id only ride on some event types
+				// (e.g. api_request, not tool events). Assign only non-empty
+				// values so a later emailless record in the batch does not
+				// clobber a value already extracted from an earlier record for
+				// the same session. ServiceName uses first-non-empty wins in
+				// case a re-batched session spans resources with differing
+				// service.name values.
+				meta := &ordered[idx]
 				if data.UserEmail != "" {
-					metadata.UserEmail = data.UserEmail
+					meta.UserEmail = data.UserEmail
 				}
 				if data.ClaudeOrgID != "" {
-					metadata.ClaudeOrgID = data.ClaudeOrgID
+					meta.ClaudeOrgID = data.ClaudeOrgID
+				}
+				if meta.ServiceName == "" && serviceName != "" {
+					meta.ServiceName = serviceName
 				}
 			}
 		}
 	}
 
-	return metadata
+	return ordered
 }
 
 func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *gen.LogsPayload, orgID string, projectID string) {
@@ -228,7 +266,7 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				params = append(params, telemetry.WithOTELMetadata(telemetry.LogParams{
 					Timestamp:  timestamp,
 					ToolInfo:   claudeOTELLogToolInfo(orgID, parsedProjectID.String()),
-					UserInfo:   telemetry.UserInfo{},
+					UserInfo:   telemetry.UserInfoByEmail(stringAttr(logAttrs, attr.UserEmailKey)),
 					Attributes: logAttrs,
 				}, observedTimestamp, resourceAttrs))
 			}
