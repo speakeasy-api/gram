@@ -223,6 +223,12 @@ class ProcessPoolScanner(_AsyncCloseable):
         supported with the ``fork`` start method). The warmup forces each worker to
         spawn and load its model up front, so the first real scans don't pay
         model-load latency.
+
+        The forkserver this reuses is bootstrapped pristine by the ``multi``
+        entrypoint (``pystreams.cmd.bootstrap``), before numpy/gRPC are imported, so
+        its one-time fork()+exec() does not inherit a parent that macOS would abort
+        for forking mid Objective-C ``+initialize``. Every worker here forks from
+        that clean forkserver, never from this process.
         """
         executor = ProcessPoolExecutor(
             max_workers=max_workers,
