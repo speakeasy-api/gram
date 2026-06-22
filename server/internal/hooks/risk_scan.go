@@ -39,13 +39,6 @@ func (s *Service) scanPermissionRequestForEnforcement(ctx context.Context, ev *h
 	return s.scanHookEventForEnforcement(ctx, ev.Event, marshalToJSON(ev.ToolInput), message.ToolRequest, ev.ToolName)
 }
 
-func (s *Service) scanToolResponseForEnforcement(ctx context.Context, ev *hookevents.AfterToolUse) *risk.ScanResult {
-	if ev == nil {
-		return nil
-	}
-	return s.scanHookEventForEnforcement(ctx, ev.Event, marshalToJSON(ev.ToolOutput), message.ToolResponse, ev.ToolName)
-}
-
 func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents.Event, text string, messageType message.Type, toolName string) *risk.ScanResult {
 	if s.riskScanner == nil {
 		return nil
