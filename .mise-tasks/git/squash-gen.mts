@@ -99,9 +99,13 @@ async function assertNoMergeCommits(scopeStart: string): Promise<void> {
     .filter(Boolean);
   for (const c of commits) {
     const raw = await git("cat-file", "-p", c);
-    const parents = raw
-      .split("\n")
-      .filter((l) => l.startsWith("parent ")).length;
+    // `parent` entries live only in the header (before the first blank line).
+    // Scanning the whole object would miscount a message body line that
+    // happens to start with "parent " as an extra parent.
+    const lines = raw.split("\n");
+    const headerEnd = lines.indexOf("");
+    const header = headerEnd === -1 ? lines : lines.slice(0, headerEnd);
+    const parents = header.filter((l) => l.startsWith("parent ")).length;
     if (parents > 1) {
       fail(
         `merge commit in scope: ${c.slice(0, 7)} ${await subjectOf(c)} — refusing`,
