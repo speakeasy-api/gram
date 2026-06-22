@@ -1127,17 +1127,15 @@ func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload
 
 	// An assistant thread depends on its backing chat operationally: the runtime
 	// reloads the conversation every turn, so a soft-deleted chat makes that fetch
-	// fail and wedges the thread. Refuse to delete a chat that backs an active
-	// assistant thread.
-	_, err = s.repo.GetAssistantThreadAssistantIDByChatID(ctx, repo.GetAssistantThreadAssistantIDByChatIDParams{
-		ChatID:    chatID,
-		ProjectID: *authCtx.ProjectID,
-	})
-	switch {
-	case err == nil:
-		return oops.E(oops.CodeConflict, nil, "cannot delete a chat that backs an assistant thread").LogError(ctx, s.logger)
-	case !errors.Is(err, pgx.ErrNoRows):
+	// fail and wedges the thread. Refuse to delete a chat that backs a live
+	// assistant thread (a deleted assistant's leftover threads don't count, or the
+	// chat could never be cleaned up).
+	backsThread, err := s.repo.ChatBacksLiveAssistantThread(ctx, chatID)
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "check assistant thread for chat").LogError(ctx, s.logger)
+	}
+	if backsThread {
+		return oops.E(oops.CodeConflict, nil, "cannot delete a chat that backs an assistant thread").LogError(ctx, s.logger)
 	}
 
 	err = s.repo.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{

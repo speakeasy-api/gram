@@ -28,6 +28,28 @@ func (q *Queries) AddUserFeedbackChatResolution(ctx context.Context, arg AddUser
 	return err
 }
 
+const chatBacksLiveAssistantThread = `-- name: ChatBacksLiveAssistantThread :one
+SELECT EXISTS (
+  SELECT 1
+  FROM assistant_threads t
+  JOIN assistants a ON a.id = t.assistant_id
+  WHERE t.chat_id = $1
+    AND t.deleted IS FALSE
+    AND a.deleted IS FALSE
+) AS backs_thread
+`
+
+// True when the chat backs a thread of a live (non-deleted) assistant. The
+// assistant join matters because DeleteAssistant only soft-deletes the
+// assistant, leaving its threads behind — those orphaned threads must not keep
+// the backing chat undeletable forever.
+func (q *Queries) ChatBacksLiveAssistantThread(ctx context.Context, chatID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, chatBacksLiveAssistantThread, chatID)
+	var backs_thread bool
+	err := row.Scan(&backs_thread)
+	return backs_thread, err
+}
+
 const countChatMessages = `-- name: CountChatMessages :one
 SELECT COUNT(*) FROM chat_messages
 WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
@@ -1973,6 +1995,17 @@ func (q *Queries) SeedRiskResult(ctx context.Context, arg SeedRiskResultParams) 
 		arg.ChatMessageID,
 		arg.Found,
 	)
+	return err
+}
+
+const seedSoftDeleteAssistant = `-- name: SeedSoftDeleteAssistant :exec
+UPDATE assistants SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+// Test fixture: soft-delete an assistant (mirrors DeleteAssistant, which leaves
+// its threads behind).
+func (q *Queries) SeedSoftDeleteAssistant(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, seedSoftDeleteAssistant, id)
 	return err
 }
 

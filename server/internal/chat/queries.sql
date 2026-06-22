@@ -6,6 +6,20 @@ WHERE t.chat_id = @chat_id
   AND t.deleted IS FALSE
 LIMIT 1;
 
+-- name: ChatBacksLiveAssistantThread :one
+-- True when the chat backs a thread of a live (non-deleted) assistant. The
+-- assistant join matters because DeleteAssistant only soft-deletes the
+-- assistant, leaving its threads behind — those orphaned threads must not keep
+-- the backing chat undeletable forever.
+SELECT EXISTS (
+  SELECT 1
+  FROM assistant_threads t
+  JOIN assistants a ON a.id = t.assistant_id
+  WHERE t.chat_id = @chat_id
+    AND t.deleted IS FALSE
+    AND a.deleted IS FALSE
+) AS backs_thread;
+
 -- name: UpsertChat :one
 INSERT INTO chats (
     id
@@ -861,3 +875,8 @@ RETURNING id;
 -- Test fixture: insert an active assistant thread backed by a chat.
 INSERT INTO assistant_threads (assistant_id, project_id, correlation_id, chat_id, source_kind)
 VALUES (@assistant_id, @project_id, @correlation_id, @chat_id, 'cron');
+
+-- name: SeedSoftDeleteAssistant :exec
+-- Test fixture: soft-delete an assistant (mirrors DeleteAssistant, which leaves
+-- its threads behind).
+UPDATE assistants SET deleted_at = clock_timestamp() WHERE id = @id;
