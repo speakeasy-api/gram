@@ -114,3 +114,60 @@ func celRuleDescription(rule CustomDetectionRule) string {
 	}
 	return rule.RuleID
 }
+
+// CompiledScope is a policy's compiled scope predicates. A nil include is
+// all-in; a nil exempt is none-exempt.
+type CompiledScope struct {
+	eng     *celenv.Engine
+	include cel.Program
+	exempt  cel.Program
+}
+
+// CompileScope compiles a policy's scope predicates (empty strings -> nil).
+func CompileScope(eng *celenv.Engine, includeCEL, exemptCEL string) (CompiledScope, error) {
+	s := CompiledScope{eng: eng, include: nil, exempt: nil}
+	if expr := strings.TrimSpace(includeCEL); expr != "" {
+		prg, err := eng.Compile(expr)
+		if err != nil {
+			return CompiledScope{}, fmt.Errorf("compile scope_include %q: %w", expr, err)
+		}
+		s.include = prg
+	}
+	if expr := strings.TrimSpace(exemptCEL); expr != "" {
+		prg, err := eng.Compile(expr)
+		if err != nil {
+			return CompiledScope{}, fmt.Errorf("compile scope_exempt %q: %w", expr, err)
+		}
+		s.exempt = prg
+	}
+	return s, nil
+}
+
+// Active reports whether the scope has any predicate to evaluate.
+func (s CompiledScope) Active() bool { return s.include != nil || s.exempt != nil }
+
+// Includes reports whether a message is in scope (nil include = all-in). An
+// eval error fails toward scanning so detection is never silently skipped.
+func (s CompiledScope) Includes(view MessageView) bool {
+	if s.include == nil {
+		return true
+	}
+	in, err := s.eng.EvalScope(s.include, celMessage(view))
+	if err != nil {
+		return true
+	}
+	return in
+}
+
+// Exempts reports whether a message is exempted (nil exempt = none). An eval
+// error fails toward scanning (not exempt).
+func (s CompiledScope) Exempts(view MessageView) bool {
+	if s.exempt == nil {
+		return false
+	}
+	ex, err := s.eng.EvalScope(s.exempt, celMessage(view))
+	if err != nil {
+		return false
+	}
+	return ex
+}

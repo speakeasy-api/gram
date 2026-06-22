@@ -226,6 +226,13 @@ type CreateRiskPolicyPayload struct {
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
 	MessageTypes []string
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Omit/empty means all
+	// messages are in scope.
+	ScopeInclude *string
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Omit/empty means no inline exemption.
+	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
@@ -876,6 +883,12 @@ type UpdateRiskPolicyPayload struct {
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
 	MessageTypes []string
+	// CEL scope predicate (in addition to message_types). Omit to preserve the
+	// current value; send empty to clear.
+	ScopeInclude *string
+	// CEL exemption predicate. Omit to preserve the current value; send empty to
+	// clear.
+	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.

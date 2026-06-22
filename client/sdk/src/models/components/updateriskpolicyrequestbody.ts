@@ -94,6 +94,14 @@ export type UpdateRiskPolicyRequestBody = {
    */
   promptInjectionRules?: Array<string> | undefined;
   /**
+   * CEL exemption predicate. Omit to preserve the current value; send empty to clear.
+   */
+  scopeExempt?: string | undefined;
+  /**
+   * CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.
+   */
+  scopeInclude?: string | undefined;
+  /**
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
@@ -130,6 +138,8 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
   presidio_entities?: Array<string> | undefined;
   prompt?: string | undefined;
   prompt_injection_rules?: Array<string> | undefined;
+  scope_exempt?: string | undefined;
+  scope_include?: string | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
 };
@@ -156,6 +166,8 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     presidioEntities: z.optional(z.array(z.string())),
     prompt: z.optional(z.string()),
     promptInjectionRules: z.optional(z.array(z.string())),
+    scopeExempt: z.optional(z.string()),
+    scopeInclude: z.optional(z.string()),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),
@@ -170,6 +182,8 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       modelConfig: "model_config",
       presidioEntities: "presidio_entities",
       promptInjectionRules: "prompt_injection_rules",
+      scopeExempt: "scope_exempt",
+      scopeInclude: "scope_include",
       userMessage: "user_message",
     });
   }),

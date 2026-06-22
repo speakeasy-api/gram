@@ -102,6 +102,14 @@ export type CreateRiskPolicyRequestBody = {
    */
   promptInjectionRules?: Array<string> | undefined;
   /**
+   * CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.
+   */
+  scopeExempt?: string | undefined;
+  /**
+   * CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.
+   */
+  scopeInclude?: string | undefined;
+  /**
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
@@ -140,6 +148,8 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   presidio_entities?: Array<string> | undefined;
   prompt?: string | undefined;
   prompt_injection_rules?: Array<string> | undefined;
+  scope_exempt?: string | undefined;
+  scope_include?: string | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
 };
@@ -164,6 +174,8 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     presidioEntities: z.optional(z.array(z.string())),
     prompt: z.optional(z.string()),
     promptInjectionRules: z.optional(z.array(z.string())),
+    scopeExempt: z.optional(z.string()),
+    scopeInclude: z.optional(z.string()),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),
@@ -179,6 +191,8 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       policyType: "policy_type",
       presidioEntities: "presidio_entities",
       promptInjectionRules: "prompt_injection_rules",
+      scopeExempt: "scope_exempt",
+      scopeInclude: "scope_include",
       userMessage: "user_message",
     });
   }),
