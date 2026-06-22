@@ -19,10 +19,7 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CursorPayload, i
 		RawEventType:   payload.HookEventName,
 		Timestamp:      timestamp,
 		AuthContext:    authCtx,
-		OrganizationID: identity.OrganizationID,
-		ProjectID:      identity.ProjectID,
-		UserID:         identity.UserID,
-		UserEmail:      identity.UserEmail,
+		Identity:       identity,
 		ConversationID: conv.PtrValOr(payload.ConversationID, ""),
 		Raw:            payload,
 	}

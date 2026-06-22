@@ -43,15 +43,12 @@ type Identity struct {
 }
 
 type Event struct {
-	Provider       Provider
-	Type           EventType
-	RawEventType   string
-	Timestamp      time.Time
-	AuthContext    *contextvalues.AuthContext
-	OrganizationID string
-	ProjectID      uuid.UUID
-	UserID         string
-	UserEmail      string
+	Provider     Provider
+	Type         EventType
+	RawEventType string
+	Timestamp    time.Time
+	AuthContext  *contextvalues.AuthContext
+	Identity
 	ConversationID string
 	Raw            any
 }
