@@ -268,11 +268,11 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 
 	s.recordHook(ctx, payload)
 
-	claudeEvent, err := s.normalizeClaudeHookEvent(ctx, payload, time.Now())
+	hookEvent, err := s.normalizeClaudeHookEvent(ctx, payload, time.Now())
 	if err != nil {
 		return nil, err
 	}
-	if claudeEvent == nil {
+	if hookEvent == nil {
 		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
 		return makeHookResult(payload.HookEventName), nil
 	}
@@ -281,7 +281,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 	var (
 		result *gen.ClaudeHookResult
 	)
-	switch ev := claudeEvent.(type) {
+	switch ev := hookEvent.(type) {
 	case *hookevents.SessionStart:
 		result, err = s.handleSessionStart(ctx, ev)
 	case *hookevents.ConfigChange:

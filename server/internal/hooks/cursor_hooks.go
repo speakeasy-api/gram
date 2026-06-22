@@ -27,10 +27,10 @@ import (
 
 // Cursor is the endpoint for Cursor hook events
 func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.CursorHookResult, error) {
-	hookEvent, parsedHookEvent := parseCursorHookEvent(payload.HookEventName)
+	parsedEvent, parsedHookEvent := parseCursorHookEvent(payload.HookEventName)
 	logHookEventName := payload.HookEventName
 	if parsedHookEvent {
-		logHookEventName = string(hookEvent)
+		logHookEventName = string(parsedEvent)
 	}
 
 	logger := s.logger.With(
@@ -85,7 +85,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		AgentMessage:      nil,
 	}
 
-	cursorEvent, err := cursorevents.Normalize(authCtx, payload, hookevents.EventContext{
+	hookEvent, err := cursorevents.Normalize(authCtx, payload, hookevents.EventContext{
 		OrganizationID: orgID,
 		ProjectID:      *authCtx.ProjectID,
 		User: hookevents.User{
@@ -96,7 +96,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	if err != nil {
 		return nil, fmt.Errorf("normalize cursor hook event: %w", err)
 	}
-	if cursorEvent == nil {
+	if hookEvent == nil {
 		logger.InfoContext(ctx, "cursor hook received illegal event type",
 			attr.SlogEvent("cursor_hook_illegal_event_type"),
 			attr.SlogHookEvent(payload.HookEventName),
@@ -109,7 +109,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	// the trace renders as "blocked" in dashboards.
 	var blockReason string
 
-	switch ev := cursorEvent.(type) {
+	switch ev := hookEvent.(type) {
 	case *hookevents.BeforeMCPExecution:
 		// beforeMCPExecution fires for MCP-routed (non-local) tool calls. Run
 		// the risk scanner first (block-only today), then fall through to the

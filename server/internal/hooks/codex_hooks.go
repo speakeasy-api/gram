@@ -66,7 +66,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 
 	var blockReason, userReason string
 
-	codexEvent, err := codexevents.Normalize(authCtx, payload, hookevents.EventContext{
+	hookEvent, err := codexevents.Normalize(authCtx, payload, hookevents.EventContext{
 		OrganizationID: orgID,
 		ProjectID:      *authCtx.ProjectID,
 		User: hookevents.User{
@@ -78,8 +78,8 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 		return nil, fmt.Errorf("normalize codex hook event: %w", err)
 	}
 
-	if codexEvent != nil {
-		switch ev := codexEvent.(type) {
+	if hookEvent != nil {
+		switch ev := hookEvent.(type) {
 		case *hookevents.BeforeToolUse:
 			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
 				blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
