@@ -156,7 +156,7 @@ type CompileExprPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// The CEL expression to compile.
+	// The CEL expression to compile. Empty is valid and compiles to ok=true.
 	Expr string
 }
 

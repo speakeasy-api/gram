@@ -8046,15 +8046,13 @@ func unmarshalDetectionDescriptorTypeResponseBodyToRiskDetectionDescriptorType(v
 		DisplayName: *v.DisplayName,
 		Description: *v.Description,
 	}
-	if v.Fields != nil {
-		res.Fields = make([]*risk.DetectionDescriptorField, len(v.Fields))
-		for i, val := range v.Fields {
-			if val == nil {
-				res.Fields[i] = nil
-				continue
-			}
-			res.Fields[i] = unmarshalDetectionDescriptorFieldResponseBodyToRiskDetectionDescriptorField(val)
+	res.Fields = make([]*risk.DetectionDescriptorField, len(v.Fields))
+	for i, val := range v.Fields {
+		if val == nil {
+			res.Fields[i] = nil
+			continue
 		}
+		res.Fields[i] = unmarshalDetectionDescriptorFieldResponseBodyToRiskDetectionDescriptorField(val)
 	}
 
 	return res
@@ -8064,9 +8062,6 @@ func unmarshalDetectionDescriptorTypeResponseBodyToRiskDetectionDescriptorType(v
 // builds a value of type *risk.DetectionDescriptorField from a value of type
 // *DetectionDescriptorFieldResponseBody.
 func unmarshalDetectionDescriptorFieldResponseBodyToRiskDetectionDescriptorField(v *DetectionDescriptorFieldResponseBody) *risk.DetectionDescriptorField {
-	if v == nil {
-		return nil
-	}
 	res := &risk.DetectionDescriptorField{
 		Name:        *v.Name,
 		Type:        *v.Type,
@@ -8103,15 +8098,13 @@ func unmarshalDetectionDescriptorFunctionResponseBodyToRiskDetectionDescriptorFu
 		Signature:    *v.Signature,
 		Description:  *v.Description,
 	}
-	if v.Params != nil {
-		res.Params = make([]*risk.DetectionDescriptorParam, len(v.Params))
-		for i, val := range v.Params {
-			if val == nil {
-				res.Params[i] = nil
-				continue
-			}
-			res.Params[i] = unmarshalDetectionDescriptorParamResponseBodyToRiskDetectionDescriptorParam(val)
+	res.Params = make([]*risk.DetectionDescriptorParam, len(v.Params))
+	for i, val := range v.Params {
+		if val == nil {
+			res.Params[i] = nil
+			continue
 		}
+		res.Params[i] = unmarshalDetectionDescriptorParamResponseBodyToRiskDetectionDescriptorParam(val)
 	}
 
 	return res
@@ -8121,9 +8114,6 @@ func unmarshalDetectionDescriptorFunctionResponseBodyToRiskDetectionDescriptorFu
 // builds a value of type *risk.DetectionDescriptorParam from a value of type
 // *DetectionDescriptorParamResponseBody.
 func unmarshalDetectionDescriptorParamResponseBodyToRiskDetectionDescriptorParam(v *DetectionDescriptorParamResponseBody) *risk.DetectionDescriptorParam {
-	if v == nil {
-		return nil
-	}
 	res := &risk.DetectionDescriptorParam{
 		Name: *v.Name,
 		Type: *v.Type,

@@ -22219,12 +22219,12 @@ paths:
       operationId: compileExpr
       parameters:
         - allowEmptyValue: true
-          description: The CEL expression to compile.
+          description: The CEL expression to compile. Empty is valid and compiles to ok=true.
           in: query
           name: expr
-          required: true
           schema:
-            description: The CEL expression to compile.
+            default: ""
+            description: The CEL expression to compile. Empty is valid and compiles to ok=true.
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -37220,6 +37220,7 @@ components:
         - overloadId
         - member
         - receiverType
+        - params
         - returnType
         - signature
         - description
@@ -37310,6 +37311,7 @@ components:
       required:
         - name
         - opaque
+        - fields
         - displayName
         - description
     DetectionDescriptorVariable:

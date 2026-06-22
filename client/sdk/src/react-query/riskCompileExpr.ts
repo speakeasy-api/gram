@@ -59,7 +59,7 @@ export type RiskCompileExprQueryError =
  * Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).
  */
 export function useRiskCompileExpr(
-  request: operations.CompileExprRequest,
+  request?: operations.CompileExprRequest | undefined,
   security?: operations.CompileExprSecurity | undefined,
   options?: QueryHookOptions<
     RiskCompileExprQueryData,
@@ -85,7 +85,7 @@ export function useRiskCompileExpr(
  * Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).
  */
 export function useRiskCompileExprSuspense(
-  request: operations.CompileExprRequest,
+  request?: operations.CompileExprRequest | undefined,
   security?: operations.CompileExprSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     RiskCompileExprQueryData,
@@ -108,7 +108,7 @@ export function setRiskCompileExprData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      expr: string;
+      expr?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -125,7 +125,7 @@ export function invalidateRiskCompileExpr(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      expr: string;
+      expr?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;

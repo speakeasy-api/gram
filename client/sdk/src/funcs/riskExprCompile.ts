@@ -35,7 +35,7 @@ import { Result } from "../types/fp.js";
  */
 export function riskExprCompile(
   client: GramCore,
-  request: operations.CompileExprRequest,
+  request?: operations.CompileExprRequest | undefined,
   security?: operations.CompileExprSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -62,7 +62,7 @@ export function riskExprCompile(
 
 async function $do(
   client: GramCore,
-  request: operations.CompileExprRequest,
+  request?: operations.CompileExprRequest | undefined,
   security?: operations.CompileExprSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -84,7 +84,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(operations.CompileExprRequest$outboundSchema, value),
+    (value) =>
+      z.parse(z.optional(operations.CompileExprRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -96,20 +97,20 @@ async function $do(
   const path = pathToFunc("/rpc/risk.compileExpr")();
 
   const query = encodeFormQuery({
-    "expr": payload.expr,
+    "expr": payload?.expr,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),

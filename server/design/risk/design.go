@@ -426,8 +426,9 @@ var _ = Service("risk", func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
-			Attribute("expr", String, "The CEL expression to compile.")
-			Required("expr")
+			Attribute("expr", String, "The CEL expression to compile. Empty is valid and compiles to ok=true.", func() {
+				Default("")
+			})
 		})
 
 		Result(ExprCompileResult)
@@ -1223,7 +1224,7 @@ var DetectionDescriptorType = Type("DetectionDescriptorType", func() {
 	Attribute("displayName", String, "Short human label for the editor (e.g. 'field', 'tool').")
 	Attribute("description", String, "Plain-English description of the type.")
 
-	Required("name", "opaque", "displayName", "description")
+	Required("name", "opaque", "fields", "displayName", "description")
 })
 
 var DetectionDescriptorVariable = Type("DetectionDescriptorVariable", func() {
@@ -1260,7 +1261,7 @@ var DetectionDescriptorFunction = Type("DetectionDescriptorFunction", func() {
 
 	// receiverType is required (empty string for a hypothetical global overload)
 	// so it serializes as a plain string; every current overload is a member.
-	Required("name", "overloadId", "member", "receiverType", "returnType", "signature", "description")
+	Required("name", "overloadId", "member", "receiverType", "params", "returnType", "signature", "description")
 })
 
 var DetectionDescriptorMacro = Type("DetectionDescriptorMacro", func() {

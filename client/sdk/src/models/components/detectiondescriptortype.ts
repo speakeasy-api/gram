@@ -26,7 +26,7 @@ export type DetectionDescriptorType = {
   /**
    * Typed members of a non-opaque object type. Empty when opaque.
    */
-  fields?: Array<DetectionDescriptorField> | undefined;
+  fields: Array<DetectionDescriptorField>;
   /**
    * Engine type name (e.g. 'field', 'celenv.celTool').
    */
@@ -44,7 +44,7 @@ export const DetectionDescriptorType$inboundSchema: z.ZodMiniType<
 > = z.object({
   description: z.string(),
   displayName: z.string(),
-  fields: z.optional(z.array(DetectionDescriptorField$inboundSchema)),
+  fields: z.array(DetectionDescriptorField$inboundSchema),
   name: z.string(),
   opaque: z.boolean(),
 });

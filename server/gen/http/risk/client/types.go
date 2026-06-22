@@ -22255,6 +22255,9 @@ func ValidateDetectionDescriptorTypeResponseBody(body *DetectionDescriptorTypeRe
 	if body.Opaque == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("opaque", "body"))
 	}
+	if body.Fields == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fields", "body"))
+	}
 	if body.DisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("displayName", "body"))
 	}
@@ -22318,6 +22321,9 @@ func ValidateDetectionDescriptorFunctionResponseBody(body *DetectionDescriptorFu
 	}
 	if body.ReceiverType == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("receiverType", "body"))
+	}
+	if body.Params == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("params", "body"))
 	}
 	if body.ReturnType == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("returnType", "body"))

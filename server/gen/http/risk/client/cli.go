@@ -784,7 +784,9 @@ func BuildGetDetectionDescriptorPayload(riskGetDetectionDescriptorApikeyToken st
 func BuildCompileExprPayload(riskCompileExprExpr string, riskCompileExprApikeyToken string, riskCompileExprSessionToken string, riskCompileExprProjectSlugInput string) (*risk.CompileExprPayload, error) {
 	var expr string
 	{
-		expr = riskCompileExprExpr
+		if riskCompileExprExpr != "" {
+			expr = riskCompileExprExpr
+		}
 	}
 	var apikeyToken *string
 	{

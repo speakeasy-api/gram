@@ -22,9 +22,9 @@ export type CompileExprSecurity = {
 
 export type CompileExprRequest = {
   /**
-   * The CEL expression to compile.
+   * The CEL expression to compile. Empty is valid and compiles to ok=true.
    */
-  expr: string;
+  expr?: string | undefined;
   /**
    * API Key header
    */
@@ -150,7 +150,7 @@ export const CompileExprRequest$outboundSchema: z.ZodMiniType<
   CompileExprRequest
 > = z.pipe(
   z.object({
-    expr: z.string(),
+    expr: z._default(z.string(), ""),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),

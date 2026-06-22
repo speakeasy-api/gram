@@ -2720,11 +2720,10 @@ func DecodeCompileExprRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
-			err              error
 		)
-		expr = r.URL.Query().Get("expr")
-		if expr == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("expr", "query string"))
+		exprRaw := r.URL.Query().Get("expr")
+		if exprRaw != "" {
+			expr = exprRaw
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -2737,9 +2736,6 @@ func DecodeCompileExprRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		projectSlugInputRaw := r.Header.Get("Gram-Project")
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
-		}
-		if err != nil {
-			return payload, err
 		}
 		payload = NewCompileExprPayload(expr, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
@@ -7862,6 +7858,8 @@ func marshalRiskDetectionDescriptorTypeToDetectionDescriptorTypeResponseBody(v *
 			}
 			res.Fields[i] = marshalRiskDetectionDescriptorFieldToDetectionDescriptorFieldResponseBody(val)
 		}
+	} else {
+		res.Fields = []*DetectionDescriptorFieldResponseBody{}
 	}
 
 	return res
@@ -7871,9 +7869,6 @@ func marshalRiskDetectionDescriptorTypeToDetectionDescriptorTypeResponseBody(v *
 // builds a value of type *DetectionDescriptorFieldResponseBody from a value of
 // type *risk.DetectionDescriptorField.
 func marshalRiskDetectionDescriptorFieldToDetectionDescriptorFieldResponseBody(v *risk.DetectionDescriptorField) *DetectionDescriptorFieldResponseBody {
-	if v == nil {
-		return nil
-	}
 	res := &DetectionDescriptorFieldResponseBody{
 		Name:        v.Name,
 		Type:        v.Type,
@@ -7919,6 +7914,8 @@ func marshalRiskDetectionDescriptorFunctionToDetectionDescriptorFunctionResponse
 			}
 			res.Params[i] = marshalRiskDetectionDescriptorParamToDetectionDescriptorParamResponseBody(val)
 		}
+	} else {
+		res.Params = []*DetectionDescriptorParamResponseBody{}
 	}
 
 	return res
@@ -7928,9 +7925,6 @@ func marshalRiskDetectionDescriptorFunctionToDetectionDescriptorFunctionResponse
 // builds a value of type *DetectionDescriptorParamResponseBody from a value of
 // type *risk.DetectionDescriptorParam.
 func marshalRiskDetectionDescriptorParamToDetectionDescriptorParamResponseBody(v *risk.DetectionDescriptorParam) *DetectionDescriptorParamResponseBody {
-	if v == nil {
-		return nil
-	}
 	res := &DetectionDescriptorParamResponseBody{
 		Name: v.Name,
 		Type: v.Type,

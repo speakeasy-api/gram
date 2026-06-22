@@ -34,7 +34,7 @@ export type DetectionDescriptorFunction = {
   /**
    * Non-receiver parameters in order.
    */
-  params?: Array<DetectionDescriptorParam> | undefined;
+  params: Array<DetectionDescriptorParam>;
   /**
    * Machine type-string of the receiver when member is true.
    */
@@ -58,7 +58,7 @@ export const DetectionDescriptorFunction$inboundSchema: z.ZodMiniType<
   member: z.boolean(),
   name: z.string(),
   overloadId: z.string(),
-  params: z.optional(z.array(DetectionDescriptorParam$inboundSchema)),
+  params: z.array(DetectionDescriptorParam$inboundSchema),
   receiverType: z.string(),
   returnType: z.string(),
   signature: z.string(),

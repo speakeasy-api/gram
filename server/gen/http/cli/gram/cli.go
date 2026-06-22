@@ -1539,7 +1539,7 @@ func ParseEndpoint(
 		riskGetDetectionDescriptorProjectSlugInputFlag = riskGetDetectionDescriptorFlags.String("project-slug-input", "", "")
 
 		riskCompileExprFlags                = flag.NewFlagSet("compile-expr", flag.ExitOnError)
-		riskCompileExprExprFlag             = riskCompileExprFlags.String("expr", "REQUIRED", "")
+		riskCompileExprExprFlag             = riskCompileExprFlags.String("expr", "", "")
 		riskCompileExprApikeyTokenFlag      = riskCompileExprFlags.String("apikey-token", "", "")
 		riskCompileExprSessionTokenFlag     = riskCompileExprFlags.String("session-token", "", "")
 		riskCompileExprProjectSlugInputFlag = riskCompileExprFlags.String("project-slug-input", "", "")

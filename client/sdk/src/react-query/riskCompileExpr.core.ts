@@ -19,7 +19,7 @@ export type RiskCompileExprQueryData = components.ExprCompileResult;
 export function prefetchRiskCompileExpr(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.CompileExprRequest,
+  request?: operations.CompileExprRequest | undefined,
   security?: operations.CompileExprSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -35,7 +35,7 @@ export function prefetchRiskCompileExpr(
 
 export function buildRiskCompileExprQuery(
   client$: GramCore,
-  request: operations.CompileExprRequest,
+  request?: operations.CompileExprRequest | undefined,
   security?: operations.CompileExprSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -44,10 +44,10 @@ export function buildRiskCompileExprQuery(
 } {
   return {
     queryKey: queryKeyRiskCompileExpr({
-      expr: request.expr,
-      gramKey: request.gramKey,
-      gramSession: request.gramSession,
-      gramProject: request.gramProject,
+      expr: request?.expr,
+      gramKey: request?.gramKey,
+      gramSession: request?.gramSession,
+      gramProject: request?.gramProject,
     }),
     queryFn: async function riskCompileExprQueryFn(
       ctx,
@@ -75,7 +75,7 @@ export function buildRiskCompileExprQuery(
 
 export function queryKeyRiskCompileExpr(
   parameters: {
-    expr: string;
+    expr?: string | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

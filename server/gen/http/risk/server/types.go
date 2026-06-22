@@ -7090,7 +7090,7 @@ type DetectionDescriptorTypeResponseBody struct {
 	// 'field').
 	Opaque bool `form:"opaque" json:"opaque" xml:"opaque"`
 	// Typed members of a non-opaque object type. Empty when opaque.
-	Fields []*DetectionDescriptorFieldResponseBody `form:"fields,omitempty" json:"fields,omitempty" xml:"fields,omitempty"`
+	Fields []*DetectionDescriptorFieldResponseBody `form:"fields" json:"fields" xml:"fields"`
 	// Short human label for the editor (e.g. 'field', 'tool').
 	DisplayName string `form:"displayName" json:"displayName" xml:"displayName"`
 	// Plain-English description of the type.
@@ -7133,7 +7133,7 @@ type DetectionDescriptorFunctionResponseBody struct {
 	// Machine type-string of the receiver when member is true.
 	ReceiverType string `form:"receiverType" json:"receiverType" xml:"receiverType"`
 	// Non-receiver parameters in order.
-	Params []*DetectionDescriptorParamResponseBody `form:"params,omitempty" json:"params,omitempty" xml:"params,omitempty"`
+	Params []*DetectionDescriptorParamResponseBody `form:"params" json:"params" xml:"params"`
 	// Machine type-string of the result (e.g. 'bool', 'field').
 	ReturnType string `form:"returnType" json:"returnType" xml:"returnType"`
 	// Human-readable call signature.
