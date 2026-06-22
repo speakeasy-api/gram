@@ -36788,6 +36788,12 @@ components:
                     items:
                         type: string
                     description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
+                scope_exempt:
+                    type: string
+                    description: 'CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.'
+                scope_include:
+                    type: string
+                    description: 'CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.'
                 sources:
                     type: array
                     items:
@@ -44276,6 +44282,12 @@ components:
                     items:
                         type: string
                     description: Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.
+                scope_exempt:
+                    type: string
+                    description: 'CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.'
+                scope_include:
+                    type: string
+                    description: 'CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.'
                 sources:
                     type: array
                     items:
@@ -48535,6 +48547,12 @@ components:
                     items:
                         type: string
                     description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
+                scope_exempt:
+                    type: string
+                    description: CEL exemption predicate. Omit to preserve the current value; send empty to clear.
+                scope_include:
+                    type: string
+                    description: CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.
                 sources:
                     type: array
                     items:

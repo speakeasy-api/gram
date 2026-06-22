@@ -193,7 +193,18 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if err != nil {
 		return nil, err
 	}
-	messages = filterMessagesByMessageTypes(messages, args.MessageTypes)
+	// Policy application: a defined include predicate is the fine-grained scope
+	// and supersedes the coarse message_types filter; exempt takes a matched
+	// message out of the policy entirely. Computed once, applied to the source
+	// scanners and the judge.
+	eng := a.celEng
+	app, err := CompileScope(eng, policy.ScopeInclude.String, policy.ScopeExempt.String)
+	if err != nil {
+		return nil, fmt.Errorf("compile policy scope: %w", err)
+	}
+	if !app.HasInclude() {
+		messages = filterMessagesByMessageTypes(messages, args.MessageTypes)
+	}
 	scannedCount = len(messages)
 	if len(messages) == 0 {
 		if err := a.writeResults(ctx, args, nil); err != nil {
@@ -220,7 +231,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return nil, fmt.Errorf("list exclusions: %w", err)
 	}
 
-	appExcluded := make([]bool, len(messages))
+	appExcluded := a.applicationExcluded(ctx, app, messages)
 
 	findings, err := a.scan(ctx, args, messages, customRules, NewExclusionSet(exclusions), appExcluded)
 	if err != nil {
@@ -563,6 +574,22 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 		merged[i] = dedup(combined)
 	}
 	return merged, nil
+}
+
+// applicationExcluded marks messages a policy's application_config takes out of
+// scope (include does not match) or exempts. Returns nil when the policy has no
+// application predicates, so the common path allocates nothing and callers skip
+// the per-message check.
+func (a *AnalyzeBatch) applicationExcluded(ctx context.Context, app CompiledScope, messages []repo.GetMessageContentBatchRow) []bool {
+	if !app.Active() {
+		return nil
+	}
+	excluded := make([]bool, len(messages))
+	for i, msg := range messages {
+		view := a.customRuleMessageView(ctx, msg)
+		excluded[i] = !app.Includes(view) || app.Exempts(view)
+	}
+	return excluded
 }
 
 // judgeConcurrency bounds the number of in-flight judge calls per batch. Judge

@@ -11,6 +11,8 @@ INSERT INTO risk_policies (
   , disabled_rules
   , custom_rule_ids
   , message_types
+  , scope_include
+  , scope_exempt
   , enabled
   , action
   , audience_type
@@ -32,6 +34,8 @@ VALUES (
   , @disabled_rules
   , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
   , sqlc.arg(message_types)::text[]
+  , sqlc.narg(scope_include)::text
+  , sqlc.narg(scope_exempt)::text
   , @enabled
   , @action
   , @audience_type
@@ -87,6 +91,8 @@ SET name = @name
   , disabled_rules = @disabled_rules
   , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
   , message_types = sqlc.arg(message_types)::text[]
+  , scope_include = sqlc.narg(scope_include)::text
+  , scope_exempt = sqlc.narg(scope_exempt)::text
   , enabled = @enabled
   , action = @action
   , audience_type = @audience_type
@@ -101,6 +107,8 @@ SET name = @name
         OR disabled_rules IS DISTINCT FROM @disabled_rules
         OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
         OR message_types IS DISTINCT FROM sqlc.arg(message_types)::text[]
+        OR scope_include IS DISTINCT FROM sqlc.narg(scope_include)::text
+        OR scope_exempt IS DISTINCT FROM sqlc.narg(scope_exempt)::text
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
         OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text
