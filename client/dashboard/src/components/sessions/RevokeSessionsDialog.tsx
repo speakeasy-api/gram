@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect } from "react";
+import { useMutation } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -13,30 +14,45 @@ export function RevokeSessionsDialog({
   sessionIds: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onRevoked: () => void;
+  /** Reports the ids that were successfully revoked so the caller can clear them. */
+  onRevoked: (succeededIds: string[]) => void;
 }): JSX.Element {
   const revoke = useRevokeUserSessionMutation();
-  const [isRevoking, setIsRevoking] = useState(false);
-  const [isError, setIsError] = useState(false);
+
+  // Revoke each session concurrently. allSettled (not all) means a single
+  // failure doesn't discard the sessions that did revoke — we report the
+  // successes so the caller clears/refetches them, and keep the failures so the
+  // user can retry. react-query owns the pending/result state (no hand-rolled
+  // async flags).
+  const bulkRevoke = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const results = await Promise.allSettled(
+        ids.map((id) => revoke.mutateAsync({ request: { id } })),
+      );
+      const succeededIds = ids.filter(
+        (_, i) => results[i]?.status === "fulfilled",
+      );
+      return { succeededIds, failedCount: ids.length - succeededIds.length };
+    },
+  });
+
+  const { reset } = bulkRevoke;
+  // Clear any prior result when the dialog closes so stale failure messaging
+  // doesn't linger across reopens.
+  useEffect(() => {
+    if (!open) reset();
+  }, [open, reset]);
 
   const count = sessionIds.length;
+  const failedCount = bulkRevoke.data?.failedCount ?? 0;
 
-  const handleRevoke = async () => {
-    setIsError(false);
-    setIsRevoking(true);
-    try {
-      // Fire all revocations concurrently; surface a single failure rather than
-      // leaving the caller guessing which of the batch went through.
-      await Promise.all(
-        sessionIds.map((id) => revoke.mutateAsync({ request: { id } })),
-      );
-      onOpenChange(false);
-      onRevoked();
-    } catch {
-      setIsError(true);
-    } finally {
-      setIsRevoking(false);
-    }
+  const handleRevoke = () => {
+    bulkRevoke.mutate(sessionIds, {
+      onSuccess: (result) => {
+        onRevoked(result.succeededIds);
+        if (result.failedCount === 0) onOpenChange(false);
+      },
+    });
   };
 
   return (
@@ -52,9 +68,10 @@ export function RevokeSessionsDialog({
             clients will need to re-authenticate.
           </Dialog.Description>
         </Dialog.Header>
-        {isError && (
+        {failedCount > 0 && (
           <p className="text-destructive text-sm">
-            Some sessions couldn&apos;t be revoked. Please try again.
+            {failedCount} session{failedCount === 1 ? "" : "s"} couldn&apos;t be
+            revoked. Please try again.
           </p>
         )}
         <Dialog.Footer>
@@ -63,10 +80,10 @@ export function RevokeSessionsDialog({
           </Button>
           <Button
             variant="destructive"
-            disabled={isRevoking || count === 0}
-            onClick={() => void handleRevoke()}
+            disabled={bulkRevoke.isPending || count === 0}
+            onClick={handleRevoke}
           >
-            {isRevoking ? "Revoking…" : `Revoke ${count}`}
+            {bulkRevoke.isPending ? "Revoking…" : `Revoke ${count}`}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>

@@ -91,12 +91,17 @@ function UserSessionsInner(): JSX.Element {
   );
 
   const { hasScope } = useRBAC();
-  // Revoke is a write mutation (backend requires project:write); only expose the
-  // bulk-selection affordance to users who can actually act on it.
-  const canRevoke = hasScope("project:write");
 
   const [projectSlug, setProjectSlug] = useState<string>(project.slug);
   const filters = useFilterState(USER_SESSION_FILTERS);
+
+  // Revoke is a write mutation (backend requires project:write). Scope the check
+  // to the *selected* project — a user with project:write on one project must
+  // not see revoke affordances after switching to another (they'd only fail at
+  // mutation time). Drives both the bulk selection and the per-row affordances.
+  const selectedProjectId = projects.find((p) => p.slug === projectSlug)?.id;
+  const canRevoke =
+    !!selectedProjectId && hasScope("project:write", selectedProjectId);
   const [searchQuery, setSearchQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
@@ -241,6 +246,7 @@ function UserSessionsInner(): JSX.Element {
           <SessionTableRow
             key={s.id}
             session={s}
+            canRevokeInProject={canRevoke}
             onRevoked={() => void refetch()}
             selectable={selectionEnabled}
             selected={selected.has(s.id)}
@@ -344,8 +350,14 @@ function UserSessionsInner(): JSX.Element {
           sessionIds={selectedIds}
           open={bulkConfirmOpen}
           onOpenChange={setBulkConfirmOpen}
-          onRevoked={() => {
-            setSelected(new Set());
+          onRevoked={(succeededIds) => {
+            // Clear only the sessions that actually revoked; keep any failures
+            // selected so the user can retry them.
+            setSelected((prev) => {
+              const next = new Set(prev);
+              for (const id of succeededIds) next.delete(id);
+              return next;
+            });
             void refetch();
           }}
         />

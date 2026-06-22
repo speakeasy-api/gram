@@ -11,7 +11,6 @@ import {
 import { DotRow } from "@/components/ui/dot-row";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
-import { useRBAC } from "@/hooks/useRBAC";
 import {
   sessionStatus,
   sessionTimeLabel,
@@ -23,23 +22,28 @@ import { RevokeSessionDialog } from "./RevokeSessionDialog";
 export function SessionTableRow({
   session,
   onRevoked,
+  canRevokeInProject = false,
   selectable = false,
   selected = false,
   onSelectedChange,
 }: {
   session: UserSession;
   onRevoked: () => void;
+  /**
+   * Whether the user holds project:write on this row's project (project-scoped,
+   * resolved by the parent). Combined with the row's status below.
+   */
+  canRevokeInProject?: boolean;
   /** Render the leading selection cell so columns align with the table header. */
   selectable?: boolean;
   selected?: boolean;
   onSelectedChange?: (checked: boolean) => void;
 }): JSX.Element {
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const { hasScope } = useRBAC();
   const status = sessionStatus(session);
-  // Revoke is a write mutation (backend requires project:write); hide the
-  // affordance for read-only users instead of letting them hit a 403.
-  const canRevoke = status === "active" && hasScope("project:write");
+  // Only active sessions can be revoked, and only when the user can write to
+  // this project (hide the affordance rather than 403 later).
+  const canRevoke = status === "active" && canRevokeInProject;
 
   const row = (
     <DotRow>
