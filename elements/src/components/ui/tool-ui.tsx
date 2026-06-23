@@ -90,6 +90,9 @@ interface SectionHighlight {
   /** Optional host-supplied badge rendered in the section header (e.g. a risk
    * pill). Replaces the default warning icon when present. */
   headerBadge?: React.ReactNode;
+  /** Mark colour: "risk" (red, default) for findings, "search" (yellow) for a
+   * text-search hit. */
+  tone?: "risk" | "search";
 }
 
 interface ToolUIProps {
@@ -378,10 +381,12 @@ function HighlightedCode({
   text,
   matches,
   masked,
+  tone = "risk",
 }: {
   text: string;
   matches: SectionMatch[];
   masked?: boolean;
+  tone?: "risk" | "search";
 }): React.JSX.Element {
   const hits = React.useMemo(
     () =>
@@ -435,13 +440,18 @@ function HighlightedCode({
           markRefs.current[i] = el;
         }}
         className={cn(
-          // Red chip, fixed-width mono, lightened for the dark code surface. The
-          // active (currently navigated) match pops so prev/next navigation +
-          // auto-scroll have a visible target; the rest stay a darker red.
+          // Fixed-width mono chip, lightened for the dark code surface. The active
+          // (currently navigated) match pops so prev/next navigation + auto-scroll
+          // have a visible target; the rest stay a darker shade. Risk findings are
+          // red; a plain text-search hit is yellow.
           "rounded-sm px-0.5 font-mono ring-1",
-          i === active
-            ? "bg-red-700 text-red-50 ring-red-400"
-            : "bg-red-900 text-red-300 ring-red-800",
+          tone === "search"
+            ? i === active
+              ? "bg-yellow-400 text-yellow-950 ring-yellow-300"
+              : "bg-yellow-700 text-yellow-100 ring-yellow-600"
+            : i === active
+              ? "bg-red-700 text-red-50 ring-red-400"
+              : "bg-red-900 text-red-300 ring-red-800",
         )}
       >
         {masked && !revealed ? maskMatch(value) : value}
@@ -655,6 +665,7 @@ function ToolUISection({
               text={contentString}
               matches={highlight!.matches}
               masked={highlight?.masked}
+              tone={highlight?.tone}
             />
           ) : isStructured ? (
             <StructuredResultContent content={content} />

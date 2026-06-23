@@ -50,6 +50,7 @@ import {
 import {
   type DisplayItem,
   type MessageRow,
+  rowMatchesSeq,
   type ToolRow,
   type TranscriptRow,
   type TurnAuthor,
@@ -557,7 +558,17 @@ function toSectionMatches(
     }));
 }
 
-function ToolRowView({ row, ctx }: { row: ToolRow; ctx: RowContext }) {
+function ToolRowView({
+  row,
+  ctx,
+  active,
+}: {
+  row: ToolRow;
+  ctx: RowContext;
+  /** This tool holds the active search match → expand it (and remount on
+   * toggle so it collapses again when navigation moves to another match). */
+  active: boolean;
+}) {
   const openExclusion = useContext(CreateExclusionContext);
   const name =
     row.toolCall?.function?.name || row.toolCall?.name || "Tool result";
@@ -576,15 +587,14 @@ function ToolRowView({ row, ctx }: { row: ToolRow; ctx: RowContext }) {
   const reqMatches = toSectionMatches(callResults, openExclusion);
   const resMatches = toSectionMatches(resultResults, openExclusion);
   // Search: which of this tool's sections contain the query (case-insensitive,
-  // mirroring the server's ILIKE). Drives expand-on-match + section highlight, so
-  // only a tool that actually matches opens — and only its matching section.
+  // mirroring the server's ILIKE) — drives which section auto-opens + highlights.
+  // The card itself opens whenever it holds the active match (`active`), even if
+  // the hit is in structured content not surfaced in the args/output text.
   const queryLc = ctx.searchQuery?.trim().toLowerCase();
-  const nameMatches = !!queryLc && name.toLowerCase().includes(queryLc);
   const requestMatches =
     !!queryLc && (request?.toLowerCase().includes(queryLc) ?? false);
   const resultMatches =
     !!queryLc && (result?.toLowerCase().includes(queryLc) ?? false);
-  const toolMatches = nameMatches || requestMatches || resultMatches;
   const searchSection: SectionMatch[] = ctx.searchQuery
     ? [{ value: ctx.searchQuery, label: "match" }]
     : [];
@@ -595,7 +605,7 @@ function ToolRowView({ row, ctx }: { row: ToolRow; ctx: RowContext }) {
         headerBadge: <RiskBadge results={callResults} />,
       }
     : requestMatches
-      ? { matches: searchSection, masked: false }
+      ? { matches: searchSection, masked: false, tone: "search" as const }
       : undefined;
   const resultHighlight = resultResults?.length
     ? {
@@ -604,7 +614,7 @@ function ToolRowView({ row, ctx }: { row: ToolRow; ctx: RowContext }) {
         headerBadge: <RiskBadge results={resultResults} />,
       }
     : resultMatches
-      ? { matches: searchSection, masked: false }
+      ? { matches: searchSection, masked: false, tone: "search" as const }
       : undefined;
 
   const toolUseId = row.toolCall?.id ?? row.resultMessage?.toolCallId ?? "";
@@ -620,11 +630,16 @@ function ToolRowView({ row, ctx }: { row: ToolRow; ctx: RowContext }) {
         </div>
       )}
       <ToolUI
+        // ToolUI expansion is uncontrolled, so key on `active` to remount it:
+        // landing on this tool's match opens it; moving to the next match
+        // collapses it again. Non-active tools keep a stable key (and any manual
+        // expansion the user made).
+        key={active ? "active" : "default"}
         name={name}
         request={request}
         result={result}
         status="complete"
-        defaultExpanded={flagged || toolMatches}
+        defaultExpanded={flagged || active}
         requestHighlight={requestHighlight}
         resultHighlight={resultHighlight}
       />
@@ -669,6 +684,10 @@ export interface TranscriptPagination {
    * to the same index). null when not navigating matches. */
   scrollToItemIndex?: number | null;
   scrollNonce?: number;
+  /** seq of the currently-active search match. The row holding it expands (a
+   * matched tool opens); navigating away collapses it again. null when not
+   * searching. */
+  activeMatchSeq?: number | null;
 }
 
 /** Edge "load older/newer" affordance + the risk-gap "load in-between" marker. */
@@ -713,14 +732,17 @@ function LoadDivider({
 const RowView = memo(function RowView({
   row,
   ctx,
+  active,
 }: {
   row: TranscriptRow;
   ctx: RowContext;
+  /** This row holds the currently-active search match. */
+  active: boolean;
 }) {
   return row.kind === "message" ? (
     <MessageRowView row={row} ctx={ctx} />
   ) : (
-    <ToolRowView row={row} ctx={ctx} />
+    <ToolRowView row={row} ctx={ctx} active={active} />
   );
 });
 
@@ -773,8 +795,14 @@ function DisplayItemView({
           onClick={() => pagination.onLoadGap?.(item.afterSeq)}
         />
       );
-    case "row":
-      return <RowView row={item.row} ctx={ctx} />;
+    case "row": {
+      // Only the row holding the active match is "active"; computed here (not in
+      // ctx) so navigation re-renders just the two toggling rows, not all of them.
+      const active =
+        pagination.activeMatchSeq != null &&
+        rowMatchesSeq(item.row, pagination.activeMatchSeq);
+      return <RowView row={item.row} ctx={ctx} active={active} />;
+    }
   }
 }
 

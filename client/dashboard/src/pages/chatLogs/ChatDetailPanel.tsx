@@ -363,7 +363,7 @@ function ThreadSearchBar({
   const navBtn =
     "text-muted-foreground hover:text-foreground hover:bg-background flex size-6 shrink-0 items-center justify-center rounded transition-colors disabled:opacity-40";
   return (
-    <div className="bg-muted/40 focus-within:border-foreground/40 flex items-center gap-2 rounded-lg border px-2.5 py-1.5 transition-colors">
+    <div className="bg-muted/40 focus-within:border-foreground/40 flex h-9 items-center gap-2 rounded-lg border px-2.5 transition-colors">
       <Search className="text-muted-foreground size-3.5 shrink-0" />
       <input
         type="text"
@@ -817,6 +817,7 @@ function ChatDetailPanel({
       scrollToFinding: dimNonRisk || searchActive,
       scrollToItemIndex: matchItemIndex,
       scrollNonce,
+      activeMatchSeq: searchActive ? (matchSeqs[activeMatchIdx] ?? null) : null,
     };
   }, [
     hasMoreBefore,
@@ -829,6 +830,8 @@ function ChatDetailPanel({
     initialScrollIndex,
     matchItemIndex,
     scrollNonce,
+    matchSeqs,
+    activeMatchIdx,
   ]);
 
   const rowCtx = useMemo<RowContext>(
