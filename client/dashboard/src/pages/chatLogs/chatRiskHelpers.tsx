@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { RiskResult } from "@gram/client/models/components";
+import { cn } from "@/lib/utils";
 import { ruleIdCategoryLabel } from "@/pages/security/rule-ids";
 import { serializeExclusionExpression } from "@/pages/security/exclusion-expression";
 import {
@@ -9,10 +10,18 @@ import {
 import { getRuleTitleFallback } from "@/pages/security/risk-utils";
 import { useRevealAll } from "@/pages/security/reveal-all-context";
 
-/** Soft warning (yellow) wash used to mark a flagged span inside message text
- * or tool output. */
+/** Soft warning (yellow) wash for a *non-sensitive* flagged span — always shown,
+ * so it keeps the natural proportional text. */
 const RISK_MARK_CLASS =
   "rounded-sm bg-warning-softest px-0.5 text-foreground ring-1 ring-warning-softest";
+
+/** A sensitive span toggles between dotted-out and revealed, so both states must
+ * occupy the exact same width or revealing reflows the message. Shared box +
+ * monospace (so char-count == width); red tint matching the risk divider, with a
+ * stronger wash once revealed to signal the value is exposed. */
+const SENSITIVE_MARK_BASE = "rounded-sm px-0.5 font-mono ring-1";
+const SENSITIVE_MARK_MASKED = "bg-red-700/10 text-red-700 ring-red-700/20";
+const SENSITIVE_MARK_REVEALED = "bg-red-700/15 text-red-700 ring-red-700/30";
 
 export function getRiskBadgeLabel(result: RiskResult): string {
   if (result.ruleId === "llm_judge") return getRuleTitleFallback(result.ruleId);
@@ -32,6 +41,16 @@ export function resultsAreSensitive(
     results?.some((r) => r.source === "gitleaks" || r.source === "presidio") ??
     false
   );
+}
+
+/** Count of distinct findings (by source/rule/match), matching the RiskBadge's
+ * grouping — used for the "N risks" turn-divider label. */
+export function distinctRiskCount(results: RiskResult[]): number {
+  const keys = new Set<string>();
+  for (const r of results) {
+    keys.add(`${r.source} ${r.ruleId ?? ""} ${r.match ?? ""}`);
+  }
+  return keys.size;
 }
 
 /** Distinct, non-empty match strings to highlight, longest first so a longer
@@ -87,6 +106,9 @@ export function highlightMatches(
   text: string,
   matches: string[],
   masked: boolean,
+  /** The spans are maskable (sensitive), so render them with the fixed-width
+   * style in both states even when currently revealed — avoids reflow on toggle. */
+  maskable = false,
 ): ReactNode {
   if (matches.length === 0) return text;
 
@@ -119,8 +141,14 @@ export function highlightMatches(
   merged.forEach(([start, end], k) => {
     if (start > pos) nodes.push(text.slice(pos, start));
     const value = text.slice(start, end);
+    const className = maskable
+      ? cn(
+          SENSITIVE_MARK_BASE,
+          masked ? SENSITIVE_MARK_MASKED : SENSITIVE_MARK_REVEALED,
+        )
+      : RISK_MARK_CLASS;
     nodes.push(
-      <mark key={k} className={RISK_MARK_CLASS}>
+      <mark key={k} className={className}>
         {masked ? maskValue(value) : value}
       </mark>,
     );

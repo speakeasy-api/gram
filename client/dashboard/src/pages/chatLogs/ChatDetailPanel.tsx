@@ -1,9 +1,8 @@
 import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
-  Check,
   ChevronDown,
-  ListFilter,
+  Info,
   Sparkles,
   SlidersHorizontal,
   User,
@@ -42,6 +41,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Dialog } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsAdmin } from "@/contexts/Auth";
@@ -202,9 +202,14 @@ function SessionSummary({
             </span>
           )}
           {tokens > 0 && <span>{formatTokenCount(tokens)} tokens</span>}
-          {/* No cost telemetry for this session (e.g. ClickHouse miss) — fall
-              back to the message count so the trigger is never an empty pill. */}
-          {!hasCost && tokens === 0 && <span>{messageCount} messages</span>}
+          {/* No cost telemetry for this session (e.g. ClickHouse miss) — show a
+              neutral "Details" label so the trigger is never an empty pill. */}
+          {!hasCost && tokens === 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <Info className="size-3.5" />
+              Details
+            </span>
+          )}
           <ChevronDown className="size-3.5" />
         </button>
       </PopoverTrigger>
@@ -261,93 +266,66 @@ const ALL_CATEGORIES: ReadonlySet<MessageCategory> = new Set(
   MESSAGE_TYPES.map((t) => t.key),
 );
 
-/** Header control to narrow the transcript to one or more message types. A
- * checkbox popover (rather than always-on pills) keeps the dense header clean;
- * the trigger surfaces an active state + count only when a filter is applied. */
-function MessageTypeFilter({
-  active,
-  onChange,
+/** A single toggle in the header filter bar. */
+/** Header filter bar: a multi-select segmented control over message types and a
+ * "Risky only" switch, separated by a hairline. Right-aligned on its own row. */
+function MessageFilterBar({
+  typeFilter,
+  onTypeFilterChange,
+  riskyOnly,
+  onRiskyOnlyChange,
 }: {
-  active: ReadonlySet<MessageCategory>;
-  onChange: (next: Set<MessageCategory>) => void;
+  typeFilter: ReadonlySet<MessageCategory>;
+  onTypeFilterChange: (next: Set<MessageCategory>) => void;
+  riskyOnly: boolean;
+  onRiskyOnlyChange: (next: boolean) => void;
 }) {
-  const allOn = active.size === MESSAGE_TYPES.length;
-  const toggle = (key: MessageCategory) => {
-    const next = new Set(active);
+  const toggleType = (key: MessageCategory) => {
+    const next = new Set(typeFilter);
     if (next.has(key)) next.delete(key);
     else next.add(key);
     // Never leave the transcript fully empty — clearing the last type resets.
     if (next.size === 0) for (const t of MESSAGE_TYPES) next.add(t.key);
-    onChange(next);
+    onTypeFilterChange(next);
   };
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label="Filter messages by type"
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors",
-            allOn
-              ? "text-muted-foreground hover:text-foreground hover:bg-muted"
-              : "text-foreground bg-muted",
-          )}
-        >
-          <ListFilter className="size-4" />
-          Filters
-          {!allOn && (
-            <span className="tabular-nums">
-              ({active.size}/{MESSAGE_TYPES.length})
-            </span>
-          )}
-          <ChevronDown className="size-3.5" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-52 p-1.5">
-        <div className="text-muted-foreground px-2 py-1.5 text-xs font-medium">
-          Show messages
-        </div>
+    <div className="flex items-center justify-end gap-3">
+      <div className="bg-muted/40 inline-flex items-center gap-1 rounded-lg border p-1">
         {MESSAGE_TYPES.map(({ key, label, icon: Glyph }) => {
-          const on = active.has(key);
+          const on = typeFilter.has(key);
           return (
             <button
               key={key}
               type="button"
-              role="checkbox"
-              aria-checked={on}
-              onClick={() => toggle(key)}
-              className="hover:bg-muted flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors"
+              aria-pressed={on}
+              onClick={() => toggleType(key)}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:border-foreground/40",
+                on
+                  ? "bg-background text-foreground shadow-sm hover:bg-muted/60"
+                  : "text-muted-foreground hover:bg-background hover:text-foreground",
+              )}
             >
-              <span
-                aria-hidden
-                className={cn(
-                  "flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors",
-                  on
-                    ? "bg-primary border-primary text-primary-foreground"
-                    : "border-muted-foreground/40",
-                )}
-              >
-                {on && <Check className="size-3" />}
-              </span>
-              <Glyph className="text-muted-foreground size-4 shrink-0" />
-              <span className={cn(!on && "text-muted-foreground")}>
-                {label}
-              </span>
+              <Glyph className="size-3.5" />
+              {label}
             </button>
           );
         })}
-        {!allOn && (
-          <button
-            type="button"
-            onClick={() => onChange(new Set(ALL_CATEGORIES))}
-            className="text-muted-foreground hover:text-foreground hover:bg-muted mt-1 flex w-full items-center justify-center rounded-md border-t px-2 pt-2 pb-1.5 text-xs transition-colors"
-          >
-            Reset filter
-          </button>
-        )}
-      </PopoverContent>
-    </Popover>
+      </div>
+      <div className="bg-border h-5 w-px" />
+      <div className="flex items-center gap-2">
+        <Switch
+          checked={riskyOnly}
+          onCheckedChange={onRiskyOnlyChange}
+          aria-label="Show only risky messages"
+          className={riskyOnly ? "bg-red-700" : undefined}
+        />
+        <span className="text-muted-foreground text-xs font-medium">
+          Risky only
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -360,6 +338,8 @@ function ChatDetailHeader({
   showFilter,
   typeFilter,
   onTypeFilterChange,
+  riskyOnly,
+  onRiskyOnlyChange,
   onExport,
   onDelete,
   onSetView,
@@ -373,6 +353,8 @@ function ChatDetailHeader({
   showFilter: boolean;
   typeFilter: ReadonlySet<MessageCategory>;
   onTypeFilterChange: (next: Set<MessageCategory>) => void;
+  riskyOnly: boolean;
+  onRiskyOnlyChange: (next: boolean) => void;
   onExport: () => void;
   onDelete: () => void;
   onSetView: (view: ViewMode) => void;
@@ -410,12 +392,6 @@ function ChatDetailHeader({
             messageCount={messageCount}
             toolCount={toolCount}
           />
-          {showFilter && (
-            <MessageTypeFilter
-              active={typeFilter}
-              onChange={onTypeFilterChange}
-            />
-          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -462,6 +438,16 @@ function ChatDetailHeader({
           </button>
         </div>
       </div>
+      {showFilter && (
+        <div className="mt-3">
+          <MessageFilterBar
+            typeFilter={typeFilter}
+            onTypeFilterChange={onTypeFilterChange}
+            riskyOnly={riskyOnly}
+            onRiskyOnlyChange={onRiskyOnlyChange}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -492,10 +478,12 @@ function ChatDetailPanel({
   const canManageChat = isSuperAdmin || hasScope("org:admin");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [view, setView] = useState<ViewMode>("chat");
-  // Header transcript filter — which message types to show (all on by default).
+  // Header transcript filter — which message types to show (all on by default)
+  // plus an optional "risky only" toggle.
   const [typeFilter, setTypeFilter] = useState<ReadonlySet<MessageCategory>>(
     () => new Set(ALL_CATEGORIES),
   );
+  const [riskyOnly, setRiskyOnly] = useState(false);
   const [exclusionState, setExclusionState] =
     useState<ExclusionSheetState | null>(null);
   // The finding an in-flight exclusion was opened from, and the set of findings
@@ -549,6 +537,7 @@ function ChatDetailPanel({
   useEffect(() => {
     setView("chat");
     setTypeFilter(new Set(ALL_CATEGORIES));
+    setRiskyOnly(false);
     setExclusionState(null);
     setPendingExclusionKey(null);
     setOptimisticExcluded(new Set());
@@ -595,16 +584,19 @@ function ChatDetailPanel({
     () => buildTranscript(chatMessages),
     [chatMessages],
   );
-  // Apply the header type filter at the row level so generation dividers and
-  // risk gaps recompute against exactly what's shown (no orphaned dividers).
-  const filterActive = typeFilter.size < ALL_CATEGORIES.size;
-  const visibleRows = useMemo(
-    () =>
-      filterActive
-        ? transcriptRows.filter((r) => typeFilter.has(rowCategory(r)))
-        : transcriptRows,
-    [transcriptRows, typeFilter, filterActive],
-  );
+  // Apply the header filters at the row level so generation dividers and risk
+  // gaps recompute against exactly what's shown (no orphaned dividers).
+  const filterActive = typeFilter.size < ALL_CATEGORIES.size || riskyOnly;
+  const visibleRows = useMemo(() => {
+    let rows = transcriptRows;
+    if (typeFilter.size < ALL_CATEGORIES.size) {
+      rows = rows.filter((r) => typeFilter.has(rowCategory(r)));
+    }
+    if (riskyOnly) {
+      rows = rows.filter((r) => rowIsFlagged(r, riskResultsByMessage));
+    }
+    return rows;
+  }, [transcriptRows, typeFilter, riskyOnly, riskResultsByMessage]);
   const hasMoreBefore = active.hasMoreBefore;
   const hasMoreAfter = active.hasMoreAfter;
   const riskGaps = dimNonRisk ? riskTranscript.gaps : undefined;
@@ -667,12 +659,14 @@ function ChatDetailPanel({
       claudeUsageByMessage,
       claudeToolUsageByToolUseId,
       dimNonRisk,
+      userLabel: chat?.externalUserId,
     }),
     [
       riskResultsByMessage,
       claudeUsageByMessage,
       claudeToolUsageByToolUseId,
       dimNonRisk,
+      chat?.externalUserId,
     ],
   );
 
@@ -731,6 +725,8 @@ function ChatDetailPanel({
         showFilter={view === "chat"}
         typeFilter={typeFilter}
         onTypeFilterChange={setTypeFilter}
+        riskyOnly={riskyOnly}
+        onRiskyOnlyChange={setRiskyOnly}
         onExport={() => {
           exportTraceDataAsJson({
             chatId,
@@ -752,7 +748,10 @@ function ChatDetailPanel({
         </div>
       )}
 
-      {view === "chat" && (
+      {/* The transcript stays mounted while a sub-view (tools/exclusion) overlays
+          it, so returning lands back at the same scroll position rather than
+          re-scrolling to the first finding. */}
+      <div className="relative flex flex-1 flex-col overflow-hidden">
         <CreateExclusionContext.Provider
           value={canManageChat ? openExclusion : null}
         >
@@ -770,41 +769,41 @@ function ChatDetailPanel({
             }
           />
         </CreateExclusionContext.Provider>
-      )}
 
-      {view === "tools" && (
-        <>
-          <SubViewBar title="Tool calls" onBack={() => setView("chat")} />
-          <div className="flex-1 overflow-y-auto">
-            <ToolCallsView
-              toolLogs={toolLogs}
-              isLoading={logsLoading}
-              error={error}
+        {view === "tools" && (
+          <div className="bg-background absolute inset-0 z-10 flex flex-col">
+            <SubViewBar title="Tool calls" onBack={() => setView("chat")} />
+            <div className="flex-1 overflow-y-auto">
+              <ToolCallsView
+                toolLogs={toolLogs}
+                isLoading={logsLoading}
+                error={error}
+              />
+            </div>
+          </div>
+        )}
+
+        {view === "exclusion" && exclusionState && (
+          <div className="bg-background absolute inset-0 z-10 flex flex-col overflow-hidden">
+            <SubViewBar
+              title={
+                exclusionState.mode === "edit"
+                  ? "Edit exclusion"
+                  : "Create exclusion"
+              }
+              onBack={closeExclusion}
+            />
+            <p className="text-muted-foreground px-6 pt-4 text-sm">
+              Suppress matching findings retroactively and going forward. Does
+              not re-run analysis.
+            </p>
+            <ExclusionEditor
+              state={exclusionState}
+              onDone={handleExclusionDone}
             />
           </div>
-        </>
-      )}
-
-      {view === "exclusion" && exclusionState && (
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <SubViewBar
-            title={
-              exclusionState.mode === "edit"
-                ? "Edit exclusion"
-                : "Create exclusion"
-            }
-            onBack={closeExclusion}
-          />
-          <p className="text-muted-foreground px-6 pt-4 text-sm">
-            Suppress matching findings retroactively and going forward. Does not
-            re-run analysis.
-          </p>
-          <ExclusionEditor
-            state={exclusionState}
-            onDone={handleExclusionDone}
-          />
-        </div>
-      )}
+        )}
+      </div>
 
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <Dialog.Content>

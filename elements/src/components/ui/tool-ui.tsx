@@ -435,10 +435,13 @@ function HighlightedCode({
           markRefs.current[i] = el;
         }}
         className={cn(
-          "rounded px-0.5",
-          i === active
-            ? "bg-amber-400 font-semibold text-slate-900 ring-1 ring-amber-300"
-            : "bg-amber-400/15 text-amber-200/80",
+          // Same treatment as the dashboard's user-message masked style (red
+          // tint chip, red glyphs, fixed-width mono) but inverted to the light
+          // side so it reads on the dark code surface.
+          "rounded-sm px-0.5 font-mono ring-1",
+          masked && !revealed
+            ? "bg-red-900 text-red-200 ring-red-700"
+            : "bg-red-800 text-red-100 ring-red-600",
         )}
       >
         {masked && !revealed ? maskMatch(value) : value}

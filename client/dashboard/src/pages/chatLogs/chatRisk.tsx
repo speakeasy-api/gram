@@ -1,20 +1,12 @@
-import { Eye, EyeOff, ShieldOff } from "lucide-react";
-import { type ReactNode, useContext, useMemo } from "react";
-import {
-  Badge,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+import { Eye, EyeOff } from "lucide-react";
+import { type ReactNode, useMemo } from "react";
+import { Badge, Icon } from "@speakeasy-api/moonshine";
 import type { RiskResult } from "@gram/client/models/components";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { CreateExclusionContext } from "./exclusionContext";
 import {
   getMatchStrings,
   getRiskBadgeLabel,
@@ -52,7 +44,7 @@ export function HighlightedMessageText({
     <div className="space-y-1">
       {text && (
         <div className="whitespace-pre-wrap">
-          {highlightMatches(text, matches, sensitive && !revealed)}
+          {highlightMatches(text, matches, sensitive && !revealed, sensitive)}
         </div>
       )}
       {orphanMatches.length > 0 && (
@@ -125,9 +117,13 @@ function MaskedMatchInline({ value }: { value: string }): ReactNode {
 export function RiskBadge({
   results,
   compact = false,
+  trigger,
 }: {
   results: RiskResult[];
   compact?: boolean;
+  /** Custom popover trigger (e.g. the "N risks" turn-divider label). Falls back
+   * to the default destructive badge. */
+  trigger?: ReactNode;
 }): ReactNode {
   const unique = useMemo(() => {
     const grouped = new Map<string, { result: RiskResult; count: number }>();
@@ -143,22 +139,24 @@ export function RiskBadge({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="cursor-pointer"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Badge
-            variant="destructive"
-            className={compact ? "px-1.5 py-0 text-[10px]" : "text-xs"}
+        {trigger ?? (
+          <button
+            type="button"
+            className="cursor-pointer"
+            onClick={(e) => e.stopPropagation()}
           >
-            <Icon
-              name="shield-alert"
-              className={`mr-1 ${compact ? "size-2.5" : "size-3"}`}
-            />
-            {unique.length} {unique.length === 1 ? "Risk" : "Risks"}
-          </Badge>
-        </button>
+            <Badge
+              variant="destructive"
+              className={compact ? "px-1.5 py-0 text-[10px]" : "text-xs"}
+            >
+              <Icon
+                name="shield-alert"
+                className={`mr-1 ${compact ? "size-2.5" : "size-3"}`}
+              />
+              {unique.length} {unique.length === 1 ? "Risk" : "Risks"}
+            </Badge>
+          </button>
+        )}
       </PopoverTrigger>
       <PopoverContent
         align="start"
@@ -247,72 +245,4 @@ export function RevealSecretButton({
  * sibling (never on its own) so it doesn't dangle. */
 export function MetaSeparator(): ReactNode {
   return <span aria-hidden className="bg-border h-3 w-px shrink-0" />;
-}
-
-/** Compact "Create exclusion" action for a flagged row's meta strip. When
- * several distinct findings are excludable it opens a dropdown to pick one.
- * `leadingSeparator` draws a hairline before it to delimit metadata from
- * actions — only emitted when the action actually renders. */
-export function CreateExclusionButton({
-  results,
-  leadingSeparator = false,
-}: {
-  results: RiskResult[];
-  leadingSeparator?: boolean;
-}): ReactNode {
-  const openCreateExclusion = useContext(CreateExclusionContext);
-
-  const actionable = useMemo(() => {
-    if (!openCreateExclusion) return [];
-    const seen = new Set<string>();
-    const out: RiskResult[] = [];
-    for (const r of results) {
-      const key = `${r.source}|${r.ruleId ?? ""}|${r.match ?? ""}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      if (r.ruleId !== "llm_judge") out.push(r);
-    }
-    return out;
-  }, [results, openCreateExclusion]);
-
-  if (actionable.length === 0) return null;
-
-  const trigger =
-    actionable.length === 1 ? (
-      <button
-        type="button"
-        className={META_ACTION_CLASS}
-        onClick={() => openCreateExclusion?.(actionable[0]!)}
-      >
-        <ShieldOff className="size-3" />
-        Create exclusion
-      </button>
-    ) : (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button type="button" className={META_ACTION_CLASS}>
-            <ShieldOff className="size-3" />
-            Create exclusion
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {actionable.map((r) => (
-            <DropdownMenuItem
-              key={r.id}
-              className="cursor-pointer"
-              onSelect={() => openCreateExclusion?.(r)}
-            >
-              {[r.ruleId, r.source].filter(Boolean).join(" · ")}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-
-  return (
-    <>
-      {leadingSeparator && <MetaSeparator />}
-      {trigger}
-    </>
-  );
 }

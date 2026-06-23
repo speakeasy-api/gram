@@ -1,20 +1,33 @@
 import {
+  type CSSProperties,
   type JSX,
   useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
 } from "react";
+import { format } from "date-fns";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  Bot,
   ChevronDown,
   ChevronUp,
   Ellipsis,
   GitBranch,
   Loader2,
+  ShieldOff,
+  SlidersHorizontal,
 } from "lucide-react";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import {
+  Badge,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Icon,
+} from "@speakeasy-api/moonshine";
 import { MessageContent, type SectionMatch, ToolUI } from "@gram-ai/elements";
 import type {
   ClaudeToolUsage,
@@ -33,15 +46,23 @@ import {
   formatDurationFromNanos,
   formatUsageCost,
 } from "./claudeUsage";
-import { type DisplayItem, type MessageRow, type ToolRow } from "./transcript";
 import {
-  CreateExclusionButton,
+  type DisplayItem,
+  type MessageRow,
+  type ToolRow,
+  type TurnAuthor,
+} from "./transcript";
+import {
   HighlightedMessageText,
   MetaSeparator,
   RevealSecretButton,
   RiskBadge,
 } from "./chatRisk";
-import { resultsAreSensitive, useRowReveal } from "./chatRiskHelpers";
+import {
+  distinctRiskCount,
+  resultsAreSensitive,
+  useRowReveal,
+} from "./chatRiskHelpers";
 import { CreateExclusionContext } from "./exclusionContext";
 
 interface RowContext {
@@ -51,6 +72,9 @@ interface RowContext {
   /** When the session has findings, non-flagged rows are dimmed to spotlight
    * the risky ones. */
   dimNonRisk: boolean;
+  /** Chat-level user label, used as the turn-header name when an individual
+   * message carries no user id of its own. */
+  userLabel?: string;
 }
 
 // Fade non-risky rows so the findings stand out.
@@ -165,10 +189,6 @@ function ToolByteBadge({ bytes }: { bytes: number }) {
   );
 }
 
-// Outgoing turn — right-aligned bubble, matching the elements <UserMessage />
-// (bg-muted, rounded-xl). When flagged, the risk/cost badges and the
-// create-exclusion action ride above the bubble (right-aligned) so the bubble
-// itself stays clean.
 // Two letters for the avatar fallback: the first two name parts of an email
 // local-part (jane.doe → JD), else the first two characters.
 function userInitials(id: string | undefined): string {
@@ -179,6 +199,184 @@ function userInitials(id: string | undefined): string {
   return handle.slice(0, 2).toUpperCase();
 }
 
+function userDisplayName(id: string | undefined): string {
+  return id && id.trim().length > 0 ? id : "User";
+}
+
+// A repeating zig-zag (triangle-wave) rule. Drawn as a themeable `bg-border`
+// bar revealed through an SVG mask, so it follows the border colour in light and
+// dark without baking a colour into the data URI.
+const zigzagMask = (strokeWidth: number) =>
+  `url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='12'%20height='7'%20viewBox='0%200%2012%207'%3E%3Cpath%20d='M0%206%20L6%201%20L12%206'%20fill='none'%20stroke='%23000'%20stroke-width='${strokeWidth}'%20stroke-linejoin='round'/%3E%3C/svg%3E")`;
+
+const zigzagStyle = (strokeWidth: number): CSSProperties => ({
+  maskImage: zigzagMask(strokeWidth),
+  WebkitMaskImage: zigzagMask(strokeWidth),
+  maskRepeat: "repeat-x",
+  WebkitMaskRepeat: "repeat-x",
+  maskSize: "12px 7px",
+  WebkitMaskSize: "12px 7px",
+});
+
+// Thin for plain turn dividers; thicker (bold) for the red risk divider.
+const ZIGZAG_STYLE = zigzagStyle(0.6);
+const ZIGZAG_STYLE_BOLD = zigzagStyle(1);
+
+function ZigZagRule({
+  className,
+  bold,
+}: {
+  className?: string;
+  bold?: boolean;
+}) {
+  return (
+    <div
+      className={cn("h-[7px] flex-1", className ?? "bg-border")}
+      style={bold ? ZIGZAG_STYLE_BOLD : ZIGZAG_STYLE}
+    />
+  );
+}
+
+// Distinct, excludable findings for a flagged turn (drops llm_judge and dupes),
+// mirroring CreateExclusionButton's selection.
+function useActionableExclusions(results: RiskResult[] | undefined) {
+  const openCreateExclusion = useContext(CreateExclusionContext);
+  const actionable = useMemo(() => {
+    if (!openCreateExclusion || !results) return [];
+    const seen = new Set<string>();
+    const out: RiskResult[] = [];
+    for (const r of results) {
+      const key = `${r.source}|${r.ruleId ?? ""}|${r.match ?? ""}`;
+      if (seen.has(key) || r.ruleId === "llm_judge") continue;
+      seen.add(key);
+      out.push(r);
+    }
+    return out;
+  }, [results, openCreateExclusion]);
+  return { openCreateExclusion, actionable };
+}
+
+// Pill-styled (matches the avatar pill) "Actions" dropdown on the turn header,
+// surfacing the create-exclusion action for the turn's findings.
+function TurnActions({ results }: { results: RiskResult[] }) {
+  const { openCreateExclusion, actionable } = useActionableExclusions(results);
+  if (actionable.length === 0) return null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="bg-background text-muted-foreground hover:text-foreground flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors"
+        >
+          <SlidersHorizontal className="size-3.5" />
+          Actions
+          <ChevronDown className="size-3.5" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {actionable.map((r) => (
+          <DropdownMenuItem
+            key={r.id}
+            className="cursor-pointer"
+            onSelect={() => openCreateExclusion?.(r)}
+          >
+            <ShieldOff className="size-3.5" />
+            Create exclusion
+            {actionable.length > 1 &&
+              `: ${[r.ruleId, r.source].filter(Boolean).join(" · ")}`}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// Avatar + name above each turn, separated from the previous turn by a rule.
+// Both speakers are left-aligned and get an avatar here (outside the bubble) so
+// an assistant turn — which may be only tool calls — still reads as one labelled
+// block. A flagged user turn shows its risk badge beside the pill and an
+// "Actions" menu (create exclusion) on the right.
+function TurnHeader({
+  author,
+  userId,
+  userLabel,
+  results,
+  first,
+}: {
+  author: TurnAuthor;
+  userId?: string;
+  userLabel?: string;
+  results?: RiskResult[];
+  first: boolean;
+}) {
+  const isUser = author === "user";
+  const userName = userId ?? userLabel;
+  // Any flagged turn (user or assistant) flags itself via the turn divider — an
+  // assistant turn's findings live on its tool rows, aggregated into `results`.
+  const flagged = !!results && results.length > 0;
+  const riskCount = flagged ? distinctRiskCount(results) : 0;
+  return (
+    <div className="px-4">
+      {/* Turn separator: a zig-zag rule with a centered label. A flagged turn
+          turns red and counts its risks instead of reading "Turn"; the label
+          opens the findings popover. */}
+      {(!first || flagged) && (
+        <div
+          className={cn(
+            "flex items-center gap-3 pt-7 pb-5",
+            flagged ? "text-red-700" : "text-muted-foreground",
+          )}
+        >
+          <ZigZagRule
+            bold={flagged}
+            className={flagged ? "bg-red-700" : undefined}
+          />
+          {flagged ? (
+            <RiskBadge
+              results={results}
+              trigger={
+                <button
+                  type="button"
+                  className="inline-flex cursor-pointer items-center gap-1 font-mono text-sm font-semibold whitespace-nowrap text-red-700 uppercase"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {riskCount} {riskCount === 1 ? "risk" : "risks"}
+                  <ChevronDown className="size-3.5" />
+                </button>
+              }
+            />
+          ) : (
+            <span className="font-mono text-sm font-medium uppercase">
+              Turn
+            </span>
+          )}
+          <ZigZagRule
+            bold={flagged}
+            className={flagged ? "bg-red-700" : undefined}
+          />
+        </div>
+      )}
+      <div className="flex items-center justify-between pt-1 pb-3">
+        <div className="bg-background flex h-9 min-w-0 items-center gap-2 rounded-full border pr-3 pl-1">
+          <Avatar className="size-7 shrink-0">
+            <AvatarFallback className="bg-muted text-muted-foreground text-xs font-medium">
+              {isUser ? userInitials(userName) : <Bot className="size-3.5" />}
+            </AvatarFallback>
+          </Avatar>
+          <span className="text-foreground max-w-[220px] truncate text-sm font-medium">
+            {isUser ? userDisplayName(userName) : "Assistant"}
+          </span>
+        </div>
+        {flagged && <TurnActions results={results} />}
+      </div>
+    </div>
+  );
+}
+
+// Outgoing turn — left-aligned to match the assistant, but kept in a bg-muted
+// bubble. The avatar/name + risk badge + Actions menu sit in the turn header
+// above; the meta strip below keeps the message time, cost, and reveal toggle
+// (create-exclusion moved to the header Actions menu).
 function UserMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
   const { message } = row;
   const results = ctx.riskResultsByMessage.get(message.id);
@@ -191,18 +389,29 @@ function UserMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
   return (
     <div
       className={cn(
-        "flex flex-col items-end gap-2 px-4 py-2",
+        "flex flex-col items-start gap-1.5 px-4 py-1.5",
         dimClass(ctx.dimNonRisk && !flagged),
       )}
     >
+      <div className="bg-muted text-foreground mx-2 max-w-[80%] rounded-xl px-4 py-2 wrap-break-word">
+        {flagged ? (
+          <HighlightedMessageText
+            text={text}
+            results={results}
+            revealed={sensitive ? revealed : undefined}
+          />
+        ) : (
+          <div className="whitespace-pre-wrap">{text}</div>
+        )}
+      </div>
       {(flagged || usage) && (
-        <div className="text-muted-foreground flex items-center gap-2 pr-1 text-xs">
-          {flagged && <RiskBadge results={results} compact />}
-          {flagged && usage && <MetaSeparator />}
+        <div className="text-muted-foreground mx-2 flex items-center gap-2 pl-4 text-xs">
+          <span className="tabular-nums">
+            {format(new Date(message.createdAt), "h:mm a")}
+          </span>
+          {usage && <MetaSeparator />}
           {usage && <CostBadge usage={usage} />}
-          {flagged && (
-            <CreateExclusionButton results={results} leadingSeparator />
-          )}
+          {sensitive && <MetaSeparator />}
           {sensitive && (
             <RevealSecretButton
               results={results}
@@ -212,24 +421,6 @@ function UserMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
           )}
         </div>
       )}
-      <div className="bg-muted text-foreground flex max-w-[80%] items-center gap-2.5 rounded-xl py-2 pr-4 pl-2 wrap-break-word">
-        <Avatar className="size-8 shrink-0 self-start">
-          <AvatarFallback className="bg-background text-xs font-medium">
-            {userInitials(message.externalUserId ?? message.userId)}
-          </AvatarFallback>
-        </Avatar>
-        <div className="min-w-0">
-          {flagged ? (
-            <HighlightedMessageText
-              text={text}
-              results={results}
-              revealed={sensitive ? revealed : undefined}
-            />
-          ) : (
-            <div className="whitespace-pre-wrap">{text}</div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
@@ -263,17 +454,15 @@ function AssistantMessageRow({
           <MessageContent markdown content={text} />
         )}
       </div>
-      {flagged && (
+      {/* Turn-level risk count + exclusion live in the turn header now; the row
+          keeps only the reveal toggle for an inline masked value. */}
+      {sensitive && (
         <div className="text-muted-foreground mx-2 mt-2 flex items-center gap-2 text-xs">
-          <RiskBadge results={results} compact />
-          <CreateExclusionButton results={results} leadingSeparator />
-          {sensitive && (
-            <RevealSecretButton
-              results={results}
-              revealed={revealed}
-              onToggle={() => setRevealed(!revealed)}
-            />
-          )}
+          <RevealSecretButton
+            results={results}
+            revealed={revealed}
+            onToggle={() => setRevealed(!revealed)}
+          />
         </div>
       )}
     </div>
@@ -490,6 +679,18 @@ function DisplayItemView({
   switch (item.type) {
     case "divider":
       return <SegmentDivider generation={item.generation} />;
+    case "turnHeader":
+      return (
+        <TurnHeader
+          author={item.author}
+          userId={item.userId}
+          userLabel={ctx.userLabel}
+          results={item.messageIds.flatMap(
+            (id) => ctx.riskResultsByMessage.get(id) ?? [],
+          )}
+          first={item.first}
+        />
+      );
     case "loadMore":
       return item.dir === "older" ? (
         <LoadDivider

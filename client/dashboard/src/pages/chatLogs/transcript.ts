@@ -164,8 +164,27 @@ export function rowCategory(row: TranscriptRow): MessageCategory {
   return row.entryType === "user" ? "user" : "assistant";
 }
 
+/** Who owns a conversation turn. Tool rows belong to the assistant's turn, so
+ * an assistant turn groups its text + any tool calls under one header. */
+export type TurnAuthor = "user" | "assistant";
+
+function rowTurnAuthor(row: TranscriptRow): TurnAuthor {
+  return rowCategory(row) === "user" ? "user" : "assistant";
+}
+
 export type DisplayItem =
   | { type: "divider"; id: string; generation: number }
+  /** Avatar + name above each turn, with a divider rule separating turns. */
+  | {
+      type: "turnHeader";
+      id: string;
+      author: TurnAuthor;
+      userId?: string;
+      /** Every message in the turn (the assistant turn spans text + tool rows),
+       * so the header can surface the turn's risk badge + exclusion actions. */
+      messageIds: string[];
+      first: boolean;
+    }
   | { type: "row"; id: string; row: TranscriptRow }
   /** Keyset-pagination affordance at the top/bottom of the loaded window. */
   | { type: "loadMore"; id: string; dir: "older" | "newer" }
@@ -209,6 +228,8 @@ export function buildDisplayItems({
   const gapAnchors = gaps ? [...gaps].sort((a, b) => a - b) : [];
   let gi = 0;
   let lastGeneration: number | null = null;
+  let lastAuthor: TurnAuthor | null = null;
+  let firstTurn = true;
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!;
@@ -219,6 +240,37 @@ export function buildDisplayItems({
         generation: row.generation,
       });
       lastGeneration = row.generation;
+    }
+
+    // Open a new turn whenever authorship flips (user ↔ assistant), grouping an
+    // assistant's text + tool calls under one header.
+    const author = rowTurnAuthor(row);
+    if (author !== lastAuthor) {
+      // Collect every message in this turn (look ahead until authorship flips)
+      // so the header can aggregate the turn's findings + exclusion actions.
+      const messageIds: string[] = [];
+      for (
+        let j = i;
+        j < rows.length && rowTurnAuthor(rows[j]!) === author;
+        j++
+      ) {
+        messageIds.push(...rowMessageIds(rows[j]!));
+      }
+      items.push({
+        type: "turnHeader",
+        id: `turn-${row.id}`,
+        author,
+        userId:
+          row.kind === "message"
+            ? (row.message.externalUserId ?? row.message.userId)
+            : undefined,
+        messageIds,
+        // No divider rule above the very first turn (unless older pages sit
+        // above it, in which case the load-older affordance already separates).
+        first: firstTurn && !hasMoreBefore,
+      });
+      firstTurn = false;
+      lastAuthor = author;
     }
     items.push({ type: "row", id: row.id, row });
 
