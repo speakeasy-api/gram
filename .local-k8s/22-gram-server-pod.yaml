@@ -1,0 +1,32 @@
+# Standalone Pod variant of the gram server (you asked for a Pod manifest).
+# The Deployment in 21-*.yaml is the recommended way to run it; this bare Pod
+# is handy for one-off debugging. It is NOT fronted by the Service/Ingress
+# (those select app=gram-server on the Deployment's pods). Apply only one.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gram-server
+  namespace: gram-local
+  labels: { app: gram-server-pod }
+spec:
+  containers:
+    - name: gram-server
+      image: gram-server:local
+      imagePullPolicy: Never
+      args: ["start", "--dev-single-process"]
+      ports:
+        - { containerPort: 8080, name: http }
+        - { containerPort: 8081, name: control }
+      envFrom:
+        - configMapRef: { name: gram-config }
+        - secretRef: { name: gram-secrets }
+      volumeMounts:
+        - { name: assets, mountPath: /tmp/assets }
+      readinessProbe:
+        httpGet: { path: /healthz, port: 8081 }
+        initialDelaySeconds: 15
+        periodSeconds: 10
+        failureThreshold: 6
+  volumes:
+    - name: assets
+      emptyDir: {}

@@ -1,0 +1,72 @@
+# dev-idp mock identity provider. Browser reaches it at http://idp.gram.local
+# (ingress). gram-server reaches the SAME url server-side via a hostAliases entry
+# (see 21-gram-server-deployment.yaml) pointing idp.gram.local at the ingress
+# controller ClusterIP. mock-workos mode: no real WorkOS, no external DB.
+# Rebuild+reload:
+#   CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o dev-idp/bin/dev-idp ./dev-idp
+#   docker build -t gram-devidp:local -f .local-k8s/devidp.Dockerfile dev-idp
+#   kind load docker-image gram-devidp:local --name local-mess
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dev-idp
+  namespace: gram-local
+  labels: { app: dev-idp }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: dev-idp }
+  template:
+    metadata:
+      labels: { app: dev-idp }
+    spec:
+      containers:
+        - name: dev-idp
+          image: gram-devidp:local
+          imagePullPolicy: Never
+          ports:
+            - { containerPort: 35291, name: http }
+            - { containerPort: 35292, name: control }
+          env:
+            - { name: GRAM_DEVIDP_ADDRESS, value: ":35291" }
+            - { name: GRAM_DEVIDP_CONTROL_ADDRESS, value: ":35292" }
+            # Issuer / public base URL advertised in discovery docs + redirects.
+            # Must match the host browser AND gram-server use.
+            - { name: GRAM_DEVIDP_EXTERNAL_URL, value: "http://idp.gram.local" }
+            - { name: GRAM_IDP_MODE, value: "mock-workos" }
+            # Ephemeral in-memory store (users auto-provisioned by mock-workos).
+            - { name: GRAM_DEVIDP_DB, value: "memory" }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 35292 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dev-idp
+  namespace: gram-local
+spec:
+  selector: { app: dev-idp }
+  ports:
+    - { name: http, port: 35291, targetPort: 35291 }
+    - { name: control, port: 35292, targetPort: 35292 }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dev-idp
+  namespace: gram-local
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: idp.gram.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dev-idp
+                port:
+                  number: 35291

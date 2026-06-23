@@ -9,6 +9,8 @@ import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import { AlertCircle, Loader2, Network } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { hasHeaderErrors, headerRowToInput, type HeaderRow } from "./headers";
+import { HeadersEditor } from "./HeadersEditor";
 import { useCreateRemoteMcpSource } from "./hooks";
 import { useVerifyRemoteMcpUrl } from "./useVerifyRemoteMcpUrl";
 import {
@@ -58,6 +60,7 @@ function CreateRemoteMcpForm() {
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [headerRows, setHeaderRows] = useState<HeaderRow[]>([]);
   // Track whether the field has been touched so we don't surface "URL is
   // required" the moment the page renders.
   const [touched, setTouched] = useState(false);
@@ -65,8 +68,12 @@ function CreateRemoteMcpForm() {
   const verify = useVerifyRemoteMcpUrl(url);
 
   const validationError = touched ? validateRemoteMcpUrl(url) : null;
+  const headerErrors = hasHeaderErrors(headerRows);
   const submitDisabled =
-    createSource.isPending || !url.trim() || validateRemoteMcpUrl(url) !== null;
+    createSource.isPending ||
+    !url.trim() ||
+    headerErrors ||
+    validateRemoteMcpUrl(url) !== null;
   const verifyDisabled =
     createSource.isPending || !url.trim() || validateRemoteMcpUrl(url) !== null;
 
@@ -81,6 +88,7 @@ function CreateRemoteMcpForm() {
       const { authAutoConfig, mcpServer } = await createSource.mutateAsync({
         name: trimmedName === "" ? undefined : trimmedName,
         url: url.trim(),
+        headers: headerRows.map(headerRowToInput),
       });
       if (authAutoConfig.status === "configured") {
         toast.success("Remote MCP server added and authentication configured");
@@ -179,6 +187,17 @@ function CreateRemoteMcpForm() {
             <Type muted small>
               streamable-http
             </Type>
+          </Stack>
+
+          <Stack gap={2}>
+            <label className="text-sm leading-none font-medium">
+              Proxy headers (optional)
+            </label>
+            <Type muted small>
+              Sent on every request proxied to this server. Use a static value
+              or pass through an inbound request header.
+            </Type>
+            <HeadersEditor rows={headerRows} setRows={setHeaderRows} />
           </Stack>
 
           {createSource.isError && (

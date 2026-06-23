@@ -31,6 +31,7 @@ import type {
   GetObservabilityOverviewResult,
   McpServer,
   RemoteMcpServer,
+  RemoteMcpServerHeader,
 } from "@gram/client/models/components";
 import { useGramContext } from "@gram/client/react-query/_context";
 import {
@@ -56,6 +57,14 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
+import {
+  hasHeaderErrors,
+  headerRowToInput,
+  headerRowsSignature,
+  headerToRow,
+  type HeaderRow,
+} from "./headers";
+import { HeadersEditor } from "./HeadersEditor";
 import { useLinkMcpServerToRemote } from "./hooks";
 import { RemoveRemoteMcpDialogContent } from "./RemoveRemoteMcpDialog";
 import { useVerifyRemoteMcpUrl } from "./useVerifyRemoteMcpUrl";
@@ -222,6 +231,7 @@ export default function RemoteMCPDetails(): JSX.Element {
                 remoteMcpServerId={remoteMcpServer.id}
                 initialName={remoteMcpServer.name ?? ""}
                 url={remoteMcpServer.url}
+                headers={remoteMcpServer.headers}
                 linkedMcpServers={linkedMcpServers}
               />
             )}
@@ -504,11 +514,13 @@ function SettingsTab({
   remoteMcpServerId,
   initialName,
   url,
+  headers,
   linkedMcpServers,
 }: {
   remoteMcpServerId: string;
   initialName: string;
   url: string;
+  headers: RemoteMcpServerHeader[];
   linkedMcpServers: McpServer[];
 }) {
   return (
@@ -518,6 +530,10 @@ function SettingsTab({
         initialName={initialName}
       />
       <UrlSection remoteMcpServerId={remoteMcpServerId} initialUrl={url} />
+      <HeadersSection
+        remoteMcpServerId={remoteMcpServerId}
+        initialHeaders={headers}
+      />
       <DangerZoneSection
         remoteMcpServerId={remoteMcpServerId}
         url={url}
@@ -749,6 +765,99 @@ function UrlSection({
                 </>
               ) : (
                 <Button.Text>Save</Button.Text>
+              )}
+            </Button>
+          </RequireScope>
+        </Stack>
+      </Stack>
+    </div>
+  );
+}
+
+function HeadersSection({
+  remoteMcpServerId,
+  initialHeaders,
+}: {
+  remoteMcpServerId: string;
+  initialHeaders: RemoteMcpServerHeader[];
+}) {
+  const [rows, setRows] = useState<HeaderRow[]>(() =>
+    initialHeaders.map(headerToRow),
+  );
+
+  // Re-sync when the upstream headers change (refetch / edit from elsewhere).
+  const initialSignature = useMemo(
+    () => headerRowsSignature(initialHeaders.map(headerToRow)),
+    [initialHeaders],
+  );
+  useEffect(() => {
+    setRows(initialHeaders.map(headerToRow));
+  }, [initialHeaders]);
+
+  const queryClient = useQueryClient();
+  const update = useUpdateRemoteMcpServerMutation();
+
+  const hasErrors = hasHeaderErrors(rows);
+  const dirty = headerRowsSignature(rows) !== initialSignature;
+  const saveDisabled = !dirty || hasErrors || update.isPending;
+
+  const handleSave = async () => {
+    if (hasErrors) return;
+    try {
+      await update.mutateAsync({
+        request: {
+          updateServerForm: {
+            id: remoteMcpServerId,
+            // Full desired set: the server replaces all headers with this list.
+            headers: rows.map(headerRowToInput),
+          },
+        },
+      });
+      await Promise.all([
+        invalidateAllGetRemoteMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
+      ]);
+      toast.success("Remote MCP headers updated");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to update headers";
+      toast.error(message);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border p-6">
+      <Type variant="subheading" className="mb-1">
+        Proxy Headers
+      </Type>
+      <Type muted small className="mb-4">
+        Headers sent on every request proxied to this server. Use a static value
+        or pass through an inbound request header. Secret values are encrypted
+        at rest and shown redacted.
+      </Type>
+      <Stack gap={4}>
+        <HeadersEditor rows={rows} setRows={setRows} />
+        {update.isError && (
+          <Alert variant="error" dismissible={false}>
+            {update.error.message}
+          </Alert>
+        )}
+        <Stack direction="horizontal" gap={2}>
+          <RequireScope scope="mcp:write" level="component">
+            <Button
+              variant="primary"
+              disabled={saveDisabled}
+              onClick={() => void handleSave()}
+            >
+              {update.isPending ? (
+                <>
+                  <Button.LeftIcon>
+                    <Loader2 className="size-4 animate-spin" />
+                  </Button.LeftIcon>
+                  <Button.Text>Saving</Button.Text>
+                </>
+              ) : (
+                <Button.Text>Save headers</Button.Text>
               )}
             </Button>
           </RequireScope>

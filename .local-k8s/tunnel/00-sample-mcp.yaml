@@ -1,0 +1,38 @@
+# Stand-in "customer" MCP server the tunnel agent forwards to. Lives in-cluster
+# for the POC; in reality this is on the customer network behind the agent.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-mcp
+  namespace: gram-local
+  labels: { app: sample-mcp }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: sample-mcp }
+  template:
+    metadata:
+      labels: { app: sample-mcp }
+    spec:
+      containers:
+        - name: sample-mcp
+          image: gram-sample-mcp:local
+          imagePullPolicy: Never
+          env:
+            - { name: SAMPLE_MCP_ADDR, value: ":9000" }
+          ports:
+            - { containerPort: 9000, name: http }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 9000 }
+            initialDelaySeconds: 2
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-mcp
+  namespace: gram-local
+spec:
+  selector: { app: sample-mcp }
+  ports:
+    - { port: 9000, targetPort: 9000 }

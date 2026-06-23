@@ -1,0 +1,40 @@
+# Loads the full Postgres schema directly with psql.
+# We bypass Atlas because some migrations use login-gated `atlas:txtar` checks
+# that cannot run headless. server/database/schema.sql is the end-state schema
+# (incl. CREATE EXTENSION vector) and is applied here via a mounted ConfigMap.
+#
+# The ConfigMap is created from the repo file before applying this Job:
+#   kubectl --context kind-local-mess -n gram-local create configmap schema-sql \
+#     --from-file=schema.sql=server/database/schema.sql
+#
+# Re-runnable: schema.sql uses IF NOT EXISTS / OR REPLACE throughout.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate-postgres
+  namespace: gram-local
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels: { app: migrate-postgres }
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: psql
+          image: postgres:17
+          command: ["bash", "-c"]
+          args:
+            - 'psql "$GRAM_DATABASE_URL_PSQL" -v ON_ERROR_STOP=1 -f /schema/schema.sql'
+          env:
+            - name: GRAM_DATABASE_URL_PSQL
+              valueFrom:
+                configMapKeyRef:
+                  { name: gram-config, key: GRAM_DATABASE_URL_PSQL }
+          volumeMounts:
+            - { name: schema, mountPath: /schema, readOnly: true }
+      volumes:
+        - name: schema
+          configMap:
+            name: schema-sql

@@ -1,0 +1,64 @@
+# Gram dashboard SPA (static nginx). Served at http://app.gram.local.
+# The API base URL (http://gram.local) is baked into the JS bundle at build time
+# via GRAM_SERVER_URL (vite define __GRAM_SERVER_URL__) — NOT runtime-configurable.
+# Browser loads app.gram.local, calls gram.local for the API; gram-server runs
+# with GRAM_ENVIRONMENT=local so it echoes any Origin (CORS ok, no proxy needed).
+# Rebuild + reload after any dashboard change:
+#   GRAM_SERVER_URL=http://gram.local GRAM_SITE_URL=http://app.gram.local \
+#     NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter dashboard build
+#   docker build -t gram-dashboard:local -f client/dashboard/Dockerfile client/dashboard
+#   kind load docker-image gram-dashboard:local --name local-mess
+#   kubectl -n gram-local rollout restart deploy/gram-dashboard
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gram-dashboard
+  namespace: gram-local
+  labels: { app: gram-dashboard }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: gram-dashboard }
+  template:
+    metadata:
+      labels: { app: gram-dashboard }
+    spec:
+      containers:
+        - name: dashboard
+          image: gram-dashboard:local
+          imagePullPolicy: Never
+          ports:
+            - { containerPort: 3000, name: http }
+          readinessProbe:
+            httpGet: { path: /, port: 3000 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gram-dashboard
+  namespace: gram-local
+spec:
+  selector: { app: gram-dashboard }
+  ports:
+    - { name: http, port: 3000, targetPort: 3000 }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gram-dashboard
+  namespace: gram-local
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: gram.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gram-dashboard
+                port:
+                  number: 3000

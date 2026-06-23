@@ -1,0 +1,102 @@
+# tunnel-gateway: terminates agent WebSocket upgrades (/connect), owns the yamux
+# sessions, and maps internal forward requests onto substreams by tunnel ID.
+# POC: seeds one demo tunnel key (Secret below), publishes routes to the existing
+# gram-local Redis. Reachable in-cluster as tunnel-gateway:8090 and externally at
+# http://tunnel.gram.local (ingress) for the agent's WS upgrade.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tunnel-gateway-secrets
+  namespace: gram-local
+type: Opaque
+stringData:
+  # Demo seed: <tunnelID>=<plaintext key>. The gateway stores only the hash.
+  # Static value for the local POC (no secret generator); rotate for anything real.
+  TUNNEL_SEED_KEYS: "demo-tunnel=gram_tunnel_localpocdemokey000000000000000000000000"
+  TUNNEL_REDIS_PASSWORD: "gramredis"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tunnel-gateway
+  namespace: gram-local
+  labels: { app: tunnel-gateway }
+spec:
+  replicas: 1 # Phase-1 honest MVP: single replica + in-process registry.
+  selector:
+    matchLabels: { app: tunnel-gateway }
+  template:
+    metadata:
+      labels: { app: tunnel-gateway }
+    spec:
+      containers:
+        - name: tunnel-gateway
+          image: gram-tunnel-gateway:local
+          imagePullPolicy: Never
+          ports:
+            - { containerPort: 8090, name: http }
+          env:
+            - { name: TUNNEL_GATEWAY_ADDR, value: ":8090" }
+            # Address other pods (gram-server) use to forward to this gateway.
+            - {
+                name: TUNNEL_GATEWAY_ADVERTISE_ADDR,
+                value: "tunnel-gateway.gram-local.svc.cluster.local:8090",
+              }
+            - { name: TUNNEL_REDIS_ADDR, value: "redis:6379" }
+            - name: TUNNEL_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  { name: tunnel-gateway-secrets, key: TUNNEL_REDIS_PASSWORD }
+            - name: TUNNEL_SEED_KEYS
+              valueFrom:
+                secretKeyRef:
+                  { name: tunnel-gateway-secrets, key: TUNNEL_SEED_KEYS }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8090 }
+            initialDelaySeconds: 2
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tunnel-gateway
+  namespace: gram-local
+spec:
+  selector: { app: tunnel-gateway }
+  ports:
+    - { port: 8090, targetPort: 8090 }
+---
+# External WS entry for the agent. WS-friendly timeouts so idle tunnels survive.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tunnel-gateway
+  namespace: gram-local
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: tunnel.gram.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tunnel-gateway
+                port:
+                  number: 8090
+    # Public ngrok host so an external agent can dial wss://<host>/connect.
+    # The agent presents this Host verbatim, so it needs its own ingress rule.
+    - host: dennis-tunnel.ngrok.app
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tunnel-gateway
+                port:
+                  number: 8090

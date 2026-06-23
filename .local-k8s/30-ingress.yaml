@@ -1,0 +1,28 @@
+# Routes http://gram.local -> gram-server:8080.
+# Requires an ingress controller in the kind cluster. If you created the cluster
+# with `kind create cluster --config` using the ingress-ready extraPortMappings,
+# install nginx ingress:
+#   kubectl --context kind-local-mess apply -f \
+#     https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+# Then add to /etc/hosts:  127.0.0.1 gram.local
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gram
+  namespace: gram-local
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: gram.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gram-server
+                port:
+                  number: 8080

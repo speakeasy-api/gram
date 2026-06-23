@@ -1,0 +1,26 @@
+# Applies ClickHouse schema via golang-migrate (avoids `atlas login`).
+# Run AFTER clickhouse is up. Re-runnable: migrate applies only pending up steps.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate-clickhouse
+  namespace: gram-local
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels: { app: migrate-clickhouse }
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: gram-migrations:local
+          imagePullPolicy: Never
+          args:
+            - 'migrate -path clickhouse/golang_migrate -database "$GRAM_CLICKHOUSE_GOMIGRATE_URL" up'
+          env:
+            - name: GRAM_CLICKHOUSE_GOMIGRATE_URL
+              valueFrom:
+                configMapKeyRef:
+                  { name: gram-config, key: GRAM_CLICKHOUSE_GOMIGRATE_URL }

@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal
+  namespace: gram-local
+  labels: { app: temporal }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: temporal }
+  template:
+    metadata:
+      labels: { app: temporal }
+    spec:
+      containers:
+        - name: temporal
+          image: temporalio/server:1.27.2
+          # Dev server: in-memory/sqlite, single binary, frontend on 7233.
+          command: ["temporal"]
+          args:
+            - "server"
+            - "start-dev"
+            - "--ip"
+            - "0.0.0.0"
+            - "--ui-ip"
+            - "0.0.0.0"
+            - "--namespace"
+            - "default"
+            - "--db-filename"
+            - "/home/temporal/dev.db"
+          ports:
+            - { containerPort: 7233, name: grpc }
+            - { containerPort: 8233, name: web }
+          readinessProbe:
+            exec: { command: ["temporal", "operator", "cluster", "health"] }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - { name: data, mountPath: /home/temporal }
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal
+  namespace: gram-local
+spec:
+  selector: { app: temporal }
+  ports:
+    - { name: grpc, port: 7233, targetPort: 7233 }
+    - { name: web, port: 8233, targetPort: 8233 }

@@ -3,6 +3,7 @@ import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { formatRemoteMcpDisplay } from "@/lib/sources";
 import { randomSlugSuffix } from "@/lib/slug";
 import type {
+  HeaderInput,
   McpServer,
   RemoteMcpServer,
 } from "@gram/client/models/components";
@@ -63,6 +64,7 @@ async function createDefaultMcpEndpoint(
 export type CreateRemoteMcpSourceVariables = {
   name?: string | undefined;
   url: string;
+  headers?: HeaderInput[] | undefined;
 };
 
 export type CreateRemoteMcpSourceData = {
@@ -82,13 +84,13 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
   const { orgSlug } = useSlugs();
 
   return useMutation({
-    mutationFn: async ({ name, url }) => {
+    mutationFn: async ({ name, url, headers }) => {
       const remoteMcpServer = await client.remoteMcp.createServer({
         createServerForm: {
           name,
           url,
           transportType: "streamable-http",
-          headers: [],
+          headers: headers ?? [],
         },
       });
 

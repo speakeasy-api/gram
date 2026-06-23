@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clickhouse
+  namespace: gram-local
+  labels: { app: clickhouse }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: clickhouse }
+  template:
+    metadata:
+      labels: { app: clickhouse }
+    spec:
+      containers:
+        - name: clickhouse
+          # Repo's local image (clickhouse 25.8.3 + TLS certs/config). The gram
+          # server's clickhouse client ALWAYS uses TLS, so it connects on the
+          # secure native port 9440 (CLICKHOUSE_INSECURE=true skips cert verify).
+          # Plaintext 9000 stays open and is used by the golang-migrate Job.
+          # Build+load: docker build -t gram-clickhouse:local local/clickhouse
+          #             kind load docker-image gram-clickhouse:local --name local-mess
+          image: gram-clickhouse:local
+          imagePullPolicy: Never
+          ports:
+            - { containerPort: 9440, name: secure }
+            - { containerPort: 9000, name: native }
+            - { containerPort: 8123, name: http }
+          env:
+            - { name: CLICKHOUSE_DB, value: default }
+            - { name: CLICKHOUSE_USER, value: gram }
+            - { name: CLICKHOUSE_PASSWORD, value: gram }
+            - { name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT, value: "1" }
+          readinessProbe:
+            httpGet: { path: /ping, port: 8123 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/clickhouse }
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  namespace: gram-local
+spec:
+  selector: { app: clickhouse }
+  ports:
+    - { name: secure, port: 9440, targetPort: 9440 }
+    - { name: native, port: 9000, targetPort: 9000 }
+    - { name: http, port: 8123, targetPort: 8123 }

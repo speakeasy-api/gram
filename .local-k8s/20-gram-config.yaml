@@ -1,0 +1,91 @@
+# Non-secret runtime config for the gram server. Hostnames are in-cluster
+# Service DNS names (<svc>.gram-local.svc.cluster.local, short form works too).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gram-config
+  namespace: gram-local
+data:
+  GRAM_ENVIRONMENT: "local" # local => k8s client stubbed, local feature flags
+  GRAM_SINGLE_PROCESS: "1" # run API + Temporal worker in one process
+  GRAM_LOG_PRETTY: "1"
+
+  GRAM_SERVER_ADDRESS: ":8080"
+  GRAM_CONTROL_ADDRESS: ":8081"
+  # Single origin: the dashboard image serves the SPA at gram.local AND proxies
+  # API paths to gram-server, so server URL == site URL == http://gram.local.
+  GRAM_SERVER_URL: "http://gram.local"
+  GRAM_SITE_URL: "http://gram.local"
+
+  # Postgres (pgx-style URL with search_path, used by the server)
+  GRAM_DATABASE_URL: "postgres://gram:gram@postgres:5432/gram?sslmode=disable&search_path=public"
+  # libpq-compatible URL (no search_path keyword) for the psql schema-load Job
+  GRAM_DATABASE_URL_PSQL: "postgres://gram:gram@postgres:5432/gram?sslmode=disable"
+
+  # Redis
+  GRAM_REDIS_CACHE_ADDR: "redis:6379"
+  GRAM_REDIS_ENABLE_TRACING: "false"
+
+  # Temporal
+  TEMPORAL_ADDRESS: "temporal:7233"
+  TEMPORAL_NAMESPACE: "default"
+  TEMPORAL_TASK_QUEUE: "main"
+
+  # ClickHouse: server client uses TLS on secure native port 9440 (self-signed
+  # certs => CLICKHOUSE_INSECURE=true skips verification).
+  CLICKHOUSE_HOST: "clickhouse"
+  CLICKHOUSE_NATIVE_PORT: "9440"
+  CLICKHOUSE_DATABASE: "default"
+  CLICKHOUSE_USERNAME: "gram"
+  CLICKHOUSE_INSECURE: "true"
+  # Used by the golang-migrate ClickHouse Job (plain native, no TLS).
+  GRAM_CLICKHOUSE_GOMIGRATE_URL: "clickhouse://clickhouse:9000?username=gram&password=gram&database=default&x-multi-statement=true"
+
+  # Assets on local fs (ephemeral emptyDir)
+  GRAM_ASSETS_BACKEND: "fs"
+  GRAM_ASSETS_URI: "/tmp/assets"
+
+  # Gram Functions: local provider (no fly.io/tigris). Runner root is writable.
+  GRAM_FUNCTIONS_PROVIDER: "local"
+  GRAM_FUNCTIONS_RUNNER_OCI_IMAGE: "gram-runner"
+  GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT: "/tmp/functions"
+
+  # Assistant runtime only supports the flyio provider, which validates these at
+  # boot. Dummy values satisfy validation; the assistants feature won't actually
+  # work here. server-url must be a PUBLIC host (guardian rejects gram.local).
+  GRAM_ASSISTANT_RUNTIME_PROVIDER: "flyio"
+  GRAM_ASSISTANT_RUNTIME_FLYIO_ORG: "gram-local"
+  GRAM_ASSISTANT_RUNTIME_OCI_IMAGE: "registry.example.com/gram-assistant"
+  GRAM_ASSISTANT_RUNTIME_SERVER_URL: "https://example.com"
+
+  # Disable OTEL export (no collector in this minimal stack)
+  GRAM_ENABLE_OTEL_TRACES: "0"
+  GRAM_ENABLE_OTEL_METRICS: "0"
+
+  # IDP: mock-workos via dev-idp, reachable at http://idp.gram.local (ingress).
+  # Browser hits /oauth2/authorize there; gram-server hits /oauth2/token and
+  # /mock-workos server-side via the hostAliases entry on the gram-server pod.
+  GRAM_IDP_MODE: "mock-workos"
+  GRAM_IDP_BASE_URL: "http://idp.gram.local/oauth2"
+  WORKOS_API_URL: "http://idp.gram.local/mock-workos"
+  GRAM_IDP_CLIENT_ID: "gram-local-dev"
+  PULSE_REGISTRY_TENANT: "unset"
+  PULSE_REGISTRY_KEY: "unset"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gram-secrets
+  namespace: gram-local
+type: Opaque
+stringData:
+  # AES-256 key, base64 of 32 random bytes. Regenerate for your own use.
+  GRAM_ENCRYPTION_KEY: "KyI9ug4RaLz8Ny6beKJxOrWekoH3XefqTz4abYd2q30="
+  GRAM_REDIS_CACHE_PASSWORD: "gramredis"
+  CLICKHOUSE_PASSWORD: "gram"
+  # HMAC key for signing user-session JWTs. Any non-empty value works locally.
+  GRAM_JWT_SIGNING_KEY: "local-dev-jwt-signing-key-change-me"
+  # Dummy fly.io token to satisfy assistant-runtime boot validation.
+  GRAM_ASSISTANT_RUNTIME_FLYIO_API_TOKEN: "unset-local"
+  # Non-empty satisfies the boot-time "idp-client-secret is required" check.
+  GRAM_IDP_CLIENT_SECRET: "unset"

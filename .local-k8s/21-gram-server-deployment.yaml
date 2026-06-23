@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gram-server
+  namespace: gram-local
+  labels: { app: gram-server }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: gram-server }
+  template:
+    metadata:
+      labels: { app: gram-server }
+    spec:
+      # Make idp.gram.local resolve INSIDE the pod to the ingress controller
+      # ClusterIP, so server-side OAuth/mock-workos calls reach dev-idp via the
+      # same hostname the browser uses. IP = `kubectl -n ingress-nginx get svc
+      # ingress-nginx-controller -o jsonpath={.spec.clusterIP}` — update if the
+      # ingress controller Service is recreated.
+      hostAliases:
+        - ip: "10.96.54.230"
+          hostnames: ["idp.gram.local"]
+      containers:
+        - name: gram-server
+          # Built locally + loaded into kind (see helper script). Never pulled.
+          image: gram-server:local
+          imagePullPolicy: Never
+          args: ["start", "--dev-single-process"]
+          ports:
+            - { containerPort: 8080, name: http }
+            - { containerPort: 8081, name: control }
+          envFrom:
+            - configMapRef: { name: gram-config }
+            - secretRef: { name: gram-secrets }
+          volumeMounts:
+            - { name: assets, mountPath: /tmp/assets }
+          # Readiness gates on deps: control /healthz pings DB+Redis+Temporal+API.
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8081 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 6
+          # Liveness is a plain TCP check so a transient dep blip does NOT
+          # restart the pod (control /healthz depends on backing services).
+          livenessProbe:
+            tcpSocket: { port: 8081 }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 6
+      volumes:
+        - name: assets
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gram-server
+  namespace: gram-local
+spec:
+  selector: { app: gram-server }
+  ports:
+    - { name: http, port: 8080, targetPort: 8080 }
+    - { name: control, port: 8081, targetPort: 8081 }
