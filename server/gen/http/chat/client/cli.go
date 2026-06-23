@@ -18,7 +18,7 @@ import (
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
 // from CLI flags.
-func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsAssistantID string, chatListChatsHasRisk string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
+func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsAssistantID string, chatListChatsHasRisk string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
 	var err error
 	var search *string
 	{
@@ -48,6 +48,24 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 			hasRisk = &chatListChatsHasRisk
 			if !(*hasRisk == "" || *hasRisk == "true" || *hasRisk == "false") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("has_risk", *hasRisk, []any{"", "true", "false"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var minRiskScore *int
+	{
+		if chatListChatsMinRiskScore != "" {
+			var v int64
+			v, err = strconv.ParseInt(chatListChatsMinRiskScore, 10, strconv.IntSize)
+			val := int(v)
+			minRiskScore = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for minRiskScore, must be INT")
+			}
+			if *minRiskScore < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("min_risk_score", *minRiskScore, 0, true))
 			}
 			if err != nil {
 				return nil, err
@@ -158,6 +176,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	v.ExternalUserID = externalUserID
 	v.AssistantID = assistantID
 	v.HasRisk = hasRisk
+	v.MinRiskScore = minRiskScore
 	v.From = from
 	v.To = to
 	v.Limit = limit

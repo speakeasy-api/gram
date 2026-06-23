@@ -29,6 +29,9 @@ var _ = Service("chat", func() {
 			Attribute("has_risk", String, "Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.", func() {
 				Enum("", "true", "false")
 			})
+			Attribute("min_risk_score", Int, "Filter to chats with at least this many active risk findings (inclusive). Omit or pass 0 for no threshold.", func() {
+				Minimum(0)
+			})
 			Attribute("from", String, "Filter chats last active after this timestamp (ISO 8601)", func() {
 				Format(FormatDateTime)
 			})
@@ -62,6 +65,7 @@ var _ = Service("chat", func() {
 			Param("external_user_id")
 			Param("assistant_id")
 			Param("has_risk")
+			Param("min_risk_score")
 			Param("from")
 			Param("to")
 			Param("limit")

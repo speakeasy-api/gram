@@ -67,6 +67,9 @@ func EncodeListChatsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		if p.HasRisk != nil {
 			values.Add("has_risk", *p.HasRisk)
 		}
+		if p.MinRiskScore != nil {
+			values.Add("min_risk_score", fmt.Sprintf("%v", *p.MinRiskScore))
+		}
 		if p.From != nil {
 			values.Add("from", *p.From)
 		}
