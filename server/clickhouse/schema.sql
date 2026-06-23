@@ -462,45 +462,47 @@ GROUP BY
 
 CREATE TABLE IF NOT EXISTS chat_turn_summaries (
     -- Turn identity
-    gram_project_id UUID,
-    chat_id String,
-    prompt_id String,
+    gram_project_id UUID COMMENT 'Gram project that owns the chat session.',
+    chat_id String COMMENT 'Chat/session identifier from attributes.gen_ai.conversation.id.' CODEC(ZSTD),
+    -- turn_id is Gram's provider-agnostic turn key. Claude Code emits this as
+    -- attributes.prompt.id; other providers can map their native per-turn ID here.
+    turn_id String COMMENT 'Provider-agnostic identifier for one user turn within the chat session. For Claude Code this is attributes.prompt.id.' CODEC(ZSTD),
 
     -- Claude request attribution dimensions. Empty strings represent pure
     -- inference for the corresponding axis.
-    query_source String,
-    skill_name String,
-    agent_name String,
-    mcp_server_name String,
-    mcp_tool_name String,
-    model String,
+    query_source LowCardinality(String) COMMENT 'Claude Code subsystem that issued the request, such as main, subagent, auxiliary, or compact.',
+    skill_name LowCardinality(String) COMMENT 'Claude Code skill active for the request. Empty when no skill contributed context.',
+    agent_name LowCardinality(String) COMMENT 'Claude Code agent or subagent type that issued the request. Empty when no agent contributed context.',
+    mcp_server_name LowCardinality(String) COMMENT 'MCP server attributed by Claude Code to this request. Empty when no MCP server contributed context.',
+    mcp_tool_name LowCardinality(String) COMMENT 'MCP tool attributed by Claude Code to this request. Empty when no MCP tool contributed context.',
+    model LowCardinality(String) COMMENT 'Claude model used for the attributed API request.',
 
     -- User-identity dimensions (WorkOS directory attributes).
-    department_name String,
-    job_title String,
-    employee_type String,
-    division_name String,
-    cost_center_name String,
-    user_email String,
-    hook_source String,
-    roles Array(String),
-    groups Array(String),
+    department_name LowCardinality(String) COMMENT 'WorkOS department name for the user attributed to the request.',
+    job_title LowCardinality(String) COMMENT 'WorkOS job title for the user attributed to the request.',
+    employee_type LowCardinality(String) COMMENT 'WorkOS employee type for the user attributed to the request.',
+    division_name LowCardinality(String) COMMENT 'WorkOS division name for the user attributed to the request.',
+    cost_center_name LowCardinality(String) COMMENT 'WorkOS cost center name for the user attributed to the request.',
+    user_email String COMMENT 'Email of the user attributed to the request.' CODEC(ZSTD),
+    hook_source LowCardinality(String) COMMENT 'Consuming surface that produced the telemetry row, such as claude-code.',
+    roles Array(LowCardinality(String)) COMMENT 'WorkOS role slugs for the user attributed to the request.',
+    groups Array(LowCardinality(String)) COMMENT 'WorkOS group slugs for the user attributed to the request.',
 
     -- Turn timing.
-    start_time_unix_nano SimpleAggregateFunction(min, Int64),
-    end_time_unix_nano SimpleAggregateFunction(max, Int64),
+    start_time_unix_nano SimpleAggregateFunction(min, Int64) COMMENT 'Earliest API request timestamp for this chat turn attribution bucket, in Unix nanoseconds.',
+    end_time_unix_nano SimpleAggregateFunction(max, Int64) COMMENT 'Latest API request timestamp for this chat turn attribution bucket, in Unix nanoseconds.',
 
     -- Request/token/cost measures. cache_creation_tokens is the primary
     -- "context added" attribution measure; the other measures support cost and
     -- sanity-check views.
-    request_count SimpleAggregateFunction(sum, UInt64),
-    input_tokens SimpleAggregateFunction(sum, Int64),
-    output_tokens SimpleAggregateFunction(sum, Int64),
-    total_tokens SimpleAggregateFunction(sum, Int64),
-    cache_read_tokens SimpleAggregateFunction(sum, Int64),
-    cache_creation_tokens SimpleAggregateFunction(sum, Int64),
-    cost_usd SimpleAggregateFunction(sum, Float64),
-    cost_usd_micros SimpleAggregateFunction(sum, Int64),
+    request_count SimpleAggregateFunction(sum, UInt64) COMMENT 'Number of Claude Code api_request rows in this attribution bucket.',
+    input_tokens SimpleAggregateFunction(sum, Int64) COMMENT 'Input tokens reported by Claude Code api_request rows.',
+    output_tokens SimpleAggregateFunction(sum, Int64) COMMENT 'Output tokens reported by Claude Code api_request rows.',
+    total_tokens SimpleAggregateFunction(sum, Int64) COMMENT 'Input, output, cache read, and cache creation tokens summed for this attribution bucket.',
+    cache_read_tokens SimpleAggregateFunction(sum, Int64) COMMENT 'Prompt-cache read tokens reported by Claude Code api_request rows.',
+    cache_creation_tokens SimpleAggregateFunction(sum, Int64) COMMENT 'Prompt-cache creation tokens. This is the primary marginal context-added attribution measure.',
+    cost_usd SimpleAggregateFunction(sum, Float64) COMMENT 'Estimated total API request cost in USD for this attribution bucket.',
+    cost_usd_micros SimpleAggregateFunction(sum, Int64) COMMENT 'Estimated total API request cost in micro-USD for this attribution bucket.',
 
     INDEX idx_chat_turn_summaries_chat_id chat_id TYPE bloom_filter(0.01) GRANULARITY 1,
     INDEX idx_chat_turn_summaries_mcp_server_name mcp_server_name TYPE bloom_filter(0.01) GRANULARITY 1
@@ -508,7 +510,7 @@ CREATE TABLE IF NOT EXISTS chat_turn_summaries (
 ORDER BY (
     gram_project_id,
     chat_id,
-    prompt_id,
+    turn_id,
     query_source,
     skill_name,
     agent_name,
@@ -527,7 +529,7 @@ ORDER BY (
 )
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192
-COMMENT 'Claude Code per-turn request attribution by chat, prompt, MCP server/tool, skill, agent, and user attributes. cache_creation_tokens is the primary context-added measure.';
+COMMENT 'Claude Code per-turn request attribution by chat, turn, MCP server/tool, skill, agent, and user attributes. cache_creation_tokens is the primary context-added measure.';
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS chat_turn_summaries_mv TO chat_turn_summaries AS
 -- Cutoff separates live MV ingestion from one-time historical backfill.
@@ -535,7 +537,9 @@ WITH toUnixTimestamp64Nano(toDateTime64('2026-06-23 18:15:00', 9, 'UTC')) AS cha
 SELECT
     gram_project_id,
     chat_id,
-    toString(attributes.prompt.id) AS prompt_id,
+    -- Map Claude's provider-specific prompt.id into Gram's vendor-agnostic
+    -- turn_id. Future providers should map their native turn identifier here.
+    toString(attributes.prompt.id) AS turn_id,
 
     -- Claude Code request attribution dimensions.
     toString(attributes.query_source) AS query_source,
@@ -582,7 +586,7 @@ WHERE time_unix_nano >= chat_turn_cutoff_unix_nano
 GROUP BY
     gram_project_id,
     chat_id,
-    prompt_id,
+    turn_id,
     query_source,
     skill_name,
     agent_name,
