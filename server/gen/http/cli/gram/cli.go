@@ -113,7 +113,7 @@ func UsageCommands() []string {
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|test-detection-rule)",
-		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|list-tool-usage-traces|get-tool-usage-filter-options|list-hooks-traces)",
+		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|query-chat-turns|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|list-tool-usage-traces|get-tool-usage-filter-options|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server|updateoauth-proxy-server|set-user-session-issuer|set-tool-variations-group)",
@@ -1729,6 +1729,10 @@ func ParseEndpoint(
 		telemetryQueryBodyFlag         = telemetryQueryFlags.String("body", "REQUIRED", "")
 		telemetryQuerySessionTokenFlag = telemetryQueryFlags.String("session-token", "", "")
 
+		telemetryQueryChatTurnsFlags            = flag.NewFlagSet("query-chat-turns", flag.ExitOnError)
+		telemetryQueryChatTurnsBodyFlag         = telemetryQueryChatTurnsFlags.String("body", "REQUIRED", "")
+		telemetryQueryChatTurnsSessionTokenFlag = telemetryQueryChatTurnsFlags.String("session-token", "", "")
+
 		telemetryListSessionsFlags            = flag.NewFlagSet("list-sessions", flag.ExitOnError)
 		telemetryListSessionsBodyFlag         = telemetryListSessionsFlags.String("body", "REQUIRED", "")
 		telemetryListSessionsSessionTokenFlag = telemetryListSessionsFlags.String("session-token", "", "")
@@ -2482,6 +2486,7 @@ func ParseEndpoint(
 	telemetryGetObservabilityOverviewFlags.Usage = telemetryGetObservabilityOverviewUsage
 	telemetryGetProjectOverviewFlags.Usage = telemetryGetProjectOverviewUsage
 	telemetryQueryFlags.Usage = telemetryQueryUsage
+	telemetryQueryChatTurnsFlags.Usage = telemetryQueryChatTurnsUsage
 	telemetryListSessionsFlags.Usage = telemetryListSessionsUsage
 	telemetryListFilterOptionsFlags.Usage = telemetryListFilterOptionsUsage
 	telemetryListAttributeKeysFlags.Usage = telemetryListAttributeKeysUsage
@@ -3681,6 +3686,9 @@ func ParseEndpoint(
 
 			case "query":
 				epf = telemetryQueryFlags
+
+			case "query-chat-turns":
+				epf = telemetryQueryChatTurnsFlags
 
 			case "list-sessions":
 				epf = telemetryListSessionsFlags
@@ -4938,6 +4946,9 @@ func ParseEndpoint(
 			case "query":
 				endpoint = c.Query()
 				data, err = telemetryc.BuildQueryPayload(*telemetryQueryBodyFlag, *telemetryQuerySessionTokenFlag)
+			case "query-chat-turns":
+				endpoint = c.QueryChatTurns()
+				data, err = telemetryc.BuildQueryChatTurnsPayload(*telemetryQueryChatTurnsBodyFlag, *telemetryQueryChatTurnsSessionTokenFlag)
 			case "list-sessions":
 				endpoint = c.ListSessions()
 				data, err = telemetryc.BuildListSessionsPayload(*telemetryListSessionsBodyFlag, *telemetryListSessionsSessionTokenFlag)
@@ -11862,6 +11873,7 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    get-observability-overview: Get observability overview metrics including time series, tool breakdowns, and summary stats`)
 	fmt.Fprintln(os.Stderr, `    get-project-overview: Get project-level overview including total chats, tool calls, active servers/users, and top lists`)
 	fmt.Fprintln(os.Stderr, `    query: Generic, org-scoped analytics query over pre-aggregated usage metrics. Returns both a grouped table and a per-group hourly timeseries for the same slice of data, supporting arbitrary allowlisted group-by dimensions and filters (e.g. group by department_name, then drill in by filtering department_name and grouping by role).`)
+	fmt.Fprintln(os.Stderr, `    query-chat-turns: Generic, org-scoped analytics query over Claude Code chat turn attribution summaries. Returns both a grouped table and matching timeseries for context-added tokens, request counts, token totals, and costs, supporting allowlisted chat, turn, attribution, project, and identity dimensions.`)
 	fmt.Fprintln(os.Stderr, `    list-sessions: Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.`)
 	fmt.Fprintln(os.Stderr, `    list-filter-options: List available filter options (API keys or users) for the observability overview`)
 	fmt.Fprintln(os.Stderr, `    list-attribute-keys: List distinct attribute keys available for filtering`)
@@ -12134,6 +12146,26 @@ func telemetryQueryUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry query --body '{\n      \"filters\": [\n         {\n            \"dimension\": \"job_title\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"granularity_seconds\": 1,\n      \"group_by\": \"department_name\",\n      \"sort_by\": \"total_tokens\",\n      \"to\": \"2025-12-26T10:00:00Z\",\n      \"top_n\": 2\n   }' --session-token \"abc123\"")
+}
+
+func telemetryQueryChatTurnsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry query-chat-turns", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Generic, org-scoped analytics query over Claude Code chat turn attribution summaries. Returns both a grouped table and matching timeseries for context-added tokens, request counts, token totals, and costs, supporting allowlisted chat, turn, attribution, project, and identity dimensions.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry query-chat-turns --body '{\n      \"filters\": [\n         {\n            \"dimension\": \"turn_id\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"granularity_seconds\": 1,\n      \"group_by\": \"mcp_server_name\",\n      \"sort_by\": \"total_cost\",\n      \"to\": \"2025-12-26T10:00:00Z\",\n      \"top_n\": 2\n   }' --session-token \"abc123\"")
 }
 
 func telemetryListSessionsUsage() {

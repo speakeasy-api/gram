@@ -2681,6 +2681,240 @@ func DecodeQueryResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 	}
 }
 
+// BuildQueryChatTurnsRequest instantiates a HTTP request object with method
+// and path set to call the "telemetry" service "queryChatTurns" endpoint
+func (c *Client) BuildQueryChatTurnsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: QueryChatTurnsTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "queryChatTurns", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeQueryChatTurnsRequest returns an encoder for requests sent to the
+// telemetry queryChatTurns server.
+func EncodeQueryChatTurnsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.QueryChatTurnsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "queryChatTurns", "*telemetry.QueryChatTurnsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewQueryChatTurnsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "queryChatTurns", err)
+		}
+		return nil
+	}
+}
+
+// DecodeQueryChatTurnsResponse returns a decoder for responses returned by the
+// telemetry queryChatTurns endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeQueryChatTurnsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeQueryChatTurnsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body QueryChatTurnsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryChatTurns", err)
+			}
+			err = ValidateQueryChatTurnsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryChatTurns", err)
+			}
+			res := NewQueryChatTurnsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body QueryChatTurnsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryChatTurns", err)
+			}
+			err = ValidateQueryChatTurnsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryChatTurns", err)
+			}
+			return nil, NewQueryChatTurnsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body QueryChatTurnsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryChatTurns", err)
+			}
+			err = ValidateQueryChatTurnsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryChatTurns", err)
+			}
+			return nil, NewQueryChatTurnsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body QueryChatTurnsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryChatTurns", err)
+			}
+			err = ValidateQueryChatTurnsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryChatTurns", err)
+			}
+			return nil, NewQueryChatTurnsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body QueryChatTurnsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryChatTurns", err)
+			}
+			err = ValidateQueryChatTurnsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryChatTurns", err)
+			}
+			return nil, NewQueryChatTurnsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body QueryChatTurnsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryChatTurns", err)
+			}
+			err = ValidateQueryChatTurnsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryChatTurns", err)
+			}
+			return nil, NewQueryChatTurnsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body QueryChatTurnsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryChatTurns", err)
+			}
+			err = ValidateQueryChatTurnsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryChatTurns", err)
+			}
+			return nil, NewQueryChatTurnsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body QueryChatTurnsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryChatTurns", err)
+			}
+			err = ValidateQueryChatTurnsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryChatTurns", err)
+			}
+			return nil, NewQueryChatTurnsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body QueryChatTurnsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "queryChatTurns", err)
+				}
+				err = ValidateQueryChatTurnsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "queryChatTurns", err)
+				}
+				return nil, NewQueryChatTurnsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body QueryChatTurnsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "queryChatTurns", err)
+				}
+				err = ValidateQueryChatTurnsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "queryChatTurns", err)
+				}
+				return nil, NewQueryChatTurnsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "queryChatTurns", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body QueryChatTurnsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "queryChatTurns", err)
+			}
+			err = ValidateQueryChatTurnsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "queryChatTurns", err)
+			}
+			return nil, NewQueryChatTurnsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "queryChatTurns", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListSessionsRequest instantiates a HTTP request object with method and
 // path set to call the "telemetry" service "listSessions" endpoint
 func (c *Client) BuildListSessionsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -5346,6 +5580,122 @@ func unmarshalQueryPointResponseBodyToTelemetryQueryPoint(v *QueryPointResponseB
 		BucketTimeUnixNano: *v.BucketTimeUnixNano,
 	}
 	res.Measures = unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures(v.Measures)
+
+	return res
+}
+
+// marshalTelemetryChatTurnQueryFilterToChatTurnQueryFilterRequestBody builds a
+// value of type *ChatTurnQueryFilterRequestBody from a value of type
+// *telemetry.ChatTurnQueryFilter.
+func marshalTelemetryChatTurnQueryFilterToChatTurnQueryFilterRequestBody(v *telemetry.ChatTurnQueryFilter) *ChatTurnQueryFilterRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &ChatTurnQueryFilterRequestBody{
+		Dimension: v.Dimension,
+	}
+	if v.Values != nil {
+		res.Values = make([]string, len(v.Values))
+		for i, val := range v.Values {
+			res.Values[i] = val
+		}
+	} else {
+		res.Values = []string{}
+	}
+
+	return res
+}
+
+// marshalChatTurnQueryFilterRequestBodyToTelemetryChatTurnQueryFilter builds a
+// value of type *telemetry.ChatTurnQueryFilter from a value of type
+// *ChatTurnQueryFilterRequestBody.
+func marshalChatTurnQueryFilterRequestBodyToTelemetryChatTurnQueryFilter(v *ChatTurnQueryFilterRequestBody) *telemetry.ChatTurnQueryFilter {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.ChatTurnQueryFilter{
+		Dimension: v.Dimension,
+	}
+	if v.Values != nil {
+		res.Values = make([]string, len(v.Values))
+		for i, val := range v.Values {
+			res.Values[i] = val
+		}
+	} else {
+		res.Values = []string{}
+	}
+
+	return res
+}
+
+// unmarshalChatTurnQueryRowResponseBodyToTelemetryChatTurnQueryRow builds a
+// value of type *telemetry.ChatTurnQueryRow from a value of type
+// *ChatTurnQueryRowResponseBody.
+func unmarshalChatTurnQueryRowResponseBodyToTelemetryChatTurnQueryRow(v *ChatTurnQueryRowResponseBody) *telemetry.ChatTurnQueryRow {
+	res := &telemetry.ChatTurnQueryRow{
+		GroupValue: *v.GroupValue,
+	}
+	res.Measures = unmarshalChatTurnQueryMeasuresResponseBodyToTelemetryChatTurnQueryMeasures(v.Measures)
+	res.DimensionValues = make(map[string][]string, len(v.DimensionValues))
+	for key, val := range v.DimensionValues {
+		tk := key
+		tv := make([]string, len(val))
+		for i, val := range val {
+			tv[i] = val
+		}
+		res.DimensionValues[tk] = tv
+	}
+
+	return res
+}
+
+// unmarshalChatTurnQueryMeasuresResponseBodyToTelemetryChatTurnQueryMeasures
+// builds a value of type *telemetry.ChatTurnQueryMeasures from a value of type
+// *ChatTurnQueryMeasuresResponseBody.
+func unmarshalChatTurnQueryMeasuresResponseBodyToTelemetryChatTurnQueryMeasures(v *ChatTurnQueryMeasuresResponseBody) *telemetry.ChatTurnQueryMeasures {
+	res := &telemetry.ChatTurnQueryMeasures{
+		CacheCreationTokens: *v.CacheCreationTokens,
+		CacheReadTokens:     *v.CacheReadTokens,
+		InputTokens:         *v.InputTokens,
+		OutputTokens:        *v.OutputTokens,
+		TotalTokens:         *v.TotalTokens,
+		TotalCost:           *v.TotalCost,
+		CostUsdMicros:       *v.CostUsdMicros,
+		RequestCount:        *v.RequestCount,
+		TotalTurns:          *v.TotalTurns,
+		TotalChats:          *v.TotalChats,
+	}
+
+	return res
+}
+
+// unmarshalChatTurnQuerySeriesResponseBodyToTelemetryChatTurnQuerySeries
+// builds a value of type *telemetry.ChatTurnQuerySeries from a value of type
+// *ChatTurnQuerySeriesResponseBody.
+func unmarshalChatTurnQuerySeriesResponseBodyToTelemetryChatTurnQuerySeries(v *ChatTurnQuerySeriesResponseBody) *telemetry.ChatTurnQuerySeries {
+	res := &telemetry.ChatTurnQuerySeries{
+		GroupValue: *v.GroupValue,
+	}
+	res.Points = make([]*telemetry.ChatTurnQueryPoint, len(v.Points))
+	for i, val := range v.Points {
+		if val == nil {
+			res.Points[i] = nil
+			continue
+		}
+		res.Points[i] = unmarshalChatTurnQueryPointResponseBodyToTelemetryChatTurnQueryPoint(val)
+	}
+
+	return res
+}
+
+// unmarshalChatTurnQueryPointResponseBodyToTelemetryChatTurnQueryPoint builds
+// a value of type *telemetry.ChatTurnQueryPoint from a value of type
+// *ChatTurnQueryPointResponseBody.
+func unmarshalChatTurnQueryPointResponseBodyToTelemetryChatTurnQueryPoint(v *ChatTurnQueryPointResponseBody) *telemetry.ChatTurnQueryPoint {
+	res := &telemetry.ChatTurnQueryPoint{
+		BucketTimeUnixNano: *v.BucketTimeUnixNano,
+	}
+	res.Measures = unmarshalChatTurnQueryMeasuresResponseBodyToTelemetryChatTurnQueryMeasures(v.Measures)
 
 	return res
 }

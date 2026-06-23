@@ -26,6 +26,8 @@ const (
 	defaultQueryTopN   = 10
 )
 
+const defaultChatTurnQuerySortBy = "cache_creation_tokens"
+
 // otherGroupLabel is the default synthetic group value that holds the rolled-up
 // remainder beyond top_n. If a real group already uses this value, the response
 // picks a suffixed label so the synthetic rollup cannot collide with user data.
@@ -121,6 +123,89 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	}
 
 	return buildQueryResult(groupBy, interval, timeStart, timeEnd, topN, tableRows, tsRows), nil
+}
+
+// QueryChatTurns is a generic, org-scoped analytics query over the
+// chat_turn_summaries view. It returns both a grouped table and a matching
+// timeseries for the same slice of Claude Code turn attribution data.
+func (s *Service) QueryChatTurns(ctx context.Context, payload *telem_gen.QueryChatTurnsPayload) (*telem_gen.QueryChatTurnsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	projects, err := s.projectsRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list organization projects")
+	}
+	projectIDs := make([]string, 0, len(projects))
+	for _, p := range projects {
+		projectIDs = append(projectIDs, p.ID.String())
+	}
+
+	groupBy := ""
+	if payload.GroupBy != nil {
+		groupBy = *payload.GroupBy
+	}
+	sortBy := payload.SortBy
+	if sortBy == "" {
+		sortBy = defaultChatTurnQuerySortBy
+	}
+	topN := payload.TopN
+	if topN == 0 {
+		topN = defaultQueryTopN
+	}
+
+	interval := calculateInterval(timeStart, timeEnd)
+	if payload.GranularitySeconds != nil && *payload.GranularitySeconds > 0 {
+		interval = *payload.GranularitySeconds
+	}
+
+	filters := make([]repo.ChatTurnSummaryFilter, 0, len(payload.Filters))
+	for _, f := range payload.Filters {
+		if f == nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "filters must not contain null entries")
+		}
+		filters = append(filters, repo.ChatTurnSummaryFilter{Dimension: f.Dimension, Values: f.Values})
+	}
+
+	params := repo.ChatTurnSummaryQueryParams{
+		ProjectIDs:      projectIDs,
+		TimeStart:       timeStart,
+		TimeEnd:         timeEnd,
+		GroupBy:         groupBy,
+		SortBy:          sortBy,
+		Filters:         filters,
+		IntervalSeconds: interval,
+	}
+
+	tableRows, err := s.chRepo.QueryChatTurnSummariesTable(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error running chat turn attribution table query")
+	}
+	tsRows, err := s.chRepo.QueryChatTurnSummariesTimeseries(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error running chat turn attribution timeseries query")
+	}
+
+	return buildChatTurnQueryResult(groupBy, interval, timeStart, timeEnd, topN, tableRows, tsRows), nil
 }
 
 // ListSessions returns org-scoped chat sessions for a filtered analytics slice.
@@ -487,5 +572,160 @@ func toGenMeasures(m repo.AttributeMetricsMeasures) *telem_gen.QueryMeasures {
 		CacheCreationInputTokens: m.CacheCreationInputTokens,
 		TotalToolCalls:           int64(m.TotalToolCalls), //nolint:gosec // bounded count
 		TotalChats:               int64(m.TotalChats),     //nolint:gosec // bounded count
+	}
+}
+
+func buildChatTurnQueryResult(
+	groupBy string,
+	intervalSeconds int64,
+	timeStart, timeEnd int64,
+	topN int,
+	tableRows []repo.ChatTurnSummaryRow,
+	tsRows []repo.ChatTurnSummaryTimePoint,
+) *telem_gen.QueryChatTurnsResult {
+	buckets := bucketStarts(timeStart, timeEnd, intervalSeconds)
+
+	kept, hasOther := selectChatTurnGroups(groupBy, topN, tableRows)
+	otherLabel := uniqueChatTurnOtherGroupLabel(tableRows)
+
+	keptIndex := make(map[string]int, len(kept))
+	for i, g := range kept {
+		keptIndex[g] = i
+	}
+
+	table := make([]*telem_gen.ChatTurnQueryRow, 0, len(kept)+1)
+	var otherTable repo.ChatTurnSummaryMeasures
+	otherDimValues := map[string]map[string]struct{}{}
+	for _, row := range tableRows {
+		if _, ok := keptIndex[row.GroupValue]; ok || groupBy == "" {
+			table = append(table, &telem_gen.ChatTurnQueryRow{
+				GroupValue:      row.GroupValue,
+				Measures:        toGenChatTurnMeasures(row.Measures()),
+				DimensionValues: normalizeDimensionValues(row.DimensionValues),
+			})
+			continue
+		}
+		otherTable.Add(row.Measures())
+		mergeDimensionValues(otherDimValues, row.DimensionValues)
+	}
+	if hasOther {
+		table = append(table, &telem_gen.ChatTurnQueryRow{
+			GroupValue:      otherLabel,
+			Measures:        toGenChatTurnMeasures(otherTable),
+			DimensionValues: flattenDimensionValues(otherDimValues),
+		})
+	}
+
+	seriesValues := append([]string{}, kept...)
+	if hasOther {
+		seriesValues = append(seriesValues, otherLabel)
+	}
+	if groupBy == "" && len(seriesValues) == 0 {
+		seriesValues = []string{""}
+	}
+
+	seriesBuckets := make(map[string]map[int64]*repo.ChatTurnSummaryMeasures, len(seriesValues))
+	for _, v := range seriesValues {
+		seriesBuckets[v] = make(map[int64]*repo.ChatTurnSummaryMeasures, len(buckets))
+	}
+
+	for _, point := range tsRows {
+		seriesValue := point.GroupValue
+		if groupBy == "" {
+			seriesValue = ""
+		} else if _, ok := keptIndex[seriesValue]; !ok {
+			if !hasOther {
+				continue
+			}
+			seriesValue = otherLabel
+		}
+		byBucket := seriesBuckets[seriesValue]
+		if byBucket == nil {
+			continue
+		}
+		m := byBucket[point.BucketTimeUnixNano]
+		if m == nil {
+			m = new(repo.ChatTurnSummaryMeasures)
+			byBucket[point.BucketTimeUnixNano] = m
+		}
+		m.Add(point.Measures())
+	}
+
+	timeseries := make([]*telem_gen.ChatTurnQuerySeries, 0, len(seriesValues))
+	for _, v := range seriesValues {
+		byBucket := seriesBuckets[v]
+		points := make([]*telem_gen.ChatTurnQueryPoint, 0, len(buckets))
+		for _, b := range buckets {
+			var measures repo.ChatTurnSummaryMeasures
+			if m := byBucket[b]; m != nil {
+				measures = *m
+			}
+			points = append(points, &telem_gen.ChatTurnQueryPoint{
+				BucketTimeUnixNano: strconv.FormatInt(b, 10),
+				Measures:           toGenChatTurnMeasures(measures),
+			})
+		}
+		timeseries = append(timeseries, &telem_gen.ChatTurnQuerySeries{
+			GroupValue: v,
+			Points:     points,
+		})
+	}
+
+	return &telem_gen.QueryChatTurnsResult{
+		GroupBy:         groupBy,
+		IntervalSeconds: intervalSeconds,
+		Table:           table,
+		Timeseries:      timeseries,
+	}
+}
+
+func selectChatTurnGroups(groupBy string, topN int, tableRows []repo.ChatTurnSummaryRow) (kept []string, hasOther bool) {
+	if groupBy == "" {
+		for _, r := range tableRows {
+			kept = append(kept, r.GroupValue)
+		}
+		return kept, false
+	}
+	if topN <= 0 {
+		topN = len(tableRows)
+	}
+	for i, r := range tableRows {
+		if i < topN {
+			kept = append(kept, r.GroupValue)
+			continue
+		}
+		hasOther = true
+	}
+	return kept, hasOther
+}
+
+func uniqueChatTurnOtherGroupLabel(tableRows []repo.ChatTurnSummaryRow) string {
+	seen := make(map[string]struct{}, len(tableRows))
+	for _, row := range tableRows {
+		seen[row.GroupValue] = struct{}{}
+	}
+	if _, ok := seen[otherGroupLabel]; !ok {
+		return otherGroupLabel
+	}
+	for i := 1; ; i++ {
+		label := otherGroupLabel + " (" + strconv.Itoa(i) + ")"
+		if _, ok := seen[label]; !ok {
+			return label
+		}
+	}
+}
+
+func toGenChatTurnMeasures(m repo.ChatTurnSummaryMeasures) *telem_gen.ChatTurnQueryMeasures {
+	return &telem_gen.ChatTurnQueryMeasures{
+		CacheCreationTokens: m.CacheCreationTokens,
+		CacheReadTokens:     m.CacheReadTokens,
+		InputTokens:         m.InputTokens,
+		OutputTokens:        m.OutputTokens,
+		TotalTokens:         m.TotalTokens,
+		TotalCost:           sanitizeFloat64(m.TotalCost),
+		CostUsdMicros:       m.CostUSDMicros,
+		RequestCount:        int64(m.RequestCount), //nolint:gosec // bounded count
+		TotalTurns:          int64(m.TotalTurns),   //nolint:gosec // bounded count
+		TotalChats:          int64(m.TotalChats),   //nolint:gosec // bounded count
 	}
 }

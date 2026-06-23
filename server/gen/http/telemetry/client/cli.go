@@ -673,6 +673,81 @@ func BuildQueryPayload(telemetryQueryBody string, telemetryQuerySessionToken str
 	return v, nil
 }
 
+// BuildQueryChatTurnsPayload builds the payload for the telemetry
+// queryChatTurns endpoint from CLI flags.
+func BuildQueryChatTurnsPayload(telemetryQueryChatTurnsBody string, telemetryQueryChatTurnsSessionToken string) (*telemetry.QueryChatTurnsPayload, error) {
+	var err error
+	var body QueryChatTurnsRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryQueryChatTurnsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"filters\": [\n         {\n            \"dimension\": \"turn_id\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"granularity_seconds\": 1,\n      \"group_by\": \"mcp_server_name\",\n      \"sort_by\": \"total_cost\",\n      \"to\": \"2025-12-26T10:00:00Z\",\n      \"top_n\": 2\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if body.GroupBy != nil {
+			if !(*body.GroupBy == "chat_id" || *body.GroupBy == "turn_id" || *body.GroupBy == "query_source" || *body.GroupBy == "skill_name" || *body.GroupBy == "agent_name" || *body.GroupBy == "mcp_server_name" || *body.GroupBy == "mcp_tool_name" || *body.GroupBy == "department_name" || *body.GroupBy == "job_title" || *body.GroupBy == "employee_type" || *body.GroupBy == "division_name" || *body.GroupBy == "cost_center_name" || *body.GroupBy == "email" || *body.GroupBy == "model" || *body.GroupBy == "hook_source" || *body.GroupBy == "role" || *body.GroupBy == "group" || *body.GroupBy == "project_id") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.group_by", *body.GroupBy, []any{"chat_id", "turn_id", "query_source", "skill_name", "agent_name", "mcp_server_name", "mcp_tool_name", "department_name", "job_title", "employee_type", "division_name", "cost_center_name", "email", "model", "hook_source", "role", "group", "project_id"}))
+			}
+		}
+		for _, e := range body.Filters {
+			if e != nil {
+				if err2 := ValidateChatTurnQueryFilterRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if body.TopN < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.top_n", body.TopN, 1, true))
+		}
+		if !(body.SortBy == "cache_creation_tokens" || body.SortBy == "total_cost" || body.SortBy == "total_tokens" || body.SortBy == "input_tokens" || body.SortBy == "output_tokens" || body.SortBy == "cache_read_tokens" || body.SortBy == "request_count" || body.SortBy == "total_turns" || body.SortBy == "total_chats") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", body.SortBy, []any{"cache_creation_tokens", "total_cost", "total_tokens", "input_tokens", "output_tokens", "cache_read_tokens", "request_count", "total_turns", "total_chats"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryQueryChatTurnsSessionToken != "" {
+			sessionToken = &telemetryQueryChatTurnsSessionToken
+		}
+	}
+	v := &telemetry.QueryChatTurnsPayload{
+		From:               body.From,
+		To:                 body.To,
+		GroupBy:            body.GroupBy,
+		GranularitySeconds: body.GranularitySeconds,
+		TopN:               body.TopN,
+		SortBy:             body.SortBy,
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.ChatTurnQueryFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = marshalChatTurnQueryFilterRequestBodyToTelemetryChatTurnQueryFilter(val)
+		}
+	}
+	{
+		var zero int
+		if v.TopN == zero {
+			v.TopN = 10
+		}
+	}
+	{
+		var zero string
+		if v.SortBy == zero {
+			v.SortBy = "cache_creation_tokens"
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListSessionsPayload builds the payload for the telemetry listSessions
 // endpoint from CLI flags.
 func BuildListSessionsPayload(telemetryListSessionsBody string, telemetryListSessionsSessionToken string) (*telemetry.ListSessionsPayload, error) {

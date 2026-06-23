@@ -184,6 +184,29 @@ type QueryRequestBody struct {
 	SortBy string `form:"sort_by" json:"sort_by" xml:"sort_by"`
 }
 
+// QueryChatTurnsRequestBody is the type of the "telemetry" service
+// "queryChatTurns" endpoint HTTP request body.
+type QueryChatTurnsRequestBody struct {
+	// Start time in ISO 8601 format
+	From string `form:"from" json:"from" xml:"from"`
+	// End time in ISO 8601 format
+	To string `form:"to" json:"to" xml:"to"`
+	// Optional dimension to break results down by. When omitted, a single
+	// aggregate row/series for the whole slice is returned.
+	GroupBy *string `form:"group_by,omitempty" json:"group_by,omitempty" xml:"group_by,omitempty"`
+	// Optional filters; all filters are ANDed together.
+	Filters []*ChatTurnQueryFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
+	// Optional timeseries bucket size in seconds. Defaults to an interval derived
+	// from the time range.
+	GranularitySeconds *int64 `form:"granularity_seconds,omitempty" json:"granularity_seconds,omitempty" xml:"granularity_seconds,omitempty"`
+	// When group_by is set, keep at most this many groups (ranked by sort_by); the
+	// remainder are rolled into an 'Other' group. Defaults to 10.
+	TopN int `form:"top_n" json:"top_n" xml:"top_n"`
+	// Measure used to rank groups for top_n. Defaults to cache_creation_tokens,
+	// the primary context-added attribution measure.
+	SortBy string `form:"sort_by" json:"sort_by" xml:"sort_by"`
+}
+
 // ListSessionsRequestBody is the type of the "telemetry" service
 // "listSessions" endpoint HTTP request body.
 type ListSessionsRequestBody struct {
@@ -426,6 +449,19 @@ type QueryResponseBody struct {
 	Table []*QueryRowResponseBody `form:"table,omitempty" json:"table,omitempty" xml:"table,omitempty"`
 	// One series per group value (aligned with table rows), each gap-filled.
 	Timeseries []*QuerySeriesResponseBody `form:"timeseries,omitempty" json:"timeseries,omitempty" xml:"timeseries,omitempty"`
+}
+
+// QueryChatTurnsResponseBody is the type of the "telemetry" service
+// "queryChatTurns" endpoint HTTP response body.
+type QueryChatTurnsResponseBody struct {
+	// Echoes the requested group_by dimension; empty when none was requested.
+	GroupBy *string `form:"group_by,omitempty" json:"group_by,omitempty" xml:"group_by,omitempty"`
+	// The timeseries bucket interval in seconds.
+	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
+	// Grouped totals over the full time range, ordered by sort_by descending.
+	Table []*ChatTurnQueryRowResponseBody `form:"table,omitempty" json:"table,omitempty" xml:"table,omitempty"`
+	// One series per group value (aligned with table rows), each gap-filled.
+	Timeseries []*ChatTurnQuerySeriesResponseBody `form:"timeseries,omitempty" json:"timeseries,omitempty" xml:"timeseries,omitempty"`
 }
 
 // ListSessionsResponseBody is the type of the "telemetry" service
@@ -2563,6 +2599,190 @@ type QueryGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// QueryChatTurnsUnauthorizedResponseBody is the type of the "telemetry"
+// service "queryChatTurns" endpoint HTTP response body for the "unauthorized"
+// error.
+type QueryChatTurnsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryChatTurnsForbiddenResponseBody is the type of the "telemetry" service
+// "queryChatTurns" endpoint HTTP response body for the "forbidden" error.
+type QueryChatTurnsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryChatTurnsBadRequestResponseBody is the type of the "telemetry" service
+// "queryChatTurns" endpoint HTTP response body for the "bad_request" error.
+type QueryChatTurnsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryChatTurnsNotFoundResponseBody is the type of the "telemetry" service
+// "queryChatTurns" endpoint HTTP response body for the "not_found" error.
+type QueryChatTurnsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryChatTurnsConflictResponseBody is the type of the "telemetry" service
+// "queryChatTurns" endpoint HTTP response body for the "conflict" error.
+type QueryChatTurnsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryChatTurnsUnsupportedMediaResponseBody is the type of the "telemetry"
+// service "queryChatTurns" endpoint HTTP response body for the
+// "unsupported_media" error.
+type QueryChatTurnsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryChatTurnsInvalidResponseBody is the type of the "telemetry" service
+// "queryChatTurns" endpoint HTTP response body for the "invalid" error.
+type QueryChatTurnsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryChatTurnsInvariantViolationResponseBody is the type of the "telemetry"
+// service "queryChatTurns" endpoint HTTP response body for the
+// "invariant_violation" error.
+type QueryChatTurnsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryChatTurnsUnexpectedResponseBody is the type of the "telemetry" service
+// "queryChatTurns" endpoint HTTP response body for the "unexpected" error.
+type QueryChatTurnsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryChatTurnsGatewayErrorResponseBody is the type of the "telemetry"
+// service "queryChatTurns" endpoint HTTP response body for the "gateway_error"
+// error.
+type QueryChatTurnsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListSessionsUnauthorizedResponseBody is the type of the "telemetry" service
 // "listSessions" endpoint HTTP response body for the "unauthorized" error.
 type ListSessionsUnauthorizedResponseBody struct {
@@ -4618,6 +4838,73 @@ type QueryPointResponseBody struct {
 	Measures *QueryMeasuresResponseBody `form:"measures,omitempty" json:"measures,omitempty" xml:"measures,omitempty"`
 }
 
+// ChatTurnQueryFilterRequestBody is used to define fields on request body
+// types.
+type ChatTurnQueryFilterRequestBody struct {
+	// Dimension to filter on
+	Dimension string `form:"dimension" json:"dimension" xml:"dimension"`
+	// Match if the dimension equals any of these values (IN semantics; for
+	// multi-valued dimensions like role/group, matches if any element is present).
+	Values []string `form:"values" json:"values" xml:"values"`
+}
+
+// ChatTurnQueryRowResponseBody is used to define fields on response body types.
+type ChatTurnQueryRowResponseBody struct {
+	// The dimension value for this row. Empty string when no group_by was
+	// requested; 'Other' for the rolled-up remainder beyond top_n.
+	GroupValue *string `form:"group_value,omitempty" json:"group_value,omitempty" xml:"group_value,omitempty"`
+	// Aggregated measures for this group
+	Measures *ChatTurnQueryMeasuresResponseBody `form:"measures,omitempty" json:"measures,omitempty" xml:"measures,omitempty"`
+	// Distinct values of every allowlisted dimension other than the group_by
+	// dimension, observed within this group. Keyed by dimension identifier.
+	DimensionValues map[string][]string `form:"dimension_values,omitempty" json:"dimension_values,omitempty" xml:"dimension_values,omitempty"`
+}
+
+// ChatTurnQueryMeasuresResponseBody is used to define fields on response body
+// types.
+type ChatTurnQueryMeasuresResponseBody struct {
+	// Sum of prompt-cache creation tokens; the primary context-added attribution
+	// measure
+	CacheCreationTokens *int64 `form:"cache_creation_tokens,omitempty" json:"cache_creation_tokens,omitempty" xml:"cache_creation_tokens,omitempty"`
+	// Sum of prompt-cache read tokens
+	CacheReadTokens *int64 `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
+	// Sum of input tokens
+	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
+	// Sum of output tokens
+	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
+	// Sum of input, output, cache read, and cache creation tokens
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Total cost in USD
+	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
+	// Total cost in micro-USD
+	CostUsdMicros *int64 `form:"cost_usd_micros,omitempty" json:"cost_usd_micros,omitempty" xml:"cost_usd_micros,omitempty"`
+	// Number of Claude Code api_request rows
+	RequestCount *int64 `form:"request_count,omitempty" json:"request_count,omitempty" xml:"request_count,omitempty"`
+	// Number of distinct chat turns
+	TotalTurns *int64 `form:"total_turns,omitempty" json:"total_turns,omitempty" xml:"total_turns,omitempty"`
+	// Number of distinct chat sessions
+	TotalChats *int64 `form:"total_chats,omitempty" json:"total_chats,omitempty" xml:"total_chats,omitempty"`
+}
+
+// ChatTurnQuerySeriesResponseBody is used to define fields on response body
+// types.
+type ChatTurnQuerySeriesResponseBody struct {
+	// The dimension value for this series. Empty string when no group_by was
+	// requested; 'Other' for the rolled-up remainder beyond top_n.
+	GroupValue *string `form:"group_value,omitempty" json:"group_value,omitempty" xml:"group_value,omitempty"`
+	// Time buckets in ascending order, gap-filled with zeros.
+	Points []*ChatTurnQueryPointResponseBody `form:"points,omitempty" json:"points,omitempty" xml:"points,omitempty"`
+}
+
+// ChatTurnQueryPointResponseBody is used to define fields on response body
+// types.
+type ChatTurnQueryPointResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano *string `form:"bucket_time_unix_nano,omitempty" json:"bucket_time_unix_nano,omitempty" xml:"bucket_time_unix_nano,omitempty"`
+	// Aggregated measures for this bucket
+	Measures *ChatTurnQueryMeasuresResponseBody `form:"measures,omitempty" json:"measures,omitempty" xml:"measures,omitempty"`
+}
+
 // SessionSummaryResponseBody is used to define fields on response body types.
 type SessionSummaryResponseBody struct {
 	// Chat session ID
@@ -5272,6 +5559,42 @@ func NewQueryRequestBody(p *telemetry.QueryPayload) *QueryRequestBody {
 		var zero string
 		if body.SortBy == zero {
 			body.SortBy = "total_cost"
+		}
+	}
+	return body
+}
+
+// NewQueryChatTurnsRequestBody builds the HTTP request body from the payload
+// of the "queryChatTurns" endpoint of the "telemetry" service.
+func NewQueryChatTurnsRequestBody(p *telemetry.QueryChatTurnsPayload) *QueryChatTurnsRequestBody {
+	body := &QueryChatTurnsRequestBody{
+		From:               p.From,
+		To:                 p.To,
+		GroupBy:            p.GroupBy,
+		GranularitySeconds: p.GranularitySeconds,
+		TopN:               p.TopN,
+		SortBy:             p.SortBy,
+	}
+	if p.Filters != nil {
+		body.Filters = make([]*ChatTurnQueryFilterRequestBody, len(p.Filters))
+		for i, val := range p.Filters {
+			if val == nil {
+				body.Filters[i] = nil
+				continue
+			}
+			body.Filters[i] = marshalTelemetryChatTurnQueryFilterToChatTurnQueryFilterRequestBody(val)
+		}
+	}
+	{
+		var zero int
+		if body.TopN == zero {
+			body.TopN = 10
+		}
+	}
+	{
+		var zero string
+		if body.SortBy == zero {
+			body.SortBy = "cache_creation_tokens"
 		}
 	}
 	return body
@@ -7387,6 +7710,183 @@ func NewQueryGatewayError(body *QueryGatewayErrorResponseBody) *goa.ServiceError
 	return v
 }
 
+// NewQueryChatTurnsResultOK builds a "telemetry" service "queryChatTurns"
+// endpoint result from a HTTP "OK" response.
+func NewQueryChatTurnsResultOK(body *QueryChatTurnsResponseBody) *telemetry.QueryChatTurnsResult {
+	v := &telemetry.QueryChatTurnsResult{
+		GroupBy:         *body.GroupBy,
+		IntervalSeconds: *body.IntervalSeconds,
+	}
+	v.Table = make([]*telemetry.ChatTurnQueryRow, len(body.Table))
+	for i, val := range body.Table {
+		if val == nil {
+			v.Table[i] = nil
+			continue
+		}
+		v.Table[i] = unmarshalChatTurnQueryRowResponseBodyToTelemetryChatTurnQueryRow(val)
+	}
+	v.Timeseries = make([]*telemetry.ChatTurnQuerySeries, len(body.Timeseries))
+	for i, val := range body.Timeseries {
+		if val == nil {
+			v.Timeseries[i] = nil
+			continue
+		}
+		v.Timeseries[i] = unmarshalChatTurnQuerySeriesResponseBodyToTelemetryChatTurnQuerySeries(val)
+	}
+
+	return v
+}
+
+// NewQueryChatTurnsUnauthorized builds a telemetry service queryChatTurns
+// endpoint unauthorized error.
+func NewQueryChatTurnsUnauthorized(body *QueryChatTurnsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryChatTurnsForbidden builds a telemetry service queryChatTurns
+// endpoint forbidden error.
+func NewQueryChatTurnsForbidden(body *QueryChatTurnsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryChatTurnsBadRequest builds a telemetry service queryChatTurns
+// endpoint bad_request error.
+func NewQueryChatTurnsBadRequest(body *QueryChatTurnsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryChatTurnsNotFound builds a telemetry service queryChatTurns endpoint
+// not_found error.
+func NewQueryChatTurnsNotFound(body *QueryChatTurnsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryChatTurnsConflict builds a telemetry service queryChatTurns endpoint
+// conflict error.
+func NewQueryChatTurnsConflict(body *QueryChatTurnsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryChatTurnsUnsupportedMedia builds a telemetry service queryChatTurns
+// endpoint unsupported_media error.
+func NewQueryChatTurnsUnsupportedMedia(body *QueryChatTurnsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryChatTurnsInvalid builds a telemetry service queryChatTurns endpoint
+// invalid error.
+func NewQueryChatTurnsInvalid(body *QueryChatTurnsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryChatTurnsInvariantViolation builds a telemetry service
+// queryChatTurns endpoint invariant_violation error.
+func NewQueryChatTurnsInvariantViolation(body *QueryChatTurnsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryChatTurnsUnexpected builds a telemetry service queryChatTurns
+// endpoint unexpected error.
+func NewQueryChatTurnsUnexpected(body *QueryChatTurnsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryChatTurnsGatewayError builds a telemetry service queryChatTurns
+// endpoint gateway_error error.
+func NewQueryChatTurnsGatewayError(body *QueryChatTurnsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListSessionsResultOK builds a "telemetry" service "listSessions" endpoint
 // result from a HTTP "OK" response.
 func NewListSessionsResultOK(body *ListSessionsResponseBody) *telemetry.ListSessionsResult {
@@ -9068,6 +9568,38 @@ func ValidateQueryResponseBody(body *QueryResponseBody) (err error) {
 	for _, e := range body.Timeseries {
 		if e != nil {
 			if err2 := ValidateQuerySeriesResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateQueryChatTurnsResponseBody runs the validations defined on
+// QueryChatTurnsResponseBody
+func ValidateQueryChatTurnsResponseBody(body *QueryChatTurnsResponseBody) (err error) {
+	if body.GroupBy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("group_by", "body"))
+	}
+	if body.IntervalSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
+	}
+	if body.Table == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("table", "body"))
+	}
+	if body.Timeseries == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeseries", "body"))
+	}
+	for _, e := range body.Table {
+		if e != nil {
+			if err2 := ValidateChatTurnQueryRowResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Timeseries {
+		if e != nil {
+			if err2 := ValidateChatTurnQuerySeriesResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -11987,6 +12519,246 @@ func ValidateQueryGatewayErrorResponseBody(body *QueryGatewayErrorResponseBody) 
 	return
 }
 
+// ValidateQueryChatTurnsUnauthorizedResponseBody runs the validations defined
+// on queryChatTurns_unauthorized_response_body
+func ValidateQueryChatTurnsUnauthorizedResponseBody(body *QueryChatTurnsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryChatTurnsForbiddenResponseBody runs the validations defined on
+// queryChatTurns_forbidden_response_body
+func ValidateQueryChatTurnsForbiddenResponseBody(body *QueryChatTurnsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryChatTurnsBadRequestResponseBody runs the validations defined on
+// queryChatTurns_bad_request_response_body
+func ValidateQueryChatTurnsBadRequestResponseBody(body *QueryChatTurnsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryChatTurnsNotFoundResponseBody runs the validations defined on
+// queryChatTurns_not_found_response_body
+func ValidateQueryChatTurnsNotFoundResponseBody(body *QueryChatTurnsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryChatTurnsConflictResponseBody runs the validations defined on
+// queryChatTurns_conflict_response_body
+func ValidateQueryChatTurnsConflictResponseBody(body *QueryChatTurnsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryChatTurnsUnsupportedMediaResponseBody runs the validations
+// defined on queryChatTurns_unsupported_media_response_body
+func ValidateQueryChatTurnsUnsupportedMediaResponseBody(body *QueryChatTurnsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryChatTurnsInvalidResponseBody runs the validations defined on
+// queryChatTurns_invalid_response_body
+func ValidateQueryChatTurnsInvalidResponseBody(body *QueryChatTurnsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryChatTurnsInvariantViolationResponseBody runs the validations
+// defined on queryChatTurns_invariant_violation_response_body
+func ValidateQueryChatTurnsInvariantViolationResponseBody(body *QueryChatTurnsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryChatTurnsUnexpectedResponseBody runs the validations defined on
+// queryChatTurns_unexpected_response_body
+func ValidateQueryChatTurnsUnexpectedResponseBody(body *QueryChatTurnsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryChatTurnsGatewayErrorResponseBody runs the validations defined
+// on queryChatTurns_gateway_error_response_body
+func ValidateQueryChatTurnsGatewayErrorResponseBody(body *QueryChatTurnsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListSessionsUnauthorizedResponseBody runs the validations defined on
 // listSessions_unauthorized_response_body
 func ValidateListSessionsUnauthorizedResponseBody(body *ListSessionsUnauthorizedResponseBody) (err error) {
@@ -14733,6 +15505,113 @@ func ValidateQueryPointResponseBody(body *QueryPointResponseBody) (err error) {
 	}
 	if body.Measures != nil {
 		if err2 := ValidateQueryMeasuresResponseBody(body.Measures); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateChatTurnQueryFilterRequestBody runs the validations defined on
+// ChatTurnQueryFilterRequestBody
+func ValidateChatTurnQueryFilterRequestBody(body *ChatTurnQueryFilterRequestBody) (err error) {
+	if body.Values == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("values", "body"))
+	}
+	if !(body.Dimension == "chat_id" || body.Dimension == "turn_id" || body.Dimension == "query_source" || body.Dimension == "skill_name" || body.Dimension == "agent_name" || body.Dimension == "mcp_server_name" || body.Dimension == "mcp_tool_name" || body.Dimension == "department_name" || body.Dimension == "job_title" || body.Dimension == "employee_type" || body.Dimension == "division_name" || body.Dimension == "cost_center_name" || body.Dimension == "email" || body.Dimension == "model" || body.Dimension == "hook_source" || body.Dimension == "role" || body.Dimension == "group" || body.Dimension == "project_id") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dimension", body.Dimension, []any{"chat_id", "turn_id", "query_source", "skill_name", "agent_name", "mcp_server_name", "mcp_tool_name", "department_name", "job_title", "employee_type", "division_name", "cost_center_name", "email", "model", "hook_source", "role", "group", "project_id"}))
+	}
+	if len(body.Values) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.values", body.Values, len(body.Values), 1, true))
+	}
+	return
+}
+
+// ValidateChatTurnQueryRowResponseBody runs the validations defined on
+// ChatTurnQueryRowResponseBody
+func ValidateChatTurnQueryRowResponseBody(body *ChatTurnQueryRowResponseBody) (err error) {
+	if body.GroupValue == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("group_value", "body"))
+	}
+	if body.Measures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("measures", "body"))
+	}
+	if body.DimensionValues == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dimension_values", "body"))
+	}
+	if body.Measures != nil {
+		if err2 := ValidateChatTurnQueryMeasuresResponseBody(body.Measures); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateChatTurnQueryMeasuresResponseBody runs the validations defined on
+// ChatTurnQueryMeasuresResponseBody
+func ValidateChatTurnQueryMeasuresResponseBody(body *ChatTurnQueryMeasuresResponseBody) (err error) {
+	if body.CacheCreationTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_creation_tokens", "body"))
+	}
+	if body.CacheReadTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_read_tokens", "body"))
+	}
+	if body.InputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input_tokens", "body"))
+	}
+	if body.OutputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("output_tokens", "body"))
+	}
+	if body.TotalTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.TotalCost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_cost", "body"))
+	}
+	if body.CostUsdMicros == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cost_usd_micros", "body"))
+	}
+	if body.RequestCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_count", "body"))
+	}
+	if body.TotalTurns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_turns", "body"))
+	}
+	if body.TotalChats == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_chats", "body"))
+	}
+	return
+}
+
+// ValidateChatTurnQuerySeriesResponseBody runs the validations defined on
+// ChatTurnQuerySeriesResponseBody
+func ValidateChatTurnQuerySeriesResponseBody(body *ChatTurnQuerySeriesResponseBody) (err error) {
+	if body.GroupValue == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("group_value", "body"))
+	}
+	if body.Points == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("points", "body"))
+	}
+	for _, e := range body.Points {
+		if e != nil {
+			if err2 := ValidateChatTurnQueryPointResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateChatTurnQueryPointResponseBody runs the validations defined on
+// ChatTurnQueryPointResponseBody
+func ValidateChatTurnQueryPointResponseBody(body *ChatTurnQueryPointResponseBody) (err error) {
+	if body.BucketTimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_time_unix_nano", "body"))
+	}
+	if body.Measures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("measures", "body"))
+	}
+	if body.Measures != nil {
+		if err2 := ValidateChatTurnQueryMeasuresResponseBody(body.Measures); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
