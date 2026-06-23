@@ -1,8 +1,6 @@
 package risk_analysis
 
 // Finding represents a single secret or sensitive data match found in a message.
-// DeadLetterReason is populated only on synthetic "could not analyze" markers
-// emitted when a scanner exhausts its retry budget for a message.
 type Finding struct {
 	RuleID           string
 	Description      string

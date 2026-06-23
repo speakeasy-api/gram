@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -237,7 +238,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 
 	policyType := payload.PolicyType
 	if policyType == "" {
-		policyType = "standard"
+		policyType = ra.PolicyTypeStandard
 	}
 	if err := validatePolicyType(policyType); err != nil {
 		return nil, err
@@ -248,7 +249,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	// during the MVP.
 	var prompt pgtype.Text
 	var modelConfig []byte
-	if policyType == "prompt_based" {
+	if policyType == ra.PolicyTypePromptBased {
 		if !s.promptPoliciesEnabled(ctx, authCtx) {
 			return nil, oops.E(oops.CodeForbidden, nil, "prompt-based policies are not enabled for this organization")
 		}
@@ -264,13 +265,13 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	}
 
 	sources := payload.Sources
-	if policyType == "prompt_based" {
+	if policyType == ra.PolicyTypePromptBased {
 		// prompt_based policies evaluate the prompt via the LLM judge, not
 		// detection sources. Persist an empty (non-null) source set.
 		sources = []string{}
 	} else {
 		if sources == nil {
-			sources = []string{"gitleaks"}
+			sources = []string{ra.SourceGitleaks}
 		}
 		if err := validateSources(sources); err != nil {
 			return nil, err
@@ -316,7 +317,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		for _, p := range existingPolicies {
 			existingNames = append(existingNames, p.Name)
 		}
-		if policyType == "prompt_based" {
+		if policyType == ra.PolicyTypePromptBased {
 			name = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
 		} else {
 			customRuleTitles := s.customRuleTitlesForIDs(ctx, *authCtx.ProjectID, payload.CustomRuleIds)
@@ -487,13 +488,13 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	}
 
 	// policy_type is immutable; gate edits to prompt_based policies behind the flag.
-	if current.PolicyType == "prompt_based" && !s.promptPoliciesEnabled(ctx, authCtx) {
+	if current.PolicyType == ra.PolicyTypePromptBased && !s.promptPoliciesEnabled(ctx, authCtx) {
 		return nil, oops.E(oops.CodeForbidden, nil, "prompt-based policies are not enabled for this organization")
 	}
-	if current.PolicyType == "standard" && (payload.Prompt != nil || payload.ModelConfig != nil) {
+	if current.PolicyType == ra.PolicyTypeStandard && (payload.Prompt != nil || payload.ModelConfig != nil) {
 		return nil, oops.E(oops.CodeInvalid, nil, "prompt and model_config are only supported for prompt-based policies")
 	}
-	if current.PolicyType == "prompt_based" && payloadHasPromptPolicyDetectionConfig(payload) {
+	if current.PolicyType == ra.PolicyTypePromptBased && payloadHasPromptPolicyDetectionConfig(payload) {
 		return nil, oops.E(oops.CodeInvalid, nil, "prompt-based policies do not support detection source configuration")
 	}
 
@@ -613,7 +614,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	prompt := current.Prompt
 	if payload.Prompt != nil {
 		p := strings.TrimSpace(*payload.Prompt)
-		if current.PolicyType == "prompt_based" && p == "" {
+		if current.PolicyType == ra.PolicyTypePromptBased && p == "" {
 			return nil, oops.E(oops.CodeInvalid, nil, "prompt must not be empty for prompt-based policies")
 		}
 		if len([]rune(p)) > maxPromptPolicyPromptLength {
@@ -642,7 +643,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 				existingNames = append(existingNames, p.Name)
 			}
 		}
-		if current.PolicyType == "prompt_based" {
+		if current.PolicyType == ra.PolicyTypePromptBased {
 			name = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
 		} else {
 			customRuleTitles := s.customRuleTitlesForIDs(ctx, *authCtx.ProjectID, customRuleIds)
@@ -2270,7 +2271,7 @@ func (s *Service) testCustomRule(ruleID, detectionExpr, text string) (*gen.TestD
 	// The playground only has pasted text, so it evaluates against a user
 	// message (content/prompt populated, no tool calls). Tool-targeted rules
 	// simply won't match here; save them and run analysis to see matches.
-	compiled, err := ra.CompileCELRules(eng, []ra.CustomDetectionRule{{
+	compiled, err := ra.CompileCELRules(eng, []customrules.Rule{{
 		RuleID:        ruleID,
 		Title:         "",
 		Description:   "Custom rule match",
@@ -2281,7 +2282,7 @@ func (s *Service) testCustomRule(ruleID, detectionExpr, text string) (*gen.TestD
 		return nil, oops.E(oops.CodeInvalid, err, "invalid detection_expr")
 	}
 
-	findings, err := ra.ScanCELRules(eng, ra.MessageView{Content: text, Type: message.User, Tools: nil}, compiled)
+	findings, err := ra.ScanCELRules(eng, ra.MessageView{Content: text, Type: message.User, Tools: []ra.ToolView{}}, compiled)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "evaluate detection rule")
 	}
@@ -2516,9 +2517,9 @@ func sourcesToCategoryLabels(sources []string) []string {
 	out := make([]string, 0, len(sources))
 	for _, src := range sources {
 		switch src {
-		case "gitleaks":
+		case ra.SourceGitleaks:
 			out = append(out, "Secrets")
-		case "presidio":
+		case ra.SourcePresidio:
 			out = append(out, "PII")
 		case shadowmcp.SourceShadowMCP:
 			out = append(out, "Shadow MCP")
@@ -2631,7 +2632,7 @@ func validateAction(action string) error {
 func validateSources(sources []string) error {
 	for _, src := range sources {
 		switch src {
-		case "gitleaks", "presidio", shadowmcp.SourceShadowMCP, shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourcePromptInjection:
+		case ra.SourceGitleaks, ra.SourcePresidio, shadowmcp.SourceShadowMCP, shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourcePromptInjection:
 		default:
 			return oops.E(oops.CodeInvalid, nil, "source %q is not a recognized policy source", src)
 		}
@@ -2664,7 +2665,7 @@ func validatePolicyName(name string) error {
 // validatePolicyType ensures policy_type is one of the supported discriminators.
 func validatePolicyType(policyType string) error {
 	switch policyType {
-	case "standard", "prompt_based":
+	case ra.PolicyTypeStandard, ra.PolicyTypePromptBased:
 		return nil
 	default:
 		return oops.E(oops.CodeInvalid, nil, "policy_type must be one of: standard, prompt_based")
@@ -2688,7 +2689,7 @@ func payloadHasCreatePromptPolicyDetectionConfig(payload *gen.CreateRiskPolicyPa
 }
 
 func createPolicyDetectionField(policyType string, values []string) []string {
-	if policyType == "prompt_based" {
+	if policyType == ra.PolicyTypePromptBased {
 		return nil
 	}
 	return values

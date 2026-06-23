@@ -8,17 +8,8 @@ import (
 	"github.com/google/cel-go/cel"
 
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
 )
-
-// This file is the CEL evaluation path for custom detection and policy scopes,
-// backed by internal/risk/celenv. Rules store a CEL detection predicate
-// (detection_expr, legacy regex evaluated as content.matchRegex(regex)); policies
-// store CEL scope predicates (scope_include / scope_exempt).
-//
-// The CEL engine is immutable and Eval is thread-safe, so a single instance is
-// constructed once at each composition root (server start, worker activities)
-// and injected into the consumers (Scanner, Service, AnalyzeBatch) rather than
-// reached through a package global.
 
 // celMessage adapts the structured MessageView into the celenv input model.
 func celMessage(view MessageView) celenv.Message {
@@ -29,10 +20,8 @@ func celMessage(view MessageView) celenv.Message {
 	return celenv.Message{Content: view.Content, Type: view.Type, Tools: tools}
 }
 
-// effectiveDetectionExpr returns the CEL predicate a rule should evaluate: its
-// detection_expr when set, else a synthesized content.matchRegex(regex) for a legacy
-// regex rule, else empty (no matcher configured).
-func effectiveDetectionExpr(rule CustomDetectionRule) string {
+// effectiveDetectionExpr returns the stored CEL predicate or a legacy regex fallback.
+func effectiveDetectionExpr(rule customrules.Rule) string {
 	if expr := strings.TrimSpace(rule.DetectionExpr); expr != "" {
 		return expr
 	}
@@ -44,14 +33,12 @@ func effectiveDetectionExpr(rule CustomDetectionRule) string {
 
 // CompiledCELRule is a custom rule whose detection predicate is compiled once.
 type CompiledCELRule struct {
-	rule CustomDetectionRule
+	rule customrules.Rule
 	prg  cel.Program
 }
 
-// CompileCELRules compiles each rule's detection predicate (rules without a
-// matcher are skipped). A nil engine yields no rules, so a failed CEL env skips
-// custom-rule detection rather than panicking in the scan.
-func CompileCELRules(eng *celenv.Engine, rules []CustomDetectionRule) ([]CompiledCELRule, error) {
+// CompileCELRules compiles each rule's detection predicate.
+func CompileCELRules(eng *celenv.Engine, rules []customrules.Rule) ([]CompiledCELRule, error) {
 	if eng == nil {
 		return []CompiledCELRule{}, nil
 	}
@@ -71,9 +58,7 @@ func CompileCELRules(eng *celenv.Engine, rules []CustomDetectionRule) ([]Compile
 	return out, nil
 }
 
-// ScanCELRules evaluates the (detector) rules over a view, producing one Finding
-// per recorded span. Custom rules are pure detectors; message exemptions are
-// handled by the policy's scope_exempt (CompiledScope.Exempts), not by rules.
+// ScanCELRules evaluates custom detector rules over a message view.
 func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule) ([]Finding, error) {
 	msg := celMessage(view)
 	findings := []Finding{}
@@ -106,7 +91,7 @@ func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule)
 	return findings, nil
 }
 
-func celRuleDescription(rule CustomDetectionRule) string {
+func celRuleDescription(rule customrules.Rule) string {
 	if strings.TrimSpace(rule.Description) != "" {
 		return rule.Description
 	}
@@ -116,15 +101,14 @@ func celRuleDescription(rule CustomDetectionRule) string {
 	return rule.RuleID
 }
 
-// CompiledScope is a policy's compiled scope predicates. A nil include is
-// all-in; a nil exempt is none-exempt.
+// CompiledScope is a policy's compiled scope predicates.
 type CompiledScope struct {
 	eng     *celenv.Engine
 	include cel.Program
 	exempt  cel.Program
 }
 
-// CompileScope compiles a policy's scope predicates (empty strings -> nil).
+// CompileScope compiles a policy's scope predicates.
 func CompileScope(eng *celenv.Engine, includeCEL, exemptCEL string) (CompiledScope, error) {
 	var s CompiledScope
 	s.eng = eng
@@ -148,8 +132,7 @@ func CompileScope(eng *celenv.Engine, includeCEL, exemptCEL string) (CompiledSco
 // Active reports whether the scope has any predicate to evaluate.
 func (s CompiledScope) Active() bool { return s.include != nil || s.exempt != nil }
 
-// Includes reports whether a message is in scope (nil include = all-in). An
-// eval error fails toward scanning so detection is never silently skipped.
+// Includes reports whether a message is in scope.
 func (s CompiledScope) Includes(view MessageView) bool {
 	if s.include == nil {
 		return true
@@ -161,8 +144,7 @@ func (s CompiledScope) Includes(view MessageView) bool {
 	return in
 }
 
-// Exempts reports whether a message is exempted (nil exempt = none). An eval
-// error fails toward scanning (not exempt).
+// Exempts reports whether a message is exempted.
 func (s CompiledScope) Exempts(view MessageView) bool {
 	if s.exempt == nil {
 		return false
