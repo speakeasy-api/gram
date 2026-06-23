@@ -19,6 +19,7 @@ import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { Button } from "@speakeasy-api/moonshine";
 import {
+  invalidateAllListChats,
   invalidateAllRiskListExclusions,
   invalidateAllRiskListResults,
   invalidateAllRiskListResultsByChat,
@@ -80,6 +81,9 @@ export function ExclusionEditor({
       invalidateAllRiskListResultsByChat(queryClient),
       invalidateAllRiskListResultsForAgent(queryClient),
       invalidateAllRiskOverview(queryClient),
+      // The Agent Sessions list shows per-session risk counts, so refresh it too
+      // (lags the async reconcile like the other surfaces).
+      invalidateAllListChats(queryClient),
     ]);
 
   const createMutation = useRiskCreateExclusionMutation({
