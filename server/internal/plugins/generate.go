@@ -1608,27 +1608,28 @@ def gram_safe_dir():
     return base
 sid = re.sub(r"[^A-Za-z0-9_-]", "", str(p.get("session_id") or ""))[:128]
 base = gram_safe_dir()
+# File persistence is strictly best-effort: it must never abort enrichment,
+# which also builds the POST body, or the freshly gathered inventory would be
+# lost for this very SessionStart/ConfigChange event. Swallow anything it
+# raises (e.g. os.listdir failing if the dir vanished after the safe check).
 if sid and frag and base:
-    # Prune snapshots older than 24h so session files do not accumulate.
-    now = time.time()
-    for fn in os.listdir(base):
-        if not fn.startswith("mcp-"):
-            continue
-        stale = os.path.join(base, fn)
-        try:
-            if now - os.path.getmtime(stale) > 86400:
-                os.remove(stale)
-        except OSError:
-            pass
-    dest = os.path.join(base, "mcp-" + sid + ".json")
-    # Unique temp name per writer (mkstemp uses O_EXCL, mode 0600) so concurrent
-    # SessionStart/ConfigChange runs for the same session cannot truncate each
-    # other mid-write; os.replace is atomic so the last writer wins cleanly.
     try:
+        # Prune snapshots older than 24h so session files do not accumulate.
+        now = time.time()
+        for fn in os.listdir(base):
+            if not fn.startswith("mcp-"):
+                continue
+            stale = os.path.join(base, fn)
+            try:
+                if now - os.path.getmtime(stale) > 86400:
+                    os.remove(stale)
+            except OSError:
+                pass
+        dest = os.path.join(base, "mcp-" + sid + ".json")
+        # Unique temp name per writer (mkstemp uses O_EXCL, mode 0600) so concurrent
+        # SessionStart/ConfigChange runs for the same session cannot truncate each
+        # other mid-write; os.replace is atomic so the last writer wins cleanly.
         fd, tmp = tempfile.mkstemp(dir=base, prefix="mcp-" + sid + ".", suffix=".tmp")
-    except OSError:
-        fd, tmp = -1, ""
-    if tmp:
         try:
             with os.fdopen(fd, "w") as wf:
                 json.dump(frag, wf)
@@ -1638,6 +1639,8 @@ if sid and frag and base:
                 os.remove(tmp)
             except OSError:
                 pass
+    except Exception:
+        pass
 print(json.dumps(p))
 ') || enriched="$payload"
 
