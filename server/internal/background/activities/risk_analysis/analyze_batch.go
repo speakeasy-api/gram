@@ -94,6 +94,10 @@ type AnalyzeBatchArgs struct {
 	MessageTypes     []string
 	PresidioEntities []string
 	CustomRuleIds    []string
+	// JudgeObserve, when non-nil, is forwarded to each prompt-policy judge call
+	// so a caller can roll up cost/latency. Set by the policy-eval ("session
+	// replay") path; nil for realtime/enforcement analysis, which pays nothing.
+	JudgeObserve func(JudgeUsage)
 }
 
 type AnalyzeBatchResult struct {

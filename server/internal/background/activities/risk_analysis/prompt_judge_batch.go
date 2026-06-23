@@ -57,6 +57,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 					Prompt:    policy.Prompt.String,
 					Message:   batchJudgeMessage(messages[idx]),
 					Config:    cfg,
+					Observe:   args.JudgeObserve,
 				})
 				if verdict != nil {
 					out[idx] = []Finding{JudgeFinding(*verdict)}
