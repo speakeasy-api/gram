@@ -33,7 +33,6 @@ SELECT
     arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)')) AS groups,
     min(time_unix_nano) AS start_time_unix_nano,
     max(time_unix_nano) AS end_time_unix_nano,
-    toUInt64(count()) AS request_count,
     sum(toInt64OrZero(toString(attributes.input_tokens))) AS input_tokens,
     sum(toInt64OrZero(toString(attributes.output_tokens))) AS output_tokens,
     sum(toInt64OrZero(toString(attributes.input_tokens))) +

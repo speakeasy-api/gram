@@ -495,7 +495,6 @@ CREATE TABLE IF NOT EXISTS chat_turn_summaries (
     -- Request/token/cost measures. cache_creation_tokens is the primary
     -- "context added" attribution measure; the other measures support cost and
     -- sanity-check views.
-    request_count UInt64 COMMENT 'Number of Claude Code api_request rows in this attribution bucket.',
     input_tokens Int64 COMMENT 'Input tokens reported by Claude Code api_request rows.',
     output_tokens Int64 COMMENT 'Output tokens reported by Claude Code api_request rows.',
     total_tokens Int64 COMMENT 'Input, output, cache read, and cache creation tokens summed for this attribution bucket.',
@@ -566,7 +565,6 @@ SELECT
 
     min(time_unix_nano) AS start_time_unix_nano,
     max(time_unix_nano) AS end_time_unix_nano,
-    toUInt64(count()) AS request_count,
     sum(toInt64OrZero(toString(attributes.input_tokens))) AS input_tokens,
     sum(toInt64OrZero(toString(attributes.output_tokens))) AS output_tokens,
     sum(toInt64OrZero(toString(attributes.input_tokens))) +
