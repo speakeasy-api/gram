@@ -10,7 +10,7 @@ SELECT
     gram_project_id,
     chat_id,
     -- turn_id is Gram's provider-agnostic turn key. Claude Code emits this as
-    -- attributes.prompt.id; other providers can map their native per-turn ID here.
+    -- attributes.prompt.id. Other providers can map their native per-turn ID here.
     toString(attributes.prompt.id) AS turn_id,
     toString(attributes.query_source) AS query_source,
     toString(attributes.skill.name) AS skill_name,
