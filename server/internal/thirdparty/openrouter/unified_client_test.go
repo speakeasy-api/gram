@@ -500,6 +500,96 @@ func TestChatClient_GetCompletionStream_FetchesFallbackUsageWhenFinalUsageChunkM
 	trackingStrategy.mu.Unlock()
 }
 
+func TestChatClient_GetCompletion_FetchesFallbackUsageWhenInlineCostMissing(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "/api/v1/chat/completions", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id": "msg_missing_cost",
+			"model": "openai/gpt-5.4",
+			"choices": [{
+				"message": {
+					"role": "assistant",
+					"content": "Hello"
+				},
+				"finish_reason": "stop"
+			}],
+			"usage": {
+				"prompt_tokens": 10,
+				"completion_tokens": 5,
+				"total_tokens": 15
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	fallbackCost := 0.003
+	provisioner := &mockProvisioner{
+		apiKey: "test-api-key",
+		modelUsage: &ModelUsage{
+			TotalCost:             &fallbackCost,
+			CacheDiscount:         0,
+			UpstreamInferenceCost: 0.003,
+			Model:                 "openai/gpt-5.4",
+			TokensPrompt:          10,
+			TokensCompletion:      5,
+			NativeTokensCached:    0,
+			NativeTokensReasoning: 0,
+		},
+	}
+	trackingStrategy := &mockUsageTrackingStrategy{}
+
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	client := NewUnifiedClient(
+		testenv.NewLogger(t),
+		guardianPolicy,
+		provisioner,
+		&mockMessageCaptureStrategy{},
+		trackingStrategy,
+		&mockChatTitleGenerator{},
+		&mockTelemetryLogger{},
+	)
+	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
+
+	resp, err := client.GetCompletion(context.Background(), CompletionRequest{
+		OrgID:     "test-org",
+		ProjectID: uuid.New().String(),
+		Messages: []or.ChatMessages{
+			CreateMessageUser("Hello"),
+		},
+		ChatID:      uuid.New(),
+		UsageSource: billing.ModelUsageSourcePlayground,
+		APIKeyID:    "test-api-key-id",
+	})
+	require.NoError(t, err)
+	assert.Nil(t, resp.Usage.Cost)
+
+	require.Eventually(t, func() bool {
+		trackingStrategy.mu.Lock()
+		defer trackingStrategy.mu.Unlock()
+		return trackingStrategy.trackUsageCalled
+	}, time.Second, 10*time.Millisecond)
+
+	provisioner.mu.Lock()
+	assert.True(t, provisioner.getModelUsageCalled)
+	assert.Equal(t, "msg_missing_cost", provisioner.generationID)
+	provisioner.mu.Unlock()
+
+	trackingStrategy.mu.Lock()
+	require.NotNil(t, trackingStrategy.usage)
+	require.NotNil(t, trackingStrategy.usage.TotalCost)
+	assert.InDelta(t, fallbackCost, *trackingStrategy.usage.TotalCost, 1e-9)
+	assert.Equal(t, 10, trackingStrategy.usage.TokensPrompt)
+	assert.Equal(t, 5, trackingStrategy.usage.TokensCompletion)
+	trackingStrategy.mu.Unlock()
+}
+
 func TestUsageToModelUsagePreservesExplicitZeroCost(t *testing.T) {
 	t.Parallel()
 

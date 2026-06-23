@@ -232,13 +232,15 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 	// completion, so we hand the strategy the decoded ModelUsage directly
 	// instead of polling /v1/generation.
 	if c.usageTrackingStrategy != nil {
-		modelUsage := response.Usage.ToModelUsage(response.Model)
+		inlineUsage := response.Usage.ToModelUsage(response.Model)
 		go func() {
-			if modelUsage == nil && response.MessageID != "" {
-				var err error
-				modelUsage, err = c.provisioner.GetModelUsage(context.WithoutCancel(ctx), response.MessageID, req.OrgID)
+			modelUsage := inlineUsage
+			if response.MessageID != "" && (modelUsage == nil || modelUsage.TotalCost == nil) {
+				fallbackUsage, err := c.provisioner.GetModelUsage(context.WithoutCancel(ctx), response.MessageID, req.OrgID)
 				if err != nil {
 					c.logger.WarnContext(ctx, "failed to fetch fallback openrouter usage", attr.SlogError(err))
+				} else if fallbackUsage != nil {
+					modelUsage = fallbackUsage
 				}
 			}
 
