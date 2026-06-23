@@ -38,7 +38,18 @@ import (
 // payload.
 const decodeBodySampleLimit = 1024
 
-const claudeShadowMCPMetadataUnavailableReason = "Speakeasy could not verify this MCP tool call because the Claude session metadata is not available yet. Try again after the session initializes."
+const claudeShadowMCPMetadataUnavailableReason = "Speakeasy could not verify this MCP tool call. Try restarting Claude, or running /reload-plugins."
+
+// Diagnostic codes appended to claudeShadowMCPMetadataUnavailableReason. The
+// three fail-closed branches that can't verify an MCP call all surface the
+// same generic copy, so the code is the only thing that tells a user (or
+// support) which branch denied the call from the message alone. They mirror
+// the slog event suffixes on each branch.
+const (
+	denyCodeNoSession   = "NO_SESSION"
+	denyCodeNoMetadata  = "NO_METADATA"
+	denyCodeNoUserEmail = "NO_USER_EMAIL"
+)
 
 // decoderFunc adapts a plain function to the goahttp.Decoder interface so we
 // can capture per-request context (logger, raw body, headers) in a closure
@@ -698,8 +709,8 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	deny := "deny"
 	result := makeHookResult(payload.HookEventName)
 	output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
-	denyUnverifiedMCP := func() (*gen.ClaudeHookResult, error) {
-		reason := claudeShadowMCPMetadataUnavailableReason
+	denyUnverifiedMCP := func(code string) (*gen.ClaudeHookResult, error) {
+		reason := fmt.Sprintf("%s (err code: %s)", claudeShadowMCPMetadataUnavailableReason, code)
 		result.SystemMessage = &reason
 		if output != nil {
 			output.PermissionDecision = &deny
@@ -736,7 +747,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		s.logger.WarnContext(ctx, "claude PreToolUse fired without session id; denying MCP tool call",
 			attr.SlogEvent("claude_hook_pretooluse_no_session"),
 		)
-		return denyUnverifiedMCP()
+		return denyUnverifiedMCP(denyCodeNoSession)
 	}
 	// Plugin path: when the request authenticated via Gram-Key + Gram-Project,
 	// org/project come from the auth context — same pattern as recordHook.
@@ -758,7 +769,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			attr.SlogToolName(rawToolName),
 			attr.SlogError(err),
 		)
-		return denyUnverifiedMCP()
+		return denyUnverifiedMCP(denyCodeNoMetadata)
 	}
 	if strings.TrimSpace(metadata.UserEmail) == "" {
 		s.logger.WarnContext(ctx, "claude PreToolUse metadata has no user email; denying MCP tool call",
@@ -768,7 +779,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			attr.SlogGenAIConversationID(sessionID),
 			attr.SlogToolName(rawToolName),
 		)
-		return denyUnverifiedMCP()
+		return denyUnverifiedMCP(denyCodeNoUserEmail)
 	}
 
 	policy := s.lookupShadowMCPBlockingPolicy(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID)
