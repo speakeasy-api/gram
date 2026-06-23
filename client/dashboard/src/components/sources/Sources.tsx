@@ -6,13 +6,14 @@ import { useViewMode } from "@/components/ui/use-view-mode";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useCatalogIconMap } from "./sources-hooks";
-import { remoteMcpRouteParam } from "@/lib/sources";
+import { remoteMcpRouteParam, tunnelledMcpRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
   useListAssets,
   useListTools,
   useRemoteMcpServers,
+  useTunnelledMcpServers,
 } from "@gram/client/react-query/index.js";
 import {
   Button,
@@ -82,11 +83,14 @@ export default function Sources(): JSX.Element {
   const { data: assets, refetch: refetchAssets } = useListAssets();
   const { data: remoteMcpServersResult, isLoading: isLoadingRemoteMcp } =
     useRemoteMcpServers();
+  const { data: tunnelledMcpServersResult, isLoading: isLoadingTunnelledMcp } =
+    useTunnelledMcpServers();
   const catalogIconMap = useCatalogIconMap();
   const deployment = deploymentResult?.deployment;
-  // Remote MCP sources aren't deployment-bound, so the page isn't ready until
-  // both queries have resolved.
-  const isLoading = isLoadingDeployment || isLoadingRemoteMcp;
+  // Remote/tunnelled MCP sources aren't deployment-bound, so the page isn't
+  // ready until every source query has resolved.
+  const isLoading =
+    isLoadingDeployment || isLoadingRemoteMcp || isLoadingTunnelledMcp;
 
   const [viewMode, setViewMode] = useViewMode();
   const toolCountsBySource = useToolCountsBySource();
@@ -174,13 +178,32 @@ export default function Sources(): JSX.Element {
       type: "remotemcp" as const,
     }));
 
+    const tunnelledMcpSources: NamedAsset[] = (
+      tunnelledMcpServersResult?.tunnelledMcpServers ?? []
+    ).map((server) => ({
+      id: server.id,
+      deploymentAssetId: server.id,
+      slug: tunnelledMcpRouteParam(server),
+      name: server.name,
+      type: "tunnelledmcp" as const,
+      createdAt: server.createdAt,
+      updatedAt: server.updatedAt,
+    }));
+
     return [
       ...openApiSources,
       ...functionSources,
       ...externalMcpSources,
       ...remoteMcpSources,
+      ...tunnelledMcpSources,
     ];
-  }, [deployment, assets, catalogIconMap, remoteMcpServersResult]);
+  }, [
+    deployment,
+    assets,
+    catalogIconMap,
+    remoteMcpServersResult,
+    tunnelledMcpServersResult,
+  ]);
 
   const removeSource = async (
     assetId: string,
@@ -236,7 +259,8 @@ export default function Sources(): JSX.Element {
         >
           <Dialog.Content className="max-w-2xl!">
             {dialogState.type === "remove-source" &&
-              dialogState.asset.type !== "remotemcp" && (
+              dialogState.asset.type !== "remotemcp" &&
+              dialogState.asset.type !== "tunnelledmcp" && (
                 <RemoveSourceDialogContent
                   asset={dialogState.asset}
                   onConfirmRemoval={removeSource}
@@ -261,8 +285,8 @@ export default function Sources(): JSX.Element {
         <Page.Section.Title>Sources</Page.Section.Title>
         <Page.Section.Description className="max-w-2xl">
           {isFunctionsEnabled
-            ? "Remote MCPs, third-party MCP servers on the catalog, OpenAPI documents, and functions deployed in your project to power tools."
-            : "Remote MCPs, third-party MCP servers on the catalog, and OpenAPI documents deployed in your project to power tools."}
+            ? "Remote MCPs, tunnelled MCP servers, third-party MCP servers on the catalog, OpenAPI documents, and functions deployed in your project to power tools."
+            : "Remote MCPs, tunnelled MCP servers, third-party MCP servers on the catalog, and OpenAPI documents deployed in your project to power tools."}
         </Page.Section.Description>
         <Page.Section.CTA>
           <ViewToggle value={viewMode} onChange={setViewMode} />
@@ -347,6 +371,22 @@ export default function Sources(): JSX.Element {
                         </span>
                       </div>
                     </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => routes.sources.addTunnelledMcp.goTo()}
+                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20">
+                        <Network className="h-5 w-5 text-cyan-700 dark:text-cyan-300" />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium">
+                          Tunnelled MCP Server
+                        </span>
+                        <span className="text-muted-foreground text-xs">
+                          Connect private MCP servers through a tunnel
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 )}
               </DropdownMenu>
@@ -420,7 +460,8 @@ export default function Sources(): JSX.Element {
               }
             >
               {dialogState.type === "remove-source" &&
-                dialogState.asset.type !== "remotemcp" && (
+                dialogState.asset.type !== "remotemcp" &&
+                dialogState.asset.type !== "tunnelledmcp" && (
                   <RemoveSourceDialogContent
                     asset={dialogState.asset}
                     onConfirmRemoval={removeSource}
@@ -435,7 +476,8 @@ export default function Sources(): JSX.Element {
                 />
               )}
               {dialogState.type === "view-asset" &&
-                dialogState.asset.type !== "remotemcp" && (
+                dialogState.asset.type !== "remotemcp" &&
+                dialogState.asset.type !== "tunnelledmcp" && (
                   <ViewAssetDialogContent asset={dialogState.asset} />
                 )}
             </Dialog.Content>

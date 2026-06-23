@@ -380,6 +380,7 @@ export function AttachRemoteIdentityProviderSheet({
             id: mcpServer.id,
             name: mcpServer.name ?? undefined,
             remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
+            tunnelledMcpServerId: mcpServer.tunnelledMcpServerId ?? undefined,
             toolsetId: mcpServer.toolsetId ?? undefined,
             environmentId: mcpServer.environmentId ?? undefined,
             visibility: "private",

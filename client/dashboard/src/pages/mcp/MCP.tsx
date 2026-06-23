@@ -93,13 +93,13 @@ function MCPOverview() {
   } = useMcpEndpoints({ gramProject }, undefined, {
     throwOnError: false,
   });
-  // Filter the listing to Remote-MCP-backed rows for now — the AGE-1902
+  // Filter the listing to mcp_servers-backed rows for now — the AGE-1902
   // cutover will introduce toolset-backed rows that today still render
   // through the existing Hosted MCPCard path via useToolsets().
   const mcpServers = useMemo(
     () =>
       (mcpServersResult?.mcpServers ?? []).filter(
-        (server) => !!server.remoteMcpServerId,
+        (server) => !!server.remoteMcpServerId || !!server.tunnelledMcpServerId,
       ),
     [mcpServersResult],
   );
