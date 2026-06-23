@@ -1,0 +1,16 @@
+edition = "2024";
+
+package test.schema.v1;
+
+import "gcp/pubsub/v1/options.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "example.com/gen/test/schema/v1;schemav1";
+
+// Ttls uses a map whose value type is imported, so it must fail generation.
+message Ttls {
+  string id = 1;
+  map<string, google.protobuf.Duration> values = 2;
+
+  option (gcp.pubsub.v1.topic) = {};
+}

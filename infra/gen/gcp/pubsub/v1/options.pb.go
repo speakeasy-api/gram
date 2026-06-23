@@ -121,6 +121,12 @@ func (x *TopicOptions) ClearRetentionHint() {
 type TopicOptions_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
+	// Optional. Defaults to the kebab-cased proto full name of the topic-declaring
+	// message (e.g. message gram.outbox.v1.Event → "gram-outbox-v1-event"). Set
+	// this to route publishing to a shared, externally-owned topic so several
+	// messages can map onto a single topic ID. This overrides the topic ID only:
+	// a message's generated PubSubSchema is always named after the message, never
+	// after this field, because the schema describes that one message's shape.
 	Name          *string
 	RetentionHint *durationpb.Duration
 	Labels        map[string]string
