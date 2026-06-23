@@ -82,10 +82,6 @@ type mockMessageCaptureStrategy struct {
 }
 
 //go:fix inline
-func floatPtr(v float64) *float64 {
-	return new(v)
-}
-
 func (m *mockMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request CompletionRequest) (CaptureSession, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
