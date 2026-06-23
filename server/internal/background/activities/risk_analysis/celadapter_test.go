@@ -7,9 +7,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
 )
 
-func celRules(t *testing.T, rules ...CustomDetectionRule) []CompiledCELRule {
+func celRules(t *testing.T, rules ...customrules.Rule) []CompiledCELRule {
 	t.Helper()
 	eng, err := celenv.New()
 	require.NoError(t, err)
@@ -31,7 +32,7 @@ func scanCEL(t *testing.T, view MessageView, rules []CompiledCELRule) []Finding 
 // matched span.
 func TestScanCELRules_CorrelatedToolRule(t *testing.T) {
 	t.Parallel()
-	rules := celRules(t, CustomDetectionRule{
+	rules := celRules(t, customrules.Rule{
 		RuleID:        "custom.bash_drop",
 		Title:         "bash drop table",
 		Description:   "destructive SQL via a bash tool",
@@ -60,7 +61,7 @@ func TestScanCELRules_CorrelatedToolRule(t *testing.T) {
 // Correlation does not cross tools.
 func TestScanCELRules_CorrelationDoesNotCrossTools(t *testing.T) {
 	t.Parallel()
-	rules := celRules(t, CustomDetectionRule{
+	rules := celRules(t, customrules.Rule{
 		RuleID:        "custom.bash_drop",
 		DetectionExpr: `tool_calls.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("DROP TABLE"))`,
 	})
@@ -79,7 +80,7 @@ func TestScanCELRules_CorrelationDoesNotCrossTools(t *testing.T) {
 // A content rule yields one finding per occurrence.
 func TestScanCELRules_ContentRule(t *testing.T) {
 	t.Parallel()
-	rules := celRules(t, CustomDetectionRule{
+	rules := celRules(t, customrules.Rule{
 		RuleID:        "custom.secret",
 		DetectionExpr: `content.matchRegex("secret")`,
 	})
@@ -93,7 +94,7 @@ func TestScanCELRules_ContentRule(t *testing.T) {
 // Legacy regex rules (no detection_expr) evaluate as content.matchRegex(regex).
 func TestScanCELRules_LegacyRegexFallback(t *testing.T) {
 	t.Parallel()
-	rules := celRules(t, CustomDetectionRule{
+	rules := celRules(t, customrules.Rule{
 		RuleID: "custom.legacy",
 		Regex:  "AKIA[0-9A-Z]{16}",
 	})
