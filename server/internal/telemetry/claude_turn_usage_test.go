@@ -270,10 +270,7 @@ func TestQueryChatTurns_GroupByAttributionAndFilter(t *testing.T) {
 	require.ElementsMatch(t, []string{chatID}, readFile.DimensionValues["chat_id"])
 	require.ElementsMatch(t, []string{"prompt-1"}, readFile.DimensionValues["turn_id"])
 	require.ElementsMatch(t, []string{"filesystem"}, readFile.DimensionValues["mcp_server_name"])
-	require.Equal(t, int64(1), readFile.Measures.RequestCount)
 	require.Equal(t, int64(163), readFile.Measures.TotalTokens)
-	require.Equal(t, int64(1), readFile.Measures.TotalTurns)
-	require.Equal(t, int64(1), readFile.Measures.TotalChats)
 
 	postMessage := chatTurnRowByGroup(t, toolResult.Table, "post_message")
 	require.Equal(t, int64(41), postMessage.Measures.TotalTokens)

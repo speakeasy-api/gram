@@ -15,7 +15,6 @@ import (
 const chatTurnMeasureAliasPrefix = "m_"
 
 var chatTurnMeasureSelects = []string{
-	"sum(request_count) AS m_request_count",
 	"sum(input_tokens) AS m_input_tokens",
 	"sum(output_tokens) AS m_output_tokens",
 	"sum(total_tokens) AS m_total_tokens",
@@ -23,12 +22,9 @@ var chatTurnMeasureSelects = []string{
 	"sum(cache_creation_tokens) AS m_cache_creation_tokens",
 	"sum(cost_usd) AS m_total_cost",
 	"sum(cost_usd_micros) AS m_cost_usd_micros",
-	"uniqExact(tuple(chat_id, turn_id)) AS m_total_turns",
-	"uniqExact(chat_id) AS m_total_chats",
 }
 
 var chatTurnMeasureSet = map[string]bool{
-	"request_count":         true,
 	"input_tokens":          true,
 	"output_tokens":         true,
 	"total_tokens":          true,
@@ -36,12 +32,9 @@ var chatTurnMeasureSet = map[string]bool{
 	"cache_creation_tokens": true,
 	"total_cost":            true,
 	"cost_usd_micros":       true,
-	"total_turns":           true,
-	"total_chats":           true,
 }
 
 type ChatTurnSummaryMeasures struct {
-	RequestCount        uint64
 	InputTokens         int64
 	OutputTokens        int64
 	TotalTokens         int64
@@ -49,12 +42,9 @@ type ChatTurnSummaryMeasures struct {
 	CacheCreationTokens int64
 	TotalCost           float64
 	CostUSDMicros       int64
-	TotalTurns          uint64
-	TotalChats          uint64
 }
 
 func (m *ChatTurnSummaryMeasures) Add(o ChatTurnSummaryMeasures) {
-	m.RequestCount += o.RequestCount
 	m.InputTokens += o.InputTokens
 	m.OutputTokens += o.OutputTokens
 	m.TotalTokens += o.TotalTokens
@@ -62,13 +52,10 @@ func (m *ChatTurnSummaryMeasures) Add(o ChatTurnSummaryMeasures) {
 	m.CacheCreationTokens += o.CacheCreationTokens
 	m.TotalCost += o.TotalCost
 	m.CostUSDMicros += o.CostUSDMicros
-	m.TotalTurns += o.TotalTurns
-	m.TotalChats += o.TotalChats
 }
 
 type ChatTurnSummaryRow struct {
 	GroupValue          string              `ch:"group_value"`
-	RequestCount        uint64              `ch:"m_request_count"`
 	InputTokens         int64               `ch:"m_input_tokens"`
 	OutputTokens        int64               `ch:"m_output_tokens"`
 	TotalTokens         int64               `ch:"m_total_tokens"`
@@ -76,14 +63,11 @@ type ChatTurnSummaryRow struct {
 	CacheCreationTokens int64               `ch:"m_cache_creation_tokens"`
 	TotalCost           float64             `ch:"m_total_cost"`
 	CostUSDMicros       int64               `ch:"m_cost_usd_micros"`
-	TotalTurns          uint64              `ch:"m_total_turns"`
-	TotalChats          uint64              `ch:"m_total_chats"`
 	DimensionValues     map[string][]string `ch:"dimension_values"`
 }
 
 func (r ChatTurnSummaryRow) Measures() ChatTurnSummaryMeasures {
 	return ChatTurnSummaryMeasures{
-		RequestCount:        r.RequestCount,
 		InputTokens:         r.InputTokens,
 		OutputTokens:        r.OutputTokens,
 		TotalTokens:         r.TotalTokens,
@@ -91,15 +75,12 @@ func (r ChatTurnSummaryRow) Measures() ChatTurnSummaryMeasures {
 		CacheCreationTokens: r.CacheCreationTokens,
 		TotalCost:           r.TotalCost,
 		CostUSDMicros:       r.CostUSDMicros,
-		TotalTurns:          r.TotalTurns,
-		TotalChats:          r.TotalChats,
 	}
 }
 
 type ChatTurnSummaryTimePoint struct {
 	GroupValue          string  `ch:"group_value"`
 	BucketTimeUnixNano  int64   `ch:"bucket_time_unix_nano"`
-	RequestCount        uint64  `ch:"m_request_count"`
 	InputTokens         int64   `ch:"m_input_tokens"`
 	OutputTokens        int64   `ch:"m_output_tokens"`
 	TotalTokens         int64   `ch:"m_total_tokens"`
@@ -107,13 +88,10 @@ type ChatTurnSummaryTimePoint struct {
 	CacheCreationTokens int64   `ch:"m_cache_creation_tokens"`
 	TotalCost           float64 `ch:"m_total_cost"`
 	CostUSDMicros       int64   `ch:"m_cost_usd_micros"`
-	TotalTurns          uint64  `ch:"m_total_turns"`
-	TotalChats          uint64  `ch:"m_total_chats"`
 }
 
 func (p ChatTurnSummaryTimePoint) Measures() ChatTurnSummaryMeasures {
 	return ChatTurnSummaryMeasures{
-		RequestCount:        p.RequestCount,
 		InputTokens:         p.InputTokens,
 		OutputTokens:        p.OutputTokens,
 		TotalTokens:         p.TotalTokens,
@@ -121,8 +99,6 @@ func (p ChatTurnSummaryTimePoint) Measures() ChatTurnSummaryMeasures {
 		CacheCreationTokens: p.CacheCreationTokens,
 		TotalCost:           p.TotalCost,
 		CostUSDMicros:       p.CostUSDMicros,
-		TotalTurns:          p.TotalTurns,
-		TotalChats:          p.TotalChats,
 	}
 }
 

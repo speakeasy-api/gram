@@ -35729,14 +35729,6 @@ components:
                     type: integer
                     description: Sum of output tokens
                     format: int64
-                request_count:
-                    type: integer
-                    description: Number of Claude Code api_request rows
-                    format: int64
-                total_chats:
-                    type: integer
-                    description: Number of distinct chat sessions
-                    format: int64
                 total_cost:
                     type: number
                     description: Total cost in USD
@@ -35744,10 +35736,6 @@ components:
                 total_tokens:
                     type: integer
                     description: Sum of input, output, cache read, and cache creation tokens
-                    format: int64
-                total_turns:
-                    type: integer
-                    description: Number of distinct chat turns
                     format: int64
             description: Aggregated chat turn attribution measure values for a group or time bucket
             required:
@@ -35758,9 +35746,6 @@ components:
                 - total_tokens
                 - total_cost
                 - cost_usd_micros
-                - request_count
-                - total_turns
-                - total_chats
         ChatTurnQueryPoint:
             type: object
             properties:
@@ -43262,9 +43247,6 @@ components:
                         - input_tokens
                         - output_tokens
                         - cache_read_tokens
-                        - request_count
-                        - total_turns
-                        - total_chats
                 to:
                     type: string
                     description: End time in ISO 8601 format

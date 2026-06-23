@@ -4759,12 +4759,6 @@ type ChatTurnQueryMeasuresResponseBody struct {
 	TotalCost float64 `form:"total_cost" json:"total_cost" xml:"total_cost"`
 	// Total cost in micro-USD
 	CostUsdMicros int64 `form:"cost_usd_micros" json:"cost_usd_micros" xml:"cost_usd_micros"`
-	// Number of Claude Code api_request rows
-	RequestCount int64 `form:"request_count" json:"request_count" xml:"request_count"`
-	// Number of distinct chat turns
-	TotalTurns int64 `form:"total_turns" json:"total_turns" xml:"total_turns"`
-	// Number of distinct chat sessions
-	TotalChats int64 `form:"total_chats" json:"total_chats" xml:"total_chats"`
 }
 
 // ChatTurnQuerySeriesResponseBody is used to define fields on response body
@@ -9718,8 +9712,8 @@ func ValidateQueryChatTurnsRequestBody(body *QueryChatTurnsRequestBody) (err err
 		}
 	}
 	if body.SortBy != nil {
-		if !(*body.SortBy == "cache_creation_tokens" || *body.SortBy == "total_cost" || *body.SortBy == "total_tokens" || *body.SortBy == "input_tokens" || *body.SortBy == "output_tokens" || *body.SortBy == "cache_read_tokens" || *body.SortBy == "request_count" || *body.SortBy == "total_turns" || *body.SortBy == "total_chats") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", *body.SortBy, []any{"cache_creation_tokens", "total_cost", "total_tokens", "input_tokens", "output_tokens", "cache_read_tokens", "request_count", "total_turns", "total_chats"}))
+		if !(*body.SortBy == "cache_creation_tokens" || *body.SortBy == "total_cost" || *body.SortBy == "total_tokens" || *body.SortBy == "input_tokens" || *body.SortBy == "output_tokens" || *body.SortBy == "cache_read_tokens") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", *body.SortBy, []any{"cache_creation_tokens", "total_cost", "total_tokens", "input_tokens", "output_tokens", "cache_read_tokens"}))
 		}
 	}
 	return

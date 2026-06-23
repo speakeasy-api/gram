@@ -4878,12 +4878,6 @@ type ChatTurnQueryMeasuresResponseBody struct {
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// Total cost in micro-USD
 	CostUsdMicros *int64 `form:"cost_usd_micros,omitempty" json:"cost_usd_micros,omitempty" xml:"cost_usd_micros,omitempty"`
-	// Number of Claude Code api_request rows
-	RequestCount *int64 `form:"request_count,omitempty" json:"request_count,omitempty" xml:"request_count,omitempty"`
-	// Number of distinct chat turns
-	TotalTurns *int64 `form:"total_turns,omitempty" json:"total_turns,omitempty" xml:"total_turns,omitempty"`
-	// Number of distinct chat sessions
-	TotalChats *int64 `form:"total_chats,omitempty" json:"total_chats,omitempty" xml:"total_chats,omitempty"`
 }
 
 // ChatTurnQuerySeriesResponseBody is used to define fields on response body
@@ -15569,15 +15563,6 @@ func ValidateChatTurnQueryMeasuresResponseBody(body *ChatTurnQueryMeasuresRespon
 	}
 	if body.CostUsdMicros == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("cost_usd_micros", "body"))
-	}
-	if body.RequestCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("request_count", "body"))
-	}
-	if body.TotalTurns == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("total_turns", "body"))
-	}
-	if body.TotalChats == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("total_chats", "body"))
 	}
 	return
 }

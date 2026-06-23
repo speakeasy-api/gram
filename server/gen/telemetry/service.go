@@ -174,12 +174,6 @@ type ChatTurnQueryMeasures struct {
 	TotalCost float64
 	// Total cost in micro-USD
 	CostUsdMicros int64
-	// Number of Claude Code api_request rows
-	RequestCount int64
-	// Number of distinct chat turns
-	TotalTurns int64
-	// Number of distinct chat sessions
-	TotalChats int64
 }
 
 // A single chat turn attribution time bucket within a series

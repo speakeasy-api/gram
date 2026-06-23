@@ -5661,9 +5661,6 @@ func unmarshalChatTurnQueryMeasuresResponseBodyToTelemetryChatTurnQueryMeasures(
 		TotalTokens:         *v.TotalTokens,
 		TotalCost:           *v.TotalCost,
 		CostUsdMicros:       *v.CostUsdMicros,
-		RequestCount:        *v.RequestCount,
-		TotalTurns:          *v.TotalTurns,
-		TotalChats:          *v.TotalChats,
 	}
 
 	return res

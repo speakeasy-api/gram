@@ -724,8 +724,5 @@ func toGenChatTurnMeasures(m repo.ChatTurnSummaryMeasures) *telem_gen.ChatTurnQu
 		TotalTokens:         m.TotalTokens,
 		TotalCost:           sanitizeFloat64(m.TotalCost),
 		CostUsdMicros:       m.CostUSDMicros,
-		RequestCount:        int64(m.RequestCount), //nolint:gosec // bounded count
-		TotalTurns:          int64(m.TotalTurns),   //nolint:gosec // bounded count
-		TotalChats:          int64(m.TotalChats),   //nolint:gosec // bounded count
 	}
 }

@@ -1481,9 +1481,6 @@ var chatTurnQueryMeasures = []any{
 	"input_tokens",
 	"output_tokens",
 	"cache_read_tokens",
-	"request_count",
-	"total_turns",
-	"total_chats",
 }
 
 var QueryChatTurnsPayload = Type("QueryChatTurnsPayload", func() {
@@ -1538,9 +1535,6 @@ var ChatTurnQueryMeasures = Type("ChatTurnQueryMeasures", func() {
 	Attribute("total_tokens", Int64, "Sum of input, output, cache read, and cache creation tokens")
 	Attribute("total_cost", Float64, "Total cost in USD")
 	Attribute("cost_usd_micros", Int64, "Total cost in micro-USD")
-	Attribute("request_count", Int64, "Number of Claude Code api_request rows")
-	Attribute("total_turns", Int64, "Number of distinct chat turns")
-	Attribute("total_chats", Int64, "Number of distinct chat sessions")
 
 	Required(
 		"cache_creation_tokens",
@@ -1550,9 +1544,6 @@ var ChatTurnQueryMeasures = Type("ChatTurnQueryMeasures", func() {
 		"total_tokens",
 		"total_cost",
 		"cost_usd_micros",
-		"request_count",
-		"total_turns",
-		"total_chats",
 	)
 })
 
