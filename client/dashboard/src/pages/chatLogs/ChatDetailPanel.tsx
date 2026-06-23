@@ -26,9 +26,10 @@ import {
   DropdownMenuTrigger,
   Icon,
 } from "@speakeasy-api/moonshine";
-import type { RiskResult } from "@gram/client/models/components";
+import type { ChatOverview, RiskResult } from "@gram/client/models/components";
 import { useSearchLogsMutation } from "@gram/client/react-query";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Sheet,
   SheetContent,
@@ -549,6 +550,7 @@ function ChatDetailPanel({
   );
   const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
 
+  const queryClient = useQueryClient();
   const { data: riskData } = useRiskListResults({ chatId });
   const riskResults = useMemo(() => {
     const all = riskData?.results ?? [];
@@ -683,14 +685,42 @@ function ChatDetailPanel({
     setPendingExclusionKey(null);
   }, []);
   const handleExclusionDone = useCallback(() => {
-    setOptimisticExcluded((prev) => {
-      if (!pendingExclusionKey) return prev;
-      const next = new Set(prev);
-      next.add(pendingExclusionKey);
-      return next;
-    });
+    if (pendingExclusionKey) {
+      setOptimisticExcluded((prev) => {
+        const next = new Set(prev);
+        next.add(pendingExclusionKey);
+        return next;
+      });
+      // The server reconcile lags, so refetching chat.list still returns the old
+      // per-session risk count. Optimistically drop this chat's count in the
+      // Agent Sessions list cache by the findings the exclusion suppresses here.
+      const removed =
+        (riskData?.results ?? []).filter(
+          (r) => findingKey(r) === pendingExclusionKey,
+        ).length || 1;
+      queryClient.setQueriesData<{ chats?: ChatOverview[] }>(
+        { queryKey: ["@gram/client", "chat", "list"] },
+        (old) => {
+          if (!old?.chats) return old;
+          return {
+            ...old,
+            chats: old.chats.map((c) =>
+              c.id === chatId
+                ? {
+                    ...c,
+                    riskFindingsCount: Math.max(
+                      0,
+                      (c.riskFindingsCount ?? 0) - removed,
+                    ),
+                  }
+                : c,
+            ),
+          };
+        },
+      );
+    }
     closeExclusion();
-  }, [pendingExclusionKey, closeExclusion]);
+  }, [pendingExclusionKey, closeExclusion, riskData, queryClient, chatId]);
 
   if (chatLoading) {
     return (
