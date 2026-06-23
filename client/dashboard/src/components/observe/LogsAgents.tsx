@@ -259,7 +259,8 @@ export function LogsAgentsContent(): JSX.Element {
     (value: number | null) => {
       // A threshold below 1 ("≥ 0" = everything) is meaningless, so treat it as
       // clearing the filter rather than sending a 0 the API rejects.
-      const threshold = value !== null && value >= 1 ? value : null;
+      const threshold =
+        value !== null && Number.isInteger(value) && value >= 1 ? value : null;
       // Entering a real threshold contradicts the "No Risk" presence option,
       // so drop that selection when a score is set.
       const clearNoRisk = threshold !== null && hasRisk === "false";
