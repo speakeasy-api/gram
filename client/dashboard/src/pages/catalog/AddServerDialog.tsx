@@ -253,8 +253,10 @@ function useEnrichedServers(servers: PulseMCPServer[], open: boolean) {
       try {
         result = await Promise.all(
           servers.map(async (server) => {
-            // Skip if server already has remotes populated
-            if (server.remotes && server.remotes.length > 0) {
+            // The catalog list omits per-tool definitions, so we fetch details
+            // for the tools (and remotes, when the list entry lacked them) that
+            // the add/release flow needs. Skip once a server is already enriched.
+            if (server.tools) {
               return server;
             }
 
@@ -267,10 +269,15 @@ function useEnrichedServers(servers: PulseMCPServer[], open: boolean) {
                 serverSpecifier: server.registrySpecifier,
               });
 
-              // Merge remotes from details into the server object
+              // Merge tools (and remotes, when the list entry lacked them)
+              // from details into the server object.
               return {
                 ...server,
-                remotes: details.remotes as ExternalMCPRemote[] | undefined,
+                remotes:
+                  server.remotes && server.remotes.length > 0
+                    ? server.remotes
+                    : (details.remotes as ExternalMCPRemote[] | undefined),
+                tools: details.tools,
               };
             } catch (err) {
               // If we can't fetch details for a specific server, just use original

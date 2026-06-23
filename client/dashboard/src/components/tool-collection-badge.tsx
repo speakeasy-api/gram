@@ -12,12 +12,20 @@ import {
 
 export const ToolCollectionBadge = ({
   toolNames,
+  count,
   variant = "neutral",
   className,
   warnOnTooManyTools = false,
   emptyLabel,
 }: {
-  toolNames: string[] | undefined;
+  toolNames?: string[] | undefined;
+  /**
+   * Tool count to display when the per-tool names aren't available (e.g.
+   * catalog list entries omit tool definitions to keep the payload small).
+   * Ignored when `toolNames` is provided; renders a count badge with no
+   * name tooltip.
+   */
+  count?: number;
   variant?: React.ComponentProps<typeof Badge>["variant"];
   className?: string;
   warnOnTooManyTools?: boolean;
@@ -29,6 +37,8 @@ export const ToolCollectionBadge = ({
    */
   emptyLabel?: React.ReactNode | null;
 }): ReactElement | null => {
+  const toolCount = toolNames ? toolNames.length : (count ?? 0);
+
   let tooltipContent: React.ReactNode = (
     <div className="max-h-[300px] overflow-y-auto">
       <Stack gap={1}>
@@ -39,8 +49,7 @@ export const ToolCollectionBadge = ({
     </div>
   );
 
-  const toolsWarnings =
-    warnOnTooManyTools && toolNames && toolNames.length > 40;
+  const toolsWarnings = warnOnTooManyTools && toolCount > 40;
   if (toolsWarnings) {
     tooltipContent = (
       <>
@@ -51,7 +60,7 @@ export const ToolCollectionBadge = ({
     );
   }
 
-  if (!toolNames || toolNames.length === 0) {
+  if (toolCount === 0) {
     if (emptyLabel === null) return null;
     if (emptyLabel !== undefined) return <>{emptyLabel}</>;
     return (
@@ -61,24 +70,32 @@ export const ToolCollectionBadge = ({
     );
   }
 
+  const badge = (
+    <Badge
+      variant={toolsWarnings ? "warning" : variant}
+      className={cn(!toolsWarnings && "bg-card", className)}
+    >
+      {toolsWarnings && (
+        <Badge.LeftIcon>
+          <Icon name="triangle-alert" className="inline-block" />
+        </Badge.LeftIcon>
+      )}
+      <Badge.Text>
+        {toolCount} Tool
+        {toolCount === 1 ? "" : "s"}
+      </Badge.Text>
+    </Badge>
+  );
+
+  // Without per-tool names there's nothing to put in a tooltip, so show the
+  // bare count badge (unless we're surfacing the too-many-tools warning).
+  if (!toolNames && !toolsWarnings) {
+    return badge;
+  }
+
   return (
     <Tooltip>
-      <TooltipTrigger>
-        <Badge
-          variant={toolsWarnings ? "warning" : variant}
-          className={cn(!toolsWarnings && "bg-card", className)}
-        >
-          {toolsWarnings && (
-            <Badge.LeftIcon>
-              <Icon name="triangle-alert" className="inline-block" />
-            </Badge.LeftIcon>
-          )}
-          <Badge.Text>
-            {toolNames.length} Tool
-            {toolNames.length === 1 ? "" : "s"}
-          </Badge.Text>
-        </Badge>
-      </TooltipTrigger>
+      <TooltipTrigger>{badge}</TooltipTrigger>
       <TooltipPortal>
         <TooltipContent className="max-w-sm">{tooltipContent}</TooltipContent>
       </TooltipPortal>
