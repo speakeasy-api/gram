@@ -131,7 +131,9 @@ type MessageCaptureStrategy interface {
 }
 
 // UsageTrackingStrategy defines how to track model usage for billing.
-// Different implementations can handle tracking differently (inline, async, with fallback, etc.).
+// Implementations consume the ModelUsage decoded from the inline OpenRouter
+// response. Callers pass a nil usage when no accounting payload is available
+// (e.g. an aborted stream) and the strategy is expected to no-op.
 type UsageTrackingStrategy interface {
-	TrackUsage(ctx context.Context, generationID, orgID, projectID string, source billing.ModelUsageSource, chatID string) error
+	TrackUsage(ctx context.Context, usage *ModelUsage, orgID, projectID string, source billing.ModelUsageSource, chatID string) error
 }
