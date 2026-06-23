@@ -275,6 +275,9 @@ type GetObservabilityOverviewPayload struct {
 	ToolsetSlug *string
 	// Optional Remote MCP server ID filter
 	RemoteMcpServerID *string
+	// Optional MCP server ID filter (fronting server; spans both remote-backed and
+	// toolset-backed activity)
+	McpServerID *string
 	// Optional event source filter (e.g. 'hook')
 	EventSource *string
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')

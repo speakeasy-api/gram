@@ -38394,6 +38394,10 @@ components:
           type: boolean
           description: 'Whether to include time series data (default: true)'
           default: true
+        mcp_server_id:
+          type: string
+          description: Optional MCP server ID filter (fronting server; spans both remote-backed and toolset-backed activity)
+          format: uuid
         remote_mcp_server_id:
           type: string
           description: Optional Remote MCP server ID filter
