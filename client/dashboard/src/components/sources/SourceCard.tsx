@@ -10,6 +10,7 @@ import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
 import {
   formatRemoteMcpUrlForDisplay,
+  formatTunnelledMcpDisplay,
   sourceTypeToUrnKind,
 } from "@/lib/sources";
 import { useRoutes } from "@/routes";
@@ -43,6 +44,15 @@ export type NamedAsset =
       name?: string | null;
       url: string;
       type: "remotemcp";
+    }
+  | {
+      id: string;
+      deploymentAssetId: string;
+      slug: string;
+      name: string;
+      type: "tunnelledmcp";
+      createdAt?: Date;
+      updatedAt?: Date;
     };
 
 const sourceTypeConfig = {
@@ -57,6 +67,9 @@ const sourceTypeConfig = {
   },
   remotemcp: {
     label: "Remote MCP",
+  },
+  tunnelledmcp: {
+    label: "Tunnelled MCP",
   },
 };
 
@@ -86,11 +99,11 @@ export function SourceCard({
 
   const sourceKind = sourceTypeToUrnKind(asset.type);
 
-  // Remote MCP cards delegate management actions (delete, edit) to the detail
+  // Remote/tunnelled MCP cards delegate management actions to the detail
   // page's Settings tab — the delete confirmation needs to enumerate related
   // mcp_servers and mcp_endpoints, which doesn't fit a card-level dialog.
   const actions =
-    asset.type === "remotemcp"
+    asset.type === "remotemcp" || asset.type === "tunnelledmcp"
       ? []
       : [
           ...(asset.type === "openapi"
@@ -136,7 +149,9 @@ export function SourceCard({
   const displayName =
     asset.type === "remotemcp"
       ? remoteMcpTrimmedName || remoteMcpUrlDisplay || ""
-      : asset.name;
+      : asset.type === "tunnelledmcp"
+        ? formatTunnelledMcpDisplay(asset)
+        : asset.name;
   const displaySubtitle =
     asset.type === "remotemcp" && remoteMcpTrimmedName
       ? remoteMcpUrlDisplay
@@ -152,7 +167,11 @@ export function SourceCard({
         />
       );
     }
-    if (asset.type === "externalmcp" || asset.type === "remotemcp") {
+    if (
+      asset.type === "externalmcp" ||
+      asset.type === "remotemcp" ||
+      asset.type === "tunnelledmcp"
+    ) {
       return <Network className="text-muted-foreground h-8 w-8" />;
     }
     return <FileCode className="text-muted-foreground h-8 w-8" />;

@@ -336,6 +336,7 @@ function MCPServerStatusDropdown({ server }: { server: McpServer }) {
           id: server.id,
           name: server.name ?? undefined,
           remoteMcpServerId: server.remoteMcpServerId ?? undefined,
+          tunnelledMcpServerId: server.tunnelledMcpServerId ?? undefined,
           toolsetId: server.toolsetId ?? undefined,
           environmentId: server.environmentId ?? undefined,
           // updateMcpServer is a full-record replace for the optional UUID
@@ -400,9 +401,8 @@ function MCPServerStatusDropdown({ server }: { server: McpServer }) {
 function MCPServerHero({ server }: { server: McpServer | undefined }) {
   const enabled = server?.visibility !== "disabled";
   const isPublic = server?.visibility === "public";
-  // The "Remote MCP" badge is keyed off the backing kind so it stays accurate
-  // once toolset-backed mcp_servers also flow through this page (AGE-1902).
-  const isRemoteBacked = !!server?.remoteMcpServerId;
+  const isHostedServer =
+    !!server?.remoteMcpServerId || !!server?.tunnelledMcpServerId;
   return (
     <DetailHero actions={server && <MCPServerStatusDropdown server={server} />}>
       <Stack gap={2}>
@@ -413,9 +413,9 @@ function MCPServerHero({ server }: { server: McpServer | undefined }) {
           <Heading variant="h1" className="break-all normal-case">
             {server?.name || "MCP Server"}
           </Heading>
-          {isRemoteBacked && (
+          {isHostedServer && (
             <Badge variant="neutral">
-              <Badge.Text>Remote MCP</Badge.Text>
+              <Badge.Text>Hosted MCP</Badge.Text>
             </Badge>
           )}
         </Stack>

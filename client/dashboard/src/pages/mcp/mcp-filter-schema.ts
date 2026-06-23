@@ -7,9 +7,9 @@ import {
 
 /**
  * Filters for the MCP listing, which merges two backend collections — Hosted
- * (toolset-backed) and Remote (`mcp_servers`) — into one grid. The two types
- * carry different fields, so each row is classified into a common set of facets
- * ({@link McpFacets}) and matched uniformly against the selected filter values.
+ * (toolset-backed) and mcp_servers-backed rows — into one grid. The two types
+ * carry different fields, so each row is classified into a common set of
+ * facets ({@link McpFacets}) and matched uniformly against selected filters.
  *
  * Auth was intentionally left out: the toolset *list* shape (`ToolsetEntry`)
  * does not carry `userSessionIssuerId`/`oauthEnablementMetadata` (only the full
@@ -35,12 +35,13 @@ export const MCP_FILTER_OPTIONS: OptionsById = {
     { value: "catalog", label: "Catalog" },
     { value: "custom", label: "Custom" },
     { value: "remote", label: "Remote URL" },
+    { value: "tunnelled", label: "Tunnelled" },
   ],
 };
 
 export interface McpFacets {
   status: "public" | "private" | "disabled";
-  source: "catalog" | "custom" | "remote";
+  source: "catalog" | "custom" | "remote" | "tunnelled";
 }
 
 /** Classify a Hosted (toolset-backed) row. */
@@ -56,7 +57,7 @@ export function toolsetFacets(toolset: ToolsetEntry): McpFacets {
   return { status, source };
 }
 
-/** Classify a Remote (`mcp_servers`-backed) row. */
+/** Classify an `mcp_servers`-backed row. */
 export function mcpServerFacets(server: McpServer): McpFacets {
   const status =
     server.visibility === "public"
@@ -64,7 +65,10 @@ export function mcpServerFacets(server: McpServer): McpFacets {
       : server.visibility === "private"
         ? "private"
         : "disabled";
-  return { status, source: "remote" };
+  return {
+    status,
+    source: server.tunnelledMcpServerId ? "tunnelled" : "remote",
+  };
 }
 
 /** Whether a classified row passes the active filter selection. */

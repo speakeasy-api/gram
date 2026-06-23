@@ -44,6 +44,7 @@ import Costs from "./pages/costs/Costs";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
+import CreateTunnelledMcp from "./pages/sources/tunnelled-mcp/CreateTunnelledMcp";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
 import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
 import Collections, { CollectionsRoot } from "./pages/collections/Collections";
@@ -291,6 +292,11 @@ const ROUTE_STRUCTURE = {
         title: "Add Custom Remote MCP Server",
         url: "add-remote-mcp",
         component: CreateRemoteMcp,
+      },
+      addTunnelledMcp: {
+        title: "Add Tunnelled MCP Server",
+        url: "add-tunnelled-mcp",
+        component: CreateTunnelledMcp,
       },
     },
   },

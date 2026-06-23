@@ -31,8 +31,8 @@ export function SourcesEmptyState(): JSX.Element {
       <Page.Section.Title>Sources</Page.Section.Title>
       <Page.Section.Description className="max-w-2xl">
         {isFunctionsEnabled
-          ? "OpenAPI documents, functions, and third-party MCP servers providing tools for your project"
-          : "OpenAPI documents and third-party MCP servers providing tools for your project"}
+          ? "OpenAPI documents, functions, remote MCP servers, and third-party MCP servers providing tools for your project"
+          : "OpenAPI documents, remote MCP servers, and third-party MCP servers providing tools for your project"}
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
@@ -117,6 +117,22 @@ export function SourcesEmptyState(): JSX.Element {
                         </span>
                         <span className="text-muted-foreground text-xs">
                           Add existing remote servers by URL
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => routes.sources.addTunnelledMcp.goTo()}
+                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20">
+                        <Network className="h-5 w-5 text-cyan-700 dark:text-cyan-300" />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium">
+                          Tunnelled MCP Server
+                        </span>
+                        <span className="text-muted-foreground text-xs">
+                          Connect private MCP servers through a tunnel
                         </span>
                       </div>
                     </DropdownMenuItem>
