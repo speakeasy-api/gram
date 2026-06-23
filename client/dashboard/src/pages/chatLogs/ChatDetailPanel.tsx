@@ -2,11 +2,14 @@ import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
   ChevronDown,
+  ChevronUp,
   Info,
+  Search,
   Sparkles,
   SlidersHorizontal,
   User,
   Wrench,
+  X,
 } from "lucide-react";
 import {
   type ComponentType,
@@ -52,8 +55,9 @@ import {
 } from "@/pages/security/exclusion-sheet";
 import { useChatTranscript } from "./useChatTranscript";
 import { useChatRiskTranscript } from "./useChatRiskTranscript";
+import { useChatSearchTranscript } from "./useChatSearchTranscript";
 import { CreateExclusionContext } from "./exclusionContext";
-import { findingToExclusionState } from "./chatRiskHelpers";
+import { findingToExclusionState } from "./chatHelpers";
 import {
   ChatTranscript,
   type RowContext,
@@ -65,6 +69,7 @@ import {
   type MessageCategory,
   rowCategory,
   rowIsFlagged,
+  rowMatchesSeq,
 } from "./transcript";
 import { cn } from "@/lib/utils";
 import {
@@ -96,6 +101,10 @@ interface ChatDetailSheetProps extends Omit<ChatDetailPanelProps, "chatId"> {
 }
 
 type ViewMode = "chat" | "tools" | "exclusion";
+
+// Stable empty array for the no-search case, so memo/effect deps that read the
+// match list don't see a fresh identity every render.
+const EMPTY_MATCH_SEQS: number[] = [];
 
 // Identity for a finding, used to optimistically hide it the moment an exclusion
 // is created for it (the server reconcile is async, so a refetch lags).
@@ -330,6 +339,80 @@ function MessageFilterBar({
   );
 }
 
+/** Find-in-conversation bar: a text box plus a match counter and prev/next
+ * navigation. Server-backed full-thread search; the panel debounces the input
+ * and drives the jump-to-match scrolling. */
+function ThreadSearchBar({
+  value,
+  onChange,
+  matchCount,
+  activeIndex,
+  loading,
+  onPrev,
+  onNext,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  matchCount: number;
+  activeIndex: number;
+  loading: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  const hasQuery = value.trim().length > 0;
+  const navBtn =
+    "text-muted-foreground hover:text-foreground hover:bg-background flex size-6 shrink-0 items-center justify-center rounded transition-colors disabled:opacity-40";
+  return (
+    <div className="bg-muted/40 focus-within:border-foreground/40 flex items-center gap-2 rounded-lg border px-2.5 py-1.5 transition-colors">
+      <Search className="text-muted-foreground size-3.5 shrink-0" />
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search this conversation…"
+        className="placeholder:text-muted-foreground/70 min-w-0 flex-1 bg-transparent text-xs outline-none"
+      />
+      {hasQuery && (
+        <>
+          <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
+            {loading
+              ? "…"
+              : matchCount > 0
+                ? `${activeIndex + 1}/${matchCount}`
+                : "0/0"}
+          </span>
+          <button
+            type="button"
+            onClick={onPrev}
+            disabled={matchCount === 0}
+            aria-label="Previous match"
+            className={navBtn}
+          >
+            <ChevronUp className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onNext}
+            disabled={matchCount === 0}
+            aria-label="Next match"
+            className={navBtn}
+          >
+            <ChevronDown className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            aria-label="Clear search"
+            className={navBtn}
+          >
+            <X className="size-3.5" />
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ChatDetailHeader({
   chatId,
   chat,
@@ -341,6 +424,7 @@ function ChatDetailHeader({
   onTypeFilterChange,
   riskyOnly,
   onRiskyOnlyChange,
+  searchBar,
   onExport,
   onDelete,
   onSetView,
@@ -356,6 +440,8 @@ function ChatDetailHeader({
   onTypeFilterChange: (next: Set<MessageCategory>) => void;
   riskyOnly: boolean;
   onRiskyOnlyChange: (next: boolean) => void;
+  /** Optional find-in-conversation bar (normal view only). */
+  searchBar?: ReactNode;
   onExport: () => void;
   onDelete: () => void;
   onSetView: (view: ViewMode) => void;
@@ -440,7 +526,8 @@ function ChatDetailHeader({
         </div>
       </div>
       {showFilter && (
-        <div className="mt-3">
+        <div className="mt-3 space-y-3">
+          {searchBar}
           <MessageFilterBar
             typeFilter={typeFilter}
             onTypeFilterChange={onTypeFilterChange}
@@ -495,6 +582,17 @@ function ChatDetailPanel({
   const [optimisticExcluded, setOptimisticExcluded] = useState<
     ReadonlySet<string>
   >(() => new Set());
+  // Find-in-conversation: the raw input, its debounced value (which drives the
+  // search request + its react-query key), the active match index for prev/next
+  // navigation, and a nonce bumped on each jump so re-pressing next re-scrolls.
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeMatchIdx, setActiveMatchIdx] = useState(0);
+  const [scrollNonce, setScrollNonce] = useState(0);
+  useEffect(() => {
+    const handle = setTimeout(() => setSearchQuery(searchInput.trim()), 250);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
 
   // Risk-review contexts — explicit risk focus, or opened from the has-risk
   // filter — load the server-windowed risk transcript so findings load no matter
@@ -507,13 +605,29 @@ function ChatDetailPanel({
   // server-windowed findings and render those instead of the latest page.
   const transcript = useChatTranscript(chatId, true);
   const riskTranscript = useChatRiskTranscript(chatId, dimNonRisk);
-  const active = dimNonRisk ? riskTranscript : transcript;
+  // Search is a third windowed mode, available only in the normal (non-risk)
+  // view. Disabled (no fetch) until there's a debounced query.
+  const searchActive = !dimNonRisk && searchQuery.length > 0;
+  const searchTranscript = useChatSearchTranscript(
+    chatId,
+    searchQuery,
+    searchActive,
+  );
+  const active = dimNonRisk
+    ? riskTranscript
+    : searchActive
+      ? searchTranscript
+      : transcript;
   // Prefer the enriched (cost/usage) normal-load chat, but fall back to the
-  // active transcript's chat so a risk view still renders if only that load
+  // active transcript's chat so a windowed view still renders if only that load
   // resolved (otherwise the panel would show "Not found" despite having data).
   const chat = transcript.chat ?? active.chat;
   const chatMessages = active.messages;
-  const chatLoading = active.isLoading || transcript.isLoading;
+  // Only the primary (or risk) initial load blanks the whole panel; a search
+  // re-fetch updates the transcript in place — its loading shows in the search
+  // bar and as a "Searching…" empty state instead.
+  const chatLoading =
+    transcript.isLoading || (dimNonRisk && riskTranscript.isLoading);
   const chatLoadHasErrors = active.isError;
 
   const {
@@ -542,6 +656,9 @@ function ChatDetailPanel({
     setExclusionState(null);
     setPendingExclusionKey(null);
     setOptimisticExcluded(new Set());
+    setSearchInput("");
+    setSearchQuery("");
+    setActiveMatchIdx(0);
   }, [chatId]);
 
   const logs = useMemo(
@@ -601,16 +718,20 @@ function ChatDetailPanel({
   }, [transcriptRows, typeFilter, riskyOnly, riskResultsByMessage]);
   const hasMoreBefore = active.hasMoreBefore;
   const hasMoreAfter = active.hasMoreAfter;
-  const riskGaps = dimNonRisk ? riskTranscript.gaps : undefined;
+  const windowGaps = dimNonRisk
+    ? riskTranscript.gaps
+    : searchActive
+      ? searchTranscript.gaps
+      : undefined;
   const displayItems = useMemo(
     () =>
       buildDisplayItems({
         rows: visibleRows,
         hasMoreBefore,
         hasMoreAfter,
-        gaps: riskGaps,
+        gaps: windowGaps,
       }),
-    [visibleRows, hasMoreBefore, hasMoreAfter, riskGaps],
+    [visibleRows, hasMoreBefore, hasMoreAfter, windowGaps],
   );
 
   // Risk-review contexts (risk focus or the has-risk spotlight) open scrolled to
@@ -624,36 +745,79 @@ function ChatDetailPanel({
     return idx >= 0 ? idx : null;
   }, [dimNonRisk, displayItems, riskResultsByMessage]);
 
-  const transcriptPagination = useMemo<TranscriptPagination>(
-    () => ({
+  // Search match navigation. matchSeqs (jump targets) come from the server;
+  // every match is loaded by construction, so mapping the active match to a
+  // display-item index resolves as soon as results render.
+  const matchSeqs = searchActive
+    ? searchTranscript.matchSeqs
+    : EMPTY_MATCH_SEQS;
+  const matchCount = matchSeqs.length;
+  // A fresh result set (new query) snaps the active match back to the first.
+  useEffect(() => {
+    setActiveMatchIdx(0);
+  }, [searchQuery]);
+  const matchItemIndex = useMemo(() => {
+    if (!searchActive) return null;
+    const seq = matchSeqs[activeMatchIdx];
+    if (seq == null) return null;
+    const idx = displayItems.findIndex(
+      (it) => it.type === "row" && rowMatchesSeq(it.row, seq),
+    );
+    return idx >= 0 ? idx : null;
+  }, [searchActive, matchSeqs, activeMatchIdx, displayItems]);
+  const goToMatch = useCallback(
+    (delta: number) => {
+      if (matchCount === 0) return;
+      setActiveMatchIdx((prev) => (prev + delta + matchCount) % matchCount);
+      // Bump so re-pressing next/prev re-scrolls even when the index is unchanged
+      // (e.g. a single match), since the scroll effect keys on this nonce.
+      setScrollNonce((n) => n + 1);
+    },
+    [matchCount],
+  );
+
+  const transcriptPagination = useMemo<TranscriptPagination>(() => {
+    // Risk and search are both server-windowed; only their source differs. The
+    // plain keyset transcript drives edge loads directly when neither is active.
+    const windowed = dimNonRisk
+      ? riskTranscript
+      : searchActive
+        ? searchTranscript
+        : null;
+    return {
       hasMoreBefore,
       hasMoreAfter,
       onLoadOlder: () =>
-        dimNonRisk ? riskTranscript.loadBefore() : transcript.fetchOlder(),
+        windowed ? windowed.loadBefore() : transcript.fetchOlder(),
       onLoadNewer: () =>
-        dimNonRisk ? riskTranscript.loadAfter() : transcript.fetchNewer(),
-      isFetchingOlder: dimNonRisk
-        ? riskTranscript.loadingKey === "before"
+        windowed ? windowed.loadAfter() : transcript.fetchNewer(),
+      isFetchingOlder: windowed
+        ? windowed.loadingKey === "before"
         : transcript.isFetchingOlder,
-      isFetchingNewer: dimNonRisk
-        ? riskTranscript.loadingKey === "after"
+      isFetchingNewer: windowed
+        ? windowed.loadingKey === "after"
         : transcript.isFetchingNewer,
-      onLoadGap: dimNonRisk ? riskTranscript.loadGap : undefined,
-      isLoadingGap: dimNonRisk
-        ? (afterSeq: number) => riskTranscript.loadingKey === `gap:${afterSeq}`
+      onLoadGap: windowed ? windowed.loadGap : undefined,
+      isLoadingGap: windowed
+        ? (afterSeq: number) => windowed.loadingKey === `gap:${afterSeq}`
         : undefined,
       initialScrollIndex,
-      scrollToFinding: dimNonRisk,
-    }),
-    [
-      hasMoreBefore,
-      hasMoreAfter,
-      dimNonRisk,
-      riskTranscript,
-      transcript,
-      initialScrollIndex,
-    ],
-  );
+      scrollToFinding: dimNonRisk || searchActive,
+      scrollToItemIndex: matchItemIndex,
+      scrollNonce,
+    };
+  }, [
+    hasMoreBefore,
+    hasMoreAfter,
+    dimNonRisk,
+    searchActive,
+    riskTranscript,
+    searchTranscript,
+    transcript,
+    initialScrollIndex,
+    matchItemIndex,
+    scrollNonce,
+  ]);
 
   const rowCtx = useMemo<RowContext>(
     () => ({
@@ -661,6 +825,7 @@ function ChatDetailPanel({
       claudeUsageByMessage,
       claudeToolUsageByToolUseId,
       dimNonRisk,
+      searchQuery: searchActive ? searchQuery : undefined,
       userLabel: chat?.externalUserId,
     }),
     [
@@ -668,6 +833,8 @@ function ChatDetailPanel({
       claudeUsageByMessage,
       claudeToolUsageByToolUseId,
       dimNonRisk,
+      searchActive,
+      searchQuery,
       chat?.externalUserId,
     ],
   );
@@ -757,6 +924,19 @@ function ChatDetailPanel({
         onTypeFilterChange={setTypeFilter}
         riskyOnly={riskyOnly}
         onRiskyOnlyChange={setRiskyOnly}
+        searchBar={
+          dimNonRisk ? undefined : (
+            <ThreadSearchBar
+              value={searchInput}
+              onChange={setSearchInput}
+              matchCount={matchCount}
+              activeIndex={activeMatchIdx}
+              loading={searchActive && searchTranscript.isLoading}
+              onPrev={() => goToMatch(-1)}
+              onNext={() => goToMatch(1)}
+            />
+          )
+        }
         onExport={() => {
           exportTraceDataAsJson({
             chatId,
@@ -791,11 +971,15 @@ function ChatDetailPanel({
             ctx={rowCtx}
             pagination={transcriptPagination}
             emptyMessage={
-              filterActive
-                ? "No messages match the current filter."
-                : dimNonRisk
-                  ? "No flagged messages in this session."
-                  : "No messages to display."
+              searchActive
+                ? searchTranscript.isLoading
+                  ? "Searching…"
+                  : `No messages match “${searchQuery}”.`
+                : filterActive
+                  ? "No messages match the current filter."
+                  : dimNonRisk
+                    ? "No flagged messages in this session."
+                    : "No messages to display."
             }
           />
         </CreateExclusionContext.Provider>

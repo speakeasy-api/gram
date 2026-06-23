@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * loadChat chat
  *
  * @remarks
- * Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding.
+ * Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).
  */
 export function chatLoad(
   client: GramCore,
@@ -101,6 +101,7 @@ async function $do(
     "generation": payload.generation,
     "id": payload.id,
     "limit": payload.limit,
+    "query": payload.query,
     "risk_only": payload.risk_only,
   });
 

@@ -82,6 +82,7 @@ func (s *LoadChat) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		BeforeSeq:         input.BeforeSeq,
 		AfterSeq:          input.AfterSeq,
 		RiskOnly:          riskOnly,
+		Query:             nil,
 	})
 	if err != nil {
 		return fmt.Errorf("load chat: %w", err)

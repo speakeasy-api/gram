@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
 	goa "goa.design/goa/v3/pkg"
@@ -173,7 +174,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 
 // BuildLoadChatPayload builds the payload for the chat loadChat endpoint from
 // CLI flags.
-func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatRiskOnly string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
+func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatRiskOnly string, chatLoadChatQuery string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
 	var err error
 	var id string
 	{
@@ -258,6 +259,21 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 			}
 		}
 	}
+	var query *string
+	{
+		if chatLoadChatQuery != "" {
+			query = &chatLoadChatQuery
+			if utf8.RuneCountInString(*query) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("query", *query, utf8.RuneCountInString(*query), 1, true))
+			}
+			if utf8.RuneCountInString(*query) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("query", *query, utf8.RuneCountInString(*query), 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if chatLoadChatSessionToken != "" {
@@ -283,6 +299,7 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 	v.BeforeSeq = beforeSeq
 	v.AfterSeq = afterSeq
 	v.RiskOnly = riskOnly
+	v.Query = query
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

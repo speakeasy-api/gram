@@ -329,6 +329,9 @@ func EncodeLoadChatRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 			values.Add("after_seq", fmt.Sprintf("%v", *p.AfterSeq))
 		}
 		values.Add("risk_only", fmt.Sprintf("%v", p.RiskOnly))
+		if p.Query != nil {
+			values.Add("query", *p.Query)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

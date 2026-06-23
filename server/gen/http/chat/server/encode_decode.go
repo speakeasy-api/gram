@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
 	goahttp "goa.design/goa/v3/http"
@@ -363,6 +364,7 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 			beforeSeq         *int64
 			afterSeq          *int64
 			riskOnly          bool
+			query             *string
 			sessionToken      *string
 			projectSlugInput  *string
 			chatSessionsToken *string
@@ -447,6 +449,20 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 				riskOnly = v
 			}
 		}
+		queryRaw := qp.Get("query")
+		if queryRaw != "" {
+			query = &queryRaw
+		}
+		if query != nil {
+			if utf8.RuneCountInString(*query) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("query", *query, utf8.RuneCountInString(*query), 1, true))
+			}
+		}
+		if query != nil {
+			if utf8.RuneCountInString(*query) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("query", *query, utf8.RuneCountInString(*query), 200, false))
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -462,7 +478,7 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if err != nil {
 			return payload, err
 		}
-		payload = NewLoadChatPayload(id, generation, limit, beforeSeq, afterSeq, riskOnly, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewLoadChatPayload(id, generation, limit, beforeSeq, afterSeq, riskOnly, query, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

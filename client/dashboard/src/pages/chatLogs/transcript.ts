@@ -154,6 +154,14 @@ export function rowIsFlagged(
   );
 }
 
+/** Whether a row renders the message with this `seq` (a tool row spans its
+ * assistant call and the tool-result message). Used to locate a search match's
+ * row so the transcript can scroll to it. */
+export function rowMatchesSeq(row: TranscriptRow, seq: number): boolean {
+  if (row.kind === "message") return row.message.seq === seq;
+  return row.callMessage?.seq === seq || row.resultMessage?.seq === seq;
+}
+
 /** Coarse message-type bucket for the header transcript filter. System turns
  * fold into "assistant" (model-side output) so the filter stays a clean
  * user / assistant / tool triad rather than exposing a rare fourth chip. */

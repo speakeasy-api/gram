@@ -164,6 +164,38 @@ export function highlightMatches(
   return nodes;
 }
 
+/** Highlight (blue) wash for a search-query hit — distinct from the yellow risk
+ * wash so search and risk highlights never read as the same thing. */
+const SEARCH_MARK_CLASS =
+  "rounded-sm bg-blue-400/25 px-0.5 text-foreground ring-1 ring-blue-400/40";
+
+/** Wrap every case-insensitive occurrence of `query` in `text` with the search
+ * highlight, preserving the text's original casing. Case-insensitive because the
+ * server matches with ILIKE, so a "foo" query must also highlight "Foo"/"FOO" —
+ * unlike the risk highlighter, which matches an exact flagged substring. */
+export function highlightQuery(text: string, query: string): ReactNode {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return text;
+  const haystack = text.toLowerCase();
+  const nodes: ReactNode[] = [];
+  let pos = 0;
+  let k = 0;
+  let idx = haystack.indexOf(needle);
+  while (idx !== -1) {
+    if (idx > pos) nodes.push(text.slice(pos, idx));
+    nodes.push(
+      <mark key={k++} className={SEARCH_MARK_CLASS}>
+        {text.slice(idx, idx + needle.length)}
+      </mark>,
+    );
+    pos = idx + needle.length;
+    idx = haystack.indexOf(needle, pos);
+  }
+  if (pos === 0) return text; // no occurrence
+  if (pos < text.length) nodes.push(text.slice(pos));
+  return nodes;
+}
+
 export function findingToExclusionState(
   result: RiskResult,
 ): ExclusionSheetState {

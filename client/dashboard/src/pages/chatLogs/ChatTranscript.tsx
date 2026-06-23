@@ -60,9 +60,10 @@ import {
 } from "./chatRisk";
 import {
   distinctRiskCount,
+  highlightQuery,
   resultsAreSensitive,
   useRowReveal,
-} from "./chatRiskHelpers";
+} from "./chatHelpers";
 import { getCategoryCodeForFinding } from "@/pages/security/risk-utils";
 import { CreateExclusionContext } from "./exclusionContext";
 
@@ -73,6 +74,9 @@ interface RowContext {
   /** When the session has findings, non-flagged rows are dimmed to spotlight
    * the risky ones. */
   dimNonRisk: boolean;
+  /** Active search query — highlights its occurrences in non-flagged rows and
+   * expands tool rows so a match inside a collapsed tool is visible. */
+  searchQuery?: string;
   /** Chat-level user label, used as the turn-header name when an individual
    * message carries no user id of its own. */
   userLabel?: string;
@@ -404,7 +408,9 @@ function UserMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
             revealed={sensitive ? revealed : undefined}
           />
         ) : (
-          <div className="whitespace-pre-wrap">{text}</div>
+          <div className="whitespace-pre-wrap">
+            {ctx.searchQuery ? highlightQuery(text, ctx.searchQuery) : text}
+          </div>
         )}
       </div>
       {(flagged || usage) && (
@@ -453,6 +459,12 @@ function AssistantMessageRow({
             results={results}
             revealed={sensitive ? revealed : undefined}
           />
+        ) : ctx.searchQuery ? (
+          // While searching, render plain (non-markdown) text so query hits can
+          // be highlighted inline — markdown output can't carry <mark> spans.
+          <div className="whitespace-pre-wrap">
+            {highlightQuery(text, ctx.searchQuery)}
+          </div>
         ) : (
           <MessageContent markdown content={text} />
         )}
@@ -561,20 +573,30 @@ function ToolRowView({ row, ctx }: { row: ToolRow; ctx: RowContext }) {
   // and active-match exclusion action.
   const reqMatches = toSectionMatches(callResults, openExclusion);
   const resMatches = toSectionMatches(resultResults, openExclusion);
+  // While searching (and not already flagged), highlight the query inside the
+  // tool's sections so a match in tool args/output is visible.
+  const searchMatches: SectionMatch[] | undefined =
+    ctx.searchQuery && !flagged
+      ? [{ value: ctx.searchQuery, label: "match" }]
+      : undefined;
   const requestHighlight = callResults?.length
     ? {
         matches: reqMatches ?? [],
         masked: resultsAreSensitive(callResults),
         headerBadge: <RiskBadge results={callResults} />,
       }
-    : undefined;
+    : searchMatches && request
+      ? { matches: searchMatches, masked: false }
+      : undefined;
   const resultHighlight = resultResults?.length
     ? {
         matches: resMatches ?? [],
         masked: resultsAreSensitive(resultResults),
         headerBadge: <RiskBadge results={resultResults} />,
       }
-    : undefined;
+    : searchMatches && result
+      ? { matches: searchMatches, masked: false }
+      : undefined;
 
   const toolUseId = row.toolCall?.id ?? row.resultMessage?.toolCallId ?? "";
   const usage = ctx.claudeToolUsageByToolUseId.get(toolUseId);
@@ -593,7 +615,7 @@ function ToolRowView({ row, ctx }: { row: ToolRow; ctx: RowContext }) {
         request={request}
         result={result}
         status="complete"
-        defaultExpanded={flagged}
+        defaultExpanded={flagged || Boolean(ctx.searchQuery)}
         requestHighlight={requestHighlight}
         resultHighlight={resultHighlight}
       />
@@ -633,6 +655,11 @@ export interface TranscriptPagination {
    * must stay off (otherwise it walks the window back to the chat start before
    * the finding index — sourced from a separate query — has resolved). */
   scrollToFinding: boolean;
+  /** Search match navigation: the display-item index to center, re-issued every
+   * time `scrollNonce` changes (so repeatedly hitting next/prev re-scrolls even
+   * to the same index). null when not navigating matches. */
+  scrollToItemIndex?: number | null;
+  scrollNonce?: number;
 }
 
 /** Edge "load older/newer" affordance + the risk-gap "load in-between" marker. */
@@ -755,6 +782,8 @@ export function ChatTranscript({
     onLoadNewer,
     initialScrollIndex,
     scrollToFinding,
+    scrollToItemIndex,
+    scrollNonce,
   } = pagination;
 
   // Preserve scroll position across a prepend: capture distance-from-bottom
@@ -819,6 +848,24 @@ export function ChatTranscript({
     raf = requestAnimationFrame(settle);
     return () => cancelAnimationFrame(raf);
   }, [initialScrollIndex, items.length, virtualizer]);
+
+  // Search match navigation: center the target row each time the nonce changes
+  // (next/prev), re-issuing across a few frames so the estimate→measured height
+  // shift doesn't leave it off-screen. Matches are always loaded by construction
+  // (the windowed response includes every match), so the index resolves at once.
+  useEffect(() => {
+    if (scrollToItemIndex == null || scrollToItemIndex >= items.length) return;
+    if (!scrollRef.current) return;
+    let raf = 0;
+    let tries = 0;
+    const settle = () => {
+      virtualizer.scrollToIndex(scrollToItemIndex, { align: "center" });
+      tries += 1;
+      if (tries < 12) raf = requestAnimationFrame(settle);
+    };
+    raf = requestAnimationFrame(settle);
+    return () => cancelAnimationFrame(raf);
+  }, [scrollNonce, scrollToItemIndex, items.length, virtualizer]);
 
   if (items.length === 0) {
     return (

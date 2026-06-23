@@ -50,6 +50,7 @@ export function buildLoadChatQuery(
       beforeSeq: request.beforeSeq,
       afterSeq: request.afterSeq,
       riskOnly: request.riskOnly,
+      query: request.query,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
       gramChatSession: request.gramChatSession,
@@ -84,6 +85,7 @@ export function queryKeyLoadChat(
     beforeSeq?: number | undefined;
     afterSeq?: number | undefined;
     riskOnly?: boolean | undefined;
+    query?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
     gramChatSession?: string | undefined;

@@ -24,7 +24,9 @@ type Service interface {
 	// older messages (scroll up) or `after_seq` to load newer ones (scroll down).
 	// Omit `generation` to receive the latest generation. Set `risk_only` to
 	// return only messages with risk findings plus a few messages of surrounding
-	// context per finding.
+	// context per finding. Set `query` to instead return only messages whose text
+	// matches a search query plus surrounding context (mutually exclusive with
+	// `risk_only`).
 	LoadChat(context.Context, *LoadChatPayload) (res *Chat, err error)
 	// Generate a title for a chat based on its messages
 	GenerateTitle(context.Context, *GenerateTitlePayload) (res *GenerateTitleResult, err error)
@@ -90,6 +92,14 @@ type Chat struct {
 	// messages, each spanning a risk finding and its surrounding context. Use each
 	// segment's cursors to expand it.
 	RiskSegments []*RiskSegment
+	// Present only when `query` was requested: contiguous runs of returned
+	// messages, each spanning one or more query matches and their surrounding
+	// context. Use each segment's cursors to expand it.
+	MatchSegments []*RiskSegment
+	// Present only when `query` was requested: the `seq` of every message whose
+	// text matched the query, ascending. These are the jump-to-match navigation
+	// targets; surrounding-context messages in `messages` are not listed here.
+	MatchSeqs []int64
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsage
 	// Whole-generation trace-entry totals for the returned generation. Because
@@ -374,12 +384,23 @@ type LoadChatPayload struct {
 	// When true, return only messages that have active risk findings, each padded
 	// with a fixed window of surrounding messages, grouped into contiguous
 	// segments (see `risk_segments`). Cursors are ignored in this mode; expand a
-	// segment with a follow-up `before_seq`/`after_seq` request.
+	// segment with a follow-up `before_seq`/`after_seq` request. Mutually
+	// exclusive with `query`.
 	RiskOnly bool
+	// When set (and `risk_only` is false), return only messages whose text matches
+	// this query (case-insensitive substring over message text, tool
+	// names/arguments, and structured content), each padded with a fixed window of
+	// surrounding messages, grouped into contiguous segments (see
+	// `match_segments`). The seqs that actually matched are listed in
+	// `match_seqs`. Cursors are ignored on the initial request; expand a segment
+	// with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with
+	// `risk_only`.
+	Query *string
 }
 
-// A contiguous run of messages in the risk-only view, covering one or more
-// risk findings plus their surrounding context. Messages for a segment are the
+// A contiguous run of messages in a windowed view (`risk_only` via
+// `risk_segments`, or `query` via `match_segments`), covering one or more
+// matches plus their surrounding context. Messages for a segment are the
 // entries of `Chat.messages` whose `seq` falls within `[first_seq, last_seq]`.
 type RiskSegment struct {
 	// The `seq` of the first (oldest) message in this segment.
