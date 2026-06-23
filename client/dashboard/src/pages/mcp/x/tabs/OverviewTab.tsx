@@ -254,7 +254,7 @@ type AuthenticationOverview = OverviewReadiness & {
   // Upstream advertises OAuth protected-resource metadata, but no upstream
   // remote_session_client is connected. Gram-only gating can read "secure"
   // while upstream login still fails for every client — this surfaces that gap.
-  oauthGap: boolean;
+  missingUpstreamAuth: boolean;
   status: RowStatus | undefined;
 };
 
@@ -282,7 +282,7 @@ function useAuthenticationOverview(
     hasIssuer && !hasRemote,
   );
   const upstreamNeedsOAuth = probeStatus === "available";
-  const oauthGap = upstreamNeedsOAuth && hasIssuer && !hasRemote;
+  const missingUpstreamAuth = upstreamNeedsOAuth && hasIssuer && !hasRemote;
 
   const state = deriveAuthState({
     isPublic: mcpServer.visibility === "public",
@@ -291,12 +291,12 @@ function useAuthenticationOverview(
   });
   const loading = (hasIssuer && isLoading) || probeStatus === "loading";
   const secure = state !== "none";
-  const ready = !loading && secure && !oauthGap;
+  const ready = !loading && secure && !missingUpstreamAuth;
 
   let status: RowStatus | undefined;
   if (loading) {
     status = undefined;
-  } else if (oauthGap) {
+  } else if (missingUpstreamAuth) {
     status = ACTION_NEEDED_STATUS;
   } else {
     status = secure ? READY_STATUS : NEEDS_SETUP_STATUS;
@@ -307,7 +307,7 @@ function useAuthenticationOverview(
     loading,
     state,
     secure,
-    oauthGap,
+    missingUpstreamAuth,
     status,
   };
 }
@@ -457,7 +457,7 @@ const AUTH_ROW_COPY: Record<AuthState, string> = {
 // upstream identity provider is connected. Takes precedence because the gap
 // makes the row's posture misleading: clients can pass Gram gating yet still
 // fail the upstream login.
-const OAUTH_GAP_COPY =
+const MISSING_UPSTREAM_AUTH_COPY =
   "The upstream server requires OAuth, but no upstream identity provider is connected. Connect one so clients can authenticate.";
 
 function deriveAuthState({
@@ -486,7 +486,8 @@ function AuthenticationOverviewRow({
 }) {
   // An unmet OAuth requirement needs the same call to action as an unsecured
   // server even though gram gating reads "secure", so treat both as Configure.
-  const callToAction = !authentication.secure || authentication.oauthGap;
+  const callToAction =
+    !authentication.secure || authentication.missingUpstreamAuth;
   const actionLabel = callToAction ? "Configure" : "Manage";
   const actionVariant = callToAction ? "primary" : "secondary";
 
@@ -498,8 +499,8 @@ function AuthenticationOverviewRow({
       description={
         authentication.loading ? (
           <Skeleton className="h-4 w-[520px] max-w-full" />
-        ) : authentication.oauthGap ? (
-          OAUTH_GAP_COPY
+        ) : authentication.missingUpstreamAuth ? (
+          MISSING_UPSTREAM_AUTH_COPY
         ) : (
           AUTH_ROW_COPY[authentication.state]
         )
