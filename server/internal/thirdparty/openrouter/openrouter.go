@@ -579,20 +579,26 @@ func (o *OpenRouter) GetModelUsage(ctx context.Context, generationID string, org
 	var statusCode int
 	var err error
 
-	backoffs := []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second}
-	for attempt := range backoffs {
+	// This path is intentionally narrow: normal completions consume inline
+	// usage, and only incomplete inline accounting reaches this fallback. Give
+	// OpenRouter generation stats time to propagate without reviving the old
+	// poll-on-every-completion behavior that produced error-log noise.
+	delays := []time.Duration{0, 250 * time.Millisecond, 500 * time.Millisecond, time.Second, 5 * time.Second, 15 * time.Second, 30 * time.Second, time.Minute}
+	for attempt, delay := range delays {
+		if delay > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, fmt.Errorf("context cancelled while fetching generation details: %w", ctx.Err())
+			case <-time.After(delay):
+			}
+		}
+
 		genResp, statusCode, err = o.getGenerationDetails(ctx, generationID, orgID)
 		if err == nil {
 			break
 		}
-		if statusCode != http.StatusNotFound || attempt == len(backoffs)-1 {
+		if statusCode != http.StatusNotFound || attempt == len(delays)-1 {
 			break
-		}
-
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("context cancelled while fetching generation details: %w", ctx.Err())
-		case <-time.After(backoffs[attempt]):
 		}
 	}
 
