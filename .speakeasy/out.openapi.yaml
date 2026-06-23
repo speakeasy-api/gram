@@ -37372,6 +37372,64 @@ components:
         - registry_specifier
         - version
         - description
+    ExternalMCPServerEntry:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Description of what the server does
+        icon_url:
+          type: string
+          description: URL to the server's icon
+          format: uri
+        is_read_only:
+          type: boolean
+          description: Whether every tool on the server is read-only
+        mcp_server_id:
+          type: string
+          description: ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)
+          format: uuid
+        meta:
+          description: Opaque metadata from the registry
+        organization_mcp_collection_registry_id:
+          type: string
+          description: ID of the internal collection registry this server came from
+          format: uuid
+        registry_id:
+          type: string
+          description: ID of the external MCP registry this server came from
+          format: uuid
+        registry_specifier:
+          type: string
+          description: Server specifier used to look up in the registry (e.g., 'io.github.user/server')
+          example: io.modelcontextprotocol.anonymous/exa
+        remotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalMCPRemote'
+          description: Available remote endpoints for the server
+        title:
+          type: string
+          description: Display name for the server
+        tool_count:
+          type: integer
+          description: Number of tools the server exposes
+          format: int64
+        toolset_id:
+          type: string
+          description: ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)
+          format: uuid
+        version:
+          type: string
+          description: Semantic version of the server
+          example: 1.0.0
+      description: A summary of an MCP server from an external registry, returned by catalog listings
+      required:
+        - registry_specifier
+        - version
+        - description
+        - tool_count
+        - is_read_only
     ExternalMCPTool:
       type: object
       properties:
@@ -39226,7 +39284,7 @@ components:
         servers:
           type: array
           items:
-            $ref: '#/components/schemas/ExternalMCPServer'
+            $ref: '#/components/schemas/ExternalMCPServerEntry'
           description: List of available MCP servers
       required:
         - servers
