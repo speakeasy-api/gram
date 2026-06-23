@@ -583,7 +583,7 @@ func (o *OpenRouter) GetModelUsage(ctx context.Context, generationID string, org
 	// usage, and only incomplete inline accounting reaches this fallback. Give
 	// OpenRouter generation stats time to propagate without reviving the old
 	// poll-on-every-completion behavior that produced error-log noise.
-	delays := []time.Duration{0, 250 * time.Millisecond, 500 * time.Millisecond, time.Second, 5 * time.Second, 15 * time.Second, 30 * time.Second}
+	delays := []time.Duration{0, 250 * time.Millisecond, 500 * time.Millisecond, time.Second, 5 * time.Second, 15 * time.Second, 30 * time.Second, 8 * time.Second}
 	for attempt, delay := range delays {
 		if delay > 0 {
 			select {
