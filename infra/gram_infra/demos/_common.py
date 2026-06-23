@@ -1,6 +1,6 @@
 """Shared scaffolding for the Pub/Sub demos.
 
-Both demos publish ``gram.ping.v1.Message`` payloads against the local Pub/Sub
+Both demos publish ``gram.ping.v2.Message`` payloads against the local Pub/Sub
 emulator and differ only in how they consume them (callback vs async-iterator),
 so the publish loop, signal handling, broker construction, and backend selection
 live here.
@@ -13,12 +13,12 @@ import os
 import signal
 import uuid
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 
 import anyio
 import structlog
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
-from google.protobuf.timestamp_pb2 import Timestamp
-from gram.ping.v1 import ping_pb2
+from gram.ping.v2 import ping_pb2
 
 from gram_infra.pubsub import EmulatedPubSubBroker
 from gram_infra.pubsub.publisher import Publisher
@@ -64,12 +64,10 @@ def make_emulator_broker(
 async def publish_forever(publisher: Publisher[ping_pb2.Message]) -> None:
     """Publish a fresh ping message every :data:`PUBLISH_INTERVAL_SECONDS`."""
     while True:
-        created_at = Timestamp()
-        created_at.GetCurrentTime()
         message = ping_pb2.Message(
             id=str(uuid.uuid4()),
             type="simulated",
-            created_at=created_at,
+            created_at=datetime.now(UTC).isoformat(),
             payload=b'{"msg":"Hello, World!"}',
         )
 

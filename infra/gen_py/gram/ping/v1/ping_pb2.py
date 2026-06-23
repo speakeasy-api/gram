@@ -26,7 +26,7 @@ from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17gram/ping/v1/ping.proto\x12\x0cgram.ping.v1\x1a\x1bgcp/pubsub/v1/options.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8e\x01\n\x07Message\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n\x04type\x18\x02 \x01(\tR\x04type\x12\x39\n\ncreated_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x18\n\x07payload\x18\x04 \x01(\x0cR\x07payload:\n\x8a\xb5\x18\x06\x12\x04\x08\x80\xa3\x05\x42=Z;github.com/speakeasy-api/gram/infra/gen/gram/ping/v1;pingv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17gram/ping/v1/ping.proto\x12\x0cgram.ping.v1\x1a\x1bgcp/pubsub/v1/options.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x90\x01\n\x07Message\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n\x04type\x18\x02 \x01(\tR\x04type\x12\x39\n\ncreated_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x18\n\x07payload\x18\x04 \x01(\x0cR\x07payload:\x0c\x18\x01\x8a\xb5\x18\x06\x12\x04\x08\x80\xa3\x05\x42=Z;github.com/speakeasy-api/gram/infra/gen/gram/ping/v1;pingv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,7 +35,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z;github.com/speakeasy-api/gram/infra/gen/gram/ping/v1;pingv1'
   _globals['_MESSAGE']._loaded_options = None
-  _globals['_MESSAGE']._serialized_options = b'\212\265\030\006\022\004\010\200\243\005'
+  _globals['_MESSAGE']._serialized_options = b'\030\001\212\265\030\006\022\004\010\200\243\005'
   _globals['_MESSAGE']._serialized_start=104
-  _globals['_MESSAGE']._serialized_end=246
+  _globals['_MESSAGE']._serialized_end=248
 # @@protoc_insertion_point(module_scope)

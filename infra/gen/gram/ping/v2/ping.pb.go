@@ -2,15 +2,14 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: gram/ping/v1/ping.proto
+// source: gram/ping/v2/ping.proto
 
-package pingv1
+package pingv2
 
 import (
 	_ "github.com/speakeasy-api/gram/infra/gen/gcp/pubsub/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	unsafe "unsafe"
 )
@@ -22,12 +21,11 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Deprecated: Marked as deprecated in gram/ping/v1/ping.proto.
 type Message struct {
 	state                  protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_Id          *string                `protobuf:"bytes,1,opt,name=id"`
 	xxx_hidden_Type        *string                `protobuf:"bytes,2,opt,name=type"`
-	xxx_hidden_CreatedAt   *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_at,json=createdAt"`
+	xxx_hidden_CreatedAt   *string                `protobuf:"bytes,3,opt,name=created_at,json=createdAt"`
 	xxx_hidden_Payload     []byte                 `protobuf:"bytes,4,opt,name=payload"`
 	XXX_raceDetectHookData protoimpl.RaceDetectHookData
 	XXX_presence           [1]uint32
@@ -37,7 +35,7 @@ type Message struct {
 
 func (x *Message) Reset() {
 	*x = Message{}
-	mi := &file_gram_ping_v1_ping_proto_msgTypes[0]
+	mi := &file_gram_ping_v2_ping_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -49,7 +47,7 @@ func (x *Message) String() string {
 func (*Message) ProtoMessage() {}
 
 func (x *Message) ProtoReflect() protoreflect.Message {
-	mi := &file_gram_ping_v1_ping_proto_msgTypes[0]
+	mi := &file_gram_ping_v2_ping_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -80,11 +78,14 @@ func (x *Message) GetType() string {
 	return ""
 }
 
-func (x *Message) GetCreatedAt() *timestamppb.Timestamp {
+func (x *Message) GetCreatedAt() string {
 	if x != nil {
-		return x.xxx_hidden_CreatedAt
+		if x.xxx_hidden_CreatedAt != nil {
+			return *x.xxx_hidden_CreatedAt
+		}
+		return ""
 	}
-	return nil
+	return ""
 }
 
 func (x *Message) GetPayload() []byte {
@@ -104,8 +105,9 @@ func (x *Message) SetType(v string) {
 	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 4)
 }
 
-func (x *Message) SetCreatedAt(v *timestamppb.Timestamp) {
-	x.xxx_hidden_CreatedAt = v
+func (x *Message) SetCreatedAt(v string) {
+	x.xxx_hidden_CreatedAt = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 4)
 }
 
 func (x *Message) SetPayload(v []byte) {
@@ -134,7 +136,7 @@ func (x *Message) HasCreatedAt() bool {
 	if x == nil {
 		return false
 	}
-	return x.xxx_hidden_CreatedAt != nil
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
 }
 
 func (x *Message) HasPayload() bool {
@@ -155,6 +157,7 @@ func (x *Message) ClearType() {
 }
 
 func (x *Message) ClearCreatedAt() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
 	x.xxx_hidden_CreatedAt = nil
 }
 
@@ -163,13 +166,12 @@ func (x *Message) ClearPayload() {
 	x.xxx_hidden_Payload = nil
 }
 
-// Deprecated: Marked as deprecated in gram/ping/v1/ping.proto.
 type Message_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
 	Id        *string
 	Type      *string
-	CreatedAt *timestamppb.Timestamp
+	CreatedAt *string
 	Payload   []byte
 }
 
@@ -185,7 +187,10 @@ func (b0 Message_builder) Build() *Message {
 		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 4)
 		x.xxx_hidden_Type = b.Type
 	}
-	x.xxx_hidden_CreatedAt = b.CreatedAt
+	if b.CreatedAt != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 4)
+		x.xxx_hidden_CreatedAt = b.CreatedAt
+	}
 	if b.Payload != nil {
 		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 4)
 		x.xxx_hidden_Payload = b.Payload
@@ -193,52 +198,51 @@ func (b0 Message_builder) Build() *Message {
 	return m0
 }
 
-var File_gram_ping_v1_ping_proto protoreflect.FileDescriptor
+var File_gram_ping_v2_ping_proto protoreflect.FileDescriptor
 
-const file_gram_ping_v1_ping_proto_rawDesc = "" +
+const file_gram_ping_v2_ping_proto_rawDesc = "" +
 	"\n" +
-	"\x17gram/ping/v1/ping.proto\x12\fgram.ping.v1\x1a\x1bgcp/pubsub/v1/options.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x90\x01\n" +
+	"\x17gram/ping/v2/ping.proto\x12\fgram.ping.v2\x1a\x1bgcp/pubsub/v1/options.proto\"r\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\x129\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x18\n" +
-	"\apayload\x18\x04 \x01(\fR\apayload:\f\x8a\xb5\x18\x06\x12\x04\b\x80\xa3\x05\x18\x01B=Z;github.com/speakeasy-api/gram/infra/gen/gram/ping/v1;pingv1b\beditionsp\xe9\a"
+	"created_at\x18\x03 \x01(\tR\tcreatedAt\x12\x18\n" +
+	"\apayload\x18\x04 \x01(\fR\apayload:\n" +
+	"\x8a\xb5\x18\x06\x12\x04\b\x80\xa3\x05B=Z;github.com/speakeasy-api/gram/infra/gen/gram/ping/v2;pingv2b\beditionsp\xe9\a"
 
-var file_gram_ping_v1_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_gram_ping_v1_ping_proto_goTypes = []any{
-	(*Message)(nil),               // 0: gram.ping.v1.Message
-	(*timestamppb.Timestamp)(nil), // 1: google.protobuf.Timestamp
+var file_gram_ping_v2_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_gram_ping_v2_ping_proto_goTypes = []any{
+	(*Message)(nil), // 0: gram.ping.v2.Message
 }
-var file_gram_ping_v1_ping_proto_depIdxs = []int32{
-	1, // 0: gram.ping.v1.Message.created_at:type_name -> google.protobuf.Timestamp
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+var file_gram_ping_v2_ping_proto_depIdxs = []int32{
+	0, // [0:0] is the sub-list for method output_type
+	0, // [0:0] is the sub-list for method input_type
+	0, // [0:0] is the sub-list for extension type_name
+	0, // [0:0] is the sub-list for extension extendee
+	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_gram_ping_v1_ping_proto_init() }
-func file_gram_ping_v1_ping_proto_init() {
-	if File_gram_ping_v1_ping_proto != nil {
+func init() { file_gram_ping_v2_ping_proto_init() }
+func file_gram_ping_v2_ping_proto_init() {
+	if File_gram_ping_v2_ping_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gram_ping_v1_ping_proto_rawDesc), len(file_gram_ping_v1_ping_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gram_ping_v2_ping_proto_rawDesc), len(file_gram_ping_v2_ping_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_gram_ping_v1_ping_proto_goTypes,
-		DependencyIndexes: file_gram_ping_v1_ping_proto_depIdxs,
-		MessageInfos:      file_gram_ping_v1_ping_proto_msgTypes,
+		GoTypes:           file_gram_ping_v2_ping_proto_goTypes,
+		DependencyIndexes: file_gram_ping_v2_ping_proto_depIdxs,
+		MessageInfos:      file_gram_ping_v2_ping_proto_msgTypes,
 	}.Build()
-	File_gram_ping_v1_ping_proto = out.File
-	file_gram_ping_v1_ping_proto_goTypes = nil
-	file_gram_ping_v1_ping_proto_depIdxs = nil
+	File_gram_ping_v2_ping_proto = out.File
+	file_gram_ping_v2_ping_proto_goTypes = nil
+	file_gram_ping_v2_ping_proto_depIdxs = nil
 }

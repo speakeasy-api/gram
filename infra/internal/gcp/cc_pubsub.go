@@ -81,8 +81,8 @@ func labelsWithProtoMessage(labels map[string]string, protoMessage string) map[s
 
 // sanitizeLabelValue converts a fully qualified protobuf message name into a
 // valid GCP label value. Label values must match [\p{Ll}\p{Lo}\p{N}_-]{0,63},
-// so the dotted, mixed-case proto full name (e.g. "gram.ping.v1.Message") is
-// kebab-cased to "gram-ping-v1-message" — the same transform used to derive
+// so the dotted, mixed-case proto full name (e.g. "gram.ping.v2.Message") is
+// kebab-cased to "gram-ping-v2-message" — the same transform used to derive
 // topic and subscription IDs, keeping resources traceable to their declaration.
 func sanitizeLabelValue(protoMessage string) string {
 	return strcase.ToKebab(protoMessage)

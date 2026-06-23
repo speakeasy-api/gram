@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cgram/ping/v1/processor.proto\x12\x0cgram.ping.v1\x1a\x1bgcp/pubsub/v1/options.proto\"A\n\tProcessor:4\x92\xb5\x18\x30\x12\x03\x08\x90\x1c\x18\x01\"\x02\x08\x1e\x32\t\n\x02\x08\n\x12\x03\x08\xd8\x04J\x02\x10\x05R\x14gram.ping.v1.Message\"C\n\x0bPyProcessor:4\x92\xb5\x18\x30\x12\x03\x08\x90\x1c\x18\x01\"\x02\x08\x1e\x32\t\n\x02\x08\n\x12\x03\x08\xd8\x04J\x02\x10\x05R\x14gram.ping.v1.MessageB=Z;github.com/speakeasy-api/gram/infra/gen/gram/ping/v1;pingv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cgram/ping/v1/processor.proto\x12\x0cgram.ping.v1\x1a\x1bgcp/pubsub/v1/options.proto\"C\n\tProcessor:6\x18\x01\x92\xb5\x18\x30\x12\x03\x08\x90\x1c\x18\x01\"\x02\x08\x1e\x32\t\n\x02\x08\n\x12\x03\x08\xd8\x04J\x02\x10\x05R\x14gram.ping.v1.Message\"E\n\x0bPyProcessor:6\x18\x01\x92\xb5\x18\x30\x12\x03\x08\x90\x1c\x18\x01\"\x02\x08\x1e\x32\t\n\x02\x08\n\x12\x03\x08\xd8\x04J\x02\x10\x05R\x14gram.ping.v1.MessageB=Z;github.com/speakeasy-api/gram/infra/gen/gram/ping/v1;pingv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,11 +34,11 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z;github.com/speakeasy-api/gram/infra/gen/gram/ping/v1;pingv1'
   _globals['_PROCESSOR']._loaded_options = None
-  _globals['_PROCESSOR']._serialized_options = b'\222\265\0300\022\003\010\220\034\030\001\"\002\010\0362\t\n\002\010\n\022\003\010\330\004J\002\020\005R\024gram.ping.v1.Message'
+  _globals['_PROCESSOR']._serialized_options = b'\030\001\222\265\0300\022\003\010\220\034\030\001\"\002\010\0362\t\n\002\010\n\022\003\010\330\004J\002\020\005R\024gram.ping.v1.Message'
   _globals['_PYPROCESSOR']._loaded_options = None
-  _globals['_PYPROCESSOR']._serialized_options = b'\222\265\0300\022\003\010\220\034\030\001\"\002\010\0362\t\n\002\010\n\022\003\010\330\004J\002\020\005R\024gram.ping.v1.Message'
+  _globals['_PYPROCESSOR']._serialized_options = b'\030\001\222\265\0300\022\003\010\220\034\030\001\"\002\010\0362\t\n\002\010\n\022\003\010\330\004J\002\020\005R\024gram.ping.v1.Message'
   _globals['_PROCESSOR']._serialized_start=75
-  _globals['_PROCESSOR']._serialized_end=140
-  _globals['_PYPROCESSOR']._serialized_start=142
-  _globals['_PYPROCESSOR']._serialized_end=209
+  _globals['_PROCESSOR']._serialized_end=142
+  _globals['_PYPROCESSOR']._serialized_start=144
+  _globals['_PYPROCESSOR']._serialized_end=213
 # @@protoc_insertion_point(module_scope)

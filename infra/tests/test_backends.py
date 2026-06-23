@@ -22,7 +22,7 @@ import structlog
 from conftest import FakeMessage, FakeSubscriberClient
 from gcp.pubsub.v1 import options_pb2
 from google.protobuf.duration_pb2 import Duration
-from gram.ping.v1 import ping_pb2, processor_pb2
+from gram.ping.v2 import ping_pb2, processor_pb2
 
 from gram_infra.pubsub import (
     EmulatedPubSubBroker,
@@ -210,8 +210,8 @@ def test_emulated_reconcile_is_memoized() -> None:
 # Both anyio backends. trio is a dev dependency (anyio[trio]).
 BACKENDS = ["asyncio", "trio"]
 
-TOPIC_PROTO = "gram.ping.v1.Message"
-SUB_PROTO = "gram.ping.v1.Processor"
+TOPIC_PROTO = "gram.ping.v2.Message"
+SUB_PROTO = "gram.ping.v2.Processor"
 
 
 class FakePublisherClient:

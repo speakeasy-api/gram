@@ -12,12 +12,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/speakeasy-api/gram/infra/gen"
-	pingv1 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v1"
+	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	"github.com/speakeasy-api/gram/infra/internal/attr"
 	gcppub "github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/urfave/cli/v2"
 	"google.golang.org/api/option"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func newDemoCommand() *cli.Command {
@@ -86,18 +85,18 @@ func newDemoCommand() *cli.Command {
 			broker := gcppub.NewEmulatedPubSub(logger, projectID, client, gen.Descriptors)
 
 			// Get a publisher handle so we can publish messages
-			pub, err := gcppub.PubSubPublisherForMessage(ctx, broker, &pingv1.Message{})
+			pub, err := gcppub.PubSubPublisherForMessage(ctx, broker, &pingv2.Message{})
 			if err != nil {
 				return fmt.Errorf("failed to get publisher: %w", err)
 			}
 			// Get a subscriber handle to receive messages
-			// Read this as: "Get a handler for the outbox processor subscription to receive pingv1.Message messages"
-			sub1, err := gcppub.PubSubSubscriberForMessage(ctx, broker, &pingv1.Message{}, &pingv1.Processor{})
+			// Read this as: "Get a handler for the outbox processor subscription to receive pingv2.Message messages"
+			sub1, err := gcppub.PubSubSubscriberForMessage(ctx, broker, &pingv2.Message{}, &pingv2.Processor{})
 			if err != nil {
 				return fmt.Errorf("failed to get subscriber 1: %w", err)
 			}
 			// Get another subscriber handle to receive messages
-			sub2, err := gcppub.PubSubSubscriberForMessage(ctx, broker, &pingv1.Message{}, &pingv1.Processor{})
+			sub2, err := gcppub.PubSubSubscriberForMessage(ctx, broker, &pingv2.Message{}, &pingv2.Processor{})
 			if err != nil {
 				return fmt.Errorf("failed to get subscriber 2: %w", err)
 			}
@@ -108,10 +107,10 @@ func newDemoCommand() *cli.Command {
 				// instead of hanging.
 				defer cancel()
 				for {
-					msg := pingv1.Message_builder{
+					msg := pingv2.Message_builder{
 						Id:        new(uuid.Must(uuid.NewV7()).String()),
 						Type:      new("simulated"),
-						CreatedAt: timestamppb.Now(),
+						CreatedAt: new(time.Now().Format(time.RFC3339)),
 						Payload:   []byte(`{"msg":"Hello, World!"}`),
 					}.Build()
 
@@ -129,7 +128,7 @@ func newDemoCommand() *cli.Command {
 
 			group.Go(func() {
 				defer cancel()
-				err := sub1.Receive(ctx, func(ctx context.Context, m *pingv1.Message, _ gcppub.MessageMetadata) error {
+				err := sub1.Receive(ctx, func(ctx context.Context, m *pingv2.Message, _ gcppub.MessageMetadata) error {
 					logger.InfoContext(ctx, "sub1: message", attr.SlogValueAny(map[string]any{
 						"id":      m.GetId(),
 						"type":    m.GetType(),
@@ -146,7 +145,7 @@ func newDemoCommand() *cli.Command {
 
 			group.Go(func() {
 				defer cancel()
-				err := sub2.Receive(ctx, func(ctx context.Context, m *pingv1.Message, _ gcppub.MessageMetadata) error {
+				err := sub2.Receive(ctx, func(ctx context.Context, m *pingv2.Message, _ gcppub.MessageMetadata) error {
 					logger.InfoContext(ctx, "sub2: message", attr.SlogValueAny(map[string]any{
 						"id":      m.GetId(),
 						"type":    m.GetType(),

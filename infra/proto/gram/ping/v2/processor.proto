@@ -1,16 +1,14 @@
 edition = "2024";
 
-package gram.ping.v1;
+package gram.ping.v2;
 
 import "gcp/pubsub/v1/options.proto";
 
-option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/ping/v1;pingv1";
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2;pingv2";
 
 message Processor {
-  option deprecated = true;
-
   option (gcp.pubsub.v1.subscription) = {
-    topic: "gram.ping.v1.Message"
+    topic: "gram.ping.v2.Message"
     ack_deadline: {seconds: 30}
     retention: {seconds: 3600}
     retain_acked_messages: true
@@ -23,10 +21,8 @@ message Processor {
 }
 
 message PyProcessor {
-  option deprecated = true;
-
   option (gcp.pubsub.v1.subscription) = {
-    topic: "gram.ping.v1.Message"
+    topic: "gram.ping.v2.Message"
     ack_deadline: {seconds: 30}
     retention: {seconds: 3600}
     retain_acked_messages: true
