@@ -1094,3 +1094,156 @@ WHERE id IN (
   LIMIT @batch_limit
 )
 RETURNING id;
+
+-- ============================================================================
+-- Policy eval runs ("session replay"). All reads scoped to project_id (and
+-- organization_id where the row carries it) to prevent cross-tenant access.
+-- ============================================================================
+
+-- name: CreatePolicyEvalRun :one
+INSERT INTO policy_eval_runs (
+    id
+  , project_id
+  , organization_id
+  , risk_policy_id
+  , risk_policy_version
+  , config_snapshot
+  , sample_definition
+  , requested_by
+  , expires_at
+)
+VALUES (
+    @id
+  , @project_id
+  , @organization_id
+  , @risk_policy_id
+  , @risk_policy_version
+  , @config_snapshot
+  , @sample_definition
+  , @requested_by
+  , @expires_at
+)
+RETURNING *;
+
+-- name: GetPolicyEvalRun :one
+SELECT * FROM policy_eval_runs
+WHERE id = @id AND project_id = @project_id;
+
+-- name: ListPolicyEvalRuns :many
+-- Lists runs for a project, newest first, with keyset pagination on
+-- (created_at, id). Optionally narrowed to a single policy. The NULL cursor
+-- args select the first page.
+SELECT * FROM policy_eval_runs
+WHERE project_id = @project_id
+  AND (sqlc.narg(risk_policy_id)::uuid IS NULL OR risk_policy_id = sqlc.narg(risk_policy_id))
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (created_at, id) < (sqlc.narg(cursor_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT @result_limit;
+
+-- name: StartPolicyEvalRun :exec
+-- Transitions a pending run to running. Scoped to project_id; only advances
+-- from 'pending' so a re-delivered start is a no-op.
+UPDATE policy_eval_runs
+SET status = 'running'
+  , started_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND status = 'pending';
+
+-- name: CompletePolicyEvalRun :exec
+-- Marks a run completed and writes its rolled-up statistics. Scoped to
+-- project_id; only advances from 'running'.
+UPDATE policy_eval_runs
+SET status = 'completed'
+  , messages_scanned = @messages_scanned
+  , findings_count = @findings_count
+  , total_cost_usd = @total_cost_usd
+  , input_tokens = @input_tokens
+  , output_tokens = @output_tokens
+  , judge_latency_p50_ms = @judge_latency_p50_ms
+  , judge_latency_p95_ms = @judge_latency_p95_ms
+  , completed_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND status = 'running';
+
+-- name: FailPolicyEvalRun :exec
+UPDATE policy_eval_runs
+SET status = 'failed'
+  , error = @error
+  , completed_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND status IN ('pending', 'running');
+
+-- name: CancelPolicyEvalRun :exec
+-- Operator-requested cancellation. Scoped to project_id; only cancels a run
+-- that has not already reached a terminal state.
+UPDATE policy_eval_runs
+SET status = 'cancelled'
+  , completed_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND status IN ('pending', 'running');
+
+-- name: DeleteExpiredPolicyEvalRuns :exec
+-- GC sweep: drop runs past their retention (cascades to findings, which carry
+-- raw match text). Run id-batched by the eval GC schedule.
+DELETE FROM policy_eval_runs
+WHERE id IN (
+  SELECT id FROM policy_eval_runs
+  WHERE expires_at IS NOT NULL AND expires_at < clock_timestamp()
+  ORDER BY expires_at
+  LIMIT @batch_limit
+);
+
+-- name: InsertPolicyEvalFindings :copyfrom
+INSERT INTO policy_eval_findings (
+    id
+  , policy_eval_run_id
+  , project_id
+  , organization_id
+  , chat_message_id
+  , source
+  , rule_id
+  , description
+  , match
+  , start_pos
+  , end_pos
+  , confidence
+  , tags
+  , spans
+)
+VALUES (
+    @id
+  , @policy_eval_run_id
+  , @project_id
+  , @organization_id
+  , @chat_message_id
+  , @source
+  , @rule_id
+  , @description
+  , @match
+  , @start_pos
+  , @end_pos
+  , @confidence
+  , @tags
+  , @spans
+);
+
+-- name: ListPolicyEvalFindings :many
+-- Findings for one run, joined to their chat message for display context.
+-- Scoped to project_id AND the run id. Keyset pagination on (created_at, id).
+SELECT
+    pef.id, pef.policy_eval_run_id, pef.project_id, pef.organization_id,
+    pef.chat_message_id, pef.source, pef.rule_id, pef.description, pef.match,
+    pef.start_pos, pef.end_pos, pef.confidence, pef.tags, pef.spans,
+    pef.created_at,
+    cm.chat_id, cm.created_at AS message_created_at,
+    c.title AS chat_title, c.external_user_id AS chat_user_id
+FROM policy_eval_findings pef
+JOIN chat_messages cm ON cm.id = pef.chat_message_id
+LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+WHERE pef.project_id = @project_id
+  AND pef.policy_eval_run_id = @policy_eval_run_id
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (pef.created_at, pef.id) < (sqlc.narg(cursor_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
+  )
+ORDER BY pef.created_at DESC, pef.id DESC
+LIMIT @result_limit;
