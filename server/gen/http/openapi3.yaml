@@ -40245,26 +40245,28 @@ components:
         ListRoleGrant:
             type: object
             properties:
-                effect:
-                    type: string
-                    description: Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
-                    default: allow
-                    enum:
-                        - allow
-                        - deny
                 scope:
                     type: string
                     description: The scope slug this grant applies to.
                     enum:
                         - org:read
+                        - org:blocked_read
                         - org:admin
+                        - org:blocked_admin
                         - project:read
+                        - project:blocked_read
                         - project:write
+                        - project:blocked_write
                         - mcp:read
+                        - mcp:blocked_read
                         - mcp:write
+                        - mcp:blocked_write
                         - mcp:connect
+                        - mcp:blocked_connect
                         - environment:read
+                        - environment:blocked_read
                         - environment:write
+                        - environment:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
                 selectors:
@@ -40278,14 +40280,23 @@ components:
                         type: string
                         enum:
                             - org:read
+                            - org:blocked_read
                             - org:admin
+                            - org:blocked_admin
                             - project:read
+                            - project:blocked_read
                             - project:write
+                            - project:blocked_write
                             - mcp:read
+                            - mcp:blocked_read
                             - mcp:write
+                            - mcp:blocked_write
                             - mcp:connect
+                            - mcp:blocked_connect
                             - environment:read
+                            - environment:blocked_read
                             - environment:write
+                            - environment:blocked_write
                             - risk_policy:evaluate
                             - risk_policy:bypass
                     description: The inherited scopes the primary scope grants.
@@ -44413,26 +44424,28 @@ components:
         RoleGrant:
             type: object
             properties:
-                effect:
-                    type: string
-                    description: Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
-                    default: allow
-                    enum:
-                        - allow
-                        - deny
                 scope:
                     type: string
                     description: The scope slug this grant applies to.
                     enum:
                         - org:read
+                        - org:blocked_read
                         - org:admin
+                        - org:blocked_admin
                         - project:read
+                        - project:blocked_read
                         - project:write
+                        - project:blocked_write
                         - mcp:read
+                        - mcp:blocked_read
                         - mcp:write
+                        - mcp:blocked_write
                         - mcp:connect
+                        - mcp:blocked_connect
                         - environment:read
+                        - environment:blocked_read
                         - environment:write
+                        - environment:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
                 selectors:
@@ -44496,6 +44509,20 @@ components:
                 description:
                     type: string
                     description: What this scope protects.
+                exclusion_scope:
+                    type: string
+                    description: The scope used to store exception rules for this scope.
+                    enum:
+                        - org:blocked_read
+                        - org:blocked_admin
+                        - project:blocked_read
+                        - project:blocked_write
+                        - mcp:blocked_read
+                        - mcp:blocked_write
+                        - mcp:blocked_connect
+                        - environment:blocked_read
+                        - environment:blocked_write
+                        - risk_policy:bypass
                 resource_type:
                     type: string
                     description: The type of resource this scope applies to.
@@ -44510,20 +44537,36 @@ components:
                     description: Unique scope identifier.
                     enum:
                         - org:read
+                        - org:blocked_read
                         - org:admin
+                        - org:blocked_admin
                         - project:read
+                        - project:blocked_read
                         - project:write
+                        - project:blocked_write
                         - mcp:read
+                        - mcp:blocked_read
                         - mcp:write
+                        - mcp:blocked_write
                         - mcp:connect
+                        - mcp:blocked_connect
                         - environment:read
+                        - environment:blocked_read
                         - environment:write
+                        - environment:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
+                visibility:
+                    type: string
+                    description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
+                    enum:
+                        - user_visible
+                        - internal
             required:
                 - slug
                 - description
                 - resource_type
+                - visibility
         SearchChatsFilter:
             type: object
             properties:

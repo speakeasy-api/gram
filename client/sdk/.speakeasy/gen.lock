@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 5a5af9746aeb4665c6ec68c3745c6d5d
+  docChecksum: f1a1bb16f4bacd4b9c907b4b248de12c
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -227,7 +227,7 @@ trackedFiles:
   docs/models/components/createriskpolicyrequestbody.md:
     last_write_checksum: sha1:2fa44602ca0b0375bf577535ffc6aa8d106c1f59
   docs/models/components/createroleform.md:
-    last_write_checksum: sha1:2862fd945c42babf0cce10ca510a35cc00b91201
+    last_write_checksum: sha1:8f830fa3a59663de3ec4640a0d7602e39ec1fc7e
   docs/models/components/createserverform.md:
     last_write_checksum: sha1:62c47d0b522a9d5be599889c2d7b8c50b7171cd8
   docs/models/components/createshadowmcpaccessruleform.md:
@@ -296,8 +296,6 @@ trackedFiles:
     last_write_checksum: sha1:855425544cda46eb247637c4536ddebf66b2a8b7
   docs/models/components/disposition.md:
     last_write_checksum: sha1:d51c0ffed16ab9b7706cd9c7d439d66379aac4e7
-  docs/models/components/effect.md:
-    last_write_checksum: sha1:2ea3ae7c67eda161f0cf83077be58faa0c550f98
   docs/models/components/employeedataflowedge.md:
     last_write_checksum: sha1:4c9ff584bf87c232a96e954bc2a3bf0a39513fdb
   docs/models/components/employeedataflownode.md:
@@ -314,6 +312,8 @@ trackedFiles:
     last_write_checksum: sha1:77109d97c0e09a16399eff19bbd6eeda93a48b2e
   docs/models/components/evolveresult.md:
     last_write_checksum: sha1:db06ce126556570bbfa4033c393953026f88280a
+  docs/models/components/exclusionscope.md:
+    last_write_checksum: sha1:1462d9f6a7db539217a8232b04fcac5ec4ee43be
   docs/models/components/exportmcpmetadatarequestbody.md:
     last_write_checksum: sha1:40e4d7ae27440bfd5a593b31a6e25cc5a7a4f7ad
   docs/models/components/externalmcpheaderdefinition.md:
@@ -549,13 +549,11 @@ trackedFiles:
   docs/models/components/listriskresultsresult.md:
     last_write_checksum: sha1:b9598d5d1bcbb33c95b7f7b15e7e2c4310bdb3b3
   docs/models/components/listrolegrant.md:
-    last_write_checksum: sha1:65a5d6183a99f3e7984b90f6ef3bb9e223bb0878
-  docs/models/components/listrolegranteffect.md:
-    last_write_checksum: sha1:1f23bbd574c32c9ddadc7924f6b7e88c064b7d51
+    last_write_checksum: sha1:f75b13247be2ea6208563bc63a331c3f39a6b92a
   docs/models/components/listrolegrantscope.md:
-    last_write_checksum: sha1:b15ecc7bf194fbffcf02f5940c6df33df36448e3
+    last_write_checksum: sha1:efbda569be18d01263bc119c3b799f9851b0b17a
   docs/models/components/listrolesresult.md:
-    last_write_checksum: sha1:c4d203188c40276fbb2bb34751ba7f0a90020dec
+    last_write_checksum: sha1:d6c6766a802984315308f9237201628db589b960
   docs/models/components/listscopesresult.md:
     last_write_checksum: sha1:5d5ea3bc90e7cf9c25cb5ee59e57409cfdd220d6
   docs/models/components/listserversresponsebody.md:
@@ -621,7 +619,9 @@ trackedFiles:
   docs/models/components/matchtype.md:
     last_write_checksum: sha1:47611092d9c687c6f1d277a5fb69fc4b6ca4f828
   docs/models/components/mcpcollection.md:
-    last_write_checksum: sha1:5d519bf3e0615f3acd1d6b303d8fc9fe62f2da75
+    last_write_checksum: sha1:42621332c9b4e81f787469099526300199e176de
+  docs/models/components/mcpcollectionvisibility.md:
+    last_write_checksum: sha1:718255110f71ad671012334d73777102a9bfd400
   docs/models/components/mcpendpoint.md:
     last_write_checksum: sha1:f4a417382e633e70ca8d440811a8c41020db8f5a
   docs/models/components/mcpenvironmentconfig.md:
@@ -931,13 +931,13 @@ trackedFiles:
   docs/models/components/role.md:
     last_write_checksum: sha1:d3b897e7263695af44f3c8e006d4adab1372407e
   docs/models/components/rolegrant.md:
-    last_write_checksum: sha1:827d751c24dd45c937a71f53fad03270a8fac511
+    last_write_checksum: sha1:94df0d3d24eaa9af1648c6fcf1d3812788b3eb21
   docs/models/components/rolesummary.md:
     last_write_checksum: sha1:45d8d2e5a97e1fefeab1cd7edaceaff08ce21796
   docs/models/components/scope.md:
-    last_write_checksum: sha1:7473fa2ffde01050e4f0583ac68627b04a60f1b3
+    last_write_checksum: sha1:dcb5ae81f5d79f5e490cf9939a2d2919027cefab
   docs/models/components/scopedefinition.md:
-    last_write_checksum: sha1:9e997acb2d9b9fc2fba4c498a77fcbce8fce34f2
+    last_write_checksum: sha1:c3e41eb48966fc1bce580012ed2b52b4a4caf0ed
   docs/models/components/searchchatsfilter.md:
     last_write_checksum: sha1:6030d1eef228e96402dce043397ceb548383a655
   docs/models/components/searchchatspayload.md:
@@ -1047,7 +1047,7 @@ trackedFiles:
   docs/models/components/skilltimeseriespoint.md:
     last_write_checksum: sha1:198bda00ec5c6014e843db767ac84ff2bdccffde
   docs/models/components/slug.md:
-    last_write_checksum: sha1:e5a19fe857137f86d65968c94344efe3c085f93f
+    last_write_checksum: sha1:af22e89b5302b95b5158d08b6824b731f6394801
   docs/models/components/sort.md:
     last_write_checksum: sha1:2f0a7e8e1494777fc9390e1ed8affca76b06ebca
   docs/models/components/sortby.md:
@@ -1065,7 +1065,7 @@ trackedFiles:
   docs/models/components/submitfeedbackrequestbody.md:
     last_write_checksum: sha1:4fc79535eaf97ea3ba6530166786c6a0033623e5
   docs/models/components/subscopes.md:
-    last_write_checksum: sha1:7f65b1007930a49eaec1d92298ca708d1aeba72c
+    last_write_checksum: sha1:3ab7d841c3e3eebdf09335e4a2924a2772c4f23b
   docs/models/components/suggestcustomdetectionrulerequestbody.md:
     last_write_checksum: sha1:5c99047a3d68b3f91dbff0e7a67867fd03b96f58
   docs/models/components/suggestcustomdetectionruleresult.md:
@@ -1357,7 +1357,7 @@ trackedFiles:
   docs/models/components/verifyurlresult.md:
     last_write_checksum: sha1:68c9af4b1b630ac06954961bffee1f836abf2180
   docs/models/components/visibility.md:
-    last_write_checksum: sha1:84b0c38d7854280b473fffd30f592d27801773e4
+    last_write_checksum: sha1:676b906931340343dce4b59a8029b978d5eb57ec
   docs/models/components/workflowstatus.md:
     last_write_checksum: sha1:cf97151bbe73384a8d79ca55961485537464c54a
   docs/models/components/workosdomainverificationintentoptions.md:
@@ -4634,7 +4634,7 @@ trackedFiles:
   src/models/components/listriskresultsresult.ts:
     last_write_checksum: sha1:d16223e7b7bc4d6f6ee25b9876b4746553baff8c
   src/models/components/listrolegrant.ts:
-    last_write_checksum: sha1:64caaae22cf5c3e9075c14e431b41fb91641301d
+    last_write_checksum: sha1:ac39a44021c473fb5c91c99a01dff7a30df6587e
   src/models/components/listrolesresult.ts:
     last_write_checksum: sha1:c6334302437232f7d088e953ea4b0360f1e6c8c2
   src/models/components/listscopesresult.ts:
@@ -4694,7 +4694,7 @@ trackedFiles:
   src/models/components/marketplacesettingsresult.ts:
     last_write_checksum: sha1:d912e2809cf42b2fc4dc957eddc9cee452796fee
   src/models/components/mcpcollection.ts:
-    last_write_checksum: sha1:532c1722ccbc4c4b1687e8301880b10bc15fb13b
+    last_write_checksum: sha1:3f317dd64d2d1c7f5b8a2286ce3a6c89b0376fa3
   src/models/components/mcpendpoint.ts:
     last_write_checksum: sha1:1a8e29c86b1a1be27258d4837e99c53c38c2598c
   src/models/components/mcpenvironmentconfig.ts:
@@ -4947,11 +4947,11 @@ trackedFiles:
   src/models/components/role.ts:
     last_write_checksum: sha1:7a7c55090d45c03ad2cfd17756de0f34999b76d4
   src/models/components/rolegrant.ts:
-    last_write_checksum: sha1:33c812f17f8d9c9869281636a791c912bb7c7b85
+    last_write_checksum: sha1:025d196f62e936e325c5a089b762abe611139d99
   src/models/components/rolesummary.ts:
     last_write_checksum: sha1:282676243abc03437f494ac392000ff98ea08145
   src/models/components/scopedefinition.ts:
-    last_write_checksum: sha1:a68d2a310ed6e4599a67a04b20518e5fc1498fa5
+    last_write_checksum: sha1:092c36f7b9015f62695fb2c37beddf2eeaae3601
   src/models/components/searchchatsfilter.ts:
     last_write_checksum: sha1:d32819c682e8b5987f9f1f1513c4d31392e03dc9
   src/models/components/searchchatspayload.ts:
@@ -7002,7 +7002,7 @@ examples:
   createRole:
     speakeasy-default-create-role:
       requestBody:
-        application/json: {"description": "swerve hm receptor how", "grants": [{"effect": "allow", "scope": "environment:write"}], "name": "<value>"}
+        application/json: {"description": "swerve hm receptor how", "grants": [{"scope": "environment:write"}], "name": "<value>"}
       responses:
         "201":
           application/json: {"created_at": "2024-08-15T08:14:35.208Z", "description": "mmm co-producer instead achieve through decision carefully ah", "grants": [], "id": "<id>", "is_system": false, "member_count": 747343, "name": "<value>", "principal_urn": "<value>", "slug": "<value>", "updated_at": "2024-02-02T13:39:51.749Z"}
@@ -7085,7 +7085,7 @@ examples:
     speakeasy-default-list-grants:
       responses:
         "200":
-          application/json: {"grants": [{"effect": "allow", "scope": "org:read"}]}
+          application/json: {"grants": [{"scope": "org:read"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
