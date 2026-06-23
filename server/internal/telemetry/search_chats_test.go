@@ -82,9 +82,6 @@ func TestSearchChats_AggregatesByChatID(t *testing.T) {
 	insertChatLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-6*time.Minute), chatID2, 150, 75, 225, 1.8, "stop", "claude-3", "anthropic")
 	insertToolCallLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-5*time.Minute), chatID2, "tools:http:petstore:getPet", 500, 1.0)
 
-	// Wait for ClickHouse eventual consistency
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
@@ -155,8 +152,6 @@ func TestSearchChats_Pagination(t *testing.T) {
 		insertChatLogWithChatID(t, ctx, projectID, deploymentID, ts, chatID, 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
 	}
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
@@ -226,8 +221,6 @@ func TestSearchChats_FilterByDeploymentID(t *testing.T) {
 	insertChatLogWithChatID(t, ctx, projectID, deployment2, now.Add(-9*time.Minute), uuid.New().String(), 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
 	insertChatLogWithChatID(t, ctx, projectID, deployment1, now.Add(-8*time.Minute), uuid.New().String(), 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
@@ -262,8 +255,6 @@ func TestSearchChats_PaginationAscOrder(t *testing.T) {
 		ts := now.Add(-time.Duration(50-i*10) * time.Minute)
 		insertChatLogWithChatID(t, ctx, projectID, deploymentID, ts, chatID, 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
 	}
-
-	time.Sleep(200 * time.Millisecond)
 
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
@@ -340,8 +331,6 @@ func TestSearchChats_ChatWithOnlyTools(t *testing.T) {
 	insertToolCallLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID, "tools:http:petstore:listPets", 200, 0.5)
 	insertToolCallLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID, "tools:http:petstore:getPet", 200, 0.3)
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
@@ -387,8 +376,6 @@ func TestSearchChats_ChatWithOnlyMessages(t *testing.T) {
 	// Insert only completion messages, no tool calls
 	insertChatLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID, 100, 50, 150, 1.5, "stop", "gpt-4", "openai")
 	insertChatLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID, 200, 100, 300, 2.0, "stop", "gpt-4", "openai")
-
-	time.Sleep(200 * time.Millisecond)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
@@ -440,8 +427,6 @@ func TestSearchChats_FilterByGramURN(t *testing.T) {
 	// Chat 3: another petstore tool
 	chatID3 := uuid.New().String()
 	insertToolCallLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), chatID3, "tools:http:petstore:getPet", 200, 0.4)
-
-	time.Sleep(200 * time.Millisecond)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
@@ -496,8 +481,6 @@ func TestSearchChats_PaginationCursorScopedByProject(t *testing.T) {
 	// subquery is not scoped by project, it would pick up this row's timestamp
 	// and corrupt pagination.
 	insertChatLogWithChatID(t, ctx, otherProjectID, deploymentID, now.Add(-5*time.Hour), chatIDs[0], 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
-
-	time.Sleep(200 * time.Millisecond)
 
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
@@ -558,8 +541,6 @@ func TestSearchLogs_FilterByGramChatID(t *testing.T) {
 	insertToolCallLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID, "tools:http:test:op", 200, 0.5)
 	insertTelemetryLog(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), nil, "urn:gram:other", "INFO")
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
@@ -598,8 +579,6 @@ func TestSearchChats_DerivesTotalTokensWhenProviderOmitsTotal(t *testing.T) {
 	// Two Claude Code metric rows: input/output tokens present, total omitted.
 	insertClaudeCodeMetricLog(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID, 100, 50, "claude-sonnet-4")
 	insertClaudeCodeMetricLog(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), chatID, 200, 80, "claude-sonnet-4")
-
-	time.Sleep(200 * time.Millisecond)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
