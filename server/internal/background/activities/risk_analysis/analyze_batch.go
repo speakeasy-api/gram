@@ -85,16 +85,15 @@ func NewAnalyzeBatch(
 }
 
 type AnalyzeBatchArgs struct {
-	ProjectID            uuid.UUID
-	OrganizationID       string
-	RiskPolicyID         uuid.UUID
-	PolicyVersion        int64
-	MessageIDs           []uuid.UUID
-	Sources              []string
-	MessageTypes         []string
-	PresidioEntities     []string
-	PromptInjectionRules []string
-	CustomRuleIds        []string
+	ProjectID        uuid.UUID
+	OrganizationID   string
+	RiskPolicyID     uuid.UUID
+	PolicyVersion    int64
+	MessageIDs       []uuid.UUID
+	Sources          []string
+	MessageTypes     []string
+	PresidioEntities []string
+	CustomRuleIds    []string
 }
 
 type AnalyzeBatchResult struct {

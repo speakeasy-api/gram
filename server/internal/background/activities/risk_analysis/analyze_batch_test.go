@@ -73,15 +73,14 @@ func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
-		ProjectID:            uuid.Nil,
-		OrganizationID:       "",
-		RiskPolicyID:         uuid.Nil,
-		PolicyVersion:        0,
-		MessageIDs:           nil,
-		Sources:              []string{"gitleaks"},
-		PresidioEntities:     nil,
-		PromptInjectionRules: nil,
-		CustomRuleIds:        nil,
+		ProjectID:        uuid.Nil,
+		OrganizationID:   "",
+		RiskPolicyID:     uuid.Nil,
+		PolicyVersion:    0,
+		MessageIDs:       nil,
+		Sources:          []string{"gitleaks"},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.Processed)
@@ -135,15 +134,14 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	env.RegisterActivity(ab.Do)
 
 	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
-		ProjectID:            td.projectID,
-		OrganizationID:       td.orgID,
-		RiskPolicyID:         td.policyID,
-		PolicyVersion:        td.policyVersion,
-		MessageIDs:           []uuid.UUID{msgID},
-		Sources:              []string{"gitleaks", "presidio"},
-		PresidioEntities:     nil,
-		PromptInjectionRules: nil,
-		CustomRuleIds:        nil,
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       []uuid.UUID{msgID},
+		Sources:          []string{"gitleaks", "presidio"},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
 	})
 	require.NoError(t, err, "should not fail when presidio is down")
 
@@ -226,16 +224,15 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 	env.RegisterActivity(ab.Do)
 
 	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
-		ProjectID:            td.projectID,
-		OrganizationID:       td.orgID,
-		RiskPolicyID:         td.policyID,
-		PolicyVersion:        td.policyVersion,
-		MessageIDs:           []uuid.UUID{msgID},
-		Sources:              []string{"gitleaks"},
-		MessageTypes:         []string{message.ToolRequest},
-		PresidioEntities:     nil,
-		PromptInjectionRules: nil,
-		CustomRuleIds:        nil,
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       []uuid.UUID{msgID},
+		Sources:          []string{"gitleaks"},
+		MessageTypes:     []string{message.ToolRequest},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
 	})
 	require.NoError(t, err)
 
@@ -330,16 +327,15 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 	env.RegisterActivity(ab.Do)
 
 	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
-		ProjectID:            td.projectID,
-		OrganizationID:       td.orgID,
-		RiskPolicyID:         td.policyID,
-		PolicyVersion:        td.policyVersion,
-		MessageIDs:           []uuid.UUID{msgID},
-		Sources:              nil,
-		MessageTypes:         []string{message.ToolRequest},
-		PresidioEntities:     nil,
-		PromptInjectionRules: nil,
-		CustomRuleIds:        nil,
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       []uuid.UUID{msgID},
+		Sources:          nil,
+		MessageTypes:     []string{message.ToolRequest},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
 	})
 	require.NoError(t, err)
 
@@ -414,16 +410,15 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 	env.RegisterActivity(ab.Do)
 
 	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
-		ProjectID:            td.projectID,
-		OrganizationID:       td.orgID,
-		RiskPolicyID:         td.policyID,
-		PolicyVersion:        td.policyVersion,
-		MessageIDs:           []uuid.UUID{msgID},
-		Sources:              nil,
-		MessageTypes:         []string{message.ToolRequest},
-		PresidioEntities:     nil,
-		PromptInjectionRules: nil,
-		CustomRuleIds:        nil,
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       []uuid.UUID{msgID},
+		Sources:          nil,
+		MessageTypes:     []string{message.ToolRequest},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
 	})
 	require.NoError(t, err)
 
@@ -873,15 +868,14 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 	env.RegisterActivity(ab.Do)
 
 	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
-		ProjectID:            td.projectID,
-		OrganizationID:       td.orgID,
-		RiskPolicyID:         td.policyID,
-		PolicyVersion:        td.policyVersion,
-		MessageIDs:           messageIDs,
-		Sources:              sources,
-		PresidioEntities:     nil,
-		PromptInjectionRules: nil,
-		CustomRuleIds:        nil,
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       messageIDs,
+		Sources:          sources,
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
 	})
 	require.NoError(t, err)
 
