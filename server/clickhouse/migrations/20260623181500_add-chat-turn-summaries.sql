@@ -20,19 +20,19 @@ CREATE TABLE `chat_turn_summaries` (
   `hook_source` LowCardinality(String) COMMENT 'Consuming surface that produced the telemetry row, such as claude-code.',
   `roles` Array(LowCardinality(String)) COMMENT 'WorkOS role slugs for the user attributed to the request.',
   `groups` Array(LowCardinality(String)) COMMENT 'WorkOS group slugs for the user attributed to the request.',
-  `start_time_unix_nano` SimpleAggregateFunction(min, Int64) COMMENT 'Earliest API request timestamp for this chat turn attribution bucket, in Unix nanoseconds.',
-  `end_time_unix_nano` SimpleAggregateFunction(max, Int64) COMMENT 'Latest API request timestamp for this chat turn attribution bucket, in Unix nanoseconds.',
-  `request_count` SimpleAggregateFunction(sum, UInt64) COMMENT 'Number of Claude Code api_request rows in this attribution bucket.',
-  `input_tokens` SimpleAggregateFunction(sum, Int64) COMMENT 'Input tokens reported by Claude Code api_request rows.',
-  `output_tokens` SimpleAggregateFunction(sum, Int64) COMMENT 'Output tokens reported by Claude Code api_request rows.',
-  `total_tokens` SimpleAggregateFunction(sum, Int64) COMMENT 'Input, output, cache read, and cache creation tokens summed for this attribution bucket.',
-  `cache_read_tokens` SimpleAggregateFunction(sum, Int64) COMMENT 'Prompt-cache read tokens reported by Claude Code api_request rows.',
-  `cache_creation_tokens` SimpleAggregateFunction(sum, Int64) COMMENT 'Prompt-cache creation tokens. This is the primary marginal context-added attribution measure.',
-  `cost_usd` SimpleAggregateFunction(sum, Float64) COMMENT 'Estimated total API request cost in USD for this attribution bucket.',
-  `cost_usd_micros` SimpleAggregateFunction(sum, Int64) COMMENT 'Estimated total API request cost in micro-USD for this attribution bucket.',
+  `start_time_unix_nano` Int64 COMMENT 'Earliest API request timestamp for this chat turn attribution bucket, in Unix nanoseconds.',
+  `end_time_unix_nano` Int64 COMMENT 'Latest API request timestamp for this chat turn attribution bucket, in Unix nanoseconds.',
+  `request_count` UInt64 COMMENT 'Number of Claude Code api_request rows in this attribution bucket.',
+  `input_tokens` Int64 COMMENT 'Input tokens reported by Claude Code api_request rows.',
+  `output_tokens` Int64 COMMENT 'Output tokens reported by Claude Code api_request rows.',
+  `total_tokens` Int64 COMMENT 'Input, output, cache read, and cache creation tokens summed for this attribution bucket.',
+  `cache_read_tokens` Int64 COMMENT 'Prompt-cache read tokens reported by Claude Code api_request rows.',
+  `cache_creation_tokens` Int64 COMMENT 'Prompt-cache creation tokens. This is the primary marginal context-added attribution measure.',
+  `cost_usd` Float64 COMMENT 'Estimated total API request cost in USD for this attribution bucket.',
+  `cost_usd_micros` Int64 COMMENT 'Estimated total API request cost in micro-USD for this attribution bucket.',
   INDEX `idx_chat_turn_summaries_chat_id` (`chat_id`) TYPE bloom_filter(0.01) GRANULARITY 1,
   INDEX `idx_chat_turn_summaries_mcp_server_name` (`mcp_server_name`) TYPE bloom_filter(0.01) GRANULARITY 1
-) ENGINE = AggregatingMergeTree
+) ENGINE = MergeTree
 PRIMARY KEY (`gram_project_id`, `chat_id`, `turn_id`, `query_source`, `skill_name`, `agent_name`, `mcp_server_name`, `mcp_tool_name`, `model`, `department_name`, `job_title`, `employee_type`, `division_name`, `cost_center_name`, `user_email`, `hook_source`, `roles`, `groups`) ORDER BY (`gram_project_id`, `chat_id`, `turn_id`, `query_source`, `skill_name`, `agent_name`, `mcp_server_name`, `mcp_tool_name`, `model`, `department_name`, `job_title`, `employee_type`, `division_name`, `cost_center_name`, `user_email`, `hook_source`, `roles`, `groups`) TTL fromUnixTimestamp64Nano(start_time_unix_nano) + toIntervalDay(30) SETTINGS index_granularity = 8192 COMMENT 'Claude Code per-turn request attribution by chat, turn, MCP server/tool, skill, agent, and user attributes. cache_creation_tokens is the primary context-added measure.';
 
 -- Create "chat_turn_summaries_mv" view

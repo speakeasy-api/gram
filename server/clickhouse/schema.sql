@@ -489,24 +489,24 @@ CREATE TABLE IF NOT EXISTS chat_turn_summaries (
     groups Array(LowCardinality(String)) COMMENT 'WorkOS group slugs for the user attributed to the request.',
 
     -- Turn timing.
-    start_time_unix_nano SimpleAggregateFunction(min, Int64) COMMENT 'Earliest API request timestamp for this chat turn attribution bucket, in Unix nanoseconds.',
-    end_time_unix_nano SimpleAggregateFunction(max, Int64) COMMENT 'Latest API request timestamp for this chat turn attribution bucket, in Unix nanoseconds.',
+    start_time_unix_nano Int64 COMMENT 'Earliest API request timestamp for this chat turn attribution bucket, in Unix nanoseconds.',
+    end_time_unix_nano Int64 COMMENT 'Latest API request timestamp for this chat turn attribution bucket, in Unix nanoseconds.',
 
     -- Request/token/cost measures. cache_creation_tokens is the primary
     -- "context added" attribution measure; the other measures support cost and
     -- sanity-check views.
-    request_count SimpleAggregateFunction(sum, UInt64) COMMENT 'Number of Claude Code api_request rows in this attribution bucket.',
-    input_tokens SimpleAggregateFunction(sum, Int64) COMMENT 'Input tokens reported by Claude Code api_request rows.',
-    output_tokens SimpleAggregateFunction(sum, Int64) COMMENT 'Output tokens reported by Claude Code api_request rows.',
-    total_tokens SimpleAggregateFunction(sum, Int64) COMMENT 'Input, output, cache read, and cache creation tokens summed for this attribution bucket.',
-    cache_read_tokens SimpleAggregateFunction(sum, Int64) COMMENT 'Prompt-cache read tokens reported by Claude Code api_request rows.',
-    cache_creation_tokens SimpleAggregateFunction(sum, Int64) COMMENT 'Prompt-cache creation tokens. This is the primary marginal context-added attribution measure.',
-    cost_usd SimpleAggregateFunction(sum, Float64) COMMENT 'Estimated total API request cost in USD for this attribution bucket.',
-    cost_usd_micros SimpleAggregateFunction(sum, Int64) COMMENT 'Estimated total API request cost in micro-USD for this attribution bucket.',
+    request_count UInt64 COMMENT 'Number of Claude Code api_request rows in this attribution bucket.',
+    input_tokens Int64 COMMENT 'Input tokens reported by Claude Code api_request rows.',
+    output_tokens Int64 COMMENT 'Output tokens reported by Claude Code api_request rows.',
+    total_tokens Int64 COMMENT 'Input, output, cache read, and cache creation tokens summed for this attribution bucket.',
+    cache_read_tokens Int64 COMMENT 'Prompt-cache read tokens reported by Claude Code api_request rows.',
+    cache_creation_tokens Int64 COMMENT 'Prompt-cache creation tokens. This is the primary marginal context-added attribution measure.',
+    cost_usd Float64 COMMENT 'Estimated total API request cost in USD for this attribution bucket.',
+    cost_usd_micros Int64 COMMENT 'Estimated total API request cost in micro-USD for this attribution bucket.',
 
     INDEX idx_chat_turn_summaries_chat_id chat_id TYPE bloom_filter(0.01) GRANULARITY 1,
     INDEX idx_chat_turn_summaries_mcp_server_name mcp_server_name TYPE bloom_filter(0.01) GRANULARITY 1
-) ENGINE = AggregatingMergeTree
+) ENGINE = MergeTree
 ORDER BY (
     gram_project_id,
     chat_id,
