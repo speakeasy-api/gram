@@ -173,15 +173,18 @@ kubectl --context kind-local-mess -n gram-local rollout status deploy/tunnel-gat
 the public ngrok host as rules), and a Secret seeding the route store + demo key.
 It reuses the existing `gram-local` Redis as the route cache.
 
-Expose the gateway publicly with **ngrok** — the agent runs on a separate
-machine, so the demo dials the public host, **not** a `/etc/hosts` entry:
+Expose the ingress publicly with **ngrok** — the agent runs on a separate
+machine, so the demo dials the public host, **not** a `/etc/hosts` entry. Point
+ngrok at the ingress (port 80) on a reserved ngrok domain:
 
 ```bash
-ngrok http https://tunnel.gram.local:443   # → wss://<your-ngrok-host>/connect
+ngrok http --url=<your-tunnel-svc-host>.ngrok.app 80
 ```
 
-The ngrok host must match an ingress rule in `10-gateway.yaml` (the agent sends
-`Host` verbatim — see the `dennis-tunnel.ngrok.app` rule for the pattern).
+The ngrok host (`<your-tunnel-svc-host>.ngrok.app`) must match an ingress rule in
+`10-gateway.yaml` (the agent sends `Host` verbatim — see the
+`dennis-tunnel.ngrok.app` rule for the pattern). The agent then dials
+`wss://<your-tunnel-svc-host>.ngrok.app/connect`.
 
 ### 3. (Optional) a local MCP target
 
