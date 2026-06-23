@@ -81,8 +81,9 @@ type mockMessageCaptureStrategy struct {
 	capturedResponse     *CompletionResponse
 }
 
+//go:fix inline
 func floatPtr(v float64) *float64 {
-	return &v
+	return new(v)
 }
 
 func (m *mockMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request CompletionRequest) (CaptureSession, error) {
@@ -290,7 +291,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 		assert.True(c, telemetryCalled, "CreateLog should be called")
 	}, 10*time.Second, 10*time.Millisecond)
 
-	// Verify captured data — inline usage payload flows through to the tracker.
+	// Verify captured data - inline usage payload flows through to the tracker.
 	assert.Equal(t, "msg_123", captureStrategy.capturedResponse.MessageID)
 	require.NotNil(t, trackingStrategy.usage)
 	assert.Equal(t, "openai/gpt-5.4", trackingStrategy.usage.Model)
@@ -634,7 +635,7 @@ func TestUsageToModelUsagePreservesExplicitZeroCost(t *testing.T) {
 		PromptTokens:            10,
 		CompletionTokens:        0,
 		TotalTokens:             10,
-		Cost:                    floatPtr(0),
+		Cost:                    new(float64(0)),
 		CostDetails:             nil,
 		PromptTokensDetails:     nil,
 		CompletionTokensDetails: nil,
@@ -1199,7 +1200,7 @@ func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
 		OrgID:       "test-org",
 		ProjectID:   projectID.String(),
 		Messages:    []or.ChatMessages{CreateMessageUser("Hello")},
-		ChatID:      uuid.Nil, // No chat — like title generation activity's internal call
+		ChatID:      uuid.Nil, // No chat - like title generation activity's internal call
 		UsageSource: billing.ModelUsageSourceGram,
 		APIKeyID:    "",
 	}
@@ -1329,7 +1330,7 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 	require.Equal(t, "CaptureMessage", tracker.storedMessages[1].source)
 	tracker.mu.Unlock()
 
-	// Round 2: Simulate reload — client sends all history + new user message
+	// Round 2: Simulate reload - client sends all history + new user message
 	req2 := CompletionRequest{
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),

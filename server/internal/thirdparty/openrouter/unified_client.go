@@ -756,7 +756,7 @@ func (c *ChatClient) emitGenAITelemetry(
 
 	toolInfo := telemetry.ToolInfo{
 		ID:             chatID,
-		URN:            chatID,
+		URN:            "agents:chat:completion",
 		Name:           "",
 		ProjectID:      projectID,
 		DeploymentID:   "",
