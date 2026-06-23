@@ -1,5 +1,5 @@
 import { Eye, EyeOff } from "lucide-react";
-import { type ReactNode, useMemo } from "react";
+import { type ReactElement, type ReactNode, useMemo } from "react";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import type { RiskResult } from "@gram/client/models/components";
 import {
@@ -121,9 +121,10 @@ export function RiskBadge({
 }: {
   results: RiskResult[];
   compact?: boolean;
-  /** Custom popover trigger (e.g. the "N risks" turn-divider label). Falls back
+  /** Custom popover trigger (a single element, for `PopoverTrigger asChild`)
+   * — e.g. the "N risks" turn-divider label. Falls back
    * to the default destructive badge. */
-  trigger?: ReactNode;
+  trigger?: ReactElement;
 }): ReactNode {
   const unique = useMemo(() => {
     const grouped = new Map<string, { result: RiskResult; count: number }>();
