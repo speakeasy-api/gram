@@ -169,17 +169,22 @@ func TestBuildPubSubValues_SchemaAttachment(t *testing.T) {
 	}
 
 	// Topic with no name override gets the matching schema attached.
-	event := byName["example-v1-event"].Spec
-	require.NotNil(t, event.SchemaSettings)
-	require.Equal(t, "example-v1-event", event.SchemaSettings.SchemaRef.Name)
-	require.NotNil(t, event.SchemaSettings.Encoding)
-	require.Equal(t, schemaEncodingBinary, *event.SchemaSettings.Encoding)
+	event, ok := byName["example-v1-event"]
+	require.True(t, ok, "topic example-v1-event missing from output")
+	require.NotNil(t, event.Spec.SchemaSettings)
+	require.Equal(t, "example-v1-event", event.Spec.SchemaSettings.SchemaRef.Name)
+	require.NotNil(t, event.Spec.SchemaSettings.Encoding)
+	require.Equal(t, schemaEncodingBinary, *event.Spec.SchemaSettings.Encoding)
 
 	// Topic with an explicit name override is left unattached.
-	require.Nil(t, byName["shared-topic"].Spec.SchemaSettings)
+	shared, ok := byName["shared-topic"]
+	require.True(t, ok, "topic shared-topic missing from output")
+	require.Nil(t, shared.Spec.SchemaSettings)
 
 	// Topic without a matching schema is left unattached.
-	require.Nil(t, byName["example-v1-event-dlq"].Spec.SchemaSettings)
+	dlq, ok := byName["example-v1-event-dlq"]
+	require.True(t, ok, "topic example-v1-event-dlq missing from output")
+	require.Nil(t, dlq.Spec.SchemaSettings)
 }
 
 func TestCCPubSub_WriteValues(t *testing.T) {
