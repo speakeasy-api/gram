@@ -719,8 +719,6 @@ func toGenChatTurnMeasures(m repo.ChatTurnSummaryMeasures) *telem_gen.ChatTurnQu
 	return &telem_gen.ChatTurnQueryMeasures{
 		CacheCreationTokens: m.CacheCreationTokens,
 		CacheReadTokens:     m.CacheReadTokens,
-		InputTokens:         m.InputTokens,
-		OutputTokens:        m.OutputTokens,
 		TotalTokens:         m.TotalTokens,
 		TotalCost:           sanitizeFloat64(m.TotalCost),
 		CostUsdMicros:       m.CostUSDMicros,

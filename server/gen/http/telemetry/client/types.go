@@ -4868,10 +4868,6 @@ type ChatTurnQueryMeasuresResponseBody struct {
 	CacheCreationTokens *int64 `form:"cache_creation_tokens,omitempty" json:"cache_creation_tokens,omitempty" xml:"cache_creation_tokens,omitempty"`
 	// Sum of prompt-cache read tokens
 	CacheReadTokens *int64 `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
-	// Sum of input tokens
-	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
-	// Sum of output tokens
-	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
 	// Sum of input, output, cache read, and cache creation tokens
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
 	// Total cost in USD
@@ -15548,12 +15544,6 @@ func ValidateChatTurnQueryMeasuresResponseBody(body *ChatTurnQueryMeasuresRespon
 	}
 	if body.CacheReadTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("cache_read_tokens", "body"))
-	}
-	if body.InputTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("input_tokens", "body"))
-	}
-	if body.OutputTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("output_tokens", "body"))
 	}
 	if body.TotalTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))

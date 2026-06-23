@@ -4749,10 +4749,6 @@ type ChatTurnQueryMeasuresResponseBody struct {
 	CacheCreationTokens int64 `form:"cache_creation_tokens" json:"cache_creation_tokens" xml:"cache_creation_tokens"`
 	// Sum of prompt-cache read tokens
 	CacheReadTokens int64 `form:"cache_read_tokens" json:"cache_read_tokens" xml:"cache_read_tokens"`
-	// Sum of input tokens
-	InputTokens int64 `form:"input_tokens" json:"input_tokens" xml:"input_tokens"`
-	// Sum of output tokens
-	OutputTokens int64 `form:"output_tokens" json:"output_tokens" xml:"output_tokens"`
 	// Sum of input, output, cache read, and cache creation tokens
 	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
 	// Total cost in USD
@@ -9712,8 +9708,8 @@ func ValidateQueryChatTurnsRequestBody(body *QueryChatTurnsRequestBody) (err err
 		}
 	}
 	if body.SortBy != nil {
-		if !(*body.SortBy == "cache_creation_tokens" || *body.SortBy == "total_cost" || *body.SortBy == "total_tokens" || *body.SortBy == "input_tokens" || *body.SortBy == "output_tokens" || *body.SortBy == "cache_read_tokens") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", *body.SortBy, []any{"cache_creation_tokens", "total_cost", "total_tokens", "input_tokens", "output_tokens", "cache_read_tokens"}))
+		if !(*body.SortBy == "cache_creation_tokens" || *body.SortBy == "total_cost" || *body.SortBy == "total_tokens" || *body.SortBy == "cache_read_tokens") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", *body.SortBy, []any{"cache_creation_tokens", "total_cost", "total_tokens", "cache_read_tokens"}))
 		}
 	}
 	return

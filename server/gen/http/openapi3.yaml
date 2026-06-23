@@ -35721,14 +35721,6 @@ components:
                     type: integer
                     description: Total cost in micro-USD
                     format: int64
-                input_tokens:
-                    type: integer
-                    description: Sum of input tokens
-                    format: int64
-                output_tokens:
-                    type: integer
-                    description: Sum of output tokens
-                    format: int64
                 total_cost:
                     type: number
                     description: Total cost in USD
@@ -35741,8 +35733,6 @@ components:
             required:
                 - cache_creation_tokens
                 - cache_read_tokens
-                - input_tokens
-                - output_tokens
                 - total_tokens
                 - total_cost
                 - cost_usd_micros
@@ -43244,8 +43234,6 @@ components:
                         - cache_creation_tokens
                         - total_cost
                         - total_tokens
-                        - input_tokens
-                        - output_tokens
                         - cache_read_tokens
                 to:
                     type: string

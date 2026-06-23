@@ -1478,8 +1478,6 @@ var chatTurnQueryMeasures = []any{
 	"cache_creation_tokens",
 	"total_cost",
 	"total_tokens",
-	"input_tokens",
-	"output_tokens",
 	"cache_read_tokens",
 }
 
@@ -1530,8 +1528,6 @@ var ChatTurnQueryMeasures = Type("ChatTurnQueryMeasures", func() {
 
 	Attribute("cache_creation_tokens", Int64, "Sum of prompt-cache creation tokens; the primary context-added attribution measure")
 	Attribute("cache_read_tokens", Int64, "Sum of prompt-cache read tokens")
-	Attribute("input_tokens", Int64, "Sum of input tokens")
-	Attribute("output_tokens", Int64, "Sum of output tokens")
 	Attribute("total_tokens", Int64, "Sum of input, output, cache read, and cache creation tokens")
 	Attribute("total_cost", Float64, "Total cost in USD")
 	Attribute("cost_usd_micros", Int64, "Total cost in micro-USD")
@@ -1539,8 +1535,6 @@ var ChatTurnQueryMeasures = Type("ChatTurnQueryMeasures", func() {
 	Required(
 		"cache_creation_tokens",
 		"cache_read_tokens",
-		"input_tokens",
-		"output_tokens",
 		"total_tokens",
 		"total_cost",
 		"cost_usd_micros",

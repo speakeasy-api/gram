@@ -5656,8 +5656,6 @@ func unmarshalChatTurnQueryMeasuresResponseBodyToTelemetryChatTurnQueryMeasures(
 	res := &telemetry.ChatTurnQueryMeasures{
 		CacheCreationTokens: *v.CacheCreationTokens,
 		CacheReadTokens:     *v.CacheReadTokens,
-		InputTokens:         *v.InputTokens,
-		OutputTokens:        *v.OutputTokens,
 		TotalTokens:         *v.TotalTokens,
 		TotalCost:           *v.TotalCost,
 		CostUsdMicros:       *v.CostUsdMicros,

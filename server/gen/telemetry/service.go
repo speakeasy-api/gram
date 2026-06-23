@@ -164,10 +164,6 @@ type ChatTurnQueryMeasures struct {
 	CacheCreationTokens int64
 	// Sum of prompt-cache read tokens
 	CacheReadTokens int64
-	// Sum of input tokens
-	InputTokens int64
-	// Sum of output tokens
-	OutputTokens int64
 	// Sum of input, output, cache read, and cache creation tokens
 	TotalTokens int64
 	// Total cost in USD

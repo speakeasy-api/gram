@@ -700,8 +700,8 @@ func BuildQueryChatTurnsPayload(telemetryQueryChatTurnsBody string, telemetryQue
 		if body.TopN < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.top_n", body.TopN, 1, true))
 		}
-		if !(body.SortBy == "cache_creation_tokens" || body.SortBy == "total_cost" || body.SortBy == "total_tokens" || body.SortBy == "input_tokens" || body.SortBy == "output_tokens" || body.SortBy == "cache_read_tokens") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", body.SortBy, []any{"cache_creation_tokens", "total_cost", "total_tokens", "input_tokens", "output_tokens", "cache_read_tokens"}))
+		if !(body.SortBy == "cache_creation_tokens" || body.SortBy == "total_cost" || body.SortBy == "total_tokens" || body.SortBy == "cache_read_tokens") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", body.SortBy, []any{"cache_creation_tokens", "total_cost", "total_tokens", "cache_read_tokens"}))
 		}
 		if err != nil {
 			return nil, err

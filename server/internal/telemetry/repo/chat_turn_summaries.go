@@ -15,8 +15,6 @@ import (
 const chatTurnMeasureAliasPrefix = "m_"
 
 var chatTurnMeasureSelects = []string{
-	"sum(input_tokens) AS m_input_tokens",
-	"sum(output_tokens) AS m_output_tokens",
 	"sum(total_tokens) AS m_total_tokens",
 	"sum(cache_read_tokens) AS m_cache_read_tokens",
 	"sum(cache_creation_tokens) AS m_cache_creation_tokens",
@@ -25,8 +23,6 @@ var chatTurnMeasureSelects = []string{
 }
 
 var chatTurnMeasureSet = map[string]bool{
-	"input_tokens":          true,
-	"output_tokens":         true,
 	"total_tokens":          true,
 	"cache_read_tokens":     true,
 	"cache_creation_tokens": true,
@@ -35,8 +31,6 @@ var chatTurnMeasureSet = map[string]bool{
 }
 
 type ChatTurnSummaryMeasures struct {
-	InputTokens         int64
-	OutputTokens        int64
 	TotalTokens         int64
 	CacheReadTokens     int64
 	CacheCreationTokens int64
@@ -45,8 +39,6 @@ type ChatTurnSummaryMeasures struct {
 }
 
 func (m *ChatTurnSummaryMeasures) Add(o ChatTurnSummaryMeasures) {
-	m.InputTokens += o.InputTokens
-	m.OutputTokens += o.OutputTokens
 	m.TotalTokens += o.TotalTokens
 	m.CacheReadTokens += o.CacheReadTokens
 	m.CacheCreationTokens += o.CacheCreationTokens
@@ -56,8 +48,6 @@ func (m *ChatTurnSummaryMeasures) Add(o ChatTurnSummaryMeasures) {
 
 type ChatTurnSummaryRow struct {
 	GroupValue          string              `ch:"group_value"`
-	InputTokens         int64               `ch:"m_input_tokens"`
-	OutputTokens        int64               `ch:"m_output_tokens"`
 	TotalTokens         int64               `ch:"m_total_tokens"`
 	CacheReadTokens     int64               `ch:"m_cache_read_tokens"`
 	CacheCreationTokens int64               `ch:"m_cache_creation_tokens"`
@@ -68,8 +58,6 @@ type ChatTurnSummaryRow struct {
 
 func (r ChatTurnSummaryRow) Measures() ChatTurnSummaryMeasures {
 	return ChatTurnSummaryMeasures{
-		InputTokens:         r.InputTokens,
-		OutputTokens:        r.OutputTokens,
 		TotalTokens:         r.TotalTokens,
 		CacheReadTokens:     r.CacheReadTokens,
 		CacheCreationTokens: r.CacheCreationTokens,
@@ -81,8 +69,6 @@ func (r ChatTurnSummaryRow) Measures() ChatTurnSummaryMeasures {
 type ChatTurnSummaryTimePoint struct {
 	GroupValue          string  `ch:"group_value"`
 	BucketTimeUnixNano  int64   `ch:"bucket_time_unix_nano"`
-	InputTokens         int64   `ch:"m_input_tokens"`
-	OutputTokens        int64   `ch:"m_output_tokens"`
 	TotalTokens         int64   `ch:"m_total_tokens"`
 	CacheReadTokens     int64   `ch:"m_cache_read_tokens"`
 	CacheCreationTokens int64   `ch:"m_cache_creation_tokens"`
@@ -92,8 +78,6 @@ type ChatTurnSummaryTimePoint struct {
 
 func (p ChatTurnSummaryTimePoint) Measures() ChatTurnSummaryMeasures {
 	return ChatTurnSummaryMeasures{
-		InputTokens:         p.InputTokens,
-		OutputTokens:        p.OutputTokens,
 		TotalTokens:         p.TotalTokens,
 		CacheReadTokens:     p.CacheReadTokens,
 		CacheCreationTokens: p.CacheCreationTokens,
