@@ -362,6 +362,7 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 			limit             int
 			beforeSeq         *int64
 			afterSeq          *int64
+			fromStart         bool
 			riskOnly          bool
 			sessionToken      *string
 			projectSlugInput  *string
@@ -438,6 +439,16 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 			}
 		}
 		{
+			fromStartRaw := qp.Get("from_start")
+			if fromStartRaw != "" {
+				v, err2 := strconv.ParseBool(fromStartRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("from_start", fromStartRaw, "boolean"))
+				}
+				fromStart = v
+			}
+		}
+		{
 			riskOnlyRaw := qp.Get("risk_only")
 			if riskOnlyRaw != "" {
 				v, err2 := strconv.ParseBool(riskOnlyRaw)
@@ -462,7 +473,7 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if err != nil {
 			return payload, err
 		}
-		payload = NewLoadChatPayload(id, generation, limit, beforeSeq, afterSeq, riskOnly, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewLoadChatPayload(id, generation, limit, beforeSeq, afterSeq, fromStart, riskOnly, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

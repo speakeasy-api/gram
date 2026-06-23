@@ -451,7 +451,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			ChatID:     chat.ID,
 			ProjectID:  *authCtx.ProjectID,
 			Generation: generation,
-			AfterSeq:   *payload.AfterSeq,
+			AfterSeq:   pgtype.Int8{Int64: *payload.AfterSeq, Valid: true},
 			Lim:        int32(limit + 1),
 		})
 		if err != nil {
@@ -463,6 +463,33 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 		// We paged forward from an existing anchor, so older messages exist.
 		hasMoreBefore = true
+		resultMessages = s.buildGenMessages(ctx, rows)
+
+	case payload.FromStart && payload.BeforeSeq == nil:
+		// Start of the thread: oldest page, ascending. A NULL cursor returns from
+		// the very beginning. Fetch one extra row to detect whether newer messages
+		// remain. (before_seq takes precedence per the design, hence the guard.)
+		rows, err := s.repo.ListChatMessagesAfterPage(ctx, repo.ListChatMessagesAfterPageParams{
+			ChatID:     chat.ID,
+			ProjectID:  *authCtx.ProjectID,
+			Generation: generation,
+			AfterSeq:   pgtype.Int8{Int64: 0, Valid: false}, // null → oldest page
+			Lim:        int32(limit + 1),
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").LogError(ctx, s.logger)
+		}
+		if len(rows) > limit {
+			hasMoreAfter = true
+			rows = rows[:limit]
+		}
+		// We're at the start of the thread, so nothing older remains.
+		hasMoreBefore = false
+		// This is still an initial (cursorless, latest-generation) load, so it
+		// carries source inference + ClickHouse enrichment like the newest page.
+		if isInitialLatest {
+			latestPageRows = rows
+		}
 		resultMessages = s.buildGenMessages(ctx, rows)
 
 	default:

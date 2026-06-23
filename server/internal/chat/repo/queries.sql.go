@@ -1083,7 +1083,7 @@ SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = $3::integer
-  AND cm.seq > $4::bigint
+  AND ($4::bigint IS NULL OR cm.seq > $4::bigint)
 ORDER BY cm.seq ASC
 LIMIT $5::integer
 `
@@ -1092,13 +1092,14 @@ type ListChatMessagesAfterPageParams struct {
 	ChatID     uuid.UUID
 	ProjectID  uuid.UUID
 	Generation int32
-	AfterSeq   int64
+	AfterSeq   pgtype.Int8
 	Lim        int32
 }
 
 // Keyset page within a generation, oldest first. Returns messages with seq
-// strictly greater than @after_seq. Fetch @lim = pageSize+1 to detect whether
-// more newer rows remain.
+// strictly greater than @after_seq, or the oldest page (start of the thread)
+// when @after_seq is NULL. Fetch @lim = pageSize+1 to detect whether more newer
+// rows remain.
 func (q *Queries) ListChatMessagesAfterPage(ctx context.Context, arg ListChatMessagesAfterPageParams) ([]ChatMessage, error) {
 	rows, err := q.db.Query(ctx, listChatMessagesAfterPage,
 		arg.ChatID,

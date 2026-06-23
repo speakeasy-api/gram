@@ -8,10 +8,11 @@ import { useSdkClient } from "@/contexts/Sdk";
 // initial paint is cheap on long chats; older pages stream in on scroll.
 export const TRANSCRIPT_PAGE_SIZE = 50;
 
-// Cursor encodes which keyset edge to fetch. "initial" omits cursors and gets
-// the newest page; "before"/"after" page older/newer by seq.
+// Cursor encodes which keyset edge to fetch. "start" requests the oldest page
+// (the beginning of the thread) so a normal transcript opens at the first
+// message and reads forward; "before"/"after" page older/newer by seq.
 type Cursor =
-  | { dir: "initial" }
+  | { dir: "start" }
   | { dir: "before"; seq: number }
   | { dir: "after"; seq: number };
 
@@ -44,14 +45,16 @@ export function useChatTranscript(
   const query = useInfiniteQuery({
     queryKey: ["chat", chatId, "transcript"],
     enabled,
-    initialPageParam: { dir: "initial" } as Cursor,
+    initialPageParam: { dir: "start" } as Cursor,
     queryFn: ({ pageParam }) => {
       const request: {
         id: string;
         limit: number;
         beforeSeq?: number;
         afterSeq?: number;
+        fromStart?: boolean;
       } = { id: chatId, limit: TRANSCRIPT_PAGE_SIZE };
+      if (pageParam.dir === "start") request.fromStart = true;
       if (pageParam.dir === "before") request.beforeSeq = pageParam.seq;
       if (pageParam.dir === "after") request.afterSeq = pageParam.seq;
       return client.chat.load(request);
@@ -79,14 +82,14 @@ export function useChatTranscript(
   );
 
   // Chat-level enrichment (cost, agent usage, source) is only populated on the
-  // initial newest page; locate it by its page param rather than by index,
-  // since prepends shift indices.
+  // initial from-start page; locate it by its page param rather than by index,
+  // since appends/prepends shift indices.
   const chat = useMemo(() => {
     const data = query.data;
     if (!data) return undefined;
     const params = data.pageParams as Cursor[];
-    const idx = params.findIndex((p) => p.dir === "initial");
-    return data.pages[idx >= 0 ? idx : data.pages.length - 1];
+    const idx = params.findIndex((p) => p.dir === "start");
+    return data.pages[idx >= 0 ? idx : 0];
   }, [query.data]);
 
   return {

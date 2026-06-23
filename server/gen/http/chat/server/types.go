@@ -2336,13 +2336,14 @@ func NewListChatsPayload(search *string, externalUserID *string, assistantID *st
 }
 
 // NewLoadChatPayload builds a chat service loadChat endpoint payload.
-func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64, afterSeq *int64, riskOnly bool, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.LoadChatPayload {
+func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64, afterSeq *int64, fromStart bool, riskOnly bool, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.LoadChatPayload {
 	v := &chat.LoadChatPayload{}
 	v.ID = id
 	v.Generation = generation
 	v.Limit = limit
 	v.BeforeSeq = beforeSeq
 	v.AfterSeq = afterSeq
+	v.FromStart = fromStart
 	v.RiskOnly = riskOnly
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
