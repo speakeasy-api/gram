@@ -164,10 +164,10 @@ export function highlightMatches(
   return nodes;
 }
 
-/** Highlight (blue) wash for a search-query hit — distinct from the yellow risk
- * wash so search and risk highlights never read as the same thing. */
+/** Browser-find style yellow wash for a search-query hit. (Search and risk are
+ * mutually exclusive modes, so sharing the yellow family is unambiguous.) */
 const SEARCH_MARK_CLASS =
-  "rounded-sm bg-blue-400/25 px-0.5 text-foreground ring-1 ring-blue-400/40";
+  "rounded-sm bg-yellow-300/70 px-0.5 text-foreground ring-1 ring-yellow-500/40";
 
 /** Wrap every case-insensitive occurrence of `query` in `text` with the search
  * highlight, preserving the text's original casing. Case-insensitive because the

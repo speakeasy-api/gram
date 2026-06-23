@@ -369,6 +369,14 @@ function ThreadSearchBar({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          // Enter jumps to the next match; Shift+Enter the previous. Both wrap.
+          if (e.key === "Enter") {
+            e.preventDefault();
+            if (e.shiftKey) onPrev();
+            else onNext();
+          }
+        }}
         placeholder="Search this conversation…"
         className="placeholder:text-muted-foreground/70 min-w-0 flex-1 bg-transparent text-xs outline-none"
       />
@@ -526,14 +534,18 @@ function ChatDetailHeader({
         </div>
       </div>
       {showFilter && (
-        <div className="mt-3 space-y-3">
-          {searchBar}
-          <MessageFilterBar
-            typeFilter={typeFilter}
-            onTypeFilterChange={onTypeFilterChange}
-            riskyOnly={riskyOnly}
-            onRiskyOnlyChange={onRiskyOnlyChange}
-          />
+        <div className="mt-3 flex items-center gap-3">
+          {/* Search (when present) flexes to fill the left; an empty spacer keeps
+              the filters right-aligned in the risk view where search is hidden. */}
+          <div className="min-w-0 flex-1">{searchBar}</div>
+          <div className="shrink-0">
+            <MessageFilterBar
+              typeFilter={typeFilter}
+              onTypeFilterChange={onTypeFilterChange}
+              riskyOnly={riskyOnly}
+              onRiskyOnlyChange={onRiskyOnlyChange}
+            />
+          </div>
         </div>
       )}
     </div>

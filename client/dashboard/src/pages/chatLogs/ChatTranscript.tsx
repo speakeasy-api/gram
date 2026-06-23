@@ -1,6 +1,7 @@
 import {
   type CSSProperties,
   type JSX,
+  memo,
   useCallback,
   useContext,
   useEffect,
@@ -50,6 +51,7 @@ import {
   type DisplayItem,
   type MessageRow,
   type ToolRow,
+  type TranscriptRow,
   type TurnAuthor,
 } from "./transcript";
 import {
@@ -573,20 +575,27 @@ function ToolRowView({ row, ctx }: { row: ToolRow; ctx: RowContext }) {
   // and active-match exclusion action.
   const reqMatches = toSectionMatches(callResults, openExclusion);
   const resMatches = toSectionMatches(resultResults, openExclusion);
-  // While searching (and not already flagged), highlight the query inside the
-  // tool's sections so a match in tool args/output is visible.
-  const searchMatches: SectionMatch[] | undefined =
-    ctx.searchQuery && !flagged
-      ? [{ value: ctx.searchQuery, label: "match" }]
-      : undefined;
+  // Search: which of this tool's sections contain the query (case-insensitive,
+  // mirroring the server's ILIKE). Drives expand-on-match + section highlight, so
+  // only a tool that actually matches opens — and only its matching section.
+  const queryLc = ctx.searchQuery?.trim().toLowerCase();
+  const nameMatches = !!queryLc && name.toLowerCase().includes(queryLc);
+  const requestMatches =
+    !!queryLc && (request?.toLowerCase().includes(queryLc) ?? false);
+  const resultMatches =
+    !!queryLc && (result?.toLowerCase().includes(queryLc) ?? false);
+  const toolMatches = nameMatches || requestMatches || resultMatches;
+  const searchSection: SectionMatch[] = ctx.searchQuery
+    ? [{ value: ctx.searchQuery, label: "match" }]
+    : [];
   const requestHighlight = callResults?.length
     ? {
         matches: reqMatches ?? [],
         masked: resultsAreSensitive(callResults),
         headerBadge: <RiskBadge results={callResults} />,
       }
-    : searchMatches && request
-      ? { matches: searchMatches, masked: false }
+    : requestMatches
+      ? { matches: searchSection, masked: false }
       : undefined;
   const resultHighlight = resultResults?.length
     ? {
@@ -594,8 +603,8 @@ function ToolRowView({ row, ctx }: { row: ToolRow; ctx: RowContext }) {
         masked: resultsAreSensitive(resultResults),
         headerBadge: <RiskBadge results={resultResults} />,
       }
-    : searchMatches && result
-      ? { matches: searchMatches, masked: false }
+    : resultMatches
+      ? { matches: searchSection, masked: false }
       : undefined;
 
   const toolUseId = row.toolCall?.id ?? row.resultMessage?.toolCallId ?? "";
@@ -615,7 +624,7 @@ function ToolRowView({ row, ctx }: { row: ToolRow; ctx: RowContext }) {
         request={request}
         result={result}
         status="complete"
-        defaultExpanded={flagged || Boolean(ctx.searchQuery)}
+        defaultExpanded={flagged || toolMatches}
         requestHighlight={requestHighlight}
         resultHighlight={resultHighlight}
       />
@@ -697,6 +706,24 @@ function LoadDivider({
   );
 }
 
+// Memoized row subtree. The transcript re-renders on every match-navigation
+// (scrollNonce/scrollToItemIndex churn in `pagination`), but a row's content
+// only depends on (row, ctx) — both stable across navigation — so this skips
+// re-rendering the expensive ToolUI on each next/prev.
+const RowView = memo(function RowView({
+  row,
+  ctx,
+}: {
+  row: TranscriptRow;
+  ctx: RowContext;
+}) {
+  return row.kind === "message" ? (
+    <MessageRowView row={row} ctx={ctx} />
+  ) : (
+    <ToolRowView row={row} ctx={ctx} />
+  );
+});
+
 function DisplayItemView({
   item,
   ctx,
@@ -747,11 +774,7 @@ function DisplayItemView({
         />
       );
     case "row":
-      return item.row.kind === "message" ? (
-        <MessageRowView row={item.row} ctx={ctx} />
-      ) : (
-        <ToolRowView row={item.row} ctx={ctx} />
-      );
+      return <RowView row={item.row} ctx={ctx} />;
   }
 }
 
