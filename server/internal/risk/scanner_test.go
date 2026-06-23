@@ -177,6 +177,7 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 		nil,
 		nil,
 		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 
@@ -211,6 +212,7 @@ func TestScanner_ScanForEnforcement_SkipsGrantResolutionWhenNoPolicies(t *testin
 		nil,
 		nil,
 		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 
@@ -246,6 +248,7 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 		nil,
 		nil,
 		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 
@@ -281,7 +284,7 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 		RuleID:         "custom.acme_token",
 		Title:          "ACME token",
 		Description:    "ACME token",
-		Regex:          pgtype.Text{String: `ACME-[A-Z0-9]{8}`, Valid: true},
+		DetectionExpr:  pgtype.Text{String: `content.matchRegex("ACME-[A-Z0-9]{8}")`, Valid: true},
 		Severity:       "high",
 	})
 	require.NoError(t, err)
@@ -315,6 +318,7 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 		nil,
 		nil,
 		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 
@@ -342,6 +346,7 @@ func TestScanner_RespectsMessageTypes(t *testing.T) {
 		nil,
 		nil,
 		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 

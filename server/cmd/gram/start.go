@@ -91,6 +91,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -986,7 +987,11 @@ func newStartCommand() *cli.Command {
 			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
 
 			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient)
-			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, meterProvider)
+			celEngine, err := celenv.New()
+			if err != nil {
+				return fmt.Errorf("create cel engine: %w", err)
+			}
+			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, meterProvider, celEngine)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -1125,6 +1130,7 @@ func newStartCommand() *cli.Command {
 				hookPIIScanner,
 				hookPIScanner,
 				featureFlags,
+				celEngine,
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)

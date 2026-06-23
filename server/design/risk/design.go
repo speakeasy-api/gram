@@ -30,8 +30,10 @@ var _ = Service("risk", func() {
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
-			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy.")
+			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
+			Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.")
+			Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -133,8 +135,10 @@ var _ = Service("risk", func() {
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
-			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy. Omit to preserve the current selection.")
+			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
+			Attribute("scope_include", String, "CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.")
+			Attribute("scope_exempt", String, "CEL exemption predicate. Omit to preserve the current value; send empty to clear.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -392,6 +396,35 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.categories")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCategories"}`)
+	})
+
+	Method("compileExpr", func() {
+		Description("Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("expr", String, "The CEL expression to compile. Empty is valid and compiles to ok=true.", func() {
+				Default("")
+			})
+		})
+
+		Result(ExprCompileResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.compileExpr")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("expr")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "compileExpr")
+		Meta("openapi:extension:x-speakeasy-group", "risk.expr")
+		Meta("openapi:extension:x-speakeasy-name-override", "compile")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCompileExpr"}`)
 	})
 
 	Method("getRiskUserBreakdown", func() {
@@ -683,12 +716,13 @@ var _ = Service("risk", func() {
 			Attribute("rule_id", String, "Stable rule identifier, prefixed with `custom.`.")
 			Attribute("title", String, "Human-readable title for the rule.")
 			Attribute("description", String, "Description of what the rule detects.")
-			Attribute("regex", String, "RE2-compatible regex pattern.")
+			Attribute("detection_expr", String, "CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.")
+			Attribute("regex", String, "Deprecated legacy RE2 regex pattern; superseded by detection_expr. Accepted for backward compatibility.")
 			Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
 				Enum("info", "low", "medium", "high", "critical")
 				Default("medium")
 			})
-			Required("rule_id", "title", "regex")
+			Required("rule_id", "title")
 		})
 
 		Result(shared.RiskCustomDetectionRule)
@@ -774,11 +808,12 @@ var _ = Service("risk", func() {
 			})
 			Attribute("title", String, "Human-readable title for the rule.")
 			Attribute("description", String, "Description of what the rule detects.")
-			Attribute("regex", String, "RE2-compatible regex pattern.")
+			Attribute("detection_expr", String, "CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.")
+			Attribute("regex", String, "Deprecated legacy RE2 regex pattern; superseded by detection_expr. Accepted for backward compatibility.")
 			Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
 				Enum("info", "low", "medium", "high", "critical")
 			})
-			Required("id", "title", "regex", "severity")
+			Required("id", "title", "severity")
 		})
 
 		Result(shared.RiskCustomDetectionRule)
@@ -1015,7 +1050,7 @@ var _ = Service("risk", func() {
 				MinLength(1)
 				MaxLength(50000)
 			})
-			Attribute("regex", String, "Regex pattern. Required for `custom.*` rule ids since the server doesn't persist custom rules yet; ignored for built-in rules.")
+			Attribute("detection_expr", String, "CEL detection predicate for `custom.*` rule ids, evaluated against the sample message.")
 			Required("rule_id", "text")
 		})
 
@@ -1040,7 +1075,8 @@ var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", 
 	Attribute("rule_id", String, "Suggested stable identifier, prefixed with `custom.`.")
 	Attribute("title", String, "Short, human-friendly title for the rule.")
 	Attribute("description", String, "Description of what the rule detects and why it matters.")
-	Attribute("regex", String, "RE2-compatible regex pattern the rule should match against.")
+	Attribute("detection_expr", String, "Suggested CEL detection predicate.")
+	Attribute("regex", String, "Deprecated legacy regex suggestion; superseded by detection_expr. Present for backward compatibility.")
 	Attribute("severity", String, "Suggested severity level.", func() {
 		Enum("info", "low", "medium", "high", "critical")
 	})
@@ -1147,6 +1183,15 @@ var RiskCategoriesResult = Type("RiskCategoriesResult", func() {
 	Attribute("categories", ArrayOf(RiskCategoryDefinition), "Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.")
 
 	Required("categories")
+})
+
+var ExprCompileResult = Type("ExprCompileResult", func() {
+	Description("The result of compiling a single CEL expression for the editor.")
+
+	Attribute("ok", Boolean, "True when the expression compiled successfully.")
+	Attribute("error", String, "Compiler error message when ok is false; empty otherwise.")
+
+	Required("ok", "error")
 })
 
 var RiskRuleBreakdownEntry = Type("RiskRuleBreakdownEntry", func() {

@@ -196,6 +196,8 @@ func runFamily(text string, fam ruleFamily) []Finding {
 			Tags:             nil,
 			DeadLetterReason: "",
 			toolCallID:       "",
+			field:            "",
+			path:             "",
 		})
 	}
 	return out
@@ -233,6 +235,8 @@ func detectInstructionOverrides(text string) []Finding {
 			Tags:             nil,
 			DeadLetterReason: "",
 			toolCallID:       "",
+			field:            "",
+			path:             "",
 		})
 		// One finding is enough for this family; multiple keywords would
 		// just produce overlapping findings the dedup pass would drop.
@@ -259,5 +263,7 @@ func detectDelimiterInjection(text string) []Finding {
 		Tags:             nil,
 		DeadLetterReason: "",
 		toolCallID:       "",
+		field:            "",
+		path:             "",
 	}}
 }

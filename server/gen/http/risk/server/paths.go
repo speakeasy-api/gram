@@ -57,6 +57,11 @@ func ListRiskCategoriesRiskPath() string {
 	return "/rpc/risk.categories"
 }
 
+// CompileExprRiskPath returns the URL path to the risk service compileExpr HTTP endpoint.
+func CompileExprRiskPath() string {
+	return "/rpc/risk.compileExpr"
+}
+
 // GetRiskUserBreakdownRiskPath returns the URL path to the risk service getRiskUserBreakdown HTTP endpoint.
 func GetRiskUserBreakdownRiskPath() string {
 	return "/rpc/risk.overview.userBreakdown"

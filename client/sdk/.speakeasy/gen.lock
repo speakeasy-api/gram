@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: f1a1bb16f4bacd4b9c907b4b248de12c
+  docChecksum: 0f2a3a1d39f316445de307a592af7e23
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -169,7 +169,7 @@ trackedFiles:
   docs/models/components/createassistantformstatus.md:
     last_write_checksum: sha1:7436f6e05e725b649a2872e91c305ff297fd4c0f
   docs/models/components/createcustomdetectionrulerequestbody.md:
-    last_write_checksum: sha1:54bbbaf8d0f34b7f6064713d2becd0db23d70f53
+    last_write_checksum: sha1:90b82406fb3a5ff0e7478151419ffbff5c022fdd
   docs/models/components/createdeploymentrequestbody.md:
     last_write_checksum: sha1:ac00844231e3633fba1b07dc2dc5b8bc54fac957
   docs/models/components/createdeploymentresult.md:
@@ -225,7 +225,7 @@ trackedFiles:
   docs/models/components/createriskexclusionrequestbody.md:
     last_write_checksum: sha1:d8987530cafa6706a32d252da413c1d4448c935e
   docs/models/components/createriskpolicyrequestbody.md:
-    last_write_checksum: sha1:2fa44602ca0b0375bf577535ffc6aa8d106c1f59
+    last_write_checksum: sha1:0ce0af62afa152db83a2749f9bed3465c58dd9dc
   docs/models/components/createroleform.md:
     last_write_checksum: sha1:8f830fa3a59663de3ec4640a0d7602e39ec1fc7e
   docs/models/components/createserverform.md:
@@ -316,6 +316,8 @@ trackedFiles:
     last_write_checksum: sha1:1462d9f6a7db539217a8232b04fcac5ec4ee43be
   docs/models/components/exportmcpmetadatarequestbody.md:
     last_write_checksum: sha1:40e4d7ae27440bfd5a593b31a6e25cc5a7a4f7ad
+  docs/models/components/exprcompileresult.md:
+    last_write_checksum: sha1:c226fe346ebbf201cd2e2c39028eff0af6e2580a
   docs/models/components/externalmcpheaderdefinition.md:
     last_write_checksum: sha1:da0a881710691ca1f0cc1c45d1f2bf3daad3c4e3
   docs/models/components/externalmcpremote.md:
@@ -881,7 +883,7 @@ trackedFiles:
   docs/models/components/riskchatsummary.md:
     last_write_checksum: sha1:63b23b161264d0bacab921bbde2e8e590477e71f
   docs/models/components/riskcustomdetectionrule.md:
-    last_write_checksum: sha1:d9cae27ca8143e29257fe6c1283b3bd7efc7d111
+    last_write_checksum: sha1:ba9811487b74cd559d22670906be91197db3b818
   docs/models/components/riskcustomdetectionruleseverity.md:
     last_write_checksum: sha1:3e203a4a5e92864067b9d90b9ed4b132cc9d1245
   docs/models/components/riskexclusion.md:
@@ -899,7 +901,7 @@ trackedFiles:
   docs/models/components/riskoverviewuser.md:
     last_write_checksum: sha1:e27f5822bf1197b237ac5f37aab0c8d439d3dfa0
   docs/models/components/riskpolicy.md:
-    last_write_checksum: sha1:fca1af04ecfb1034bab8fc21a5d1363318871233
+    last_write_checksum: sha1:4ddec669d27d4037b3a24e455c551fc48dc2d29f
   docs/models/components/riskpolicyaction.md:
     last_write_checksum: sha1:3729eadfe620fd4d1c367a384ab82ea55ab8b2d3
   docs/models/components/riskpolicyaudiencetype.md:
@@ -917,15 +919,19 @@ trackedFiles:
   docs/models/components/riskpolicystatus.md:
     last_write_checksum: sha1:516633e7ddae4a15c8060c4cbcccbab4f9485352
   docs/models/components/riskresult.md:
-    last_write_checksum: sha1:1511f98efefb09c1e0e2101714341c63c20af4b3
+    last_write_checksum: sha1:fbef66f928346f35adf14fe5841ae97892dcea81
   docs/models/components/riskresultredacted.md:
-    last_write_checksum: sha1:cfdb770f782f1f2087f16d84428334931e22502a
+    last_write_checksum: sha1:3e0614e8212e2e45b517240fb0bb61ea77b74cfa
   docs/models/components/riskrulebreakdownentry.md:
     last_write_checksum: sha1:aef2c541f251a072a6dc773df40baadfb8041be7
   docs/models/components/riskrulebreakdownresult.md:
     last_write_checksum: sha1:c1e2229fa35d47b5a96d056c40f66ea1fdb6d2ff
   docs/models/components/risksegment.md:
     last_write_checksum: sha1:eb6a6093547e90b6fb67c78d8971f6516b6f07e0
+  docs/models/components/riskspan.md:
+    last_write_checksum: sha1:3c8d13c3a8bd58baf0d10ddcbe326d146c137c32
+  docs/models/components/riskspanredacted.md:
+    last_write_checksum: sha1:9e70001c47cb1598313f2d293c3655db67aaf3fb
   docs/models/components/riskuserbreakdownresult.md:
     last_write_checksum: sha1:c2aca44d9079416a4a520e104fe7f7407b877304
   docs/models/components/role.md:
@@ -1069,7 +1075,7 @@ trackedFiles:
   docs/models/components/suggestcustomdetectionrulerequestbody.md:
     last_write_checksum: sha1:5c99047a3d68b3f91dbff0e7a67867fd03b96f58
   docs/models/components/suggestcustomdetectionruleresult.md:
-    last_write_checksum: sha1:4ab62f0f10a7f536697a001aab6c5856325bea86
+    last_write_checksum: sha1:3235ff24eaf0817b839f9a786733e935b7a71ce8
   docs/models/components/suggestcustomdetectionruleresultseverity.md:
     last_write_checksum: sha1:776235de0acdc2b3d89d8904b8d233c36d8dc603
   docs/models/components/targetkind.md:
@@ -1083,7 +1089,7 @@ trackedFiles:
   docs/models/components/testdetectionrulematch.md:
     last_write_checksum: sha1:1265b0c1be658b0a39cf65e71bb1c80a225f1ef8
   docs/models/components/testdetectionrulerequestbody.md:
-    last_write_checksum: sha1:ffdf3943c5395e3481ea66913ad89de4a3065977
+    last_write_checksum: sha1:e4561325d25879f2110332fc54f5a51059015a22
   docs/models/components/testdetectionruleresult.md:
     last_write_checksum: sha1:a8c4603d688ac397a01d822278d0ebf2836f3ba6
   docs/models/components/tier.md:
@@ -1217,7 +1223,7 @@ trackedFiles:
   docs/models/components/updateassistantformstatus.md:
     last_write_checksum: sha1:d93f8b189fafacbb73a752c2e28cf99ba356a82c
   docs/models/components/updatecustomdetectionrulerequestbody.md:
-    last_write_checksum: sha1:c72cd17c1a3626bff5e5c0bb49cbbb1ad6ae52c3
+    last_write_checksum: sha1:8a3392eccb2dbcc7331d490b99ca2087468d075f
   docs/models/components/updatecustomdetectionrulerequestbodyseverity.md:
     last_write_checksum: sha1:c26068d9ae2273f6e5340df3a173639949673aa1
   docs/models/components/updatedomainrequestbody.md:
@@ -1273,7 +1279,7 @@ trackedFiles:
   docs/models/components/updateriskexclusionrequestbodymatchtype.md:
     last_write_checksum: sha1:ec9f6d08a9258982255cf0e134a82f8e2f7cd348
   docs/models/components/updateriskpolicyrequestbody.md:
-    last_write_checksum: sha1:3307e27b8f09557e74320fe50451bf4fffd02ed2
+    last_write_checksum: sha1:defd97345174fc590118d726041f124b65ef54b6
   docs/models/components/updateriskpolicyrequestbodyaction.md:
     last_write_checksum: sha1:d0440dea4e7b2af3804fd303de46f1f8c1472d10
   docs/models/components/updateriskpolicyrequestbodyaudiencetype.md:
@@ -1468,6 +1474,14 @@ trackedFiles:
     last_write_checksum: sha1:6eeea26b1ef4e02e4b7bf739e26f28c4d46a1f9a
   docs/models/operations/clonetoolsetsecurityoption2.md:
     last_write_checksum: sha1:1c2d0c3c9dae595284d1f883d1e656a848a370f1
+  docs/models/operations/compileexprrequest.md:
+    last_write_checksum: sha1:a69d1201464f92204f6bf4280ab86807852ccacb
+  docs/models/operations/compileexprsecurity.md:
+    last_write_checksum: sha1:62e6db42bf61858e998e4da694e6a9c7c5f0d0f5
+  docs/models/operations/compileexprsecurityoption1.md:
+    last_write_checksum: sha1:9ea2ba2fc78f966ffa1e8901b9dde6b30bbbdb48
+  docs/models/operations/compileexprsecurityoption2.md:
+    last_write_checksum: sha1:43f326089bf3e1c189c74816c8cef8dc71ffe6c0
   docs/models/operations/createapikeyrequest.md:
     last_write_checksum: sha1:566fbc3c6734a64b4d495f1137cd79ba3e5d2bb3
   docs/models/operations/createapikeysecurity.md:
@@ -1493,7 +1507,7 @@ trackedFiles:
   docs/models/operations/createcollectionsecurity.md:
     last_write_checksum: sha1:25aeee950a24cc2951d3f5cfd058afcf932d44a0
   docs/models/operations/createcustomdetectionrulerequest.md:
-    last_write_checksum: sha1:8030dbaf3134b9990201d7c07aae210fea729708
+    last_write_checksum: sha1:4dc9d3dd881d308bf226336db5d615c07129c50c
   docs/models/operations/createcustomdetectionrulesecurity.md:
     last_write_checksum: sha1:a4747778941d86206a29e6c8ccd9959917142849
   docs/models/operations/createcustomdetectionrulesecurityoption1.md:
@@ -3159,7 +3173,7 @@ trackedFiles:
   docs/models/operations/updatecollectionsecurity.md:
     last_write_checksum: sha1:5a1955c928807047891577bd47c80fc0b7dec8a5
   docs/models/operations/updatecustomdetectionrulerequest.md:
-    last_write_checksum: sha1:fd94bd8e00a754e97efa95fe6f9f1739a39afe51
+    last_write_checksum: sha1:8b3514c036f5073bcb44176190a2d279ad46a403
   docs/models/operations/updatecustomdetectionrulesecurity.md:
     last_write_checksum: sha1:b430a4b8c054cb252a02d7860f14258fc37b3a73
   docs/models/operations/updatecustomdetectionrulesecurityoption1.md:
@@ -3419,7 +3433,7 @@ trackedFiles:
   docs/sdks/collections/README.md:
     last_write_checksum: sha1:c89e96348dfa7bf58b80683a96303e6407b49b59
   docs/sdks/customrules/README.md:
-    last_write_checksum: sha1:cec024516ce75ddd5c1411a94ba9f904c9c9a4cf
+    last_write_checksum: sha1:c08f8de30e805c81701c7107a4ff30c9b0d8d90d
   docs/sdks/deployments/README.md:
     last_write_checksum: sha1:9fa17d59c28cf90b83f4a66f2b8f26e16c1bbef4
   docs/sdks/domains/README.md:
@@ -3428,6 +3442,8 @@ trackedFiles:
     last_write_checksum: sha1:6e3cf385846dc2b2da70e4bb9101ef11e01126a9
   docs/sdks/exclusions/README.md:
     last_write_checksum: sha1:eb72f4e952a67504b17b06a2b6b9d0eca34926f5
+  docs/sdks/expr/README.md:
+    last_write_checksum: sha1:12084129292d6574c74f1f2c5f18cc209eb83736
   docs/sdks/external/README.md:
     last_write_checksum: sha1:aee21905afb158ea2169e3b8816af5d847616c85
   docs/sdks/features/README.md:
@@ -3984,6 +4000,8 @@ trackedFiles:
     last_write_checksum: sha1:9b131c1eedf5a863d3a047221afc326c99291dfa
   src/funcs/riskExclusionsUpdate.ts:
     last_write_checksum: sha1:199088fed815d31f3044b20342d362e865820839
+  src/funcs/riskExprCompile.ts:
+    last_write_checksum: sha1:4ebacfa1f3b56b3bcf33cd41130b820d24e29f58
   src/funcs/riskOverviewGet.ts:
     last_write_checksum: sha1:10dc0bdfc2d651c3b001ddb50ce4fe7c0a9a2307
   src/funcs/riskOverviewRules.ts:
@@ -4303,7 +4321,7 @@ trackedFiles:
   src/models/components/createassistantform.ts:
     last_write_checksum: sha1:8661cb7dace7db097ac9a071d2a475d85fa5c372
   src/models/components/createcustomdetectionrulerequestbody.ts:
-    last_write_checksum: sha1:db7dd98dcd2fe849f079d1701c54468055641a27
+    last_write_checksum: sha1:090ba7d561004059f6282970d153054e1f578b51
   src/models/components/createdeploymentrequestbody.ts:
     last_write_checksum: sha1:7c25ffd8257dab7f29c445ce810fab16adcd9938
   src/models/components/createdeploymentresult.ts:
@@ -4349,7 +4367,7 @@ trackedFiles:
   src/models/components/createriskexclusionrequestbody.ts:
     last_write_checksum: sha1:6dafc15fd69b59c7aeb7dedc1060612c7882efcc
   src/models/components/createriskpolicyrequestbody.ts:
-    last_write_checksum: sha1:a7cd4d2080931ee82194a37b2f3e1c4d7300ead2
+    last_write_checksum: sha1:cdea350b6764568e0c9e61ff3e5b9f8a41f71010
   src/models/components/createroleform.ts:
     last_write_checksum: sha1:85aeb0cf9b2bcc28284e482e51fc8b2d97ca4a1e
   src/models/components/createserverform.ts:
@@ -4421,6 +4439,8 @@ trackedFiles:
     last_write_checksum: sha1:2b1a8840975d45f5c196a8f8e682279ad7fe4f44
   src/models/components/exportmcpmetadatarequestbody.ts:
     last_write_checksum: sha1:39ceae9ebec465fcd7ffa438b779cd2539d0d05d
+  src/models/components/exprcompileresult.ts:
+    last_write_checksum: sha1:670837317776c328511336543d27d3e64731056a
   src/models/components/externalmcpheaderdefinition.ts:
     last_write_checksum: sha1:12572263ec71fa2fdc5fc5d17a333e356567f86c
   src/models/components/externalmcpremote.ts:
@@ -4529,7 +4549,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:f91e41d89464f18bd568b61ab389516193b715d0
+    last_write_checksum: sha1:fc4cad3f7c60bd58cd2e2509c155b119947b6fe6
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4909,7 +4929,7 @@ trackedFiles:
   src/models/components/riskchatsummary.ts:
     last_write_checksum: sha1:b4c96b9a2e839bef57233d471be967ecfd80279a
   src/models/components/riskcustomdetectionrule.ts:
-    last_write_checksum: sha1:e3aa4a363487d9e1b10511491d8c7b66b3116437
+    last_write_checksum: sha1:853eb5c035a1c4cdb0481da53cebf1d9c608372c
   src/models/components/riskexclusion.ts:
     last_write_checksum: sha1:42410f6316762239d1d06a1bd71ba15ed38c29ac
   src/models/components/riskidrequestbody.ts:
@@ -4923,7 +4943,7 @@ trackedFiles:
   src/models/components/riskoverviewuser.ts:
     last_write_checksum: sha1:eb4da626d8348818266f75b28ae1dac267441b5d
   src/models/components/riskpolicy.ts:
-    last_write_checksum: sha1:d52c48a739f82c2233c3cf3945e89b93386d17e6
+    last_write_checksum: sha1:7d2be6a6d1b9400943782dcda06cade1c8f36357
   src/models/components/riskpolicybypassapprovalrequestbody.ts:
     last_write_checksum: sha1:e55bacae622a6a00c2ce0b2825a3294c239bf39a
   src/models/components/riskpolicybypassrequest.ts:
@@ -4933,15 +4953,19 @@ trackedFiles:
   src/models/components/riskpolicystatus.ts:
     last_write_checksum: sha1:478a39101a4d8c9d51b31417839ef68b5b727e77
   src/models/components/riskresult.ts:
-    last_write_checksum: sha1:dfe419b7eedf5875524a1786534e0d783ddabb5d
+    last_write_checksum: sha1:11a49688408aec748c3155744871c78ded8e8514
   src/models/components/riskresultredacted.ts:
-    last_write_checksum: sha1:6f3ffbc41d82e98e3f1b358306e15a2d2aaab5a9
+    last_write_checksum: sha1:ac34e16de29cfb68f5bbe3eb8405b154a388f274
   src/models/components/riskrulebreakdownentry.ts:
     last_write_checksum: sha1:1a504cb8dc34c5139ea90058a885a339f581a2c9
   src/models/components/riskrulebreakdownresult.ts:
     last_write_checksum: sha1:6a9605a763b84d7f6ebc4d1fdc5e786c11ca2de6
   src/models/components/risksegment.ts:
     last_write_checksum: sha1:170edab777bb5a5bc5c58b983369947985b5c652
+  src/models/components/riskspan.ts:
+    last_write_checksum: sha1:7fc5b5e85e8c1bb11567a0cf4069a28f02532eb1
+  src/models/components/riskspanredacted.ts:
+    last_write_checksum: sha1:7d5f7a72db5fe08c954d438589112ea8b707a266
   src/models/components/riskuserbreakdownresult.ts:
     last_write_checksum: sha1:8eb12073e8221606906bcbd25abea020551cec87
   src/models/components/role.ts:
@@ -5041,13 +5065,13 @@ trackedFiles:
   src/models/components/suggestcustomdetectionrulerequestbody.ts:
     last_write_checksum: sha1:761f2e125ecd63f95c31ad2ad445ff5f38507f51
   src/models/components/suggestcustomdetectionruleresult.ts:
-    last_write_checksum: sha1:222541b7ca24085bb6b87c9ceab8d9fae6add71c
+    last_write_checksum: sha1:16b85ce2a9b8abf6019694f6ceb2492863ce0a28
   src/models/components/telemetrylogrecord.ts:
     last_write_checksum: sha1:9375c20dea0904d4c03767c1c90d4989d5995099
   src/models/components/testdetectionrulematch.ts:
     last_write_checksum: sha1:5a622f1e06ac51bd60f9083bafac2ee17b0e9595
   src/models/components/testdetectionrulerequestbody.ts:
-    last_write_checksum: sha1:d534714d7ef8baff6f2ff05d4bcdb3564d36ce1f
+    last_write_checksum: sha1:1db743e5d59351147a90afd5ff83571915bfece4
   src/models/components/testdetectionruleresult.ts:
     last_write_checksum: sha1:8603a40503786d5e3096fbf1bfa2a669f62f338d
   src/models/components/tierlimits.ts:
@@ -5133,7 +5157,7 @@ trackedFiles:
   src/models/components/updateassistantform.ts:
     last_write_checksum: sha1:283f390810d1857e8c3c90505812e490b7c0e665
   src/models/components/updatecustomdetectionrulerequestbody.ts:
-    last_write_checksum: sha1:39bf2a33917efb808a58f6f3f2362fd54cc0b55c
+    last_write_checksum: sha1:f4cac0a12247b605b9b85c8dce2031d28eea3a1e
   src/models/components/updatedomainrequestbody.ts:
     last_write_checksum: sha1:fd1aea315589174b11809b2f34a6315b462a937f
   src/models/components/updateenvironmentrequestbody.ts:
@@ -5173,7 +5197,7 @@ trackedFiles:
   src/models/components/updateriskexclusionrequestbody.ts:
     last_write_checksum: sha1:c39b1489c4edc24484c2e8709ac3d90fabc02962
   src/models/components/updateriskpolicyrequestbody.ts:
-    last_write_checksum: sha1:7eab7ac0b6a6b50aec36f3906364c9e71b6c89bd
+    last_write_checksum: sha1:3efd27d224a75e670d61219cfaf0f73215170932
   src/models/components/updateroleform.ts:
     last_write_checksum: sha1:8b8b4268330a9ca348f2950ccbba16748c5cb25d
   src/models/components/updateserverform.ts:
@@ -5284,6 +5308,8 @@ trackedFiles:
     last_write_checksum: sha1:9924c5d3a7174f48f167e36d9b1f77cf2fa24653
   src/models/operations/clonetoolset.ts:
     last_write_checksum: sha1:f36895a19ab29b8c9708394ddef22f1079e694cd
+  src/models/operations/compileexpr.ts:
+    last_write_checksum: sha1:3b1c4eeb1059878b1e82db56beac0676ab1aacb0
   src/models/operations/createapikey.ts:
     last_write_checksum: sha1:e58c09b3ddb5eddc265ae3128a4bc6235ed67de6
   src/models/operations/createassistant.ts:
@@ -5568,7 +5594,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:e5889c303ab92b525c08533816c4702015f8c0cd
+    last_write_checksum: sha1:e47a3715f6c93e28701c9b2c718045a25cbbf1cf
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -6248,7 +6274,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:67b9a319b3ae6cb532106c314198581e9e248ba2
+    last_write_checksum: sha1:c1beb04686d3cb3dd24af85812d9ff6c6293fba7
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -6572,6 +6598,10 @@ trackedFiles:
     last_write_checksum: sha1:c281a1bfc255deb6ef673431898f64ba44e6e152
   src/react-query/riskCategories.ts:
     last_write_checksum: sha1:47e205aa32b5624957c4df7d361043861be74d6b
+  src/react-query/riskCompileExpr.core.ts:
+    last_write_checksum: sha1:fe99e5f98b5319e3a7ccb2eae742bbed4ca959aa
+  src/react-query/riskCompileExpr.ts:
+    last_write_checksum: sha1:2d3b7e3f89b57546d7e0ee2d3312517b06001fa8
   src/react-query/riskCreateCustomDetectionRule.ts:
     last_write_checksum: sha1:148043ceede98bc2e4359d8126d81f9a49d9f745
   src/react-query/riskCreateExclusion.ts:
@@ -6894,6 +6924,8 @@ trackedFiles:
     last_write_checksum: sha1:32ad1a2228a56ab7f4de58aa38785085e0f3a1c3
   src/sdk/exclusions.ts:
     last_write_checksum: sha1:d9f2c5b173f9bb3b9b5da6475ee9fffb7ebb66c0
+  src/sdk/expr.ts:
+    last_write_checksum: sha1:27d77ba65ccad9bcca23728a53f047c67e9b5e50
   src/sdk/external.ts:
     last_write_checksum: sha1:b3e3eeec2b512d13ac5efca4e2c1b4ee4026efa9
   src/sdk/features.ts:
@@ -6949,7 +6981,7 @@ trackedFiles:
   src/sdk/results.ts:
     last_write_checksum: sha1:220552d21499d1871f15ca050009d2ec7646bbad
   src/sdk/risk.ts:
-    last_write_checksum: sha1:24fe6320fae7d25884b7a246ea72673b5084c92a
+    last_write_checksum: sha1:43f1504b499d387a728605cb268121ac548798dd
   src/sdk/rules.ts:
     last_write_checksum: sha1:c09a7e791d89ef5b985c765b533bf61c1b6b0e9d
   src/sdk/sdk.ts:
@@ -9826,7 +9858,7 @@ examples:
   createCustomDetectionRule:
     speakeasy-default-create-custom-detection-rule:
       requestBody:
-        application/json: {"regex": "<value>", "rule_id": "<id>", "severity": "medium", "title": "<value>"}
+        application/json: {"rule_id": "<id>", "severity": "medium", "title": "<value>"}
       responses:
         "200":
           application/json: {"created_at": "2026-12-26T03:29:20.167Z", "description": "pecan barge blossom innocently", "id": "34eee2d9-6bdf-456e-b177-c7e1011a6a30", "regex": "<value>", "rule_id": "<id>", "severity": "info", "title": "<value>", "updated_at": "2025-12-02T15:28:46.604Z"}
@@ -9878,7 +9910,7 @@ examples:
   updateCustomDetectionRule:
     speakeasy-default-update-custom-detection-rule:
       requestBody:
-        application/json: {"id": "18e6a969-19bf-4f8e-bf7b-9ff53ec70760", "regex": "<value>", "severity": "critical", "title": "<value>"}
+        application/json: {"id": "18e6a969-19bf-4f8e-bf7b-9ff53ec70760", "severity": "critical", "title": "<value>"}
       responses:
         "200":
           application/json: {"created_at": "2026-04-13T23:25:14.598Z", "description": "nudge kiddingly because mispronounce absent jaunty acidly justly ew", "id": "dbb93ddc-1a57-46ed-8614-4b9aa77b149e", "regex": "<value>", "rule_id": "<id>", "severity": "low", "title": "<value>", "updated_at": "2024-08-05T14:18:20.735Z"}
@@ -10549,5 +10581,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  compileExpr:
+    speakeasy-default-compile-expr:
+      parameters:
+        query:
+          expr: ""
+      responses:
+        "200":
+          application/json: {"error": "<value>", "ok": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
