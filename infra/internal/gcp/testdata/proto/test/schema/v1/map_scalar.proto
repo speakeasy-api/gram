@@ -1,0 +1,15 @@
+edition = "2024";
+
+package test.schema.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "example.com/gen/test/schema/v1;schemav1";
+
+// Tags uses a map with scalar key and value, which is self-contained.
+message Tags {
+  string id = 1;
+  map<string, string> attributes = 2;
+
+  option (gcp.pubsub.v1.topic) = {};
+}

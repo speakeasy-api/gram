@@ -22,7 +22,7 @@ const topicMessageLabel = "topic_proto_message"
 // buildPubSubValues projects the discovered topology into a stable, sorted Helm
 // values document. Topics and subscriptions are sorted by name so the generated
 // file diffs cleanly across runs.
-func buildPubSubValues(topics []DesiredTopic, subs []DesiredSubscription) pubSubValuesDocument {
+func buildPubSubValues(topics []DesiredTopic, subs []DesiredSubscription, schemas []DesiredSchema) pubSubValuesDocument {
 	sortedTopics := slices.Clone(topics)
 	slices.SortFunc(sortedTopics, func(a, b DesiredTopic) int {
 		return cmp.Compare(a.Name, b.Name)
@@ -30,6 +30,11 @@ func buildPubSubValues(topics []DesiredTopic, subs []DesiredSubscription) pubSub
 
 	sortedSubs := slices.Clone(subs)
 	slices.SortFunc(sortedSubs, func(a, b DesiredSubscription) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
+
+	sortedSchemas := slices.Clone(schemas)
+	slices.SortFunc(sortedSchemas, func(a, b DesiredSchema) int {
 		return cmp.Compare(a.Name, b.Name)
 	})
 
@@ -55,12 +60,25 @@ func buildPubSubValues(topics []DesiredTopic, subs []DesiredSubscription) pubSub
 		})
 	}
 
+	schemaValues := make([]pubSubSchemaValue, 0, len(sortedSchemas))
+	for _, schema := range sortedSchemas {
+		schemaValues = append(schemaValues, pubSubSchemaValue{
+			Name:   schema.Name,
+			Labels: labelsWithProtoMessage(schema.Labels, schema.ProtoMessage),
+			Spec: pubSubSchemaSpec{
+				Type:       schemaTypeProtocolBuffer,
+				Definition: schema.Definition,
+			},
+		})
+	}
+
 	return pubSubValuesDocument{
 		PubSub: pubSubValues{
 			Enabled:       true,
 			APIs:          []string{pubsubAPI},
 			Topics:        topicValues,
 			Subscriptions: subValues,
+			Schemas:       schemaValues,
 		},
 	}
 }

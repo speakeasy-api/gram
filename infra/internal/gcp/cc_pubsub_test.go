@@ -68,7 +68,7 @@ func TestBuildPubSubValues_StableOrder(t *testing.T) {
 		},
 	}
 
-	doc := buildPubSubValues(topics, subs)
+	doc := buildPubSubValues(topics, subs, []DesiredSchema{})
 
 	require.True(t, doc.PubSub.Enabled)
 	require.Equal(t, []string{pubsubAPI}, doc.PubSub.APIs)
@@ -121,7 +121,7 @@ func TestCCPubSub_WriteValues(t *testing.T) {
 	t.Parallel()
 
 	out := t.TempDir() + "/pubsub-values.yaml"
-	cc := NewCCPubSub(slog.New(slog.DiscardHandler), out, nil)
+	cc := NewCCPubSub(slog.New(slog.DiscardHandler), out, nil, "")
 
 	topics := []DesiredTopic{
 		{Name: "outbox-event", Retention: 7 * 24 * time.Hour, Labels: map[string]string{"managed_by": managedByLabel}, ProtoMessage: "gram.outbox.v1.Event"},
@@ -130,7 +130,7 @@ func TestCCPubSub_WriteValues(t *testing.T) {
 		{Name: "outbox-processor", Topic: "outbox-event", TopicMessage: "gram.outbox.v1.Event", AckDeadline: 30 * time.Second, Labels: map[string]string{"managed_by": managedByLabel}, ProtoMessage: "gram.outbox.v1.Processor"},
 	}
 
-	err := cc.writeValues(t.Context(), buildPubSubValues(topics, subs))
+	err := cc.writeValues(t.Context(), buildPubSubValues(topics, subs, []DesiredSchema{}))
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(out)
