@@ -1,4 +1,4 @@
-h1:cQpoXXr4Tw40RIKITQogvFfqX/mrOCfoqTmABoYyrJ8=
+h1:w9/dpSg8w3/bkkS5MGs5qoHPfaMsQFjAZhsD2RA50pc=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -44,4 +44,4 @@ h1:cQpoXXr4Tw40RIKITQogvFfqX/mrOCfoqTmABoYyrJ8=
 20260619135933_filter-attribute-metrics-usage-metrics.up.sql h1:b8X5oOaiXpSlwjwBwzkXT402jALm3Gb3VW5VF5wJsuM=
 20260619180658_set-cutoff-date-for-attributes-summaries-mv.up.sql h1:Zx9IqEAFZ9d9Y3M9YJ2tEgFTHF9flGidVEeUwFxMTdM=
 20260622132504_include-session-tool-calls-in-attribute-metrics.up.sql h1:MVVFyQv6vsF/F0w70w/wGzoL/0b/ioeDEtRRMdedm6I=
-20260623181505_add-chat-turn-summaries.up.sql h1:5Gvog4z2pDlDlSzxFJ7+N3QDUaqIKFUloR8Uom9iGtU=
+20260623181505_add-chat-turn-summaries.up.sql h1:Z2bkP9G48SGKnCQtvUJR7hb3PrekaeMROjJeU9MWJsM=

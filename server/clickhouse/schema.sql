@@ -465,7 +465,7 @@ CREATE TABLE IF NOT EXISTS chat_turn_summaries (
     gram_project_id UUID COMMENT 'Gram project that owns the chat session.',
     chat_id String COMMENT 'Chat/session identifier from attributes.gen_ai.conversation.id.' CODEC(ZSTD),
     -- turn_id is Gram's provider-agnostic turn key. Claude Code emits this as
-    -- attributes.prompt.id; other providers can map their native per-turn ID here.
+    -- attributes.prompt.id. Other providers can map their native per-turn ID here.
     turn_id String COMMENT 'Provider-agnostic identifier for one user turn within the chat session. For Claude Code this is attributes.prompt.id.' CODEC(ZSTD),
 
     -- Claude request attribution dimensions. Empty strings represent pure
