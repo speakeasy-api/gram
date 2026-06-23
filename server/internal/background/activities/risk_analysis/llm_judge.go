@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
@@ -40,6 +41,27 @@ type JudgeInput struct {
 	// for the judge; Body holds the type-appropriate content.
 	Message JudgeMessage
 	Config  JudgeConfig
+	// Observe, when non-nil, is invoked exactly once per attempted judge call
+	// with that call's cost and latency, regardless of the verdict (matched, not
+	// matched, or judge error). The policy-eval ("session replay") path sets this
+	// to roll up run cost/token/latency statistics; the realtime enforcement path
+	// leaves it nil and pays nothing. Not invoked when the call is short-circuited
+	// before the model is reached (nil client, empty input, rate limit), since no
+	// billable call occurred.
+	Observe func(JudgeUsage)
+}
+
+// JudgeUsage reports the cost and latency of a single judge call to an optional
+// JudgeInput.Observe sink. Tokens/cost come straight from the OpenRouter usage
+// payload; CostUSD is nil when the route reported no cost.
+type JudgeUsage struct {
+	InputTokens  int
+	OutputTokens int
+	CostUSD      *float64
+	Latency      time.Duration
+	// Err is the judge call's error, if any. The call was still attempted (and
+	// may be billable), so observers count it toward run stats.
+	Err error
 }
 
 // JudgeMessage is the message under evaluation. Type selects the actor/role and

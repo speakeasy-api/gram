@@ -215,8 +215,18 @@ func (j *Judge) Evaluate(ctx context.Context, in ra.JudgeInput) *ra.JudgeVerdict
 	}
 
 	start := time.Now()
-	matched, confidence, rationale, err := j.call(ctx, in)
-	j.metrics.RecordEvaluation(ctx, in.OrgID, o11y.OutcomeFromError(err), time.Since(start))
+	matched, confidence, rationale, usage, err := j.call(ctx, in)
+	latency := time.Since(start)
+	j.metrics.RecordEvaluation(ctx, in.OrgID, o11y.OutcomeFromError(err), latency)
+	// Report cost/latency to an optional observer (the policy-eval replay path).
+	// Invoked for every attempted call — matched, not matched, or error — so run
+	// cost is not undercounted by the common no-match case. Realtime callers leave
+	// Observe nil.
+	if in.Observe != nil {
+		usage.Latency = latency
+		usage.Err = err
+		in.Observe(usage)
+	}
 	if err != nil {
 		span.RecordError(err)
 		j.logger.WarnContext(ctx, "llm judge call failed",
@@ -245,7 +255,7 @@ func (j *Judge) Evaluate(ctx context.Context, in ra.JudgeInput) *ra.JudgeVerdict
 	}
 }
 
-func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confidence float64, rationale string, err error) {
+func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confidence float64, rationale string, usage ra.JudgeUsage, err error) {
 	strict := true
 	jsonSchema := or.ChatJSONSchemaConfig{
 		Name:        "risk_policy_judge_verdict",
@@ -283,14 +293,23 @@ func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confi
 		JSONSchema:     &jsonSchema,
 	})
 	if err != nil {
-		return false, 0, "", fmt.Errorf("openrouter object completion: %w", err)
+		return false, 0, "", usage, fmt.Errorf("openrouter object completion: %w", err)
 	}
 	if response == nil || response.Message == nil {
-		return false, 0, "", fmt.Errorf("empty completion response")
+		return false, 0, "", usage, fmt.Errorf("empty completion response")
+	}
+	// The model call is billable regardless of whether we can use its body, so
+	// capture usage now and carry it on every path below.
+	usage = ra.JudgeUsage{
+		InputTokens:  response.Usage.PromptTokens,
+		OutputTokens: response.Usage.CompletionTokens,
+		CostUSD:      response.Usage.Cost,
+		Latency:      0,
+		Err:          nil,
 	}
 	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if raw == "" {
-		return false, 0, "", fmt.Errorf("empty completion content")
+		return false, 0, "", usage, fmt.Errorf("empty completion content")
 	}
 
 	var verdict struct {
@@ -299,7 +318,7 @@ func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confi
 		Rationale  string  `json:"rationale"`
 	}
 	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
-		return false, 0, "", fmt.Errorf("parse judge response: %w", err)
+		return false, 0, "", usage, fmt.Errorf("parse judge response: %w", err)
 	}
 	// Clamp confidence and cap rationale length in code — the schema no longer
 	// enforces these (see the schema note above re: Anthropic route 400s).
@@ -309,7 +328,7 @@ func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confi
 	if utf8.RuneCountInString(rationale) > maxRationaleLen {
 		rationale = string([]rune(rationale)[:maxRationaleLen])
 	}
-	return verdict.Matched, max(0, min(1, verdict.Confidence)), rationale, nil
+	return verdict.Matched, max(0, min(1, verdict.Confidence)), rationale, usage, nil
 }
 
 // VerdictSchema is the judge's structured-output JSON schema. Deliberately no
