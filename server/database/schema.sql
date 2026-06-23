@@ -3148,6 +3148,112 @@ CREATE INDEX IF NOT EXISTS risk_results_excluded_exclusion_idx
 ON risk_results (excluded_exclusion_id)
 WHERE excluded_exclusion_id IS NOT NULL;
 
+-- A policy eval ("session replay") run: a policy evaluated NON-ENFORCING over a
+-- pinned sample of historical messages, to gauge efficacy/cost before enabling
+-- it. Findings land in policy_eval_findings, kept fully separate from
+-- risk_results so eval never touches the enforcement hot path, its dedup/sweep
+-- queries, or the realtime coordinator (it never marks messages analyzed and
+-- never appends to the outbox).
+CREATE TABLE IF NOT EXISTS policy_eval_runs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  -- The saved policy under eval, or NULL when evaluating an unsaved candidate
+  -- config (the draft case). For saved runs we pin the policy version (mirrors
+  -- how AnalyzeBatch pins PolicyVersion) and read the live policy at run time;
+  -- for drafts the full config lives in config_snapshot instead.
+  risk_policy_id uuid,
+  risk_policy_version BIGINT,
+  -- Frozen candidate config for draft runs (sources, presidio_entities,
+  -- custom_rule_ids, disabled_rules, message_types, scope CEL, prompt,
+  -- model_config). NULL when risk_policy_id is set.
+  config_snapshot JSONB,
+
+  -- How the sample was chosen (mode + params) AND the resolved, pinned list of
+  -- chat_message_ids the run scans, so re-runs hit the same messages.
+  sample_definition JSONB NOT NULL,
+
+  status TEXT NOT NULL DEFAULT 'pending',
+  requested_by TEXT,
+
+  -- Run statistics, rolled up on completion. Cost/token/latency are populated
+  -- only for LLM-judge paths; deterministic sources leave them at zero/NULL.
+  messages_scanned INT NOT NULL DEFAULT 0,
+  findings_count INT NOT NULL DEFAULT 0,
+  total_cost_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
+  input_tokens BIGINT NOT NULL DEFAULT 0,
+  output_tokens BIGINT NOT NULL DEFAULT 0,
+  judge_latency_p50_ms INT,
+  judge_latency_p95_ms INT,
+
+  error TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  started_at timestamptz,
+  completed_at timestamptz,
+  -- When the GC sweep may delete this run and its findings. Eval findings carry
+  -- raw match text (secret/PII), so retention is bounded.
+  expires_at timestamptz,
+
+  CONSTRAINT policy_eval_runs_pkey PRIMARY KEY (id),
+  CONSTRAINT policy_eval_runs_status_check CHECK (status IN ('pending', 'running', 'completed', 'cancelled', 'failed')),
+  CONSTRAINT policy_eval_runs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT policy_eval_runs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
+  CONSTRAINT policy_eval_runs_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS policy_eval_runs_project_created_idx
+ON policy_eval_runs (project_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS policy_eval_runs_policy_idx
+ON policy_eval_runs (project_id, risk_policy_id)
+WHERE risk_policy_id IS NOT NULL;
+
+-- Drives the GC sweep that deletes expired runs (and cascades to findings).
+CREATE INDEX IF NOT EXISTS policy_eval_runs_expires_at_idx
+ON policy_eval_runs (expires_at)
+WHERE expires_at IS NOT NULL;
+
+-- A single finding produced by a policy eval run. Shape mirrors risk_results
+-- (minus enforcement/exclusion columns) but is an independent table with no FK
+-- to risk_policies, so draft runs (no saved policy) can store findings.
+CREATE TABLE IF NOT EXISTS policy_eval_findings (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  policy_eval_run_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  chat_message_id uuid NOT NULL,
+  source TEXT NOT NULL,
+
+  rule_id TEXT,
+  description TEXT,
+  -- Verbatim matched substring (secret/PII). Sensitive: scope reads to
+  -- project+org and redact in any listing that does not need the raw value.
+  match TEXT,
+  start_pos INT,
+  end_pos INT,
+  confidence DOUBLE PRECISION,
+  tags TEXT[],
+  -- All matched spans attributed to this finding, as a JSON array of
+  -- {match,field,path,start_pos,end_pos}; mirrors risk_results.spans.
+  spans jsonb,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT policy_eval_findings_pkey PRIMARY KEY (id),
+  CONSTRAINT policy_eval_findings_run_id_fkey FOREIGN KEY (policy_eval_run_id) REFERENCES policy_eval_runs(id) ON DELETE CASCADE,
+  CONSTRAINT policy_eval_findings_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT policy_eval_findings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
+  CONSTRAINT policy_eval_findings_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS policy_eval_findings_run_idx
+ON policy_eval_findings (policy_eval_run_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS policy_eval_findings_project_run_idx
+ON policy_eval_findings (project_id, policy_eval_run_id);
+
 CREATE TABLE IF NOT EXISTS authz_challenge_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
