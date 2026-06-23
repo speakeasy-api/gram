@@ -1,6 +1,7 @@
 package gcp
 
 import (
+	"log/slog"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -219,7 +220,7 @@ func TestBuildPubSubValues_Schemas(t *testing.T) {
 		},
 	}
 
-	doc := buildPubSubValues([]DesiredTopic{}, []DesiredSubscription{}, schemas)
+	doc := buildPubSubValues(t.Context(), slog.New(slog.DiscardHandler), []DesiredTopic{}, []DesiredSubscription{}, schemas)
 
 	// Sorted alphabetically by name for stable diffs.
 	require.Len(t, doc.PubSub.Schemas, 2)

@@ -156,6 +156,10 @@ pubsub:
     name: gram-ping-v2-message
     spec:
       messageRetentionDuration: 86400s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-ping-v2-message
   - labels:
       dlq_for: gram-ping-v2-processor
       managed_by: proto-pubsub-orchestrator
@@ -174,15 +178,27 @@ pubsub:
     name: gram-risk-v1-finding
     spec:
       messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-finding
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-gitleaks-analysis
     name: gram-risk-v1-gitleaks-analysis
     spec:
       messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-gitleaks-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-presidio-analysis
     name: gram-risk-v1-presidio-analysis
     spec:
       messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-presidio-analysis
