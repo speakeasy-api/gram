@@ -577,6 +577,94 @@ func TestSearchLogs_FilterByGramChatID(t *testing.T) {
 	require.Len(t, result.Logs, 2, "should only return logs matching gram_chat_id")
 }
 
+// TestSearchChats_DerivesTotalTokensWhenProviderOmitsTotal reproduces DNO-323:
+// AI-coding providers like Claude Code report gen_ai.usage.input_tokens and
+// gen_ai.usage.output_tokens but never emit gen_ai.usage.total_tokens (see
+// writeMetricsToClickHouse in internal/hooks). A session built solely from these
+// rows must still surface a non-zero total — derived from input + output —
+// instead of showing "0 tokens".
+func TestSearchChats_DerivesTotalTokensWhenProviderOmitsTotal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	chatID := uuid.New().String()
+
+	// Two Claude Code metric rows: input/output tokens present, total omitted.
+	insertClaudeCodeMetricLog(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID, 100, 50, "claude-sonnet-4")
+	insertClaudeCodeMetricLog(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), chatID, 200, 80, "claude-sonnet-4")
+
+	time.Sleep(200 * time.Millisecond)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+		Filter: &gen.SearchChatsFilter{
+			From: &from,
+			To:   &to,
+		},
+		Limit: 100,
+		Sort:  "desc",
+	})
+
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 1)
+
+	chat := result.Chats[0]
+	require.Equal(t, chatID, chat.GramChatID)
+	require.Equal(t, int64(300), chat.TotalInputTokens)  // 100 + 200
+	require.Equal(t, int64(130), chat.TotalOutputTokens) // 50 + 80
+	// Provider never emitted gen_ai.usage.total_tokens; the list must derive it
+	// from input + output rather than report 0.
+	require.Equal(t, int64(430), chat.TotalTokens) // 300 + 130
+}
+
+// insertClaudeCodeMetricLog inserts a Claude Code usage-metric row that mirrors
+// writeMetricsToClickHouse: input/output tokens and cost are reported but
+// gen_ai.usage.total_tokens is deliberately absent, and the row carries
+// hook_source=claude-code rather than a tool URN.
+func insertClaudeCodeMetricLog(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, chatID string, inputTokens, outputTokens int, model string) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gen_ai.conversation.id":     chatID,
+		"gen_ai.usage.input_tokens":  inputTokens,
+		"gen_ai.usage.output_tokens": outputTokens,
+		"gen_ai.usage.cost":          0.42,
+		"gen_ai.response.model":      model,
+		"gram.hook.source":           "claude-code",
+		// Note: gen_ai.usage.total_tokens is intentionally omitted.
+	}
+
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_deployment_id, gram_urn, service_name,
+			gram_chat_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "claude code metric",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, deploymentID, "", "gram-hooks",
+		chatID)
+	require.NoError(t, err)
+}
+
 // insertChatLogWithChatID inserts a chat completion log with the gram_chat_id column set.
 func insertChatLogWithChatID(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, chatID string, inputTokens, outputTokens, totalTokens int, durationSec float64, finishReason, model, provider string) {
 	t.Helper()
