@@ -62,6 +62,42 @@ describe("ChartCard", () => {
     expect(onExpand).toHaveBeenCalledWith(null);
   });
 
+  it("calls onResetZoom when the reset zoom button is clicked", () => {
+    const onResetZoom = vi.fn();
+    render(
+      <ChartCard
+        {...defaultProps}
+        isZoomed
+        onResetZoom={() => {
+          onResetZoom();
+        }}
+      >
+        -
+      </ChartCard>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset zoom" }));
+
+    expect(onResetZoom).toHaveBeenCalledOnce();
+  });
+
+  it("does not show the reset zoom button when the chart is not zoomed", () => {
+    const onResetZoom = vi.fn();
+    render(
+      <ChartCard
+        {...defaultProps}
+        isZoomed={false}
+        onResetZoom={() => {
+          onResetZoom();
+        }}
+      >
+        -
+      </ChartCard>,
+    );
+
+    expect(screen.queryByRole("button", { name: "Reset zoom" })).toBeNull();
+  });
+
   it("hides the expand button when hasData is false", () => {
     render(
       <ChartCard {...defaultProps} hasData={false}>

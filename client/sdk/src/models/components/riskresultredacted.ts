@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  RiskSpanRedacted,
+  RiskSpanRedacted$inboundSchema,
+} from "./riskspanredacted.js";
 
 export type RiskResultRedacted = {
   /**
@@ -62,6 +66,10 @@ export type RiskResultRedacted = {
    */
   source: string;
   /**
+   * All matched spans attributed to this finding, each with its match replaced by an opaque fingerprint.
+   */
+  spansRedacted?: Array<RiskSpanRedacted> | undefined;
+  /**
    * Tags from the detection rule.
    */
   tags?: Array<string> | undefined;
@@ -93,6 +101,7 @@ export const RiskResultRedacted$inboundSchema: z.ZodMiniType<
     position_known: z.boolean(),
     rule_id: z.optional(z.string()),
     source: z.string(),
+    spans_redacted: z.optional(z.array(RiskSpanRedacted$inboundSchema)),
     tags: z.optional(z.array(z.string())),
     user_id: z.optional(z.string()),
   }),
@@ -107,6 +116,7 @@ export const RiskResultRedacted$inboundSchema: z.ZodMiniType<
       "policy_version": "policyVersion",
       "position_known": "positionKnown",
       "rule_id": "ruleId",
+      "spans_redacted": "spansRedacted",
       "user_id": "userId",
     });
   }),

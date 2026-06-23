@@ -172,13 +172,12 @@ func TestExchangeRefreshToken_ExpiredUpstreamSecrets(t *testing.T) {
 	env := newTokenTestEnv(t)
 	toolsetID := uuid.New()
 
-	// Issue token with an upstream secret that expires in 200ms
-	upstreamExpiry := time.Now().Add(200 * time.Millisecond)
+	// Issue a token whose upstream secret is already expired (the downstream token
+	// is still valid - 30 day TTL). Setting a past expiry directly is deterministic
+	// and avoids sleeping to wait out a real wall-clock deadline.
+	upstreamExpiry := time.Now().Add(-1 * time.Hour)
 	issued := env.IssueToken(t, ctx, toolsetID,
 		"upstream-access", "upstream-refresh", &upstreamExpiry, []string{"api_key"})
-
-	// Wait for upstream secret to expire (downstream token is still valid - 30 day TTL)
-	time.Sleep(300 * time.Millisecond)
 
 	_, err := env.TokenService.ExchangeRefreshToken(ctx, &oauth.TokenRequest{
 		GrantType:    "refresh_token",

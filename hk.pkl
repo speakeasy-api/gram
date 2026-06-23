@@ -65,6 +65,9 @@ local linters = new Mapping<String, Step> {
   ["ruff-format"] = (Builtins.ruff_format) {
     exclude = List("**/vendor/**", "**/node_modules/**", "**/dist/**", "**/*_pb2.*")
   }
+  ["ruff"] = (Builtins.ruff) {
+    exclude = List("**/vendor/**", "**/node_modules/**", "**/dist/**", "**/*_pb2.*")
+  }
 }
 
 hooks {

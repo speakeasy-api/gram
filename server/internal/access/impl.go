@@ -222,8 +222,9 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	return nil
 }
 
-// ListScopes exposes the stable set of grantable scopes so clients can build
-// role editing UX without hardcoding permission definitions.
+// ListScopes exposes the stable scope catalog so clients can build role editing
+// UX without hardcoding permission definitions. Clients should use visibility
+// to decide whether a scope is shown directly or only used as storage metadata.
 func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*gen.ListScopesResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -237,19 +238,60 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		attr.UserID(ac.UserID),
 	)
 
-	return &gen.ListScopesResult{Scopes: []*gen.ScopeDefinition{
-		{Slug: string(authz.ScopeOrgRead), Description: "Read organization metadata and members.", ResourceType: "org"},
-		{Slug: string(authz.ScopeOrgAdmin), Description: "Manage organization access and settings.", ResourceType: "org"},
-		{Slug: string(authz.ScopeProjectRead), Description: "View projects and project-related resources.", ResourceType: "project"},
-		{Slug: string(authz.ScopeProjectWrite), Description: "Create and modify projects and project-related resources.", ResourceType: "project"},
-		{Slug: string(authz.ScopeMCPRead), Description: "View MCP servers and configuration.", ResourceType: "mcp"},
-		{Slug: string(authz.ScopeMCPWrite), Description: "Create and modify MCP servers and configuration.", ResourceType: "mcp"},
-		{Slug: string(authz.ScopeMCPConnect), Description: "Connect to and use MCP servers.", ResourceType: "mcp"},
-		{Slug: string(authz.ScopeEnvironmentRead), Description: "View environments and their entries within the project.", ResourceType: "environment"},
-		{Slug: string(authz.ScopeEnvironmentWrite), Description: "Add, edit, clone, and remove environments within the project.", ResourceType: "environment"},
-		{Slug: string(authz.ScopeRiskPolicyEvaluate), Description: "Evaluate risk policies.", ResourceType: "risk_policy"},
-		{Slug: string(authz.ScopeRiskPolicyBypass), Description: "Bypass risk policies.", ResourceType: "risk_policy"},
-	}}, nil
+	scopes := []scopeDefinitionInput{
+		{scope: authz.ScopeOrgRead, description: "Read organization metadata and members.", resourceType: "org"},
+		{scope: authz.ScopeOrgBlockedRead, description: "Store exceptions for organization read access.", resourceType: "org"},
+		{scope: authz.ScopeOrgAdmin, description: "Manage organization access and settings.", resourceType: "org"},
+		{scope: authz.ScopeOrgBlockedAdmin, description: "Store exceptions for organization admin access.", resourceType: "org"},
+		{scope: authz.ScopeProjectRead, description: "View projects and project-related resources.", resourceType: "project"},
+		{scope: authz.ScopeProjectBlockedRead, description: "Store exceptions for project read access.", resourceType: "project"},
+		{scope: authz.ScopeProjectWrite, description: "Create and modify projects and project-related resources.", resourceType: "project"},
+		{scope: authz.ScopeProjectBlockedWrite, description: "Store exceptions for project write access.", resourceType: "project"},
+		{scope: authz.ScopeMCPRead, description: "View MCP servers and configuration.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPBlockedRead, description: "Store exceptions for MCP read access.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPWrite, description: "Create and modify MCP servers and configuration.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPBlockedWrite, description: "Store exceptions for MCP write access.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPConnect, description: "Connect to and use MCP servers.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPBlockedConnect, description: "Store exceptions for MCP connect access.", resourceType: "mcp"},
+		{scope: authz.ScopeEnvironmentRead, description: "View environments and their entries within the project.", resourceType: "environment"},
+		{scope: authz.ScopeEnvironmentBlockedRead, description: "Store exceptions for environment read access.", resourceType: "environment"},
+		{scope: authz.ScopeEnvironmentWrite, description: "Add, edit, clone, and remove environments within the project.", resourceType: "environment"},
+		{scope: authz.ScopeEnvironmentBlockedWrite, description: "Store exceptions for environment write access.", resourceType: "environment"},
+		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
+		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
+	}
+	result := make([]*gen.ScopeDefinition, 0, len(scopes))
+	for _, scope := range scopes {
+		result = append(result, scopeDefinition(scope))
+	}
+
+	return &gen.ListScopesResult{Scopes: result}, nil
+}
+
+type scopeDefinitionInput struct {
+	scope        authz.Scope
+	description  string
+	resourceType string
+}
+
+func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
+	var exclusionScope *string
+	if exclusion, ok := authz.ExclusionScopeFor(input.scope); ok {
+		exclusionScopeValue := string(exclusion)
+		exclusionScope = &exclusionScopeValue
+	}
+	visibility, ok := authz.ScopeVisibilityFor(input.scope)
+	if !ok {
+		visibility = authz.ScopeVisibilityInternal
+	}
+
+	return &gen.ScopeDefinition{
+		Slug:           string(input.scope),
+		Description:    input.description,
+		ResourceType:   input.resourceType,
+		Visibility:     visibility,
+		ExclusionScope: exclusionScope,
+	}
 }
 
 // ListMembers follows the original access API contract by returning WorkOS user
@@ -284,7 +326,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return nil, err
 	}
 	if !enforce {
-		return &gen.ListUserGrantsResult{Grants: allScopesGrants()}, nil
+		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 	}
 
 	ac, _, err := s.roleOrgContext(ctx)
@@ -297,7 +339,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	// the MembershipSyncGuard doesn't block the dashboard.
 	if ac.IsAdmin {
 		if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); hasOverride {
-			return &gen.ListUserGrantsResult{Grants: allScopesGrants()}, nil
+			return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 		}
 	}
 
@@ -417,13 +459,9 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {
 			selectors = append(selectors, genSelectorToAuthz(s))
 		}
 
-		effect := authz.PolicyEffect(grant.Effect)
-		if effect == "" {
-			effect = authz.PolicyEffectAllow
-		}
 		out = append(out, &authz.RoleGrant{
 			Scope:     grant.Scope,
-			Effect:    effect,
+			Effect:    authz.PolicyEffectAllow,
 			Selectors: selectors,
 		})
 	}
@@ -480,12 +518,12 @@ func scopedGrantToGenRoleGrant(g *authz.ScopedGrant) *gen.RoleGrant {
 	for _, sel := range g.Selectors {
 		selectors = append(selectors, authzSelectorToGen(sel))
 	}
-	return &gen.RoleGrant{Scope: g.Scope, Effect: string(g.Effect), Selectors: selectors}
+	return &gen.RoleGrant{Scope: g.Scope, Selectors: selectors}
 }
 
-// allScopesGrants returns unrestricted grants for every known scope.
-// Used when RBAC is not enforced or for admin impersonation.
-func allScopesGrants() []*gen.ListRoleGrant {
+// userVisibleScopeGrants returns unrestricted grants for every first-class
+// permission scope. Used when RBAC is not enforced or for admin impersonation.
+func userVisibleScopeGrants() []*gen.ListRoleGrant {
 	return []*gen.ListRoleGrant{
 		{Scope: string(authz.ScopeOrgRead), Selectors: nil},
 		{Scope: string(authz.ScopeOrgAdmin), Selectors: nil},
@@ -509,7 +547,7 @@ func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 		for _, sel := range g.Selectors {
 			selectors = append(selectors, authzSelectorToGen(sel))
 		}
-		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, Effect: string(g.Effect), SubScopes: g.SubScopes, Selectors: selectors})
+		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors})
 	}
 	return out
 }

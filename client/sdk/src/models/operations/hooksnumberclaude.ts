@@ -19,6 +19,10 @@ export type HooksNumberClaudeRequest = {
    * Optional endpoint hostname supplied by the Gram hook plugin.
    */
   xGramHookHostname?: string | undefined;
+  /**
+   * Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
+   */
+  idempotencyKey?: string | undefined;
   claudeHookPayload: components.ClaudeHookPayload;
 };
 
@@ -27,6 +31,7 @@ export type HooksNumberClaudeRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "X-Gram-Hook-Hostname"?: string | undefined;
+  "Idempotency-Key"?: string | undefined;
   ClaudeHookPayload: components.ClaudeHookPayload$Outbound;
 };
 
@@ -39,6 +44,7 @@ export const HooksNumberClaudeRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     xGramHookHostname: z.optional(z.string()),
+    idempotencyKey: z.optional(z.string()),
     claudeHookPayload: components.ClaudeHookPayload$outboundSchema,
   }),
   z.transform((v) => {
@@ -46,6 +52,7 @@ export const HooksNumberClaudeRequest$outboundSchema: z.ZodMiniType<
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
       xGramHookHostname: "X-Gram-Hook-Hostname",
+      idempotencyKey: "Idempotency-Key",
       claudeHookPayload: "ClaudeHookPayload",
     });
   }),

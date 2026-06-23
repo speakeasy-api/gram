@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,70 +78,72 @@ func TestGetProjectMetricsSummary(t *testing.T) {
 	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-6*time.Minute), "tools:http:petstore:getPet", 500, 1.0)
 	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-5*time.Minute), "tools:http:weather:forecast", 200, 0.3)
 
-	// Wait for ClickHouse eventual consistency
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.GetProjectMetricsSummary(ctx, &gen.GetProjectMetricsSummaryPayload{
-		From: from,
-		To:   to,
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetProjectMetricsSummary(ctx, &gen.GetProjectMetricsSummaryPayload{
+			From: from,
+			To:   to,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
+			return
+		}
+		m := res.Metrics
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
+		// Token metrics (sum of all chat completions)
+		assert.Equal(c, int64(450), m.TotalInputTokens)  // 100 + 200 + 150
+		assert.Equal(c, int64(225), m.TotalOutputTokens) // 50 + 100 + 75
+		assert.Equal(c, int64(675), m.TotalTokens)       // 150 + 300 + 225
 
-	m := result.Metrics
-	require.NotNil(t, m)
+		// Chat request metrics
+		assert.Equal(c, int64(3), m.TotalChatRequests)
+		assert.Greater(c, m.AvgChatDurationMs, float64(0))
 
-	// Token metrics (sum of all chat completions)
-	require.Equal(t, int64(450), m.TotalInputTokens)  // 100 + 200 + 150
-	require.Equal(t, int64(225), m.TotalOutputTokens) // 50 + 100 + 75
-	require.Equal(t, int64(675), m.TotalTokens)       // 150 + 300 + 225
+		// Resolution status
+		assert.Equal(c, int64(2), m.FinishReasonStop)      // 2 "stop"
+		assert.Equal(c, int64(1), m.FinishReasonToolCalls) // 1 "tool_calls"
 
-	// Chat request metrics
-	require.Equal(t, int64(3), m.TotalChatRequests)
-	require.Greater(t, m.AvgChatDurationMs, float64(0))
+		// Tool call metrics
+		assert.Equal(c, int64(3), m.TotalToolCalls)
+		assert.Equal(c, int64(2), m.ToolCallSuccess) // 2 with status 200
+		assert.Equal(c, int64(1), m.ToolCallFailure) // 1 with status 500
 
-	// Resolution status
-	require.Equal(t, int64(2), m.FinishReasonStop)      // 2 "stop"
-	require.Equal(t, int64(1), m.FinishReasonToolCalls) // 1 "tool_calls"
+		// Cardinality
+		assert.Equal(c, int64(2), m.TotalChats)        // 2 distinct chat IDs
+		assert.Equal(c, int64(2), m.DistinctModels)    // gpt-4, claude-3
+		assert.Equal(c, int64(2), m.DistinctProviders) // openai, anthropic
 
-	// Tool call metrics
-	require.Equal(t, int64(3), m.TotalToolCalls)
-	require.Equal(t, int64(2), m.ToolCallSuccess) // 2 with status 200
-	require.Equal(t, int64(1), m.ToolCallFailure) // 1 with status 500
+		// Model breakdown
+		if assert.Len(c, m.Models, 2) {
+			modelCounts := make(map[string]int64)
+			for _, model := range m.Models {
+				modelCounts[model.Name] = model.Count
+			}
+			assert.Equal(c, int64(2), modelCounts["gpt-4"])    // 2 chat completions with gpt-4
+			assert.Equal(c, int64(1), modelCounts["claude-3"]) // 1 chat completion with claude-3
+		}
 
-	// Cardinality
-	require.Equal(t, int64(2), m.TotalChats)        // 2 distinct chat IDs
-	require.Equal(t, int64(2), m.DistinctModels)    // gpt-4, claude-3
-	require.Equal(t, int64(2), m.DistinctProviders) // openai, anthropic
-
-	// Model breakdown
-	require.Len(t, m.Models, 2)
-	modelCounts := make(map[string]int64)
-	for _, model := range m.Models {
-		modelCounts[model.Name] = model.Count
-	}
-	require.Equal(t, int64(2), modelCounts["gpt-4"])    // 2 chat completions with gpt-4
-	require.Equal(t, int64(1), modelCounts["claude-3"]) // 1 chat completion with claude-3
-
-	// Tool breakdown
-	require.Len(t, m.Tools, 3)
-	toolStats := make(map[string]*gen.ToolUsage)
-	for _, tool := range m.Tools {
-		toolStats[tool.Urn] = tool
-	}
-	require.Equal(t, int64(1), toolStats["tools:http:petstore:listPets"].Count)
-	require.Equal(t, int64(1), toolStats["tools:http:petstore:listPets"].SuccessCount)
-	require.Equal(t, int64(0), toolStats["tools:http:petstore:listPets"].FailureCount)
-	require.Equal(t, int64(1), toolStats["tools:http:petstore:getPet"].Count)
-	require.Equal(t, int64(0), toolStats["tools:http:petstore:getPet"].SuccessCount)
-	require.Equal(t, int64(1), toolStats["tools:http:petstore:getPet"].FailureCount) // status 500
-	require.Equal(t, int64(1), toolStats["tools:http:weather:forecast"].Count)
-	require.Equal(t, int64(1), toolStats["tools:http:weather:forecast"].SuccessCount)
-	require.Equal(t, int64(0), toolStats["tools:http:weather:forecast"].FailureCount)
+		// Tool breakdown
+		if assert.Len(c, m.Tools, 3) {
+			toolStats := make(map[string]*gen.ToolUsage)
+			for _, tool := range m.Tools {
+				toolStats[tool.Urn] = tool
+			}
+			assert.Equal(c, int64(1), toolStats["tools:http:petstore:listPets"].Count)
+			assert.Equal(c, int64(1), toolStats["tools:http:petstore:listPets"].SuccessCount)
+			assert.Equal(c, int64(0), toolStats["tools:http:petstore:listPets"].FailureCount)
+			assert.Equal(c, int64(1), toolStats["tools:http:petstore:getPet"].Count)
+			assert.Equal(c, int64(0), toolStats["tools:http:petstore:getPet"].SuccessCount)
+			assert.Equal(c, int64(1), toolStats["tools:http:petstore:getPet"].FailureCount) // status 500
+			assert.Equal(c, int64(1), toolStats["tools:http:weather:forecast"].Count)
+			assert.Equal(c, int64(1), toolStats["tools:http:weather:forecast"].SuccessCount)
+			assert.Equal(c, int64(0), toolStats["tools:http:weather:forecast"].FailureCount)
+		}
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func insertChatCompletionLog(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, chatID string, inputTokens, outputTokens, totalTokens int, durationSec float64, finishReason, model, provider string) {
@@ -236,24 +239,26 @@ func TestGetProjectMetricsSummary_StatusCodeBoundaries(t *testing.T) {
 	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-3*time.Minute), "tools:http:test:op8", 500, 0.1) // failure
 	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-2*time.Minute), "tools:http:test:op9", 503, 0.1) // failure
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.GetProjectMetricsSummary(ctx, &gen.GetProjectMetricsSummaryPayload{
-		From: from,
-		To:   to,
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	m := result.Metrics
-	require.Equal(t, int64(9), m.TotalToolCalls)
-	require.Equal(t, int64(3), m.ToolCallSuccess) // 200, 201, 299
-	require.Equal(t, int64(4), m.ToolCallFailure) // 400, 404, 500, 503
-	// Note: 301, 302 are not counted as success (not 200-299) or failure (not 400+)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetProjectMetricsSummary(ctx, &gen.GetProjectMetricsSummaryPayload{
+			From: from,
+			To:   to,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
+			return
+		}
+		m := res.Metrics
+		assert.Equal(c, int64(9), m.TotalToolCalls)
+		assert.Equal(c, int64(3), m.ToolCallSuccess) // 200, 201, 299
+		assert.Equal(c, int64(4), m.ToolCallFailure) // 400, 404, 500, 503
+		// Note: 301, 302 are not counted as success (not 200-299) or failure (not 400+)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestGetProjectMetricsSummary_OnlyToolCalls(t *testing.T) {
@@ -271,34 +276,36 @@ func TestGetProjectMetricsSummary_OnlyToolCalls(t *testing.T) {
 	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), "tools:http:petstore:listPets", 200, 0.5)
 	insertToolCallLog(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), "tools:http:petstore:getPet", 200, 0.3)
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.GetProjectMetricsSummary(ctx, &gen.GetProjectMetricsSummaryPayload{
-		From: from,
-		To:   to,
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetProjectMetricsSummary(ctx, &gen.GetProjectMetricsSummaryPayload{
+			From: from,
+			To:   to,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
+			return
+		}
+		m := res.Metrics
+		assert.Equal(c, int64(2), m.TotalToolCalls)
+		assert.Equal(c, int64(2), m.ToolCallSuccess)
+		assert.Equal(c, int64(0), m.ToolCallFailure)
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
+		// Chat-related metrics should be zero
+		assert.Equal(c, int64(0), m.TotalChatRequests)
+		assert.Equal(c, int64(0), m.TotalChats)
+		assert.Equal(c, int64(0), m.TotalInputTokens)
+		assert.Equal(c, int64(0), m.TotalOutputTokens)
+		assert.Equal(c, int64(0), m.TotalTokens)
+		assert.Empty(c, m.Models)
 
-	m := result.Metrics
-	require.Equal(t, int64(2), m.TotalToolCalls)
-	require.Equal(t, int64(2), m.ToolCallSuccess)
-	require.Equal(t, int64(0), m.ToolCallFailure)
-
-	// Chat-related metrics should be zero
-	require.Equal(t, int64(0), m.TotalChatRequests)
-	require.Equal(t, int64(0), m.TotalChats)
-	require.Equal(t, int64(0), m.TotalInputTokens)
-	require.Equal(t, int64(0), m.TotalOutputTokens)
-	require.Equal(t, int64(0), m.TotalTokens)
-	require.Empty(t, m.Models)
-
-	// But tools should be present
-	require.Len(t, m.Tools, 2)
+		// But tools should be present
+		assert.Len(c, m.Tools, 2)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestGetProjectMetricsSummary_OnlyChatCompletions(t *testing.T) {
@@ -317,34 +324,37 @@ func TestGetProjectMetricsSummary_OnlyChatCompletions(t *testing.T) {
 	insertChatCompletionLog(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID, 100, 50, 150, 1.5, "stop", "gpt-4", "openai")
 	insertChatCompletionLog(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID, 200, 100, 300, 2.0, "stop", "gpt-4", "openai")
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.GetProjectMetricsSummary(ctx, &gen.GetProjectMetricsSummaryPayload{
-		From: from,
-		To:   to,
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetProjectMetricsSummary(ctx, &gen.GetProjectMetricsSummaryPayload{
+			From: from,
+			To:   to,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) || !assert.NotNil(c, res.Metrics) {
+			return
+		}
+		m := res.Metrics
+		assert.Equal(c, int64(2), m.TotalChatRequests)
+		assert.Equal(c, int64(1), m.TotalChats) // 1 unique chat ID
+		assert.Equal(c, int64(300), m.TotalInputTokens)
+		assert.Equal(c, int64(150), m.TotalOutputTokens)
+		assert.Equal(c, int64(450), m.TotalTokens)
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
+		// Tool metrics should be zero
+		assert.Equal(c, int64(0), m.TotalToolCalls)
+		assert.Equal(c, int64(0), m.ToolCallSuccess)
+		assert.Equal(c, int64(0), m.ToolCallFailure)
+		assert.Empty(c, m.Tools)
 
-	m := result.Metrics
-	require.Equal(t, int64(2), m.TotalChatRequests)
-	require.Equal(t, int64(1), m.TotalChats) // 1 unique chat ID
-	require.Equal(t, int64(300), m.TotalInputTokens)
-	require.Equal(t, int64(150), m.TotalOutputTokens)
-	require.Equal(t, int64(450), m.TotalTokens)
-
-	// Tool metrics should be zero
-	require.Equal(t, int64(0), m.TotalToolCalls)
-	require.Equal(t, int64(0), m.ToolCallSuccess)
-	require.Equal(t, int64(0), m.ToolCallFailure)
-	require.Empty(t, m.Tools)
-
-	// Models should be present
-	require.Len(t, m.Models, 1)
-	require.Equal(t, "gpt-4", m.Models[0].Name)
-	require.Equal(t, int64(2), m.Models[0].Count)
+		// Models should be present
+		if assert.Len(c, m.Models, 1) {
+			assert.Equal(c, "gpt-4", m.Models[0].Name)
+			assert.Equal(c, int64(2), m.Models[0].Count)
+		}
+	}, 10*time.Second, 200*time.Millisecond)
 }

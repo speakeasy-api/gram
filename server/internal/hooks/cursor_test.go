@@ -1,14 +1,18 @@
 package hooks
 
 import (
+	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -124,6 +128,61 @@ func TestCursor_RequiresUserEmail(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, result)
 	require.ErrorContains(t, err, "cursor hook payload missing user_email")
+}
+
+func TestCursor_BeforeSubmitPrompt_ScansViaCanonicalEventFields(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	scanner := &recordingCursorRiskScanner{
+		result: &risk.ScanResult{
+			PolicyName:  "prompt policy",
+			Description: "blocked prompt",
+		},
+	}
+	ti.service.riskScanner = scanner
+
+	prompt := "do something risky"
+	conversationID := "conv-risk-scan"
+	userEmail := "dev@example.com"
+
+	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
+		HookEventName:  "beforeSubmitPrompt",
+		Prompt:         &prompt,
+		ConversationID: &conversationID,
+		UserEmail:      &userEmail,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Permission)
+	assert.Equal(t, "deny", *result.Permission)
+	require.NotNil(t, result.UserMessage)
+	assert.Contains(t, *result.UserMessage, "prompt policy")
+
+	assert.Equal(t, prompt, scanner.text)
+	assert.Equal(t, message.User, scanner.messageType)
+	assert.Empty(t, scanner.toolName)
+}
+
+type recordingCursorRiskScanner struct {
+	text        string
+	messageType message.Type
+	toolName    string
+	result      *risk.ScanResult
+}
+
+func (s *recordingCursorRiskScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, text string, messageType message.Type, toolName string) (*risk.ScanResult, error) {
+	s.text = text
+	s.messageType = messageType
+	s.toolName = toolName
+	return s.result, nil
+}
+
+func (s *recordingCursorRiskScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ string, _ uuid.UUID, _ string) (*risk.ShadowMCPPolicy, error) {
+	return nil, nil
+}
+
+func (s *recordingCursorRiskScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {
+	return false, nil
 }
 
 func TestBuildCursorTelemetryAttributes_BasicFields(t *testing.T) {

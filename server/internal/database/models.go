@@ -405,15 +405,17 @@ type DeploymentTagHistory struct {
 }
 
 type DeploymentsFunction struct {
-	ID            uuid.UUID
-	DeploymentID  uuid.UUID
-	AssetID       uuid.UUID
-	Name          string
-	Slug          string
-	Runtime       string
-	RunnerVersion pgtype.Text
-	MemoryMib     pgtype.Int4
-	Scale         pgtype.Int4
+	ID                uuid.UUID
+	DeploymentID      uuid.UUID
+	AssetID           uuid.UUID
+	Name              string
+	Slug              string
+	Runtime           string
+	RunnerVersion     pgtype.Text
+	MemoryMib         pgtype.Int4
+	Scale             pgtype.Int4
+	MemoryMibOverride pgtype.Int4
+	ScaleOverride     pgtype.Int4
 }
 
 type DeploymentsOpenapiv3Asset struct {
@@ -1290,6 +1292,8 @@ type RiskCustomDetectionRule struct {
 	Title          string
 	Description    string
 	Regex          pgtype.Text
+	MatchConfig    []byte
+	DetectionExpr  pgtype.Text
 	Severity       string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
@@ -1326,6 +1330,8 @@ type RiskPolicy struct {
 	DisabledRules        []string
 	CustomRuleIds        []string
 	MessageTypes         []string
+	ScopeInclude         pgtype.Text
+	ScopeExempt          pgtype.Text
 	Action               string
 	AudienceType         string
 	AutoName             bool
@@ -1381,6 +1387,7 @@ type RiskResult struct {
 	EndPos              pgtype.Int4
 	Confidence          pgtype.Float8
 	Tags                []string
+	Spans               []byte
 	DeadLetterReason    pgtype.Text
 	ExcludedAt          pgtype.Timestamptz
 	ExcludedExclusionID uuid.NullUUID

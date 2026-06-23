@@ -27,7 +27,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
-__all__ = ["HealthState", "serve_control", "LIVENESS_PATH", "READINESS_PATH"]
+__all__ = ["LIVENESS_PATH", "READINESS_PATH", "HealthState", "serve_control"]
 
 LIVENESS_PATH = "/healthz"
 READINESS_PATH = "/readyz"
@@ -65,7 +65,7 @@ class _NoSignalServer(uvicorn.Server):
     with the worker's task group on shutdown.
     """
 
-    def install_signal_handlers(self) -> None:  # noqa: D102 - intentional no-op
+    def install_signal_handlers(self) -> None:
         return None
 
 
@@ -116,8 +116,10 @@ async def serve_control(
     async with anyio.create_task_group() as tg:
         tg.start_soon(server.serve)
 
-        # uvicorn flips ``started`` once the listening sockets are bound.
-        while not server.started:
+        # uvicorn flips ``started`` once the listening sockets are bound. It
+        # exposes only this polled boolean, not an awaitable event, so a poll
+        # loop is the available option here.
+        while not server.started:  # noqa: ASYNC110
             await anyio.sleep(0.02)
 
         bound_port = _bound_port(server, fallback=port)
@@ -131,6 +133,6 @@ def _bound_port(server: uvicorn.Server, *, fallback: int) -> int:
         for started_server in server.servers:
             for sock in started_server.sockets:
                 return sock.getsockname()[1]
-    except Exception:  # noqa: BLE001 - fall back to the requested port
+    except Exception:
         pass
     return fallback

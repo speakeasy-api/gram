@@ -173,7 +173,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 
 // BuildLoadChatPayload builds the payload for the chat loadChat endpoint from
 // CLI flags.
-func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
+func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatFromStart string, chatLoadChatRiskOnly string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
 	var err error
 	var id string
 	{
@@ -194,6 +194,76 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 			}
 			if err != nil {
 				return nil, err
+			}
+		}
+	}
+	var limit int
+	{
+		if chatLoadChatLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(chatLoadChatLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var beforeSeq *int64
+	{
+		if chatLoadChatBeforeSeq != "" {
+			val, err := strconv.ParseInt(chatLoadChatBeforeSeq, 10, 64)
+			beforeSeq = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for beforeSeq, must be INT64")
+			}
+			if *beforeSeq < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("before_seq", *beforeSeq, 1, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var afterSeq *int64
+	{
+		if chatLoadChatAfterSeq != "" {
+			val, err := strconv.ParseInt(chatLoadChatAfterSeq, 10, 64)
+			afterSeq = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for afterSeq, must be INT64")
+			}
+			if *afterSeq < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("after_seq", *afterSeq, 1, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var fromStart bool
+	{
+		if chatLoadChatFromStart != "" {
+			fromStart, err = strconv.ParseBool(chatLoadChatFromStart)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for fromStart, must be BOOL")
+			}
+		}
+	}
+	var riskOnly bool
+	{
+		if chatLoadChatRiskOnly != "" {
+			riskOnly, err = strconv.ParseBool(chatLoadChatRiskOnly)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for riskOnly, must be BOOL")
 			}
 		}
 	}
@@ -218,6 +288,11 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 	v := &chat.LoadChatPayload{}
 	v.ID = id
 	v.Generation = generation
+	v.Limit = limit
+	v.BeforeSeq = beforeSeq
+	v.AfterSeq = afterSeq
+	v.FromStart = fromStart
+	v.RiskOnly = riskOnly
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

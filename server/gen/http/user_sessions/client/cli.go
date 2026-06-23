@@ -18,7 +18,7 @@ import (
 
 // BuildListUserSessionsPayload builds the payload for the userSessions
 // listUserSessions endpoint from CLI flags.
-func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string, userSessionsListUserSessionsUserSessionIssuerID string, userSessionsListUserSessionsCursor string, userSessionsListUserSessionsLimit string, userSessionsListUserSessionsSessionToken string, userSessionsListUserSessionsApikeyToken string, userSessionsListUserSessionsProjectSlugInput string) (*usersessions.ListUserSessionsPayload, error) {
+func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string, userSessionsListUserSessionsUserSessionIssuerID string, userSessionsListUserSessionsStatus string, userSessionsListUserSessionsClientID string, userSessionsListUserSessionsCursor string, userSessionsListUserSessionsLimit string, userSessionsListUserSessionsSessionToken string, userSessionsListUserSessionsApikeyToken string, userSessionsListUserSessionsProjectSlugInput string) (*usersessions.ListUserSessionsPayload, error) {
 	var err error
 	var subjectUrn *string
 	{
@@ -31,6 +31,28 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string,
 		if userSessionsListUserSessionsUserSessionIssuerID != "" {
 			userSessionIssuerID = &userSessionsListUserSessionsUserSessionIssuerID
 			err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", *userSessionIssuerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var status *string
+	{
+		if userSessionsListUserSessionsStatus != "" {
+			status = &userSessionsListUserSessionsStatus
+			if !(*status == "active" || *status == "expired" || *status == "revoked" || *status == "all") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", *status, []any{"active", "expired", "revoked", "all"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var clientID *string
+	{
+		if userSessionsListUserSessionsClientID != "" {
+			clientID = &userSessionsListUserSessionsClientID
+			err = goa.MergeErrors(err, goa.ValidateFormat("client_id", *clientID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -79,8 +101,39 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string,
 	v := &usersessions.ListUserSessionsPayload{}
 	v.SubjectUrn = subjectUrn
 	v.UserSessionIssuerID = userSessionIssuerID
+	v.Status = status
+	v.ClientID = clientID
 	v.Cursor = cursor
 	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListFacetsPayload builds the payload for the userSessions listFacets
+// endpoint from CLI flags.
+func BuildListFacetsPayload(userSessionsListFacetsSessionToken string, userSessionsListFacetsApikeyToken string, userSessionsListFacetsProjectSlugInput string) (*usersessions.ListFacetsPayload, error) {
+	var sessionToken *string
+	{
+		if userSessionsListFacetsSessionToken != "" {
+			sessionToken = &userSessionsListFacetsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if userSessionsListFacetsApikeyToken != "" {
+			apikeyToken = &userSessionsListFacetsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if userSessionsListFacetsProjectSlugInput != "" {
+			projectSlugInput = &userSessionsListFacetsProjectSlugInput
+		}
+	}
+	v := &usersessions.ListFacetsPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -96,11 +149,7 @@ func BuildMintUserSessionPayload(userSessionsMintUserSessionBody string, userSes
 	{
 		err = json.Unmarshal([]byte(userSessionsMintUserSessionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", body.ToolsetID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -116,7 +165,8 @@ func BuildMintUserSessionPayload(userSessionsMintUserSessionBody string, userSes
 		}
 	}
 	v := &usersessions.MintUserSessionPayload{
-		ToolsetID: body.ToolsetID,
+		ToolsetID:   body.ToolsetID,
+		McpServerID: body.McpServerID,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

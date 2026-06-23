@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -381,40 +382,150 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		generation = int32(requested) //nolint:gosec // bounded by maxGeneration above
 	}
 
-	messages, err := s.repo.ListChatMessagesByGeneration(ctx, repo.ListChatMessagesByGenerationParams{
-		ChatID:     chat.ID,
-		ProjectID:  *authCtx.ProjectID,
-		Generation: generation,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").LogError(ctx, s.logger)
+	limit := payload.Limit
+	if limit < 1 {
+		limit = defaultLoadChatLimit
+	}
+	if limit > maxLoadChatLimit {
+		limit = maxLoadChatLimit
 	}
 
-	resultMessages := make([]*gen.ChatMessage, len(messages))
-	for i, msg := range messages {
-		toolCalls := string(msg.ToolCalls)
-		resultMessages[i] = &gen.ChatMessage{
-			ID:             msg.ID.String(),
-			Role:           msg.Role,
-			Model:          msg.Model.String,
-			UserID:         &msg.UserID.String,
-			ExternalUserID: &msg.ExternalUserID.String,
-			Content:        s.loadMessageContent(ctx, msg),
-			ToolCalls:      &toolCalls,
-			ToolCallID:     &msg.ToolCallID.String,
-			FinishReason:   &msg.FinishReason.String,
-			PromptID:       conv.FromPGText[string](msg.MessageID),
-			CreatedAt:      msg.CreatedAt.Time.Format(time.RFC3339),
-			Generation:     int(msg.Generation),
+	var (
+		resultMessages []*gen.ChatMessage
+		hasMoreBefore  bool
+		hasMoreAfter   bool
+		riskSegments   []*gen.RiskSegment
+		// latestPageRows holds the repo rows of the initial newest page so we can
+		// infer the chat source from them; only populated on that first request.
+		latestPageRows []repo.ChatMessage
+	)
+
+	// The initial request (latest generation, no cursors, not risk-only) is the
+	// only one that carries source inference and ClickHouse/Claude enrichment:
+	// the dashboard consumes those once from the first page, and they depend on
+	// the most recent messages which that page contains.
+	isInitialLatest := generation == maxGeneration &&
+		payload.BeforeSeq == nil && payload.AfterSeq == nil && !payload.RiskOnly
+
+	switch {
+	case payload.RiskOnly:
+		rows, err := s.repo.ListRiskWindowedMessages(ctx, repo.ListRiskWindowedMessagesParams{
+			ContextSize: riskContextWindow,
+			ProjectID:   *authCtx.ProjectID,
+			ChatID:      chat.ID,
+			Generation:  generation,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load risk-windowed messages").LogError(ctx, s.logger)
 		}
+		resultMessages = make([]*gen.ChatMessage, len(rows))
+		for i := range rows {
+			r := rows[i]
+			toolCalls := string(r.ToolCalls)
+			resultMessages[i] = &gen.ChatMessage{
+				ID:             r.ID.String(),
+				Seq:            r.Seq,
+				Role:           r.Role,
+				Model:          r.Model.String,
+				UserID:         &r.UserID.String,
+				ExternalUserID: &r.ExternalUserID.String,
+				Content:        s.loadMessageContentFields(ctx, r.ChatID, r.Content, r.ContentRaw, r.ContentAssetUrl),
+				ToolCalls:      &toolCalls,
+				ToolCallID:     &r.ToolCallID.String,
+				FinishReason:   &r.FinishReason.String,
+				PromptID:       conv.FromPGText[string](r.MessageID),
+				CreatedAt:      r.CreatedAt.Time.Format(time.RFC3339),
+				Generation:     int(r.Generation),
+			}
+		}
+		riskSegments = buildRiskSegments(rows)
+		if len(riskSegments) > 0 {
+			hasMoreBefore = riskSegments[0].HasMoreBefore
+			hasMoreAfter = riskSegments[len(riskSegments)-1].HasMoreAfter
+		}
+
+	case payload.AfterSeq != nil:
+		// Scroll down: messages newer than the cursor, oldest first. Fetch one
+		// extra row to detect whether still-newer messages remain.
+		rows, err := s.repo.ListChatMessagesAfterPage(ctx, repo.ListChatMessagesAfterPageParams{
+			ChatID:     chat.ID,
+			ProjectID:  *authCtx.ProjectID,
+			Generation: generation,
+			AfterSeq:   pgtype.Int8{Int64: *payload.AfterSeq, Valid: true},
+			Lim:        int32(limit + 1),
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").LogError(ctx, s.logger)
+		}
+		if len(rows) > limit {
+			hasMoreAfter = true
+			rows = rows[:limit]
+		}
+		// We paged forward from an existing anchor, so older messages exist.
+		hasMoreBefore = true
+		resultMessages = s.buildGenMessages(ctx, rows)
+
+	case payload.FromStart && payload.BeforeSeq == nil:
+		// Start of the thread: oldest page, ascending. A NULL cursor returns from
+		// the very beginning. Fetch one extra row to detect whether newer messages
+		// remain. (before_seq takes precedence per the design, hence the guard.)
+		rows, err := s.repo.ListChatMessagesAfterPage(ctx, repo.ListChatMessagesAfterPageParams{
+			ChatID:     chat.ID,
+			ProjectID:  *authCtx.ProjectID,
+			Generation: generation,
+			AfterSeq:   pgtype.Int8{Int64: 0, Valid: false}, // null → oldest page
+			Lim:        int32(limit + 1),
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").LogError(ctx, s.logger)
+		}
+		if len(rows) > limit {
+			hasMoreAfter = true
+			rows = rows[:limit]
+		}
+		// We're at the start of the thread, so nothing older remains.
+		hasMoreBefore = false
+		// This is still an initial (cursorless, latest-generation) load, so it
+		// carries source inference + ClickHouse enrichment like the newest page.
+		if isInitialLatest {
+			latestPageRows = rows
+		}
+		resultMessages = s.buildGenMessages(ctx, rows)
+
+	default:
+		// Initial newest page (no cursor) or scroll up via before_seq. Query DESC
+		// so LIMIT keeps the most recent rows, fetch one extra to detect more, then
+		// reverse to ascending for display.
+		var beforeSeq pgtype.Int8
+		if payload.BeforeSeq != nil {
+			beforeSeq = pgtype.Int8{Int64: *payload.BeforeSeq, Valid: true}
+		}
+		rows, err := s.repo.ListChatMessagesBeforePage(ctx, repo.ListChatMessagesBeforePageParams{
+			ChatID:     chat.ID,
+			ProjectID:  *authCtx.ProjectID,
+			Generation: generation,
+			BeforeSeq:  beforeSeq,
+			Lim:        int32(limit + 1),
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").LogError(ctx, s.logger)
+		}
+		if len(rows) > limit {
+			hasMoreBefore = true
+			rows = rows[:limit]
+		}
+		slices.Reverse(rows)
+		// A before_seq request pages backward from an anchor, so newer messages exist.
+		hasMoreAfter = payload.BeforeSeq != nil
+		if isInitialLatest {
+			latestPageRows = rows
+		}
+		resultMessages = s.buildGenMessages(ctx, rows)
 	}
 
 	// Chat-wide aggregates (count + most recent message timestamp) are computed
 	// from a single cheap query so every paginated response carries the chat's
-	// real totals regardless of which page was requested. Source inference and
-	// ClickHouse metric enrichment only run on the latest-page request because
-	// they depend on the latest generation's message slice and the dashboard
-	// only consumes them from the first response.
+	// real totals regardless of which page was requested.
 	stats, err := s.repo.GetChatMessageStats(ctx, repo.GetChatMessageStatsParams{
 		ChatID:    chat.ID,
 		ProjectID: *authCtx.ProjectID,
@@ -428,13 +539,25 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		lastMessageTimestamp = stats.LastMessageAt.Time.Format(time.RFC3339)
 	}
 
-	isLatestRequest := generation == maxGeneration
+	// Whole-generation trace-entry totals so the detail sheet's filter bar can
+	// show real counts even though messages are paginated. Scoped to the loaded
+	// generation to stay consistent with the (also generation-scoped) transcript
+	// and risk-windowed view.
+	totals, err := s.repo.GetChatEntryTotals(ctx, repo.GetChatEntryTotalsParams{
+		ChatID:     chat.ID,
+		ProjectID:  *authCtx.ProjectID,
+		Generation: generation,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat entry totals").LogError(ctx, s.logger)
+	}
+
 	var source *string
-	if isLatestRequest {
-		for i := len(messages) - 1; i >= 0; i-- {
-			if messages[i].Source.Valid && messages[i].Source.String != "" {
-				s := messages[i].Source.String
-				source = &s
+	if isInitialLatest {
+		for i := len(latestPageRows) - 1; i >= 0; i-- {
+			if latestPageRows[i].Source.Valid && latestPageRows[i].Source.String != "" {
+				v := latestPageRows[i].Source.String
+				source = &v
 				break
 			}
 		}
@@ -454,14 +577,25 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		Messages:             resultMessages,
 		Generation:           int(generation),
 		MaxGeneration:        int(maxGeneration),
-		TotalInputTokens:     nil,
-		TotalOutputTokens:    nil,
-		TotalTokens:          nil,
-		TotalCost:            nil,
-		AgentUsage:           nil,
+		HasMoreBefore:        hasMoreBefore,
+		HasMoreAfter:         hasMoreAfter,
+		RiskSegments:         riskSegments,
+		Totals: &gen.ChatTotals{
+			Total:             totals.Total,
+			UserMessages:      totals.UserMessages,
+			AssistantMessages: totals.AssistantMessages,
+			ToolCalls:         totals.ToolCalls,
+			ToolResults:       totals.ToolResults,
+			RiskOnly:          totals.RiskFindings,
+		},
+		TotalInputTokens:  nil,
+		TotalOutputTokens: nil,
+		TotalTokens:       nil,
+		TotalCost:         nil,
+		AgentUsage:        nil,
 	}
 
-	if isLatestRequest {
+	if isInitialLatest {
 		if err := s.enrichChatWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
 			s.logger.WarnContext(ctx, "failed to enrich chat with metrics", attr.SlogError(err))
 		}
@@ -1018,12 +1152,21 @@ func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload
 		return oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
 	}
 
-	err = s.repo.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{
+	// SoftDeleteChat deletes the chat unless it backs a live assistant thread, and
+	// reports the disposition in one statement (no racy re-query). A live-thread
+	// chat reloads its conversation every turn, so a soft-deleted backing chat
+	// would wedge the thread — refuse with a conflict. A no-op that isn't
+	// thread-backed (chat absent / already deleted / other project) is a success,
+	// matching the prior project-scoped behavior.
+	res, err := s.repo.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{
 		ID:        chatID,
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "soft delete chat").LogError(ctx, s.logger)
+	}
+	if !res.Deleted && res.BacksLiveThread {
+		return oops.E(oops.CodeConflict, nil, "cannot delete a chat that backs an assistant thread").LogError(ctx, s.logger)
 	}
 
 	return nil
@@ -1099,21 +1242,25 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 // 1. ContentRaw (inline JSON for messages ≤128 KiB)
 // 2. ContentAssetUrl (fetch from asset storage)
 // 3. Content (plain text fallback)
-func (s *Service) loadMessageContent(ctx context.Context, msg repo.ChatMessage) json.RawMessage {
-	content, _ := json.Marshal(msg.Content)
+// loadMessageContentFields resolves a message's content from inline JSON, asset
+// storage, or plain-text fallback. It takes the individual columns rather than a
+// row struct so callers holding different row shapes (e.g. the risk-windowed
+// query rows) can reuse it.
+func (s *Service) loadMessageContentFields(ctx context.Context, chatID uuid.UUID, plainContent string, contentRaw []byte, contentAssetURL pgtype.Text) json.RawMessage {
+	content, _ := json.Marshal(plainContent)
 
 	// 1. Try ContentRaw first (inline JSON for small messages)
-	if len(msg.ContentRaw) > 0 {
-		return msg.ContentRaw
+	if len(contentRaw) > 0 {
+		return contentRaw
 	}
 
 	// 2. Try fetching from asset storage
-	if msg.ContentAssetUrl.Valid && msg.ContentAssetUrl.String != "" {
-		assetURL, err := url.Parse(msg.ContentAssetUrl.String)
+	if contentAssetURL.Valid && contentAssetURL.String != "" {
+		assetURL, err := url.Parse(contentAssetURL.String)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to parse message content asset URL",
 				attr.SlogError(err),
-				attr.SlogChatID(msg.ChatID.String()),
+				attr.SlogChatID(chatID.String()),
 			)
 			return content
 		}
@@ -1122,7 +1269,7 @@ func (s *Service) loadMessageContent(ctx context.Context, msg repo.ChatMessage) 
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to open message content from asset storage",
 				attr.SlogError(err),
-				attr.SlogChatID(msg.ChatID.String()),
+				attr.SlogChatID(chatID.String()),
 			)
 			return content
 		}
@@ -1134,7 +1281,7 @@ func (s *Service) loadMessageContent(ctx context.Context, msg repo.ChatMessage) 
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to read message content from asset storage",
 				attr.SlogError(err),
-				attr.SlogChatID(msg.ChatID.String()),
+				attr.SlogChatID(chatID.String()),
 			)
 			return content
 		}
@@ -1144,6 +1291,61 @@ func (s *Service) loadMessageContent(ctx context.Context, msg repo.ChatMessage) 
 
 	// 3. Fallback to plain text content
 	return content
+}
+
+// buildGenMessages converts a page of repo rows (ascending by seq) to API messages.
+func (s *Service) buildGenMessages(ctx context.Context, rows []repo.ChatMessage) []*gen.ChatMessage {
+	out := make([]*gen.ChatMessage, len(rows))
+	for i := range rows {
+		out[i] = s.buildGenMessage(ctx, rows[i])
+	}
+	return out
+}
+
+func (s *Service) buildGenMessage(ctx context.Context, m repo.ChatMessage) *gen.ChatMessage {
+	toolCalls := string(m.ToolCalls)
+	return &gen.ChatMessage{
+		ID:             m.ID.String(),
+		Seq:            m.Seq,
+		Role:           m.Role,
+		Model:          m.Model.String,
+		UserID:         &m.UserID.String,
+		ExternalUserID: &m.ExternalUserID.String,
+		Content:        s.loadMessageContentFields(ctx, m.ChatID, m.Content, m.ContentRaw, m.ContentAssetUrl),
+		ToolCalls:      &toolCalls,
+		ToolCallID:     &m.ToolCallID.String,
+		FinishReason:   &m.FinishReason.String,
+		PromptID:       conv.FromPGText[string](m.MessageID),
+		CreatedAt:      m.CreatedAt.Time.Format(time.RFC3339),
+		Generation:     int(m.Generation),
+	}
+}
+
+// buildRiskSegments folds the risk-windowed rows (ascending by seq, each
+// carrying its 1-based ordinal rn within the generation and the generation
+// total) into contiguous segments. A break in rn starts a new segment;
+// has_more_before/after mark whether earlier/later messages remain to expand.
+func buildRiskSegments(rows []repo.ListRiskWindowedMessagesRow) []*gen.RiskSegment {
+	var segments []*gen.RiskSegment
+	var cur *gen.RiskSegment
+	var prevRn int64
+	for i := range rows {
+		r := rows[i]
+		if cur == nil || r.Rn != prevRn+1 {
+			cur = &gen.RiskSegment{
+				FirstSeq:      r.Seq,
+				LastSeq:       r.Seq,
+				HasMoreBefore: r.Rn > 1,
+				HasMoreAfter:  r.Rn < r.Total,
+			}
+			segments = append(segments, cur)
+		} else {
+			cur.LastSeq = r.Seq
+			cur.HasMoreAfter = r.Rn < r.Total
+		}
+		prevRn = r.Rn
+	}
+	return segments
 }
 
 type chatMessageRow struct {
@@ -1180,6 +1382,16 @@ const (
 	// maxAssetReadSize is the maximum size of message content that will be
 	// read from asset storage to prevent memory issues.
 	maxAssetReadSize = 20 * 1024 * 1024 // 20 MiB
+
+	// defaultLoadChatLimit / maxLoadChatLimit bound the keyset page size for
+	// loadChat. Mirrors the Default/Maximum in the Goa design; clamped again here
+	// so direct (non-Goa) callers can't request an unbounded page.
+	defaultLoadChatLimit = 50
+	maxLoadChatLimit     = 200
+
+	// riskContextWindow is how many surrounding messages (by ordinal position) to
+	// include on each side of a risk finding in the risk-only view.
+	riskContextWindow = 5
 
 	// maxConcurrentChatAssetWork bounds parallelism for the per-batch marshal
 	// and asset-upload phases in storeMessages, capping goroutines, memory,

@@ -24,6 +24,7 @@ func newCaptureStrategy(t *testing.T, conn *pgxpool.Pool) *chat.ChatMessageCaptu
 	t.Cleanup(func() { _ = writerShutdown(t.Context()) })
 	return chat.NewChatMessageCaptureStrategy(
 		testenv.NewLogger(t),
+		testenv.NewMeterProvider(t),
 		conn,
 		writer,
 	)
@@ -663,6 +664,146 @@ func TestCaptureMessage_StoresAssistantResponseWithBothTextAndToolCallsInSingleR
 	require.Equal(t, int64(10), assistant.PromptTokens)
 	require.Equal(t, int64(5), assistant.CompletionTokens)
 	require.Equal(t, int64(15), assistant.TotalTokens)
+}
+
+// A truncated/aborted generation persists a tool_call with unterminated JSON
+// arguments. The runner rejects such a row on replay and the turn retries
+// without a cap, so capture must drop the assistant row while keeping the
+// preceding user input — the transcript tail stays drivable. Valid (or empty)
+// arguments are unaffected.
+func TestCaptureMessage_DropsGenerationWithMalformedToolCallArgs(t *testing.T) {
+	t.Parallel()
+
+	tt := []struct {
+		name      string
+		arguments []string // one entry per tool call in the response
+		dropped   bool
+	}{
+		{name: "valid object args", arguments: []string{`{"city":"SF"}`}, dropped: false},
+		{name: "empty args treated as object", arguments: []string{``}, dropped: false},
+		{name: "truncated object", arguments: []string{`{"city":"SF`}, dropped: true},
+		{name: "truncated array", arguments: []string{`[{"a":1}`}, dropped: true},
+		{name: "not json", arguments: []string{`not json at all`}, dropped: true},
+		{name: "second call truncated", arguments: []string{`{"ok":true}`, `{"half":`}, dropped: true},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ti := newTestChatService(t)
+			ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
+			s := newCaptureStrategy(t, conn)
+			chatID := uuid.New()
+
+			toolCalls := make([]openrouter.ToolCall, len(tc.arguments))
+			for i, args := range tc.arguments {
+				toolCalls[i] = openrouter.ToolCall{
+					Index: i,
+					ID:    "call_" + string(rune('a'+i)),
+					Type:  "function",
+					Function: openrouter.ToolCallFunction{
+						Name:      "send_message",
+						Arguments: args,
+					},
+				}
+			}
+
+			runTurn(t, ctx, s,
+				makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("do it")),
+				openrouter.CompletionResponse{
+					Content:   "",
+					Model:     "test-model",
+					MessageID: "msg-toolcall",
+					ToolCalls: toolCalls,
+				},
+			)
+
+			rows := listAllMessages(t, ctx, conn, chatID, projectID)
+			if tc.dropped {
+				require.Equal(t, []string{"user"}, roles(rows),
+					"malformed generation dropped; user input retained and tail stays drivable")
+			} else {
+				require.Equal(t, []string{"user", "assistant"}, roles(rows),
+					"well-formed generation persists normally")
+			}
+		})
+	}
+}
+
+// A client can replay a previous turn's aborted assistant message — malformed
+// tool_call arguments and all. StartOrResumeChat must drop that message (and
+// any tool result that pairs with it, else the tool_result is orphaned) before
+// persisting, while keeping the surrounding user input.
+func TestStartOrResumeChat_DropsReplayedAssistantWithMalformedToolCallArgs(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("do it"),
+			makeAssistantToolOnly(or.ChatToolCall{
+				ID:   "call_bad",
+				Type: or.ChatToolCallTypeFunction,
+				Function: or.ChatToolCallFunction{
+					Name:      "send_message",
+					Arguments: `{"text":"hi`,
+				},
+			}),
+			or.CreateChatMessagesTool(or.ChatToolMessage{
+				Role:       or.ChatToolMessageRoleTool,
+				Content:    or.CreateChatToolMessageContentStr(`{"ok":true}`),
+				ToolCallID: "call_bad",
+			}),
+			openrouter.CreateMessageUser("still there?"),
+		),
+		makeResponse("yes"),
+	)
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	require.Equal(t, []string{"user", "user", "assistant"}, roles(rows),
+		"poisoned assistant + its tool result dropped; user input and fresh response kept")
+	require.Equal(t, "yes", rows[2].Content)
+}
+
+// A valid replayed assistant tool_call must NOT be dropped — only malformed
+// arguments are poison.
+func TestStartOrResumeChat_KeepsReplayedAssistantWithValidToolCallArgs(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("do it"),
+			makeAssistantToolOnly(or.ChatToolCall{
+				ID:   "call_ok",
+				Type: or.ChatToolCallTypeFunction,
+				Function: or.ChatToolCallFunction{
+					Name:      "send_message",
+					Arguments: `{"text":"hi"}`,
+				},
+			}),
+			or.CreateChatMessagesTool(or.ChatToolMessage{
+				Role:       or.ChatToolMessageRoleTool,
+				Content:    or.CreateChatToolMessageContentStr(`{"ok":true}`),
+				ToolCallID: "call_ok",
+			}),
+			openrouter.CreateMessageUser("next"),
+		),
+		makeResponse("done"),
+	)
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	require.Equal(t, []string{"user", "assistant", "tool", "user", "assistant"}, roles(rows),
+		"well-formed replayed tool call and its result persist intact")
 }
 
 // Whitespace-only assistant response content is treated as no text so storage

@@ -7,7 +7,6 @@ import { Dialog } from "@/components/ui/dialog";
 import { Combobox } from "@/components/ui/combobox";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
 import {
   AlertTriangle,
   Calendar,
@@ -41,6 +40,7 @@ import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
+import { toolStats } from "@/pages/catalog/hooks/serverMetadata";
 import { buildCollectionMcpJson, formatMcpJson } from "@/lib/mcp-json";
 import { toast } from "sonner";
 import { CollectionInstallDialog } from "./CollectionInstallDialog";
@@ -121,9 +121,6 @@ function CollectionDetailInner() {
   const [isSaving, setIsSaving] = useState(false);
 
   const client = useSdkClient();
-  const telemetry = useTelemetry();
-  const isRemoteMcpEnabled =
-    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
   const attachServer = useAttachServer();
   const detachServer = useDetachServer();
 
@@ -145,12 +142,12 @@ function CollectionDetailInner() {
     })),
   });
 
-  // Remote MCP-backed mcp_servers per project, gated on the remote-mcp feature.
+  // Remote MCP-backed mcp_servers per project.
   const mcpServerQueries = useQueries({
     queries: projects.map((project) => ({
       queryKey: ["mcpServers", "list", project.slug],
       queryFn: () => client.mcpServers.list({ gramProject: project.slug }),
-      enabled: isRemoteMcpEnabled && !!project.slug,
+      enabled: !!project.slug,
     })),
   });
 
@@ -226,6 +223,7 @@ function CollectionDetailInner() {
   const installableServers: CatalogServer[] = rawServers.map((s) => ({
     ...s,
     meta: {},
+    ...toolStats(s.tools),
   }));
 
   const collectionMcpJson = useMemo(

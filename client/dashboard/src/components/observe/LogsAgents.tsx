@@ -594,6 +594,7 @@ function AgentSessionsPageContent({
         chatId={selectedChat?.id ?? null}
         onClose={() => setSelectedChat(null)}
         onDelete={onDeleteChat}
+        dimNonRisk={hasRisk === "true"}
       />
     </>
   );

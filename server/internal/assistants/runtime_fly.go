@@ -122,10 +122,6 @@ type flyRuntimeFlapsFactory interface {
 	New(ctx context.Context) (flyRuntimeFlapsClient, error)
 }
 
-type flyRuntimeHTTPDoer interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
 type defaultFlyRuntimeFlapsFactory struct {
 	serviceName    string
 	serviceVersion string
@@ -156,7 +152,7 @@ type FlyRuntimeBackend struct {
 	config       FlyRuntimeConfig
 	client       flyRuntimeAPIClient
 	flapsFactory flyRuntimeFlapsFactory
-	httpClient   flyRuntimeHTTPDoer
+	httpClient   runtimeHTTPDoer
 }
 
 func NewFlyRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpPolicy *guardian.Policy, config FlyRuntimeConfig) *FlyRuntimeBackend {
@@ -224,6 +220,12 @@ func (f *FlyRuntimeBackend) ServerURL() *url.URL {
 func (f *FlyRuntimeBackend) ImageRef() string {
 	return f.desiredImageRef()
 }
+
+// ReusesIdleRuntimes is true: Stop pauses the machine but keeps the app and
+// allocated IP, so a later admit resumes the same incarnation. Fly has no warm
+// pool, so a new image is rolled onto that preserved machine in place via
+// RecycleImage rather than by discarding it.
+func (f *FlyRuntimeBackend) ReusesIdleRuntimes() bool { return true }
 
 // Ensure does not auto-recreate the app on ensureExisting errors. Health and
 // configure timeouts must bubble so Temporal retries drive convergence.
@@ -830,7 +832,7 @@ func (f *FlyRuntimeBackend) tracedWaitHealth(ctx context.Context, target flyRunt
 	return f.waitForRuntimeHealth(ctx, target)
 }
 
-func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string) error {
+func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, mcpServers []runtimeMCPServer) error {
 	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
 		return err
 	}
@@ -843,8 +845,10 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	}
 
 	reqBody, err := json.Marshal(runtimeTurnRequest{
-		Input:     prompt,
-		AuthToken: authToken,
+		Input:       prompt,
+		AuthToken:   authToken,
+		MCPServers:  mcpServers,
+		AssistantID: runtime.AssistantID.String(),
 	})
 	if err != nil {
 		return fmt.Errorf("marshal assistant fly runtime turn request: %w", err)
@@ -969,6 +973,36 @@ func (f *FlyRuntimeBackend) Reap(ctx context.Context, runtime assistantRuntimeRe
 	deleteCtx, cancel := context.WithTimeout(ctx, flyRuntimeReapCallTimeout)
 	defer cancel()
 	return f.deleteApp(deleteCtx, metadata.AppName)
+}
+
+// ReapStoppedMachine destroys this thread's machine but leaves the app in
+// place. The per-thread janitor uses it to collect dead machines without
+// disturbing sibling threads on the same per-assistant app. The whole-
+// assistant janitor remains the only path that may delete the app.
+func (f *FlyRuntimeBackend) ReapStoppedMachine(ctx context.Context, runtime assistantRuntimeRecord) error {
+	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
+		return err
+	}
+	metadata, err := decodeFlyRuntimeMetadata(runtime.BackendMetadataJSON)
+	if err != nil {
+		return err
+	}
+	if metadata.AppName == "" || metadata.MachineID == "" {
+		return nil
+	}
+
+	flapsClient, err := f.flapsFactory.New(ctx)
+	if err != nil {
+		return fmt.Errorf("create fly runtime flaps client: %w", err)
+	}
+
+	if err := flapsClient.Destroy(ctx, metadata.AppName, fly.RemoveMachineInput{
+		ID:   metadata.MachineID,
+		Kill: true,
+	}, ""); err != nil && !isFlyNotFound(err) {
+		return fmt.Errorf("destroy assistant fly runtime machine: %w", err)
+	}
+	return nil
 }
 
 func (f *FlyRuntimeBackend) deleteApp(ctx context.Context, appName string) error {
@@ -1120,7 +1154,7 @@ func (f *FlyRuntimeBackend) runtimeState(ctx context.Context, target flyRuntimeT
 // clientForTarget is a hook point for per-target dialing. The runner is
 // reachable via the app's hostname today; a future dedicated-IP design can
 // swap this to pin a request to a specific IP without changing callers.
-func (f *FlyRuntimeBackend) clientForTarget(_ flyRuntimeTarget) flyRuntimeHTTPDoer {
+func (f *FlyRuntimeBackend) clientForTarget(_ flyRuntimeTarget) runtimeHTTPDoer {
 	return f.httpClient
 }
 
@@ -1161,7 +1195,7 @@ func (f *FlyRuntimeBackend) runtimeRequest(ctx context.Context, target flyRuntim
 		return nil, fmt.Errorf("read assistant fly runtime response: %w", err)
 	}
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, &runtimeResponseError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
 	}
 	return body, nil
 }

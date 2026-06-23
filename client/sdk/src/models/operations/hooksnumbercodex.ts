@@ -24,6 +24,10 @@ export type HooksNumberCodexRequest = {
    * Optional endpoint hostname supplied by the Gram hook plugin.
    */
   xGramHookHostname?: string | undefined;
+  /**
+   * Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
+   */
+  idempotencyKey?: string | undefined;
   codexHookPayload: components.CodexHookPayload;
 };
 
@@ -63,6 +67,7 @@ export type HooksNumberCodexRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "X-Gram-Hook-Hostname"?: string | undefined;
+  "Idempotency-Key"?: string | undefined;
   CodexHookPayload: components.CodexHookPayload$Outbound;
 };
 
@@ -75,6 +80,7 @@ export const HooksNumberCodexRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     xGramHookHostname: z.optional(z.string()),
+    idempotencyKey: z.optional(z.string()),
     codexHookPayload: components.CodexHookPayload$outboundSchema,
   }),
   z.transform((v) => {
@@ -82,6 +88,7 @@ export const HooksNumberCodexRequest$outboundSchema: z.ZodMiniType<
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
       xGramHookHostname: "X-Gram-Hook-Hostname",
+      idempotencyKey: "Idempotency-Key",
       codexHookPayload: "CodexHookPayload",
     });
   }),

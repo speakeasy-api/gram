@@ -227,12 +227,26 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 		}
 	}
 
-	// Apply usage tracking strategy (async)
+	// Apply usage tracking strategy (async). OpenRouter ships the full usage
+	// payload (cost + cost_details + token detail subobjects) inline on every
+	// completion, so we hand the strategy the decoded ModelUsage directly
+	// instead of polling /v1/generation.
 	if c.usageTrackingStrategy != nil {
+		inlineUsage := response.Usage.ToModelUsage(response.Model)
 		go func() {
+			modelUsage := inlineUsage
+			if response.MessageID != "" && (modelUsage == nil || modelUsage.TotalCost == nil) {
+				fallbackUsage, err := c.provisioner.GetModelUsage(context.WithoutCancel(ctx), response.MessageID, req.OrgID)
+				if err != nil {
+					c.logger.WarnContext(ctx, "failed to fetch fallback openrouter usage", attr.SlogError(err))
+				} else if fallbackUsage != nil {
+					modelUsage = fallbackUsage
+				}
+			}
+
 			if err := c.usageTrackingStrategy.TrackUsage(
 				context.WithoutCancel(ctx),
-				response.MessageID,
+				modelUsage,
 				req.OrgID,
 				req.ProjectID,
 				req.UsageSource,
@@ -363,9 +377,13 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	message := chatResp.Choices[0].Message
 	finishReason := chatResp.Choices[0].FinishReason
 	usage := Usage{
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		TotalTokens:      0,
+		PromptTokens:            0,
+		CompletionTokens:        0,
+		TotalTokens:             0,
+		Cost:                    nil,
+		CostDetails:             nil,
+		PromptTokensDetails:     nil,
+		CompletionTokensDetails: nil,
 	}
 	if chatResp.Usage != nil {
 		usage = *chatResp.Usage
@@ -452,9 +470,17 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		messageID:            "",
 		model:                "",
 		finishReason:         nil,
-		usage:                Usage{PromptTokens: 0, CompletionTokens: 0, TotalTokens: 0},
-		usageSet:             false,
-		isDone:               false,
+		usage: Usage{
+			PromptTokens:            0,
+			CompletionTokens:        0,
+			TotalTokens:             0,
+			Cost:                    nil,
+			CostDetails:             nil,
+			PromptTokensDetails:     nil,
+			CompletionTokensDetails: nil,
+		},
+		usageSet: false,
+		isDone:   false,
 	}
 
 	return streamReader, nil

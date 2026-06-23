@@ -31,10 +31,6 @@ import (
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"
 
-// ErrGenerationNotFound is returned when the generation details are not found after retries.
-// This typically means the generation data hasn't propagated yet and may be available later.
-var ErrGenerationNotFound = errors.New("generation not found")
-
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
@@ -156,6 +152,9 @@ type Provisioner interface {
 	// effective limit the caller should use for the current tick.
 	ReconcileMonthlyCredits(ctx context.Context, orgID string, currentLimit int64, upstreamLimit *int64) (int64, error)
 
+	// GetModelUsage fetches generation usage by ID. Normal completion paths use
+	// inline usage; this is only a fallback for streams closed before the final
+	// usage chunk arrives.
 	GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error)
 }
 
@@ -286,23 +285,6 @@ type keyUsageResponse struct {
 		Limit        *float64 `json:"limit"`
 		UsageMonthly *float64 `json:"usage_monthly"`
 	} `json:"data"`
-}
-
-type generationData struct {
-	ID                    string  `json:"id"`
-	TotalCost             float64 `json:"total_cost"`
-	CacheDiscount         float64 `json:"cache_discount"`
-	UpstreamInferenceCost float64 `json:"upstream_inference_cost"`
-	Model                 string  `json:"model"`
-	TokensPrompt          int     `json:"tokens_prompt"`
-	TokensCompletion      int     `json:"tokens_completion"`
-	NativeTokensReasoning int     `json:"native_tokens_reasoning"`
-	NativeTokensCached    int     `json:"native_tokens_cached"`
-	APIType               string  `json:"api_type"`
-}
-
-type generationResponse struct {
-	Data generationData `json:"data"`
 }
 
 func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64, int, error) {
@@ -527,6 +509,30 @@ func (o *OpenRouter) updateOpenRouterAPIKeyLimit(ctx context.Context, keyHash st
 	return &response, nil
 }
 
+type ModelUsage struct {
+	TotalCost             *float64
+	CacheDiscount         float64
+	UpstreamInferenceCost float64
+	Model                 string
+	TokensPrompt          int
+	TokensCompletion      int
+	NativeTokensCached    int
+	NativeTokensReasoning int
+}
+
+type generationResponse struct {
+	Data struct {
+		TotalCost             float64 `json:"total_cost"`
+		CacheDiscount         float64 `json:"cache_discount"`
+		UpstreamInferenceCost float64 `json:"upstream_inference_cost"`
+		Model                 string  `json:"model"`
+		TokensPrompt          int     `json:"tokens_prompt"`
+		TokensCompletion      int     `json:"tokens_completion"`
+		NativeTokensCached    int     `json:"native_tokens_cached"`
+		NativeTokensReasoning int     `json:"native_tokens_reasoning"`
+	} `json:"data"`
+}
+
 func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID string, orgID string) (*generationResponse, int, error) {
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
 	if err != nil {
@@ -535,7 +541,7 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 
 	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/generation", nil)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create generation request: %w", err)
+		return nil, 0, fmt.Errorf("create generation request: %w", err)
 	}
 
 	q := req.URL.Query()
@@ -547,7 +553,7 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 
 	resp, err := o.orClient.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to send generation request: %w", err)
+		return nil, 0, fmt.Errorf("send generation request: %w", err)
 	}
 
 	defer o11y.NoLogDefer(func() error {
@@ -555,83 +561,54 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 	})
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, resp.StatusCode, fmt.Errorf("failed to fetch generation from OpenRouter: %s", resp.Status)
+		return nil, resp.StatusCode, fmt.Errorf("fetch generation from OpenRouter: %s", resp.Status)
 	}
 
 	var genResp generationResponse
 	if err := json.NewDecoder(resp.Body).Decode(&genResp); err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("failed to decode generation response: %w", err)
+		return nil, resp.StatusCode, fmt.Errorf("decode generation response: %w", err)
 	}
 
 	return &genResp, resp.StatusCode, nil
 }
 
-type ModelUsage struct {
-	TotalCost             *float64 `json:"total_cost"`
-	CacheDiscount         float64  `json:"cache_discount"`
-	UpstreamInferenceCost float64  `json:"upstream_inference_cost"`
-	Model                 string   `json:"model"`
-	TokensPrompt          int      `json:"tokens_prompt"`
-	TokensCompletion      int      `json:"tokens_completion"`
-	NativeTokensCached    int      `json:"native_tokens_cached"`
-	NativeTokensReasoning int      `json:"native_tokens_reasoning"`
-}
-
-// TriggerModelUsageTracking fetches generation details from OpenRouter and tracks model usage.
-func (o *OpenRouter) GetModelUsage(
-	ctx context.Context,
-	generationID string,
-	orgID string,
-) (*ModelUsage, error) {
+// GetModelUsage fetches generation details from OpenRouter when inline usage is
+// unavailable, currently only for streams closed before the final usage chunk.
+func (o *OpenRouter) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
 	var genResp *generationResponse
 	var statusCode int
 	var err error
 
-	// The generation is typically not available synchronously with the chat completion but becomes available quickly.
-	// Temporal could handle reliability here, but given we don't want to move this action to temporal right now,
-	// this simple retry backoff will be effective enough.
-	backoffs := []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second}
-	for attempt := range backoffs {
+	// This path is intentionally narrow: normal completions consume inline
+	// usage, and only incomplete inline accounting reaches this fallback. Give
+	// OpenRouter generation stats time to propagate without reviving the old
+	// poll-on-every-completion behavior that produced error-log noise.
+	delays := []time.Duration{0, 250 * time.Millisecond, 500 * time.Millisecond, time.Second, 5 * time.Second, 15 * time.Second, 30 * time.Second, 8 * time.Second}
+	for attempt, delay := range delays {
+		if delay > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, fmt.Errorf("context cancelled while fetching generation details: %w", ctx.Err())
+			case <-time.After(delay):
+			}
+		}
+
 		genResp, statusCode, err = o.getGenerationDetails(ctx, generationID, orgID)
 		if err == nil {
 			break
 		}
-
-		// Retry on 404 (generation not found yet)
-		if statusCode == http.StatusNotFound && attempt < len(backoffs)-1 {
-			select {
-			case <-ctx.Done():
-				return nil, fmt.Errorf("context cancelled while fetching generation details: %w", ctx.Err())
-			case <-time.After(backoffs[attempt]):
-				continue
-			}
+		if statusCode != http.StatusNotFound || attempt == len(delays)-1 {
+			break
 		}
-
-		if statusCode == http.StatusNotFound {
-			return nil, fmt.Errorf("%w: %s", ErrGenerationNotFound, err.Error())
-		}
-		return nil, err
 	}
 
 	if err != nil {
-		if statusCode == http.StatusNotFound {
-			return nil, fmt.Errorf("%w: %s", ErrGenerationNotFound, err.Error())
-		}
 		return nil, err
 	}
 
-	var cost *float64
-	if genResp.Data.TotalCost > 0 {
-		cost = &genResp.Data.TotalCost
-	} else {
-		o.logger.ErrorContext(ctx, "no cost found in generation response",
-			attr.SlogError(fmt.Errorf("total_cost is %f", genResp.Data.TotalCost)),
-			attr.SlogOrganizationID(orgID),
-		)
-	}
-
+	cost := genResp.Data.TotalCost
 	return &ModelUsage{
-		TotalCost:             cost,
+		TotalCost:             &cost,
 		CacheDiscount:         genResp.Data.CacheDiscount,
 		UpstreamInferenceCost: genResp.Data.UpstreamInferenceCost,
 		Model:                 genResp.Data.Model,
@@ -640,4 +617,41 @@ func (o *OpenRouter) GetModelUsage(
 		NativeTokensCached:    genResp.Data.NativeTokensCached,
 		NativeTokensReasoning: genResp.Data.NativeTokensReasoning,
 	}, nil
+}
+
+// ToModelUsage projects the inline OpenRouter usage payload into the
+// billing-facing ModelUsage shape. Returns nil when the payload has no
+// signal (no tokens and no cost) — e.g. an aborted stream that never
+// reached the final usage chunk.
+func (u Usage) ToModelUsage(model string) *ModelUsage {
+	if u.PromptTokens == 0 && u.CompletionTokens == 0 && u.TotalTokens == 0 && u.Cost == nil && u.CostDetails == nil && u.PromptTokensDetails == nil && u.CompletionTokensDetails == nil {
+		return nil
+	}
+
+	out := &ModelUsage{
+		TotalCost:             nil,
+		CacheDiscount:         0,
+		UpstreamInferenceCost: 0,
+		Model:                 model,
+		TokensPrompt:          u.PromptTokens,
+		TokensCompletion:      u.CompletionTokens,
+		NativeTokensCached:    0,
+		NativeTokensReasoning: 0,
+	}
+
+	if u.Cost != nil {
+		cost := *u.Cost
+		out.TotalCost = &cost
+	}
+	if u.CostDetails != nil {
+		out.UpstreamInferenceCost = u.CostDetails.UpstreamInferenceCost
+		out.CacheDiscount = u.CostDetails.CacheDiscount
+	}
+	if u.PromptTokensDetails != nil {
+		out.NativeTokensCached = u.PromptTokensDetails.CachedTokens
+	}
+	if u.CompletionTokensDetails != nil {
+		out.NativeTokensReasoning = u.CompletionTokensDetails.ReasoningTokens
+	}
+	return out
 }

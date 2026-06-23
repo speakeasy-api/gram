@@ -57,6 +57,17 @@ export function formatChartLabel(date: Date, timeRangeMs: number): string {
   }
 }
 
+export function formatChartZoomRangeLabel(from: Date, to: Date): string {
+  const fmt = (date: Date) =>
+    date.toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  return `${fmt(from)} – ${fmt(to)}`;
+}
+
 export type ThresholdConfig = {
   red: number;
   amber: number;

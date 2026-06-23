@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 
@@ -146,6 +147,55 @@ func TestLogs_CodexPayloadContinuesThroughUsagePath(t *testing.T) {
 	}, 300*time.Millisecond, 50*time.Millisecond)
 }
 
+func TestLogs_CachesMultiSessionBatchPerSessionWithoutLeakingIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	userID := uuid.NewString()
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, "a@example.com")
+
+	// One export carrying two sessions: A carries an email/org, B (later in the
+	// batch) carries neither. B must be cached with an empty identity rather
+	// than inheriting A's, and each session must land under its own cache key.
+	err := ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		&gen.OTELScope{Name: new("claude-code"), Version: new("1.0.0")},
+		&gen.OTELLogRecord{
+			Body: &gen.OTELLogBody{StringValue: new("session a api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "claude-session-a"),
+				strAttr("user.email", "a@example.com"),
+				strAttr("organization.id", "claude-org-a"),
+			},
+		},
+		&gen.OTELLogRecord{
+			Body: &gen.OTELLogBody{StringValue: new("session b tool event")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "claude-session-b"),
+				strAttr("event.name", "tool_call"),
+			},
+		},
+	))
+	require.NoError(t, err)
+
+	var sessionA SessionMetadata
+	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey("claude-session-a"), &sessionA))
+	require.Equal(t, "claude-session-a", sessionA.SessionID)
+	require.Equal(t, "a@example.com", sessionA.UserEmail)
+	require.Equal(t, "claude-org-a", sessionA.ClaudeOrgID)
+	require.Equal(t, userID, sessionA.UserID)
+
+	var sessionB SessionMetadata
+	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey("claude-session-b"), &sessionB))
+	require.Equal(t, "claude-session-b", sessionB.SessionID)
+	require.Empty(t, sessionB.UserEmail)
+	require.Empty(t, sessionB.ClaudeOrgID)
+	require.Empty(t, sessionB.UserID)
+}
+
 func TestShouldTriggerClaudePromptCorrelation(t *testing.T) {
 	t.Parallel()
 
@@ -185,14 +235,15 @@ func TestExtractSessionMetadataSkipsNilOTELAttributeElements(t *testing.T) {
 		},
 	)
 
-	var metadata claudeLogMetadata
+	var sessions []claudeLogMetadata
 	require.NotPanics(t, func() {
-		metadata = extractSessionMetadata(payload)
+		sessions = extractSessionMetadata(payload)
 	})
-	require.Equal(t, "claude-code", metadata.ServiceName)
-	require.Equal(t, "claude-session-1", metadata.SessionID)
-	require.Equal(t, "dev@example.com", metadata.UserEmail)
-	require.Equal(t, "claude-org-1", metadata.ClaudeOrgID)
+	require.Len(t, sessions, 1)
+	require.Equal(t, "claude-code", sessions[0].ServiceName)
+	require.Equal(t, "claude-session-1", sessions[0].SessionID)
+	require.Equal(t, "dev@example.com", sessions[0].UserEmail)
+	require.Equal(t, "claude-org-1", sessions[0].ClaudeOrgID)
 
 	require.Empty(t, extractLogData(&gen.OTELLogRecord{Attributes: []*gen.OTELAttribute{nil}}).SessionID)
 	require.Empty(t, extractAttributeString([]*gen.OTELAttribute{nil}, "session.id"))
@@ -200,6 +251,82 @@ func TestExtractSessionMetadataSkipsNilOTELAttributeElements(t *testing.T) {
 		nil,
 		strAttr("session.id", "claude-session-1"),
 	}, "session.id"))
+}
+
+func TestExtractSessionMetadataKeepsEmailFromEarlierRecordInBatch(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "claude-session-batch"
+
+	// Claude Code batches many log records per session, but user.email and
+	// organization.id only ride on some event types. The trailing record here
+	// carries the session id but no email/org, which must not wipe the values
+	// extracted from the earlier api_request record.
+	payload := claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		&gen.OTELScope{Name: new("claude-code"), Version: new("1.0.0")},
+		&gen.OTELLogRecord{
+			Body: &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", sessionID),
+				strAttr("user.email", "dev@example.com"),
+				strAttr("organization.id", "claude-org-1"),
+			},
+		},
+		&gen.OTELLogRecord{
+			Body: &gen.OTELLogBody{StringValue: new("tool event")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", sessionID),
+				strAttr("event.name", "tool_call"),
+			},
+		},
+	)
+
+	sessions := extractSessionMetadata(payload)
+	require.Len(t, sessions, 1)
+	require.Equal(t, sessionID, sessions[0].SessionID)
+	require.Equal(t, "dev@example.com", sessions[0].UserEmail)
+	require.Equal(t, "claude-org-1", sessions[0].ClaudeOrgID)
+}
+
+func TestExtractSessionMetadataIsolatesIdentityAcrossSessionsInBatch(t *testing.T) {
+	t.Parallel()
+
+	// A re-batching OpenTelemetry Collector can place records from multiple
+	// sessions in one export. Session A carries an email; session B (emitted
+	// later in the batch) carries none. B must keep an empty email rather than
+	// inheriting A's identity, and each session must be returned under its own
+	// session id.
+	payload := claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		&gen.OTELScope{Name: new("claude-code"), Version: new("1.0.0")},
+		&gen.OTELLogRecord{
+			Body: &gen.OTELLogBody{StringValue: new("session a api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "claude-session-a"),
+				strAttr("user.email", "a@example.com"),
+				strAttr("organization.id", "claude-org-a"),
+			},
+		},
+		&gen.OTELLogRecord{
+			Body: &gen.OTELLogBody{StringValue: new("session b tool event")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "claude-session-b"),
+				strAttr("event.name", "tool_call"),
+			},
+		},
+	)
+
+	sessions := extractSessionMetadata(payload)
+	require.Len(t, sessions, 2)
+
+	require.Equal(t, "claude-session-a", sessions[0].SessionID)
+	require.Equal(t, "a@example.com", sessions[0].UserEmail)
+	require.Equal(t, "claude-org-a", sessions[0].ClaudeOrgID)
+
+	require.Equal(t, "claude-session-b", sessions[1].SessionID)
+	require.Empty(t, sessions[1].UserEmail)
+	require.Empty(t, sessions[1].ClaudeOrgID)
 }
 
 func enableHookTelemetryLogger(t *testing.T, ctx context.Context, ti *testInstance) *telemetryrepo.Queries {

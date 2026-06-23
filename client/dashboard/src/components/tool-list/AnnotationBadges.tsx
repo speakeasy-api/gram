@@ -2,7 +2,7 @@ import { toolSupportsAnnotations, type Tool } from "@/lib/toolTypes";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Shield, AlertTriangle, Repeat, Globe } from "lucide-react";
 
-interface ResolvedToolAnnotations {
+export interface ResolvedToolAnnotations {
   readOnly: boolean;
   destructive: boolean;
   idempotent: boolean;
@@ -33,8 +33,20 @@ function resolveToolAnnotations(tool: Tool): ResolvedToolAnnotations | null {
 export function AnnotationBadges({ tool }: { tool: Tool }): JSX.Element | null {
   const annotations = resolveToolAnnotations(tool);
   if (!annotations) return null;
+  return <AnnotationBadgeIcons {...annotations} />;
+}
 
-  const { readOnly, destructive, idempotent, openWorld } = annotations;
+/**
+ * Presentational annotation-hint icons, decoupled from the Gram `Tool` model so
+ * other tool sources (e.g. remote MCP servers) can render the same badges from
+ * their own resolved hints. Returns null when no hint is set.
+ */
+export function AnnotationBadgeIcons({
+  readOnly,
+  destructive,
+  idempotent,
+  openWorld,
+}: ResolvedToolAnnotations): JSX.Element | null {
   if (!readOnly && !destructive && !idempotent && !openWorld) return null;
 
   return (

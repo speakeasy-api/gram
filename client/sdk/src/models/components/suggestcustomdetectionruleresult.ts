@@ -32,7 +32,11 @@ export type SuggestCustomDetectionRuleResult = {
    */
   description: string;
   /**
-   * RE2-compatible regex pattern the rule should match against.
+   * Suggested CEL detection predicate.
+   */
+  detectionExpr?: string | undefined;
+  /**
+   * Deprecated legacy regex suggestion; superseded by detection_expr. Present for backward compatibility.
    */
   regex: string;
   /**
@@ -62,6 +66,7 @@ export const SuggestCustomDetectionRuleResult$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     description: z.string(),
+    detection_expr: z.optional(z.string()),
     regex: z.string(),
     rule_id: z.string(),
     severity: SuggestCustomDetectionRuleResultSeverity$inboundSchema,
@@ -69,6 +74,7 @@ export const SuggestCustomDetectionRuleResult$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "detection_expr": "detectionExpr",
       "rule_id": "ruleId",
     });
   }),

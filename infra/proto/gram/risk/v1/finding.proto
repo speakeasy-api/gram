@@ -1,0 +1,38 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+// Finding is a single secret or sensitive-data match detected in a message.
+// dead_letter_reason is populated only on synthetic "could not analyze" markers
+// emitted when a scanner exhausts its retry budget for a message; it is empty
+// on every real finding.
+message Finding {
+  string id = 1;
+  string request_id = 2;
+  string chat_message_id = 3;
+  string project_id = 4;
+  string organization_id = 5;
+  string risk_policy_id = 6;
+  int64 risk_policy_version = 7;
+  string created_at = 8; // Must be UTC timestamp in RFC3339 format, e.g. 2023-01-01T00:00:00Z
+
+  string rule_id = 9;
+  string description = 10;
+  string match = 11;
+  int32 start_pos = 12; // Byte position in string
+  int32 end_pos = 13; // Byte position in string
+  repeated string tags = 14;
+  string source = 15; // Detection source (e.g. "gitleaks", "presidio")
+  double confidence = 16; // 0.0-1.0 confidence score
+  string dead_letter_reason = 17; // Non-empty => dead-letter sentinel, not a real finding
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 604800 /* 7 days */
+    }
+  };
+}

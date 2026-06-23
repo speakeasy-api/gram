@@ -1,0 +1,3 @@
+
+# stray binary from `go build ./cmd/celwasm` without -o (use mise gen:celwasm)
+/celwasm

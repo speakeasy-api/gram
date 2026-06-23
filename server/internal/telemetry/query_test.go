@@ -3,6 +3,7 @@ package telemetry_test
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"testing"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// insertAttributeUsageLog inserts a chat-completion telemetry row carrying the
+// insertAttributeUsageLog inserts a usage-metrics telemetry row carrying the
 // user/request attributes the attribute_metrics_summaries MV breaks down by.
 func insertAttributeUsageLog(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string, cost float64, totalTokens int, model, provider, email, department string, roles []string) {
 	t.Helper()
@@ -26,6 +27,7 @@ func insertAttributeUsageLog(t *testing.T, ctx context.Context, projectID string
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
+	usageURN := provider + ":usage:metrics"
 	attributes := map[string]any{
 		"gen_ai.conversation.id":          chatID,
 		"gen_ai.usage.input_tokens":       totalTokens,
@@ -33,7 +35,7 @@ func insertAttributeUsageLog(t *testing.T, ctx context.Context, projectID string
 		"gen_ai.usage.cost":               cost,
 		"gen_ai.response.model":           model,
 		"gram.hook.source":                provider,
-		"gram.resource.urn":               "agents:chat:completion",
+		"gram.resource.urn":               usageURN,
 		"user.email":                      email,
 		"user.attributes.department_name": department,
 	}
@@ -52,7 +54,47 @@ func insertAttributeUsageLog(t *testing.T, ctx context.Context, projectID string
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat completion",
 		nil, nil, string(attrsJSON), "{}",
-		projectID, "agents:chat:completion", "gram-agents")
+		projectID, usageURN, "gram-agents")
+	require.NoError(t, err)
+}
+
+// insertAttributeHookToolLog inserts an agent-hook telemetry row. Agents emit a
+// PreToolUse and a PostToolUse (or PostToolUseFailure) row per tool call, each
+// carrying gram.tool.name; these capture every tool used in a session, Gram and
+// non-Gram alike. They carry no gen_ai.usage.* attributes. The MV must count
+// them (POC-209) while only firing once per call (on the completion event).
+func insertAttributeHookToolLog(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, toolName, hookEvent, email, department string) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	// Hook tool rows are not usage-metrics rows; their gram_urn is the session
+	// hook URN, distinct from the *:usage:metrics aggregate rows.
+	gramURN := "claude-code:hook:" + hookEvent
+	attributes := map[string]any{
+		"gram.tool.name":                  toolName,
+		"gram.hook.event":                 hookEvent,
+		"gram.hook.source":                "claude-code",
+		"user.email":                      email,
+		"user.attributes.department_name": department,
+	}
+
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "tool hook",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, gramURN, "gram-agents")
 	require.NoError(t, err)
 }
 
@@ -90,12 +132,12 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Now().UTC()
+	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
 	// Engineering: admin+dev ($0.25) and dev ($0.10). Sales: no roles ($0.50).
 	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.25, 15, "opus", "claude-code", "a@x.com", "Engineering", []string{"admin", "dev"})
-	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.10, 5, "opus", "cowork", "b@x.com", "Engineering", []string{"dev"})
+	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.10, 5, "opus", "cursor", "b@x.com", "Engineering", []string{"dev"})
 	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.50, 50, "sonnet", "claude-code", "c@x.com", "Sales", nil)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
@@ -136,13 +178,13 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 
 	// dimension_values: each group carries the distinct values of every other
 	// allowlisted dimension observed within it. Engineering had two users
-	// (a@x.com on opus/claude-code with roles admin+dev, b@x.com on opus/cowork
+	// (a@x.com on opus/claude-code with roles admin+dev, b@x.com on opus/cursor
 	// with role dev). The group_by dimension (department_name) is absent.
 	eng := rowByGroup(t, deptResult.Table, "Engineering")
 	require.NotContains(t, eng.DimensionValues, "department_name", "group_by dimension must be excluded")
 	require.ElementsMatch(t, []string{"a@x.com", "b@x.com"}, eng.DimensionValues["email"])
 	require.ElementsMatch(t, []string{"opus"}, eng.DimensionValues["model"])
-	require.ElementsMatch(t, []string{"claude-code", "cowork"}, eng.DimensionValues["hook_source"])
+	require.ElementsMatch(t, []string{"claude-code", "cursor"}, eng.DimensionValues["hook_source"])
 	require.ElementsMatch(t, []string{"admin", "dev"}, eng.DimensionValues["role"])
 	// Unset dimensions are present as keys with empty (filtered) lists.
 	require.Empty(t, eng.DimensionValues["job_title"])
@@ -197,6 +239,114 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	require.Len(t, totalResult.Timeseries, 1)
 }
 
+func TestQuery_DefaultSortByAndTopN(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	ts := now.Add(-10 * time.Minute)
+	for i := range 12 {
+		dept := "D" + strconv.Itoa(i+1)
+		cost := float64(12 - i)
+		insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), cost, 1, "m", "claude-code", dept+"@x.com", dept, nil)
+	}
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	var res *gen.QueryResult
+	require.Eventually(t, func() bool {
+		r, err := ti.service.Query(ctx, &gen.QueryPayload{
+			From:    from,
+			To:      to,
+			GroupBy: conv.PtrEmpty("department_name"),
+		})
+		if err != nil || r == nil {
+			return false
+		}
+		res = r
+		return len(r.Table) == 11
+	}, 10*time.Second, 200*time.Millisecond)
+
+	require.Equal(t, "D1", res.Table[0].GroupValue, "default sort_by should rank by total_cost")
+	require.Equal(t, "D10", res.Table[9].GroupValue)
+	require.Equal(t, "Other", res.Table[10].GroupValue, "default top_n should keep 10 groups and roll up the rest")
+	require.InDelta(t, 3.0, res.Table[10].Measures.TotalCost, 1e-9)
+}
+
+// TestQuery_CountsToolCalls is the POC-209 regression: the cost page reported 0
+// tool calls because the attribute_metrics_summaries MV's row filter kept only
+// `*:usage` rows, excluding the hook tool-call rows the count is sourced from.
+// The count must reflect all tools used in a session (Gram and non-Gram), fire
+// once per call (PostToolUse/PostToolUseFailure, not the matching PreToolUse),
+// exclude provider self-names, and leave token/cost sourced from usage rows.
+func TestQuery_CountsToolCalls(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	ts := now.Add(-10 * time.Minute)
+
+	// One usage row (carries cost/tokens).
+	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.25, 15, "opus", "claude-code", "a@x.com", "Engineering", nil)
+
+	// One Bash call: PreToolUse + PostToolUse. Must count once, not twice.
+	insertAttributeHookToolLog(t, ctx, projectID, ts, "Bash", "PreToolUse", "a@x.com", "Engineering")
+	insertAttributeHookToolLog(t, ctx, projectID, ts, "Bash", "PostToolUse", "a@x.com", "Engineering")
+	// A non-Gram MCP tool that failed: counts.
+	insertAttributeHookToolLog(t, ctx, projectID, ts, "mcp__github__search", "PostToolUseFailure", "a@x.com", "Engineering")
+	// A second successful call: counts.
+	insertAttributeHookToolLog(t, ctx, projectID, ts, "Read", "PostToolUse", "a@x.com", "Engineering")
+	// Provider self-name and bare PreToolUse must NOT count.
+	insertAttributeHookToolLog(t, ctx, projectID, ts, "claude-code", "PostToolUse", "a@x.com", "Engineering")
+	insertAttributeHookToolLog(t, ctx, projectID, ts, "Grep", "PreToolUse", "a@x.com", "Engineering")
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// Org total (no group_by): three counted calls (Bash, github search, Read).
+	var totalResult *gen.QueryResult
+	require.Eventually(t, func() bool {
+		res, err := ti.service.Query(ctx, &gen.QueryPayload{
+			From:   from,
+			To:     to,
+			TopN:   10,
+			SortBy: "total_tool_calls",
+		})
+		if err != nil || res == nil || len(res.Table) != 1 {
+			return false
+		}
+		totalResult = res
+		return totalResult.Table[0].Measures.TotalToolCalls == 3
+	}, 10*time.Second, 200*time.Millisecond)
+
+	require.NotNil(t, totalResult, "expected an aggregate row with tool calls")
+	require.EqualValues(t, 3, totalResult.Table[0].Measures.TotalToolCalls)
+	// Hook tool rows carry no gen_ai.usage.cost, so cost stays sourced from the
+	// single usage row — admitting tool rows must not inflate cost.
+	require.InDelta(t, 0.25, totalResult.Table[0].Measures.TotalCost, 1e-9)
+}
+
 func TestQuery_TopNRollupIntoOther(t *testing.T) {
 	t.Parallel()
 
@@ -211,7 +361,7 @@ func TestQuery_TopNRollupIntoOther(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Now().UTC()
+	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
 	// Four departments with distinct costs; top_n=2 keeps the two priciest and

@@ -35,7 +35,7 @@ export type GroupBy = ClosedEnum<typeof GroupBy>;
 /**
  * Measure used to rank groups for top_n. Defaults to total_cost.
  */
-export const SortBy = {
+export const QueryPayloadSortBy = {
   TotalCost: "total_cost",
   TotalTokens: "total_tokens",
   TotalInputTokens: "total_input_tokens",
@@ -48,7 +48,7 @@ export const SortBy = {
 /**
  * Measure used to rank groups for top_n. Defaults to total_cost.
  */
-export type SortBy = ClosedEnum<typeof SortBy>;
+export type QueryPayloadSortBy = ClosedEnum<typeof QueryPayloadSortBy>;
 
 /**
  * Payload for a generic org-scoped analytics query
@@ -73,7 +73,7 @@ export type QueryPayload = {
   /**
    * Measure used to rank groups for top_n. Defaults to total_cost.
    */
-  sortBy?: SortBy | undefined;
+  sortBy?: QueryPayloadSortBy | undefined;
   /**
    * End time in ISO 8601 format
    */
@@ -90,9 +90,9 @@ export const GroupBy$outboundSchema: z.ZodMiniEnum<typeof GroupBy> = z.enum(
 );
 
 /** @internal */
-export const SortBy$outboundSchema: z.ZodMiniEnum<typeof SortBy> = z.enum(
-  SortBy,
-);
+export const QueryPayloadSortBy$outboundSchema: z.ZodMiniEnum<
+  typeof QueryPayloadSortBy
+> = z.enum(QueryPayloadSortBy);
 
 /** @internal */
 export type QueryPayload$Outbound = {
@@ -115,7 +115,7 @@ export const QueryPayload$outboundSchema: z.ZodMiniType<
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     granularitySeconds: z.optional(z.int()),
     groupBy: z.optional(GroupBy$outboundSchema),
-    sortBy: z._default(SortBy$outboundSchema, "total_cost"),
+    sortBy: z._default(QueryPayloadSortBy$outboundSchema, "total_cost"),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
     topN: z._default(z.int(), 10),
   }),

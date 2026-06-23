@@ -66,6 +66,13 @@ export function FilterControl({
           className={className}
           hideSelectAll
           singleLine
+          // This control only ever renders inside the FilterSheet, which is a
+          // non-modal Radix Dialog. A non-modal popover nested in a non-modal
+          // dialog doesn't reliably receive option clicks in the browser (the
+          // dialog's dismissable/focus layer swallows them), so the dropdown
+          // appears but selecting an option does nothing (AIS-168). Running the
+          // popover modal makes it the top interactive layer so clicks land.
+          modalPopover
         />
       );
     case "select":

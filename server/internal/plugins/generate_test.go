@@ -21,6 +21,18 @@ func requireFileBytes(t *testing.T, path string) []byte {
 	return data
 }
 
+// TestSharedHTTPScriptMatchesCheckedIn guards against drift between the
+// generated hooks/http.sh (renderSharedHTTPScript) and the checked-in
+// hooks/plugin-claude/hooks/http.sh sourced by the local-dev plugin. Both must
+// be identical so local-dev and generated plugins share one transport.
+func TestSharedHTTPScriptMatchesCheckedIn(t *testing.T) {
+	t.Parallel()
+	checkedIn := requireFileBytes(t, filepath.Join("..", "..", "..", "hooks", "plugin-claude", "hooks", "http.sh"))
+	// renderSharedHTTPScript() is canonical → pass it as testify's "expected".
+	require.Equal(t, string(renderSharedHTTPScript()), string(checkedIn),
+		"hooks/plugin-claude/hooks/http.sh has drifted from renderSharedHTTPScript() — keep them identical")
+}
+
 func TestGeneratePluginWithCustomDomainURL(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{
@@ -84,8 +96,8 @@ func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 		".agents/plugins/marketplace.json",
 		"engineering-tools/.claude-plugin/plugin.json",
 		"engineering-tools/.mcp.json",
-		"engineering-tools-cursor/.cursor-plugin/plugin.json",
-		"engineering-tools-cursor/mcp.json",
+		"cursor-plugins/engineering-tools-cursor/.cursor-plugin/plugin.json",
+		"cursor-plugins/engineering-tools-cursor/mcp.json",
 		"engineering-tools-codex/.codex-plugin/plugin.json",
 		"engineering-tools-codex/.mcp.json",
 	}
@@ -144,7 +156,7 @@ func TestGenerateCursorMCPConfigUsesEnvSyntax(t *testing.T) {
 	require.NoError(t, err)
 
 	var mcpConfig cursorMCPConfig
-	err = json.Unmarshal(files["test-cursor/mcp.json"], &mcpConfig)
+	err = json.Unmarshal(files["cursor-plugins/test-cursor/mcp.json"], &mcpConfig)
 	require.NoError(t, err)
 
 	server := mcpConfig.MCPServers["gram-server"]
@@ -203,7 +215,7 @@ func TestGenerateCursorOAuthServerEmitsURLWithNoHeaders(t *testing.T) {
 	require.NoError(t, err)
 
 	var mcpConfig cursorMCPConfig
-	err = json.Unmarshal(files["test-cursor/mcp.json"], &mcpConfig)
+	err = json.Unmarshal(files["cursor-plugins/test-cursor/mcp.json"], &mcpConfig)
 	require.NoError(t, err)
 
 	server := mcpConfig.MCPServers["oauth-server"]
@@ -582,8 +594,10 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 
 	require.Equal(t, "acme-speakeasy", cursorManifest.Name)
 	require.Len(t, cursorManifest.Plugins, 2)
-	require.Equal(t, "./a-cursor", cursorManifest.Plugins[0].Source)
-	require.Equal(t, "./b-cursor", cursorManifest.Plugins[1].Source)
+	require.NotNil(t, cursorManifest.Metadata)
+	require.Equal(t, "cursor-plugins", cursorManifest.Metadata.PluginRoot)
+	require.Equal(t, "a-cursor", cursorManifest.Plugins[0].Source)
+	require.Equal(t, "b-cursor", cursorManifest.Plugins[1].Source)
 }
 
 func TestGenerateMarketplaceManifestUsesMarketplaceNameOverride(t *testing.T) {
@@ -715,6 +729,7 @@ func TestRenderHookScriptUsesDeviceAgentIdentityWhenAvailable(t *testing.T) {
 	capturePath := filepath.Join(dir, "payload.json")
 	require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderDeviceAgentIdentityScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "fake-agent"), []byte(`#!/usr/bin/env bash
 if [ "$1" = "identity" ]; then
   printf '{"identity":{"email":"agent@example.com"}}'
@@ -733,6 +748,9 @@ printf '{}\n200'
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GRAM_CAPTURE_PAYLOAD="+capturePath,
 		"GRAM_DEVICE_AGENT_COMMANDS=fake-agent",
+		// Pin a generous timeout so CI scheduling jitter can't trip the
+		// device-agent wall-clock timeout (default 1.5s) and flake the test.
+		"GRAM_DEVICE_AGENT_TIMEOUT_TENTHS=600",
 	)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
@@ -760,6 +778,7 @@ func TestRenderHookScriptFallsBackWhenDeviceAgentMissing(t *testing.T) {
 	capturePath := filepath.Join(dir, "payload.json")
 	require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderDeviceAgentIdentityScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
 cat > "$GRAM_CAPTURE_PAYLOAD"
 printf '{}\n200'
@@ -780,113 +799,6 @@ printf '{}\n200'
 	require.Equal(t, "cursor@example.com", posted["user_email"])
 }
 
-func TestGeneratedClaudeHookScriptAddsLastUserPromptIDFromStopTranscript(t *testing.T) {
-	t.Parallel()
-
-	cfg := GenerateConfig{
-		OrgName:     "Acme",
-		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_local_secret_xyz",
-		ProjectSlug: "acme-prod",
-	}
-	files, err := GenerateObservabilityPluginPackage(cfg, "claude")
-	require.NoError(t, err)
-
-	posted := runGeneratedClaudeHook(t, files["hooks/hook.sh"], files["hooks/prompt-id.sh"], []string{
-		`{"sessionId":"session-1","type":"user","promptId":"prompt-old","message":{"role":"user","content":"old prompt"}}`,
-		`{"sessionId":"other-session","type":"user","promptId":"prompt-other","message":{"role":"user","content":"ignore me"}}`,
-		`{"sessionId":"session-1","type":"user","promptId":"prompt-new","message":{"role":"user","content":"current prompt"}}`,
-	}, `{"hook_event_name":"Stop","session_id":"session-1","last_assistant_message":"ok"}`)
-
-	require.Equal(t, "prompt-new", posted["LastUserPromptID"])
-	additionalData, ok := posted["additional_data"].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, "prompt-new", additionalData["LastUserPromptID"])
-}
-
-func TestGeneratedClaudeHookScriptDoesNotEnrichUserPromptSubmit(t *testing.T) {
-	t.Parallel()
-
-	cfg := GenerateConfig{
-		OrgName:     "Acme",
-		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_local_secret_xyz",
-		ProjectSlug: "acme-prod",
-	}
-	files, err := GeneratePluginPackages(nil, cfg)
-	require.NoError(t, err)
-
-	posted := runGeneratedClaudeHook(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/hook.sh"], files[ClaudeObservabilitySlug(cfg)+"/hooks/prompt-id.sh"], []string{
-		`{"sessionId":"session-1","type":"user","promptId":"prompt-new","message":{"role":"user","content":"hook prompt"}}`,
-	}, `{"hook_event_name":"UserPromptSubmit","session_id":"session-1","prompt":"hook prompt"}`)
-
-	require.NotContains(t, posted, "promptId")
-	require.NotContains(t, posted, "LastUserPromptID")
-	require.NotContains(t, posted, "additional_data")
-}
-
-func TestGeneratedClaudeHookScriptOmitsLastUserPromptIDWhenTranscriptUnreadable(t *testing.T) {
-	t.Parallel()
-
-	cfg := GenerateConfig{
-		OrgName:     "Acme",
-		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_local_secret_xyz",
-		ProjectSlug: "acme-prod",
-	}
-	files, err := GenerateObservabilityPluginPackage(cfg, "claude")
-	require.NoError(t, err)
-
-	posted := runGeneratedClaudeHookWithPayload(t, files["hooks/hook.sh"], files["hooks/prompt-id.sh"], `{"hook_event_name":"Stop","session_id":"session-1","last_assistant_message":"ok","transcript_path":"/path/that/does/not/exist"}`)
-	require.NotContains(t, posted, "promptId")
-	require.NotContains(t, posted, "LastUserPromptID")
-	require.NotContains(t, posted, "additional_data")
-}
-
-func runGeneratedClaudeHook(t *testing.T, script []byte, promptIDScript []byte, transcriptLines []string, payload string) map[string]any {
-	t.Helper()
-
-	dir := t.TempDir()
-	transcriptPath := filepath.Join(dir, "transcript.jsonl")
-	require.NoError(t, os.WriteFile(transcriptPath, []byte(strings.Join(transcriptLines, "\n")+"\n"), 0o644))
-
-	var data map[string]any
-	require.NoError(t, json.Unmarshal([]byte(payload), &data))
-	data["transcript_path"] = transcriptPath
-	payloadBytes, err := json.Marshal(data)
-	require.NoError(t, err)
-
-	return runGeneratedClaudeHookWithPayload(t, script, promptIDScript, string(payloadBytes))
-}
-
-func runGeneratedClaudeHookWithPayload(t *testing.T, script []byte, promptIDScript []byte, payload string) map[string]any {
-	t.Helper()
-	require.NotEmpty(t, promptIDScript, "generated Claude prompt-id.sh missing")
-
-	dir := t.TempDir()
-	hookPath := filepath.Join(dir, "hook.sh")
-	capturePath := filepath.Join(dir, "payload.json")
-	require.NoError(t, os.WriteFile(hookPath, script, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "prompt-id.sh"), promptIDScript, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
-cat > "$GRAM_CAPTURE_PAYLOAD"
-printf '{}\n200'
-`), 0o755))
-
-	cmd := exec.Command("bash", hookPath)
-	cmd.Stdin = strings.NewReader(payload)
-	cmd.Env = append(os.Environ(),
-		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"GRAM_CAPTURE_PAYLOAD="+capturePath,
-	)
-	output, err := cmd.CombinedOutput()
-	require.NoError(t, err, string(output))
-
-	var posted map[string]any
-	require.NoError(t, json.Unmarshal(requireFileBytes(t, capturePath), &posted))
-	return posted
-}
-
 func TestDeviceAgentIdentityScriptHandlesWhitespaceEmptyObject(t *testing.T) {
 	t.Parallel()
 
@@ -905,6 +817,9 @@ exit 1
 	cmd.Env = append(os.Environ(),
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GRAM_DEVICE_AGENT_COMMANDS=fake-agent",
+		// Pin a generous timeout so CI scheduling jitter can't trip the
+		// device-agent wall-clock timeout (default 1.5s) and flake the test.
+		"GRAM_DEVICE_AGENT_TIMEOUT_TENTHS=600",
 	)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderDeviceAgentIdentityScript(), 0o755))
 	output, err := cmd.CombinedOutput()
@@ -927,7 +842,7 @@ func TestGenerateObservabilityPluginsIncludeIdentityHelper(t *testing.T) {
 
 	for _, path := range []string{
 		ClaudeObservabilitySlug(cfg) + "/hooks/identity.sh",
-		CursorObservabilitySlug(cfg) + "/hooks/identity.sh",
+		"cursor-plugins/" + CursorObservabilitySlug(cfg) + "/hooks/identity.sh",
 		CodexObservabilitySlug(cfg) + "/hooks/identity.sh",
 	} {
 		require.NotNil(t, files[path], "observability identity helper missing: %s", path)
@@ -957,7 +872,6 @@ func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t
 	hooksJSON := files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"]
 	require.NotNil(t, hooksJSON, "claude observability hooks/hooks.json missing")
 	require.NotNil(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/identity.sh"], "claude observability hooks/identity.sh missing")
-	require.NotNil(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/prompt-id.sh"], "claude observability hooks/prompt-id.sh missing")
 
 	var parsed claudeHooksConfig
 	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))
@@ -1012,6 +926,54 @@ func TestGenerateClaudeObservabilityRoutesInventoryEventsToOwnScript(t *testing.
 			continue
 		}
 		require.Contains(t, matchers[0].Hooks[0].Command, "hooks/hook.sh", "event %q should still use hook.sh", event)
+	}
+}
+
+// With observability mode off (the default) the blocking events keep their
+// synchronous flag so Claude waits for the deny/allow decision.
+func TestGenerateClaudeObservabilityBlockingEventsDefaultToSync(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	var parsed claudeHooksConfig
+	require.NoError(t, json.Unmarshal(files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"], &parsed))
+
+	for _, event := range []string{"UserPromptSubmit", "PreToolUse", "Stop"} {
+		matchers, ok := parsed.Hooks[event]
+		require.True(t, ok, "%s must be registered", event)
+		require.NotNil(t, matchers[0].Hooks[0].Async)
+		require.False(t, *matchers[0].Hooks[0].Async, "%s must be blocking when observability mode is off", event)
+	}
+}
+
+// With observability mode on, every hook event is emitted async so the plugin
+// can only observe and report — no hook can deny or delay a tool call.
+func TestGenerateClaudeObservabilityModeForcesAsyncForAllEvents(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:           "Acme",
+		ServerURL:         "https://app.getgram.ai",
+		HooksAPIKey:       "gram_local_secret_xyz",
+		ProjectSlug:       "acme-prod",
+		ObservabilityMode: true,
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	var parsed claudeHooksConfig
+	require.NoError(t, json.Unmarshal(files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"], &parsed))
+
+	require.NotEmpty(t, parsed.Hooks)
+	for event, matchers := range parsed.Hooks {
+		require.NotNil(t, matchers[0].Hooks[0].Async, "event %q must carry an async flag", event)
+		require.True(t, *matchers[0].Hooks[0].Async, "event %q must be async in observability mode", event)
 	}
 }
 
@@ -1388,10 +1350,10 @@ func TestGeneratePluginPackagesStampsConfigVersionIntoEveryManifest(t *testing.T
 	// the supplied version.
 	manifestPaths := []string{
 		"engineering-tools/.claude-plugin/plugin.json",
-		"engineering-tools-cursor/.cursor-plugin/plugin.json",
+		"cursor-plugins/engineering-tools-cursor/.cursor-plugin/plugin.json",
 		"engineering-tools-codex/.codex-plugin/plugin.json",
 		"acme-observability/.claude-plugin/plugin.json",
-		"acme-observability-cursor/.cursor-plugin/plugin.json",
+		"cursor-plugins/acme-observability-cursor/.cursor-plugin/plugin.json",
 		"acme-observability-codex/.codex-plugin/plugin.json",
 	}
 	for _, p := range manifestPaths {

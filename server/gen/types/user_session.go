@@ -24,4 +24,14 @@ type UserSession struct {
 	ExpiresAt string
 	CreatedAt string
 	UpdatedAt string
+	// Slug of the user_session_issuer that gated this session.
+	IssuerSlug string
+	// Name of the MCP client that established the session, if known.
+	ClientName *string
+	// Subject kind: 'user', 'apikey', or 'anonymous'.
+	SubjectType string
+	// Resolved human-readable name of the subject, if known.
+	SubjectDisplayName *string
+	// When the session was revoked, if it has been.
+	RevokedAt *string
 }

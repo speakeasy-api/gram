@@ -17,6 +17,8 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -38,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -84,6 +87,7 @@ type WorkerOptions struct {
 	SvixClient                     *svix.Svix
 	ProductFeatures                *productfeatures.Client
 	PluginPublisher                *plugins.Service
+	Publishers                     *Publishers
 }
 
 func ForDeploymentProcessing(
@@ -132,6 +136,10 @@ func ForDeploymentProcessing(
 		ProductFeatures:                nil,
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
+		Publishers: &Publishers{
+			PresidioAnalysis: gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
+			GitleaksAnalysis: gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
+		},
 	}
 }
 
@@ -178,6 +186,7 @@ func NewTemporalWorker(
 		ProductFeatures:                nil,
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
+		Publishers:                     nil,
 	}
 
 	for _, o := range options {
@@ -217,6 +226,7 @@ func NewTemporalWorker(
 			ProductFeatures:                conv.Default(o.ProductFeatures, opts.ProductFeatures),
 			ClickhouseConn:                 conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
 			PluginPublisher:                conv.Default(o.PluginPublisher, opts.PluginPublisher),
+			Publishers:                     conv.Default(o.Publishers, opts.Publishers),
 		}
 	}
 
@@ -239,6 +249,15 @@ func NewTemporalWorker(
 		Interceptors:                       workerInterceptors,
 		MaxConcurrentActivityExecutionSize: perPodAIUsagePollerConcurrency,
 	})
+
+	// The CEL engine is immutable + thread-safe; build one for this worker's
+	// risk activities and pass it down. Construction is deterministic and only
+	// fails on a malformed descriptor (a bug caught by tests), so log and carry
+	// on rather than failing worker startup.
+	celEng, celErr := celenv.New()
+	if celErr != nil {
+		logger.ErrorContext(context.Background(), "build CEL engine for risk activities", attr.SlogError(celErr))
+	}
 
 	activities := NewActivities(
 		logger,
@@ -278,6 +297,8 @@ func NewTemporalWorker(
 		opts.ProductFeatures,
 		opts.PluginPublisher,
 		opts.ChatMessageWriter,
+		opts.Publishers,
+		celEng,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -297,7 +318,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
-	temporalWorker.RegisterActivity(activities.FallbackModelUsageTracking)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	temporalWorker.RegisterActivity(activities.CorrelateClaudePrompts)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
@@ -320,6 +340,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ExpireAssistantThreadRuntime)
 	temporalWorker.RegisterActivity(activities.ReapStuckAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.ReapInactiveAssistantRuntimes)
+	temporalWorker.RegisterActivity(activities.ReapStoppedAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.RecycleAssistantRuntimeImages)
 	temporalWorker.RegisterActivity(activities.ReapSoftDeletedAssistantMemories)
 	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)
@@ -360,7 +381,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
-	temporalWorker.RegisterWorkflow(FallbackModelUsageTrackingWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(CorrelateClaudePromptsWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)

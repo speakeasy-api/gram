@@ -29,6 +29,26 @@ export type LoadChatRequest = {
    */
   generation?: number | undefined;
   /**
+   * Maximum number of messages to return for this page.
+   */
+  limit?: number | undefined;
+  /**
+   * Keyset cursor: return the page of messages with `seq` strictly less than this value (older messages). The returned `messages` are always ordered oldest to newest by `seq`, like every other response. Use the `seq` of the oldest message you currently hold to load the previous page. Ignored when `risk_only` is set. Mutually exclusive with `after_seq`; if both are supplied, `after_seq` takes precedence.
+   */
+  beforeSeq?: number | undefined;
+  /**
+   * Keyset cursor: return the page of messages with `seq` strictly greater than this value (newer messages). The returned `messages` are always ordered oldest to newest by `seq`. Use the `seq` of the newest message you currently hold to load the next page. Ignored when `risk_only` is set. Mutually exclusive with `before_seq`; if both are supplied, `after_seq` takes precedence.
+   */
+  afterSeq?: number | undefined;
+  /**
+   * When true, return the oldest page of the generation (the start of the thread), ordered oldest to newest, with `has_more_before=false`. Page forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`, or `risk_only` is set.
+   */
+  fromStart?: boolean | undefined;
+  /**
+   * When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request.
+   */
+  riskOnly?: boolean | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -137,6 +157,11 @@ export function loadChatSecurityToJSON(
 export type LoadChatRequest$Outbound = {
   id: string;
   generation?: number | undefined;
+  limit: number;
+  before_seq?: number | undefined;
+  after_seq?: number | undefined;
+  from_start: boolean;
+  risk_only: boolean;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
@@ -150,12 +175,21 @@ export const LoadChatRequest$outboundSchema: z.ZodMiniType<
   z.object({
     id: z.string(),
     generation: z.optional(z.int()),
+    limit: z._default(z.int(), 50),
+    beforeSeq: z.optional(z.int()),
+    afterSeq: z.optional(z.int()),
+    fromStart: z._default(z.boolean(), false),
+    riskOnly: z._default(z.boolean(), false),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      beforeSeq: "before_seq",
+      afterSeq: "after_seq",
+      fromStart: "from_start",
+      riskOnly: "risk_only",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
       gramChatSession: "Gram-Chat-Session",

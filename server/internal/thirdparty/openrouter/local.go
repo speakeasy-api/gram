@@ -35,16 +35,15 @@ func (o *Development) ReconcileMonthlyCredits(ctx context.Context, orgID string,
 }
 
 func (o *Development) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
-	// Development mode doesn't track model usage
 	totalCost := 12.5
 	return &ModelUsage{
 		TotalCost:             &totalCost,
 		CacheDiscount:         0,
 		UpstreamInferenceCost: 0,
-		Model:                 "gpt-5.4",
-		TokensPrompt:          100,
-		TokensCompletion:      100,
-		NativeTokensCached:    100,
-		NativeTokensReasoning: 100,
+		Model:                 DefaultChatModel,
+		TokensPrompt:          0,
+		TokensCompletion:      0,
+		NativeTokensCached:    0,
+		NativeTokensReasoning: 0,
 	}, nil
 }

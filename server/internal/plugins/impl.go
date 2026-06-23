@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -1919,9 +1920,10 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		// 0.1.{epoch} stays strictly above the historical 0.1.0 manifests
 		// already in users' Claude/Cursor/Codex caches, so a re-publish is
 		// always seen as a newer version and triggers a refresh.
-		Version:          fmt.Sprintf("0.1.%d", time.Now().Unix()),
-		MarketplaceName:  "",
-		IsDefaultProject: s.isDefaultProject(ctx, projectID),
+		Version:           fmt.Sprintf("0.1.%d", time.Now().Unix()),
+		MarketplaceName:   "",
+		IsDefaultProject:  s.isDefaultProject(ctx, projectID),
+		ObservabilityMode: false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
@@ -1943,6 +1945,22 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 			attr.SlogError(err),
 		)
 	}
+	// observability_mode is the org-level non-blocking switch managed by the
+	// productfeatures service against organization_features. When on, the
+	// generated plugin emits async for every hook event. The read is an EXISTS
+	// check so it never returns pgx.ErrNoRows; any error leaves the flag off,
+	// keeping hooks blocking.
+	observabilityMode, err := s.repo.IsOrganizationFeatureEnabled(ctx, repo.IsOrganizationFeatureEnabledParams{
+		OrganizationID: orgID,
+		FeatureName:    string(productfeatures.FeatureObservabilityMode),
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to read observability mode flag, defaulting to blocking hooks",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
+	}
+	cfg.ObservabilityMode = observabilityMode
 	return cfg
 }
 

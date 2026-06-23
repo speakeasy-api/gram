@@ -8,6 +8,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 )
 
 func TestCodex_PreToolUse_ShadowMCPBlockWithIdentityEvidenceIncludesRequestLink(t *testing.T) {
@@ -79,6 +81,39 @@ func TestCodex_RequiresUserEmail(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, result)
 	require.ErrorContains(t, err, "codex hook payload missing user_email")
+}
+
+func TestCodex_UserPromptSubmit_ScansViaHookEvents(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	scanner := &recordingCursorRiskScanner{
+		result: &risk.ScanResult{
+			PolicyName:  "prompt policy",
+			Description: "blocked prompt",
+		},
+	}
+	ti.service.riskScanner = scanner
+
+	sessionID := "codex-session-risk-scan"
+	userEmail := "dev@example.com"
+	prompt := "do something risky"
+
+	result, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		Prompt:        &prompt,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Decision)
+	require.Equal(t, "deny", *result.Decision)
+	require.NotNil(t, result.Reason)
+	require.Contains(t, *result.Reason, "prompt policy")
+
+	require.Equal(t, prompt, scanner.text)
+	require.Equal(t, message.User, scanner.messageType)
+	require.Empty(t, scanner.toolName)
 }
 
 func TestBuildCodexTelemetryAttributes_UsesPayloadUserEmail(t *testing.T) {

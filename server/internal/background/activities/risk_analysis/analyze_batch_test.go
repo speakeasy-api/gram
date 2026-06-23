@@ -10,9 +10,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/testsuite"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -21,6 +24,7 @@ import (
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -38,9 +42,34 @@ func (j *recordingPromptJudge) Evaluate(_ context.Context, in risk_analysis.Judg
 	return &risk_analysis.JudgeVerdict{Confidence: 0.9, Rationale: "matched tool call"}
 }
 
+// newPresidioPub returns a mock presidio publisher that accepts any publish
+// call and reports success. Tests that don't enable the "presidio" source
+// never invoke it; tests that do get a fire-and-forget success. Wiring a real
+// mock (never nil) keeps the publish path off the nil-deref cliff.
+func newPresidioPub() *gcp.MockPublisher[*riskv1.PresidioAnalysis] {
+	pub := gcp.NewMockPublisher[*riskv1.PresidioAnalysis]()
+	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+	return pub
+}
+
+// mustCELEngine builds a real CEL engine for tests; construction is
+// deterministic so a failure is a fatal setup error.
+func mustCELEngine(t *testing.T) *celenv.Engine {
+	t.Helper()
+	eng, err := celenv.New()
+	require.NoError(t, err)
+	return eng
+}
+
+func newGitleaksPub() *gcp.MockPublisher[*riskv1.GitleaksAnalysis] {
+	pub := gcp.NewMockPublisher[*riskv1.GitleaksAnalysis]()
+	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+	return pub
+}
+
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil)
+	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), mustCELEngine(t))
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
@@ -95,6 +124,9 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		newPresidioPub(),
+		newGitleaksPub(),
+		mustCELEngine(t),
 	)
 
 	// Execute via Temporal test activity environment to satisfy activity.RecordHeartbeat
@@ -184,6 +216,9 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		newPresidioPub(),
+		newGitleaksPub(),
+		mustCELEngine(t),
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -285,6 +320,9 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		nil,
 		judge,
 		flags,
+		newPresidioPub(),
+		newGitleaksPub(),
+		mustCELEngine(t),
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -366,6 +404,9 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		nil,
 		judge,
 		flags,
+		newPresidioPub(),
+		newGitleaksPub(),
+		mustCELEngine(t),
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -583,7 +624,7 @@ func TestAnalyzeBatch_CustomDetectionRuleFinding(t *testing.T) {
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
-	td = seedCustomRulePolicySelection(t, conn, td, "custom.acme_token", `ACME-[A-Z0-9]{8}`)
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.acme_token", `content.matchRegex("ACME-[A-Z0-9]{8}")`)
 
 	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
 		ChatID:    td.chatID,
@@ -639,6 +680,36 @@ func TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, rows)
+}
+
+// A CEL detection rule targeting the tool server flags a tool-request message
+// whose MCP server matches, exercising the DB → customRuleMessageView → engine
+// path.
+func TestAnalyzeBatch_CustomDetectionRuleToolServer(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.mise_tool", `tool_calls.exists(t, t.server.matchExact("mise"))`)
+
+	msgID := insertAssistantToolCallWithArgs(t, conn, td, "mcp__mise__run_task", map[string]any{"task": "build"})
+
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil)
+	require.Equal(t, 1, result.Processed)
+	require.Equal(t, 1, result.Findings)
+
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.True(t, rows[0].Found)
+	assert.Equal(t, risk_analysis.SourceCustom, rows[0].Source)
+	assert.Equal(t, "custom.mise_tool", rows[0].RuleID.String)
+	assert.Equal(t, "mise", rows[0].Match.String)
 }
 
 // insertAssistantToolCallWithArgs is a sibling of insertAssistantToolCall for
@@ -792,6 +863,9 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		nil,
 		nil,
 		nil,
+		newPresidioPub(),
+		newGitleaksPub(),
+		mustCELEngine(t),
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -816,12 +890,12 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 	return result
 }
 
-func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData, ruleID string, regex string) testData {
+func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData, ruleID string, detectionExpr string) testData {
 	t.Helper()
 
-	regexValue := pgtype.Text{}
-	if regex != "" {
-		regexValue = pgtype.Text{String: regex, Valid: true}
+	detectionValue := pgtype.Text{}
+	if detectionExpr != "" {
+		detectionValue = pgtype.Text{String: detectionExpr, Valid: true}
 	}
 	_, err := riskrepo.New(conn).CreateCustomDetectionRule(t.Context(), riskrepo.CreateCustomDetectionRuleParams{
 		ProjectID:      td.projectID,
@@ -829,7 +903,7 @@ func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData
 		RuleID:         ruleID,
 		Title:          "ACME token",
 		Description:    "ACME token",
-		Regex:          regexValue,
+		DetectionExpr:  detectionValue,
 		Severity:       "high",
 	})
 	require.NoError(t, err)

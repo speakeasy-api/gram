@@ -6,6 +6,7 @@ import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   FilterChip,
   ObserveFilterBar,
@@ -96,6 +97,30 @@ function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {
       ...(values !== undefined ? { values } : {}),
     };
   });
+}
+
+// Free-text search and arbitrary attribute filters can't be served by the
+// pre-aggregated trace_summaries view, so they fall back to scanning raw logs.
+// Surface that to the user when either is active; the structured filters
+// (server, user, agent, type, date) stay on the fast summary path.
+function isCustomSearchActive(
+  attributeSearchQuery: string | null,
+  attributeFilters: ActiveLogFilter[],
+): boolean {
+  return (attributeSearchQuery?.length ?? 0) > 0 || attributeFilters.length > 0;
+}
+
+function SlowSearchNotice() {
+  return (
+    <SimpleTooltip tooltip="Free-text search and custom attribute filters scan raw logs instead of the pre-aggregated summaries, so results may take longer to load. Server, user, agent, type, and date filters stay fast.">
+      <Badge variant="warning">
+        <Badge.LeftIcon>
+          <Icon name="info" size="small" />
+        </Badge.LeftIcon>
+        <Badge.Text>Custom search — may be slower</Badge.Text>
+      </Badge>
+    </SimpleTooltip>
+  );
 }
 
 function useAttributeSearchParams() {
@@ -656,6 +681,12 @@ function LogsToolsContent({
               </div>
             }
           />
+
+          {isCustomSearchActive(attributeSearchQuery, attributeFilters) && (
+            <div className="flex shrink-0">
+              <SlowSearchNotice />
+            </div>
+          )}
 
           <div className="flex min-h-0 flex-1 overflow-hidden">
             <div className="min-h-0 flex-1 overflow-y-auto border">

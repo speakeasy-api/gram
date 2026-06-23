@@ -64,6 +64,17 @@ func (r *RedisCacheAdapter) Set(ctx context.Context, key string, value any, ttl 
 	})
 }
 
+// Add uses Redis SET NX to create key only when it is absent. The value is a
+// fixed sentinel ("1") since callers only care about presence. Returns true
+// when this call created the key, false when it already existed.
+func (r *RedisCacheAdapter) Add(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+	ok, err := r.client.SetNX(ctx, key, "1", ttl).Result()
+	if err != nil {
+		return false, fmt.Errorf("setnx %s: %w", key, err)
+	}
+	return ok, nil
+}
+
 func (r *RedisCacheAdapter) Mutate(ctx context.Context, key string, value any, ttl time.Duration, fn func(exists bool) error) error {
 	var lastErr error
 	for range mutateMaxRetries {

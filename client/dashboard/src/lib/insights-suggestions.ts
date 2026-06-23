@@ -911,7 +911,7 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "what's each source catching",
       icon: "trend",
       prompt:
-        "What is each detection source catching? Group findings by source (gitleaks, presidio, prompt_injection, shadow_mcp, destructive_tool) over the last 7 days, and report counts with the top rule per source family.",
+        "What is each detection source catching? Group findings by source (gitleaks, PII, prompt_injection, shadow_mcp, destructive_tool) over the last 7 days, and report counts with the top rule per source family.",
     },
     {
       title: "What detectors exist?",
@@ -1038,6 +1038,142 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 } satisfies Record<string, SuggestionEntry>;
+
+/** The taxonomy node kind the cost explorer is currently focused on. */
+export type CostEntityLevel = "org" | "group" | "user" | "agent";
+
+/**
+ * Cost-explorer suggestions, tailored to the node currently in view. Standalone
+ * (not route-keyed) because the prompts depend on drill state — the entity name,
+ * its kind, and the active breakdown axis — which only the page knows. The page
+ * passes the result to <InsightsConfig suggestions={...}>, so the dock's chips
+ * change every time you drill into a different entity.
+ */
+export function costExplorerSuggestions(args: {
+  level: CostEntityLevel;
+  entityLabel: string | null; // null at the org root
+  childLabel: string; // active breakdown axis, e.g. "Department"
+  rangeLabel: string;
+}): InsightsSuggestion[] {
+  const { level, entityLabel, childLabel, rangeLabel } = args;
+  const child = childLabel.toLowerCase();
+  const who = entityLabel ?? "the organization";
+
+  if (level === "user") {
+    return [
+      {
+        title: `What's driving ${who}'s spend?`,
+        label: "Cost drivers",
+        icon: "coins",
+        prompt: `What's driving AI spend for ${who} over ${rangeLabel}? Break it down by agent and model.`,
+      },
+      {
+        title: `Which agents does ${who} use most?`,
+        label: "Top agents",
+        icon: "bot",
+        prompt: `Which agents does ${who} use most by cost over ${rangeLabel}?`,
+      },
+      {
+        title: `Is ${who}'s spend rising?`,
+        label: "Spend trend",
+        icon: "trend",
+        prompt: `Is AI spend for ${who} rising or falling over ${rangeLabel}? Show the trend.`,
+      },
+      {
+        title: `How efficient is ${who}?`,
+        label: "Cost per session",
+        icon: "gauge",
+        prompt: `What is ${who}'s cost per session over ${rangeLabel}, and how does it compare to their peers?`,
+      },
+    ];
+  }
+
+  if (level === "agent") {
+    return [
+      {
+        title: `What's driving cost on ${who}?`,
+        label: "Cost drivers",
+        icon: "coins",
+        prompt: `What's driving AI cost for the ${who} agent over ${rangeLabel}?`,
+      },
+      {
+        title: `Which models does ${who} use?`,
+        label: "Model mix",
+        icon: "chart",
+        prompt: `Which models does the ${who} agent run, and what do they each cost over ${rangeLabel}?`,
+      },
+      {
+        title: `Is ${who} cost-efficient?`,
+        label: "Cost per session",
+        icon: "gauge",
+        prompt: `What is the cost per session for the ${who} agent over ${rangeLabel}? Is it efficient?`,
+      },
+      {
+        title: `Is ${who}'s usage rising?`,
+        label: "Usage trend",
+        icon: "trend",
+        prompt: `Is usage of the ${who} agent rising or falling over ${rangeLabel}?`,
+      },
+    ];
+  }
+
+  if (level === "group") {
+    return [
+      {
+        title: `What's driving ${who}'s spend?`,
+        label: "Cost drivers",
+        icon: "coins",
+        prompt: `What's driving AI spend within ${who} over ${rangeLabel}?`,
+      },
+      {
+        title: `Top ${child} in ${who}?`,
+        label: `Top ${child}`,
+        icon: "chart",
+        prompt: `Which ${child} drives the most AI cost within ${who} over ${rangeLabel}?`,
+      },
+      {
+        title: `Is ${who}'s spend rising?`,
+        label: "Spend trend",
+        icon: "trend",
+        prompt: `Is AI spend for ${who} rising or falling over ${rangeLabel}? Show the trend.`,
+      },
+      {
+        title: `Top spenders in ${who}?`,
+        label: "Top spenders",
+        icon: "users",
+        prompt: `Who are the top individual AI spenders within ${who} over ${rangeLabel}?`,
+      },
+    ];
+  }
+
+  // Org root.
+  return [
+    {
+      title: "What's driving our spend?",
+      label: "Cost drivers",
+      icon: "coins",
+      prompt: `What's driving our AI spend over ${rangeLabel}? Break it down by the biggest contributors.`,
+    },
+    {
+      title: `Which ${child} costs the most?`,
+      label: `Top ${child}`,
+      icon: "chart",
+      prompt: `Which ${child} has the highest AI cost over ${rangeLabel}, and by how much?`,
+    },
+    {
+      title: "Where is cost growing?",
+      label: "Fastest-growing cost",
+      icon: "trend",
+      prompt: `Where is AI cost growing fastest across the organization over ${rangeLabel}?`,
+    },
+    {
+      title: "Who are the top spenders?",
+      label: "Top spenders",
+      icon: "users",
+      prompt: `Who are the top individual AI spenders across the organization over ${rangeLabel}?`,
+    },
+  ];
+}
 
 /**
  * Resolve the route-level suggestions for a project-scoped pathname

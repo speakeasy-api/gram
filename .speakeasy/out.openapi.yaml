@@ -6302,7 +6302,7 @@ paths:
         type: query
   /rpc/chat.load:
     get:
-      description: Load a chat by its ID. Messages are paginated one generation per request; omit `generation` to receive the latest generation.
+      description: 'Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding.'
       operationId: loadChat
       parameters:
         - allowEmptyValue: true
@@ -6322,6 +6322,51 @@ paths:
             format: int64
             minimum: 0
             type: integer
+        - allowEmptyValue: true
+          description: Maximum number of messages to return for this page.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Maximum number of messages to return for this page.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: 'Keyset cursor: return the page of messages with `seq` strictly less than this value (older messages). The returned `messages` are always ordered oldest to newest by `seq`, like every other response. Use the `seq` of the oldest message you currently hold to load the previous page. Ignored when `risk_only` is set. Mutually exclusive with `after_seq`; if both are supplied, `after_seq` takes precedence.'
+          in: query
+          name: before_seq
+          schema:
+            description: 'Keyset cursor: return the page of messages with `seq` strictly less than this value (older messages). The returned `messages` are always ordered oldest to newest by `seq`, like every other response. Use the `seq` of the oldest message you currently hold to load the previous page. Ignored when `risk_only` is set. Mutually exclusive with `after_seq`; if both are supplied, `after_seq` takes precedence.'
+            format: int64
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: 'Keyset cursor: return the page of messages with `seq` strictly greater than this value (newer messages). The returned `messages` are always ordered oldest to newest by `seq`. Use the `seq` of the newest message you currently hold to load the next page. Ignored when `risk_only` is set. Mutually exclusive with `before_seq`; if both are supplied, `after_seq` takes precedence.'
+          in: query
+          name: after_seq
+          schema:
+            description: 'Keyset cursor: return the page of messages with `seq` strictly greater than this value (newer messages). The returned `messages` are always ordered oldest to newest by `seq`. Use the `seq` of the newest message you currently hold to load the next page. Ignored when `risk_only` is set. Mutually exclusive with `before_seq`; if both are supplied, `after_seq` takes precedence.'
+            format: int64
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: When true, return the oldest page of the generation (the start of the thread), ordered oldest to newest, with `has_more_before=false`. Page forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`, or `risk_only` is set.
+          in: query
+          name: from_start
+          schema:
+            default: false
+            description: When true, return the oldest page of the generation (the start of the thread), ordered oldest to newest, with `has_more_before=false`. Page forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`, or `risk_only` is set.
+            type: boolean
+        - allowEmptyValue: true
+          description: When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request.
+          in: query
+          name: risk_only
+          schema:
+            default: false
+            description: When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request.
+            type: boolean
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -9780,6 +9825,13 @@ paths:
           schema:
             type: string
             description: Optional endpoint hostname supplied by the Gram hook plugin.
+        - name: Idempotency-Key
+          in: header
+          description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
       requestBody:
         required: true
         content:
@@ -9876,6 +9928,13 @@ paths:
           schema:
             type: string
             description: Optional endpoint hostname supplied by the Gram hook plugin.
+        - name: Idempotency-Key
+          in: header
+          description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
       requestBody:
         required: true
         content:
@@ -9976,6 +10035,13 @@ paths:
           schema:
             type: string
             description: Optional endpoint hostname supplied by the Gram hook plugin.
+        - name: Idempotency-Key
+          in: header
+          description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
       requestBody:
         required: true
         content:
@@ -22155,6 +22221,114 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: RiskCategories
+  /rpc/risk.compileExpr:
+    get:
+      description: Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).
+      operationId: compileExpr
+      parameters:
+        - allowEmptyValue: true
+          description: The CEL expression to compile. Empty is valid and compiles to ok=true.
+          in: query
+          name: expr
+          schema:
+            default: ""
+            description: The CEL expression to compile. Empty is valid and compiles to ok=true.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExprCompileResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: compileExpr risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.expr
+      x-speakeasy-name-override: compile
+      x-speakeasy-react-hook:
+        name: RiskCompileExpr
   /rpc/risk.createExclusions:
     post:
       description: Create a risk exclusion. Omit risk_policy_id to create a global exclusion that applies to every policy in the project.
@@ -26589,6 +26763,95 @@ paths:
       x-speakeasy-name-override: listHooksTraces
       x-speakeasy-react-hook:
         name: ListHooksTraces
+        type: query
+  /rpc/telemetry.listSessions:
+    post:
+      description: Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.
+      operationId: listSessions
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListSessionsPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSessionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listSessions telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: listSessions
+      x-speakeasy-react-hook:
+        name: ListSessions
         type: query
   /rpc/telemetry.listToolUsageTraces:
     post:
@@ -32332,6 +32595,26 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
+          description: Filter by session status.
+          in: query
+          name: status
+          schema:
+            description: Filter by session status.
+            enum:
+              - active
+              - expired
+              - revoked
+              - all
+            type: string
+        - allowEmptyValue: true
+          description: Filter by the connecting client id.
+          in: query
+          name: client_id
+          schema:
+            description: Filter by the connecting client id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
           description: 'Pagination cursor: id of the last item from the previous page.'
           in: query
           name: cursor
@@ -32449,9 +32732,108 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: UserSessions
+  /rpc/userSessions.listFacets:
+    get:
+      description: List available user session facet values (clients, users, servers) in the caller's project.
+      operationId: listUserSessionFacets
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListUserSessionFacetsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listFacets userSessions
+      tags:
+        - userSessions
+      x-speakeasy-name-override: listFacets
+      x-speakeasy-react-hook:
+        name: UserSessionFacets
   /rpc/userSessions.mint:
     post:
-      description: Mint a user_session for an issuer-gated toolset on behalf of the authenticated dashboard user. The minted JWT matches the shape of the one /mcp/{slug}/token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.
+      description: 'Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: either a toolset (/mcp) or a remote MCP server (/x/mcp). Exactly one of toolset_id or mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client''s bearer.'
       operationId: mintUserSession
       parameters:
         - allowEmptyValue: true
@@ -34475,6 +34857,12 @@ components:
           type: integer
           description: The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.
           format: int64
+        has_more_after:
+          type: boolean
+          description: Whether newer messages exist after the last message in this page (within the returned generation). Load them with an `after_seq` cursor.
+        has_more_before:
+          type: boolean
+          description: Whether older messages exist before the first message in this page (within the returned generation). Load them with a `before_seq` cursor.
         id:
           type: string
           description: The ID of the chat
@@ -34490,7 +34878,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ChatMessage'
-          description: The list of messages in the chat for the returned generation
+          description: The list of messages in the chat for the returned generation, ordered oldest to newest by `seq`.
         num_messages:
           type: integer
           description: The number of messages in the chat
@@ -34499,6 +34887,11 @@ components:
           type: integer
           description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
           format: int64
+        risk_segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskSegment'
+          description: 'Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment''s cursors to expand it.'
         source:
           type: string
           description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
@@ -34521,6 +34914,8 @@ components:
           type: integer
           description: Total tokens (input + output) used in this chat
           format: int64
+        totals:
+          $ref: '#/components/schemas/ChatTotals'
         updated_at:
           type: string
           description: When the chat was last updated.
@@ -34532,6 +34927,8 @@ components:
         - messages
         - generation
         - max_generation
+        - has_more_before
+        - has_more_after
         - id
         - title
         - num_messages
@@ -34569,6 +34966,10 @@ components:
         role:
           type: string
           description: The role of the message
+        seq:
+          type: integer
+          description: Monotonic sequence number of the message. Strictly increasing within a chat; use it as the keyset cursor for `before_seq`/`after_seq` pagination. Not contiguous (the sequence is shared across chats), so do not infer gaps from arithmetic differences.
+          format: int64
         tool_call_id:
           type: string
           description: The tool call ID of the message
@@ -34580,6 +34981,7 @@ components:
           description: The ID of the user who created the message
       required:
         - id
+        - seq
         - role
         - model
         - created_at
@@ -34710,6 +35112,41 @@ components:
         - total_input_tokens
         - total_output_tokens
         - total_tokens
+    ChatTotals:
+      type: object
+      properties:
+        assistant_messages:
+          type: integer
+          description: Number of assistant messages (without tool calls) in the generation.
+          format: int64
+        risk_only:
+          type: integer
+          description: Number of messages with an active (found, non-suppressed) risk finding in the generation.
+          format: int64
+        tool_calls:
+          type: integer
+          description: Number of messages carrying tool calls in the generation.
+          format: int64
+        tool_results:
+          type: integer
+          description: Number of tool-result messages in the generation.
+          format: int64
+        total:
+          type: integer
+          description: Total trace entries in the generation (sum of the four entry-type counts; the `of N entries` denominator).
+          format: int64
+        user_messages:
+          type: integer
+          description: Number of user messages in the generation.
+          format: int64
+      description: 'Trace-entry counts across the entire returned generation, independent of pagination. Each message maps to exactly one entry: a message carrying tool calls counts as a tool call regardless of role, otherwise the role decides.'
+      required:
+        - total
+        - user_messages
+        - assistant_messages
+        - tool_calls
+        - tool_results
+        - risk_only
     ClaudeAgentUsage:
       type: object
       properties:
@@ -35092,9 +35529,12 @@ components:
         description:
           type: string
           description: Description of what the rule detects.
+        detection_expr:
+          type: string
+          description: 'CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.'
         regex:
           type: string
-          description: RE2-compatible regex pattern.
+          description: Deprecated legacy RE2 regex pattern; superseded by detection_expr. Accepted for backward compatibility.
         rule_id:
           type: string
           description: Stable rule identifier, prefixed with `custom.`.
@@ -35114,7 +35554,6 @@ components:
       required:
         - rule_id
         - title
-        - regex
     CreateDeploymentForm:
       type: object
       properties:
@@ -35786,7 +36225,7 @@ components:
           type: array
           items:
             type: string
-          description: Custom detection rule ids to enable for this policy.
+          description: 'Custom detection rule ids to attach as detectors: a match produces a finding.'
         disabled_rules:
           type: array
           items:
@@ -35825,6 +36264,12 @@ components:
           items:
             type: string
           description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
+        scope_exempt:
+          type: string
+          description: 'CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.'
+        scope_include:
+          type: string
+          description: 'CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.'
         sources:
           type: array
           items:
@@ -36902,6 +37347,19 @@ components:
           maxLength: 40
       required:
         - mcp_slug
+    ExprCompileResult:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Compiler error message when ok is false; empty otherwise.
+        ok:
+          type: boolean
+          description: True when the expression compiled successfully.
+      description: The result of compiling a single CEL expression for the editor.
+      required:
+        - ok
+        - error
     ExternalMCPHeaderDefinition:
       type: object
       properties:
@@ -37051,6 +37509,64 @@ components:
         - registry_specifier
         - version
         - description
+    ExternalMCPServerEntry:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Description of what the server does
+        icon_url:
+          type: string
+          description: URL to the server's icon
+          format: uri
+        is_read_only:
+          type: boolean
+          description: Whether every tool on the server is read-only
+        mcp_server_id:
+          type: string
+          description: ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)
+          format: uuid
+        meta:
+          description: Opaque metadata from the registry
+        organization_mcp_collection_registry_id:
+          type: string
+          description: ID of the internal collection registry this server came from
+          format: uuid
+        registry_id:
+          type: string
+          description: ID of the external MCP registry this server came from
+          format: uuid
+        registry_specifier:
+          type: string
+          description: Server specifier used to look up in the registry (e.g., 'io.github.user/server')
+          example: io.modelcontextprotocol.anonymous/exa
+        remotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalMCPRemote'
+          description: Available remote endpoints for the server
+        title:
+          type: string
+          description: Display name for the server
+        tool_count:
+          type: integer
+          description: Number of tools the server exposes
+          format: int64
+        toolset_id:
+          type: string
+          description: ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)
+          format: uuid
+        version:
+          type: string
+          description: Semantic version of the server
+          example: 1.0.0
+      description: A summary of an MCP server from an external registry, returned by catalog listings
+      required:
+        - registry_specifier
+        - version
+        - description
+        - tool_count
+        - is_read_only
     ExternalMCPTool:
       type: object
       properties:
@@ -37951,6 +38467,9 @@ components:
         logs_enabled:
           type: boolean
           description: Whether logging is enabled
+        observability_mode_enabled:
+          type: boolean
+          description: Whether observability mode is enabled, making generated hook plugins fully non-blocking
         scim_enabled:
           type: boolean
           description: Whether SCIM/directory sync setup is enabled for the organization
@@ -37974,6 +38493,7 @@ components:
         - webhooks
         - sso_enabled
         - scim_enabled
+        - observability_mode_enabled
     GetProjectForm:
       type: object
       properties:
@@ -38124,6 +38644,11 @@ components:
           description: Start time in ISO 8601 format
           example: "2025-12-19T10:00:00Z"
           format: date-time
+        hook_sources:
+          type: array
+          items:
+            type: string
+          description: Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.
         hosted_toolset_slugs:
           type: array
           items:
@@ -38896,7 +39421,7 @@ components:
         servers:
           type: array
           items:
-            $ref: '#/components/schemas/ExternalMCPServer'
+            $ref: '#/components/schemas/ExternalMCPServerEntry'
           description: List of available MCP servers
       required:
         - servers
@@ -39421,26 +39946,28 @@ components:
     ListRoleGrant:
       type: object
       properties:
-        effect:
-          type: string
-          description: Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
-          default: allow
-          enum:
-            - allow
-            - deny
         scope:
           type: string
           description: The scope slug this grant applies to.
           enum:
             - org:read
+            - org:blocked_read
             - org:admin
+            - org:blocked_admin
             - project:read
+            - project:blocked_read
             - project:write
+            - project:blocked_write
             - mcp:read
+            - mcp:blocked_read
             - mcp:write
+            - mcp:blocked_write
             - mcp:connect
+            - mcp:blocked_connect
             - environment:read
+            - environment:blocked_read
             - environment:write
+            - environment:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
         selectors:
@@ -39454,14 +39981,23 @@ components:
             type: string
             enum:
               - org:read
+              - org:blocked_read
               - org:admin
+              - org:blocked_admin
               - project:read
+              - project:blocked_read
               - project:write
+              - project:blocked_write
               - mcp:read
+              - mcp:blocked_read
               - mcp:write
+              - mcp:blocked_write
               - mcp:connect
+              - mcp:blocked_connect
               - environment:read
+              - environment:blocked_read
               - environment:write
+              - environment:blocked_write
               - risk_policy:evaluate
               - risk_policy:bypass
           description: The inherited scopes the primary scope grants.
@@ -39507,6 +40043,64 @@ components:
       description: Result type for listing remote MCP servers
       required:
         - remote_mcp_servers
+    ListSessionsPayload:
+      type: object
+      properties:
+        cursor:
+          type: string
+          description: Opaque cursor for pagination
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryFilter'
+          description: Optional filters; all filters are ANDed together.
+        from:
+          type: string
+          description: Start time in ISO 8601 format
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        limit:
+          type: integer
+          description: Number of sessions to return (1-1000)
+          default: 50
+          format: int64
+          minimum: 1
+          maximum: 1000
+        sort_by:
+          type: string
+          description: Measure used to rank sessions. Defaults to total_cost.
+          default: total_cost
+          enum:
+            - total_cost
+            - total_tokens
+            - total_input_tokens
+            - total_output_tokens
+            - tool_call_count
+            - message_count
+            - duration_seconds
+        to:
+          type: string
+          description: End time in ISO 8601 format
+          example: "2025-12-26T10:00:00Z"
+          format: date-time
+      description: Payload for listing org-scoped chat sessions
+      required:
+        - from
+        - to
+    ListSessionsResult:
+      type: object
+      properties:
+        next_cursor:
+          type: string
+          description: Cursor for next page
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionSummary'
+          description: List of chat session summaries
+      description: Result of listing org-scoped chat sessions
+      required:
+        - sessions
     ListShadowMCPAccessRulesResult:
       type: object
       properties:
@@ -39744,6 +40338,28 @@ components:
       description: Result type for listing user_session_consents.
       required:
         - items
+    ListUserSessionFacetsResult:
+      type: object
+      properties:
+        clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSessionFacetOption'
+          description: Connecting client facets.
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSessionFacetOption'
+          description: Issuer/server facets.
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSessionFacetOption'
+          description: Subject (user) facets.
+      required:
+        - clients
+        - users
+        - servers
     ListUserSessionIssuersResult:
       type: object
       properties:
@@ -40212,18 +40828,20 @@ components:
     MintUserSessionRequestBody:
       type: object
       properties:
+        mcp_server_id:
+          type: string
+          description: Bind the JWT to this remote MCP server's user_session_issuer audience (the /x/mcp convention, since remote servers have no toolset). Mutually exclusive with toolset_id; exactly one must be set. Must be issuer-gated and live in the caller's project.
+          format: uuid
         toolset_id:
           type: string
-          description: The toolset to bind the minted JWT to. Must be issuer-gated and live in the caller's project.
+          description: Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with mcp_server_id; exactly one must be set. Must be issuer-gated and live in the caller's project.
           format: uuid
-      required:
-        - toolset_id
     MintUserSessionResponseBody:
       type: object
       properties:
         access_token:
           type: string
-          description: 'The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the toolset''s /mcp/{slug} surface.'
+          description: 'The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.'
         expires_in:
           type: integer
           description: Lifetime of the access token in seconds.
@@ -42754,13 +43372,16 @@ components:
         description:
           type: string
           description: Description of what the rule detects.
+        detection_expr:
+          type: string
+          description: 'CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding. Supersedes regex.'
         id:
           type: string
           description: The custom detection rule ID.
           format: uuid
         regex:
           type: string
-          description: RE2-compatible regex pattern.
+          description: Legacy RE2-compatible regex pattern (read-only). Live for existing rules; evaluated as content.match(regex) when detection_expr is empty. New rules author detection_expr instead.
         rule_id:
           type: string
           description: Stable rule identifier, prefixed with `custom.`.
@@ -42991,7 +43612,7 @@ components:
           type: array
           items:
             type: string
-          description: Custom detection rule ids enabled for this policy.
+          description: 'Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.'
         disabled_rules:
           type: array
           items:
@@ -43042,6 +43663,12 @@ components:
           items:
             type: string
           description: Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.
+        scope_exempt:
+          type: string
+          description: 'CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.'
+        scope_include:
+          type: string
+          description: 'CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.'
         sources:
           type: array
           items:
@@ -43268,6 +43895,11 @@ components:
         source:
           type: string
           description: Detection source (e.g. gitleaks).
+        spans:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskSpan'
+          description: All matched spans attributed to this finding. A finding may carry several correlated spans (e.g. a custom rule matching a tool's function name and its arguments on the same call). The top-level match/start_pos/end_pos mirror the primary (first) span.
         start_pos:
           type: integer
           description: Start byte position within the message content.
@@ -43336,6 +43968,11 @@ components:
         source:
           type: string
           description: Detection source (e.g. gitleaks, presidio, shadow_mcp).
+        spans_redacted:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskSpanRedacted'
+          description: All matched spans attributed to this finding, each with its match replaced by an opaque fingerprint.
         tags:
           type: array
           items:
@@ -43399,6 +44036,69 @@ components:
         - category
         - rules
         - total
+    RiskSegment:
+      type: object
+      properties:
+        first_seq:
+          type: integer
+          description: The `seq` of the first (oldest) message in this segment.
+          format: int64
+        has_more_after:
+          type: boolean
+          description: Whether messages exist after this segment within the generation. Expand with an `after_seq` request using `last_seq`.
+        has_more_before:
+          type: boolean
+          description: Whether messages exist before this segment within the generation. Expand with a `before_seq` request using `first_seq`.
+        last_seq:
+          type: integer
+          description: The `seq` of the last (newest) message in this segment.
+          format: int64
+      description: A contiguous run of messages in the risk-only view, covering one or more risk findings plus their surrounding context. Messages for a segment are the entries of `Chat.messages` whose `seq` falls within `[first_seq, last_seq]`.
+      required:
+        - first_seq
+        - last_seq
+        - has_more_before
+        - has_more_after
+    RiskSpan:
+      type: object
+      properties:
+        end_pos:
+          type: integer
+          description: End byte position within the message content.
+          format: int64
+        field:
+          type: string
+          description: The message field this span matched, in author-facing form (content, prompt, assistant, tool_result, or tool.name/tool.server/tool.function/tool.args). Empty for detectors that don't attribute a field (e.g. gitleaks, presidio).
+        match:
+          type: string
+          description: The matched secret or sensitive data for this span.
+        path:
+          type: string
+          description: The JSON sub-path within the field for a `.get(...)` match (e.g. 'command', 'payload.sql'). Empty when the whole field value matched.
+        start_pos:
+          type: integer
+          description: Start byte position within the message content.
+          format: int64
+      required:
+        - match
+    RiskSpanRedacted:
+      type: object
+      properties:
+        field:
+          type: string
+          description: The message field this span matched (see RiskSpan.field).
+        match_redacted:
+          type: string
+          description: Opaque fingerprint of this span's match, in the same form as RiskResultRedacted.match_redacted.
+        path:
+          type: string
+          description: The JSON sub-path within the field for a `.get(...)` match (see RiskSpan.path).
+        position_known:
+          type: boolean
+          description: Whether this span carried byte-position information.
+      required:
+        - match_redacted
+        - position_known
     RiskUserBreakdownResult:
       type: object
       properties:
@@ -43484,26 +44184,28 @@ components:
     RoleGrant:
       type: object
       properties:
-        effect:
-          type: string
-          description: Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
-          default: allow
-          enum:
-            - allow
-            - deny
         scope:
           type: string
           description: The scope slug this grant applies to.
           enum:
             - org:read
+            - org:blocked_read
             - org:admin
+            - org:blocked_admin
             - project:read
+            - project:blocked_read
             - project:write
+            - project:blocked_write
             - mcp:read
+            - mcp:blocked_read
             - mcp:write
+            - mcp:blocked_write
             - mcp:connect
+            - mcp:blocked_connect
             - environment:read
+            - environment:blocked_read
             - environment:write
+            - environment:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
         selectors:
@@ -43567,6 +44269,20 @@ components:
         description:
           type: string
           description: What this scope protects.
+        exclusion_scope:
+          type: string
+          description: The scope used to store exception rules for this scope.
+          enum:
+            - org:blocked_read
+            - org:blocked_admin
+            - project:blocked_read
+            - project:blocked_write
+            - mcp:blocked_read
+            - mcp:blocked_write
+            - mcp:blocked_connect
+            - environment:blocked_read
+            - environment:blocked_write
+            - risk_policy:bypass
         resource_type:
           type: string
           description: The type of resource this scope applies to.
@@ -43581,20 +44297,36 @@ components:
           description: Unique scope identifier.
           enum:
             - org:read
+            - org:blocked_read
             - org:admin
+            - org:blocked_admin
             - project:read
+            - project:blocked_read
             - project:write
+            - project:blocked_write
             - mcp:read
+            - mcp:blocked_read
             - mcp:write
+            - mcp:blocked_write
             - mcp:connect
+            - mcp:blocked_connect
             - environment:read
+            - environment:blocked_read
             - environment:write
+            - environment:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
+        visibility:
+          type: string
+          description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
+          enum:
+            - user_visible
+            - internal
       required:
         - slug
         - description
         - resource_type
+        - visibility
     SearchChatsFilter:
       type: object
       properties:
@@ -44283,6 +45015,78 @@ components:
       description: Service information
       required:
         - name
+    SessionSummary:
+      type: object
+      properties:
+        duration_seconds:
+          type: number
+          description: Chat session duration in seconds
+          format: double
+        end_time_unix_nano:
+          type: string
+          description: Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
+        gram_chat_id:
+          type: string
+          description: Chat session ID
+        hook_source:
+          type: string
+          description: Client or agent surface associated with this chat session
+        message_count:
+          type: integer
+          description: Number of LLM completion messages in this chat session
+          format: int64
+        model:
+          type: string
+          description: LLM model used in this chat session
+        project_id:
+          type: string
+          description: Project ID that emitted this chat session
+        start_time_unix_nano:
+          type: string
+          description: Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+        status:
+          type: string
+          description: Chat session status
+          enum:
+            - success
+            - error
+        tool_call_count:
+          type: integer
+          description: Number of tool calls in this chat session
+          format: int64
+        total_cost:
+          type: number
+          description: Total cost in USD
+          format: double
+        total_input_tokens:
+          type: integer
+          description: Total input tokens used
+          format: int64
+        total_output_tokens:
+          type: integer
+          description: Total output tokens used
+          format: int64
+        total_tokens:
+          type: integer
+          description: Total tokens used
+          format: int64
+        user_email:
+          type: string
+          description: User email associated with this chat session
+      description: Org-scoped summary information for a chat session
+      required:
+        - gram_chat_id
+        - project_id
+        - start_time_unix_nano
+        - end_time_unix_nano
+        - duration_seconds
+        - message_count
+        - tool_call_count
+        - total_input_tokens
+        - total_output_tokens
+        - total_tokens
+        - total_cost
+        - status
     SetBillingMetadataRequestBody:
       type: object
       properties:
@@ -44393,6 +45197,7 @@ components:
             - webhooks
             - sso
             - scim
+            - observability_mode
           maxLength: 60
       required:
         - feature_name
@@ -44806,9 +45611,12 @@ components:
         description:
           type: string
           description: Description of what the rule detects and why it matters.
+        detection_expr:
+          type: string
+          description: Suggested CEL detection predicate.
         regex:
           type: string
-          description: RE2-compatible regex pattern the rule should match against.
+          description: Deprecated legacy regex suggestion; superseded by detection_expr. Present for backward compatibility.
         rule_id:
           type: string
           description: Suggested stable identifier, prefixed with `custom.`.
@@ -44976,9 +45784,9 @@ components:
     TestDetectionRuleRequestBody:
       type: object
       properties:
-        regex:
+        detection_expr:
           type: string
-          description: Regex pattern. Required for `custom.*` rule ids since the server doesn't persist custom rules yet; ignored for built-in rules.
+          description: CEL detection predicate for `custom.*` rule ids, evaluated against the sample message.
         rule_id:
           type: string
           description: Rule identifier to evaluate (e.g. `secret.aws_access_token`, `pii.email_address`, `custom.acme_token`).
@@ -46538,13 +47346,16 @@ components:
         description:
           type: string
           description: Description of what the rule detects.
+        detection_expr:
+          type: string
+          description: 'CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.'
         id:
           type: string
           description: The custom detection rule ID.
           format: uuid
         regex:
           type: string
-          description: RE2-compatible regex pattern.
+          description: Deprecated legacy RE2 regex pattern; superseded by detection_expr. Accepted for backward compatibility.
         severity:
           type: string
           description: Severity level for findings produced by this rule.
@@ -46560,7 +47371,6 @@ components:
       required:
         - id
         - title
-        - regex
         - severity
     UpdateDomainRequestBody:
       type: object
@@ -47121,7 +47931,7 @@ components:
           type: array
           items:
             type: string
-          description: Custom detection rule ids to enable for this policy. Omit to preserve the current selection.
+          description: 'Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.'
         disabled_rules:
           type: array
           items:
@@ -47157,6 +47967,12 @@ components:
           items:
             type: string
           description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
+        scope_exempt:
+          type: string
+          description: CEL exemption predicate. Omit to preserve the current value; send empty to clear.
+        scope_include:
+          type: string
+          description: CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.
         sources:
           type: array
           items:
@@ -47699,6 +48515,9 @@ components:
     UserSession:
       type: object
       properties:
+        client_name:
+          type: string
+          description: Name of the MCP client that established the session, if known.
         created_at:
           type: string
           format: date-time
@@ -47710,6 +48529,9 @@ components:
           type: string
           description: The user_session id.
           format: uuid
+        issuer_slug:
+          type: string
+          description: Slug of the user_session_issuer that gated this session.
         jti:
           type: string
           description: Current access-token JTI; used by the revocation path.
@@ -47717,6 +48539,16 @@ components:
           type: string
           description: Next refresh deadline.
           format: date-time
+        revoked_at:
+          type: string
+          description: When the session was revoked, if it has been.
+          format: date-time
+        subject_display_name:
+          type: string
+          description: Resolved human-readable name of the subject, if known.
+        subject_type:
+          type: string
+          description: 'Subject kind: ''user'', ''apikey'', or ''anonymous''.'
         subject_urn:
           type: string
           description: The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
@@ -47737,6 +48569,8 @@ components:
         - expires_at
         - created_at
         - updated_at
+        - issuer_slug
+        - subject_type
     UserSessionClient:
       type: object
       properties:
@@ -47817,6 +48651,23 @@ components:
         - consented_at
         - created_at
         - updated_at
+    UserSessionFacetOption:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Number of sessions for this facet value.
+          format: int64
+        display_name:
+          type: string
+          description: The label shown for the facet value.
+        value:
+          type: string
+          description: The facet value used for filtering.
+      required:
+        - value
+        - display_name
+        - count
     UserSessionIssuer:
       type: object
       properties:

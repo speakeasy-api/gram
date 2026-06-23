@@ -15,12 +15,21 @@ pub struct McpServer {
 /// `/threads/{thread_id}/turn` request body. The runner looks up — or
 /// bootstraps — a per-thread tokio task on first hit and enqueues `input`
 /// onto its inbox. `auth_token` rotates the host's shared bearer; an
-/// optional `mcp_servers` reconciles the assistant-wide MCP set.
+/// optional `mcp_servers` reconciles the assistant-wide MCP set so
+/// toolset edits made after bootstrap take effect without recycling the
+/// VM.
 #[derive(Debug, Deserialize)]
 pub struct ThreadTurnRequest {
     pub input: String,
     #[serde(default)]
     pub auth_token: Option<String>,
+    #[serde(default)]
+    pub mcp_servers: Option<Vec<McpServer>>,
+    /// Identity for a runner that booted without `GRAM_ASSISTANT_ID` — i.e. a
+    /// generic warm-pool sandbox that learns which assistant it serves from
+    /// the first turn. Ignored once the boot env has set it (env wins).
+    #[serde(default)]
+    pub assistant_id: Option<String>,
 }
 
 /// 202-style ack returned by `/threads/{thread_id}/turn`. The actual turn

@@ -15,9 +15,15 @@ import (
 // MintUserSessionRequestBody is the type of the "userSessions" service
 // "mintUserSession" endpoint HTTP request body.
 type MintUserSessionRequestBody struct {
-	// The toolset to bind the minted JWT to. Must be issuer-gated and live in the
+	// Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with
+	// mcp_server_id; exactly one must be set. Must be issuer-gated and live in the
 	// caller's project.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Bind the JWT to this remote MCP server's user_session_issuer audience (the
+	// /x/mcp convention, since remote servers have no toolset). Mutually exclusive
+	// with toolset_id; exactly one must be set. Must be issuer-gated and live in
+	// the caller's project.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 }
 
 // ListUserSessionsResponseBody is the type of the "userSessions" service
@@ -28,11 +34,22 @@ type ListUserSessionsResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
+// ListFacetsResponseBody is the type of the "userSessions" service
+// "listFacets" endpoint HTTP response body.
+type ListFacetsResponseBody struct {
+	// Connecting client facets.
+	Clients []*UserSessionFacetOptionResponseBody `form:"clients" json:"clients" xml:"clients"`
+	// Subject (user) facets.
+	Users []*UserSessionFacetOptionResponseBody `form:"users" json:"users" xml:"users"`
+	// Issuer/server facets.
+	Servers []*UserSessionFacetOptionResponseBody `form:"servers" json:"servers" xml:"servers"`
+}
+
 // MintUserSessionResponseBody is the type of the "userSessions" service
 // "mintUserSession" endpoint HTTP response body.
 type MintUserSessionResponseBody struct {
 	// The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests
-	// to the toolset's /mcp/{slug} surface.
+	// to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.
 	AccessToken string `form:"access_token" json:"access_token" xml:"access_token"`
 	// Lifetime of the access token in seconds.
 	ExpiresIn int `form:"expires_in" json:"expires_in" xml:"expires_in"`
@@ -213,6 +230,188 @@ type ListUserSessionsUnexpectedResponseBody struct {
 // service "listUserSessions" endpoint HTTP response body for the
 // "gateway_error" error.
 type ListUserSessionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsUnauthorizedResponseBody is the type of the "userSessions" service
+// "listFacets" endpoint HTTP response body for the "unauthorized" error.
+type ListFacetsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsForbiddenResponseBody is the type of the "userSessions" service
+// "listFacets" endpoint HTTP response body for the "forbidden" error.
+type ListFacetsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsBadRequestResponseBody is the type of the "userSessions" service
+// "listFacets" endpoint HTTP response body for the "bad_request" error.
+type ListFacetsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsNotFoundResponseBody is the type of the "userSessions" service
+// "listFacets" endpoint HTTP response body for the "not_found" error.
+type ListFacetsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsConflictResponseBody is the type of the "userSessions" service
+// "listFacets" endpoint HTTP response body for the "conflict" error.
+type ListFacetsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsUnsupportedMediaResponseBody is the type of the "userSessions"
+// service "listFacets" endpoint HTTP response body for the "unsupported_media"
+// error.
+type ListFacetsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsInvalidResponseBody is the type of the "userSessions" service
+// "listFacets" endpoint HTTP response body for the "invalid" error.
+type ListFacetsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsInvariantViolationResponseBody is the type of the "userSessions"
+// service "listFacets" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListFacetsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsUnexpectedResponseBody is the type of the "userSessions" service
+// "listFacets" endpoint HTTP response body for the "unexpected" error.
+type ListFacetsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFacetsGatewayErrorResponseBody is the type of the "userSessions" service
+// "listFacets" endpoint HTTP response body for the "gateway_error" error.
+type ListFacetsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -624,6 +823,27 @@ type UserSessionResponseBody struct {
 	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Slug of the user_session_issuer that gated this session.
+	IssuerSlug string `form:"issuer_slug" json:"issuer_slug" xml:"issuer_slug"`
+	// Name of the MCP client that established the session, if known.
+	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
+	// Subject kind: 'user', 'apikey', or 'anonymous'.
+	SubjectType string `form:"subject_type" json:"subject_type" xml:"subject_type"`
+	// Resolved human-readable name of the subject, if known.
+	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
+	// When the session was revoked, if it has been.
+	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
+}
+
+// UserSessionFacetOptionResponseBody is used to define fields on response body
+// types.
+type UserSessionFacetOptionResponseBody struct {
+	// The facet value used for filtering.
+	Value string `form:"value" json:"value" xml:"value"`
+	// The label shown for the facet value.
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+	// Number of sessions for this facet value.
+	Count int64 `form:"count" json:"count" xml:"count"`
 }
 
 // NewListUserSessionsResponseBody builds the HTTP response body from the
@@ -643,6 +863,49 @@ func NewListUserSessionsResponseBody(res *usersessions.ListUserSessionsResult) *
 		}
 	} else {
 		body.Items = []*UserSessionResponseBody{}
+	}
+	return body
+}
+
+// NewListFacetsResponseBody builds the HTTP response body from the result of
+// the "listFacets" endpoint of the "userSessions" service.
+func NewListFacetsResponseBody(res *usersessions.ListUserSessionFacetsResult) *ListFacetsResponseBody {
+	body := &ListFacetsResponseBody{}
+	if res.Clients != nil {
+		body.Clients = make([]*UserSessionFacetOptionResponseBody, len(res.Clients))
+		for i, val := range res.Clients {
+			if val == nil {
+				body.Clients[i] = nil
+				continue
+			}
+			body.Clients[i] = marshalUsersessionsUserSessionFacetOptionToUserSessionFacetOptionResponseBody(val)
+		}
+	} else {
+		body.Clients = []*UserSessionFacetOptionResponseBody{}
+	}
+	if res.Users != nil {
+		body.Users = make([]*UserSessionFacetOptionResponseBody, len(res.Users))
+		for i, val := range res.Users {
+			if val == nil {
+				body.Users[i] = nil
+				continue
+			}
+			body.Users[i] = marshalUsersessionsUserSessionFacetOptionToUserSessionFacetOptionResponseBody(val)
+		}
+	} else {
+		body.Users = []*UserSessionFacetOptionResponseBody{}
+	}
+	if res.Servers != nil {
+		body.Servers = make([]*UserSessionFacetOptionResponseBody, len(res.Servers))
+		for i, val := range res.Servers {
+			if val == nil {
+				body.Servers[i] = nil
+				continue
+			}
+			body.Servers[i] = marshalUsersessionsUserSessionFacetOptionToUserSessionFacetOptionResponseBody(val)
+		}
+	} else {
+		body.Servers = []*UserSessionFacetOptionResponseBody{}
 	}
 	return body
 }
@@ -791,6 +1054,146 @@ func NewListUserSessionsUnexpectedResponseBody(res *goa.ServiceError) *ListUserS
 // service.
 func NewListUserSessionsGatewayErrorResponseBody(res *goa.ServiceError) *ListUserSessionsGatewayErrorResponseBody {
 	body := &ListUserSessionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "userSessions" service.
+func NewListFacetsUnauthorizedResponseBody(res *goa.ServiceError) *ListFacetsUnauthorizedResponseBody {
+	body := &ListFacetsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsForbiddenResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "userSessions" service.
+func NewListFacetsForbiddenResponseBody(res *goa.ServiceError) *ListFacetsForbiddenResponseBody {
+	body := &ListFacetsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsBadRequestResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "userSessions" service.
+func NewListFacetsBadRequestResponseBody(res *goa.ServiceError) *ListFacetsBadRequestResponseBody {
+	body := &ListFacetsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "userSessions" service.
+func NewListFacetsNotFoundResponseBody(res *goa.ServiceError) *ListFacetsNotFoundResponseBody {
+	body := &ListFacetsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsConflictResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "userSessions" service.
+func NewListFacetsConflictResponseBody(res *goa.ServiceError) *ListFacetsConflictResponseBody {
+	body := &ListFacetsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "listFacets" endpoint of the "userSessions" service.
+func NewListFacetsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListFacetsUnsupportedMediaResponseBody {
+	body := &ListFacetsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsInvalidResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "userSessions" service.
+func NewListFacetsInvalidResponseBody(res *goa.ServiceError) *ListFacetsInvalidResponseBody {
+	body := &ListFacetsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listFacets" endpoint of the "userSessions" service.
+func NewListFacetsInvariantViolationResponseBody(res *goa.ServiceError) *ListFacetsInvariantViolationResponseBody {
+	body := &ListFacetsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "userSessions" service.
+func NewListFacetsUnexpectedResponseBody(res *goa.ServiceError) *ListFacetsUnexpectedResponseBody {
+	body := &ListFacetsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFacetsGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "listFacets" endpoint of the "userSessions" service.
+func NewListFacetsGatewayErrorResponseBody(res *goa.ServiceError) *ListFacetsGatewayErrorResponseBody {
+	body := &ListFacetsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1093,12 +1496,25 @@ func NewRevokeUserSessionGatewayErrorResponseBody(res *goa.ServiceError) *Revoke
 
 // NewListUserSessionsPayload builds a userSessions service listUserSessions
 // endpoint payload.
-func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.ListUserSessionsPayload {
+func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string, status *string, clientID *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.ListUserSessionsPayload {
 	v := &usersessions.ListUserSessionsPayload{}
 	v.SubjectUrn = subjectUrn
 	v.UserSessionIssuerID = userSessionIssuerID
+	v.Status = status
+	v.ClientID = clientID
 	v.Cursor = cursor
 	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListFacetsPayload builds a userSessions service listFacets endpoint
+// payload.
+func NewListFacetsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.ListFacetsPayload {
+	v := &usersessions.ListFacetsPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1110,7 +1526,8 @@ func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string,
 // endpoint payload.
 func NewMintUserSessionPayload(body *MintUserSessionRequestBody, sessionToken *string, projectSlugInput *string) *usersessions.MintUserSessionPayload {
 	v := &usersessions.MintUserSessionPayload{
-		ToolsetID: *body.ToolsetID,
+		ToolsetID:   body.ToolsetID,
+		McpServerID: body.McpServerID,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1133,11 +1550,11 @@ func NewRevokeUserSessionPayload(id string, sessionToken *string, apikeyToken *s
 // ValidateMintUserSessionRequestBody runs the validations defined on
 // MintUserSessionRequestBody
 func ValidateMintUserSessionRequestBody(body *MintUserSessionRequestBody) (err error) {
-	if body.ToolsetID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
-	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	return
 }

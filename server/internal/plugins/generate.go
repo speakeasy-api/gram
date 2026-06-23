@@ -74,6 +74,12 @@ type GenerateConfig struct {
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
 	// marketplace.json. Empty falls back to DefaultMarketplaceName.
 	MarketplaceName string
+	// ObservabilityMode makes the generated hook plugin fully non-blocking when
+	// set: every Claude hook event is emitted async so the plugin can only
+	// observe and report, never deny or delay a tool call. It is the low-risk
+	// path for POC rollouts in orgs that cannot tolerate hook errors or brief
+	// server unavailability disrupting the user.
+	ObservabilityMode bool
 }
 
 // DefaultMarketplaceName returns the marketplace identifier used when no
@@ -112,7 +118,7 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 // for generator changes that alter behaviour in ways the placeholder
 // fingerprint pass can't observe. The Plugin Generate Check CI workflow
 // requires this to change whenever generate.go does.
-const pluginGeneratorVersion = "2"
+const pluginGeneratorVersion = "4"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -170,7 +176,16 @@ func PluginFingerprint(plugins []PluginInfo, cfg GenerateConfig) (string, error)
 // (including ConfigChange, which has no allow/deny decision to honor)
 // return true for fire-and-forget telemetry so Claude is not held up while
 // the MCP inventory is re-synced mid-session.
-func claudeHookAsyncFlag(event string) *bool {
+//
+// When observabilityMode is set, every event is forced async so the plugin
+// can only observe and report — no hook can deny or delay a tool call. This
+// is the low-risk path for POC rollouts in orgs that cannot tolerate hook
+// errors or brief server unavailability disrupting the user.
+func claudeHookAsyncFlag(event string, observabilityMode bool) *bool {
+	if observabilityMode {
+		t := true
+		return &t
+	}
 	switch event {
 	case "UserPromptSubmit", "PreToolUse", "Stop":
 		f := false
@@ -215,6 +230,11 @@ var CursorObservabilityHookEvents = []string{
 	"afterMCPExecution",
 }
 
+// cursorPluginRoot is the subdirectory under which all Cursor plugins are
+// grouped in a published repo. Declared via marketplace.json's metadata.pluginRoot
+// so plugin sources can be referenced by bare name relative to this root.
+const cursorPluginRoot = "cursor-plugins"
+
 // GeneratePluginPackages produces the complete file map for a plugin distribution
 // repository containing Claude Code, Cursor, and Codex plugins. Used for GitHub push.
 func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
@@ -246,7 +266,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 		cursorObservability := CursorObservabilitySlug(cfg)
 		cursorPlugins = append(cursorPlugins, marketplaceEntry{
 			Name:        cursorObservability,
-			Source:      "./" + cursorObservability,
+			Source:      cursorObservability,
 			Description: "Required: Speakeasy observability hooks for " + cfg.OrgName + ".",
 		})
 		codexObservability := CodexObservabilitySlug(cfg)
@@ -280,7 +300,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 		})
 		cursorPlugins = append(cursorPlugins, marketplaceEntry{
 			Name:        p.Slug + "-cursor",
-			Source:      "./" + p.Slug + "-cursor",
+			Source:      p.Slug + "-cursor",
 			Description: p.Description,
 		})
 		codexPlugins = append(codexPlugins, codexMarketplaceEntry{
@@ -300,9 +320,10 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	marketplaceName := resolveMarketplaceName(cfg)
 
 	claudeManifest, err := marshalJSON(marketplaceManifest{
-		Name:    marketplaceName,
-		Owner:   owner,
-		Plugins: claudePlugins,
+		Name:     marketplaceName,
+		Owner:    owner,
+		Metadata: nil,
+		Plugins:  claudePlugins,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal claude marketplace.json: %w", err)
@@ -310,9 +331,10 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	files[".claude-plugin/marketplace.json"] = claudeManifest
 
 	cursorManifest, err := marshalJSON(marketplaceManifest{
-		Name:    marketplaceName,
-		Owner:   owner,
-		Plugins: cursorPlugins,
+		Name:     marketplaceName,
+		Owner:    owner,
+		Metadata: &marketplaceMetadata{PluginRoot: cursorPluginRoot},
+		Plugins:  cursorPlugins,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal cursor marketplace.json: %w", err)
@@ -451,7 +473,8 @@ func generateClaudePlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 }
 
 func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
-	return generateCursorPluginInDir(files, p.Slug+"-cursor", p.Slug+"-cursor", p, cfg)
+	name := p.Slug + "-cursor"
+	return generateCursorPluginInDir(files, path.Join(cursorPluginRoot, name), name, p, cfg)
 }
 
 func generateCodexPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
@@ -596,7 +619,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 			script = "mcp_inventory.sh"
 		}
 		hookEvents[event] = []claudeHookMatcher{
-			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + script + `"`, Async: claudeHookAsyncFlag(event)}}},
+			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + script + `"`, Async: claudeHookAsyncFlag(event, cfg.ObservabilityMode)}}},
 		}
 	}
 	hooksJSON, err := marshalJSON(claudeHooksConfig{Hooks: hookEvents})
@@ -606,9 +629,9 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
 	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
+	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "claude")
 	files[path.Join(subdir, "hooks/mcp_inventory.sh")] = renderClaudeMCPInventoryScript(cfg)
-	files[path.Join(subdir, "hooks/prompt-id.sh")] = renderClaudePromptIDScript()
 
 	return nil
 }
@@ -617,26 +640,23 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 // for Cursor. Same shape as the Claude variant but uses Cursor's hook event
 // names + script destination URL.
 func generateCursorObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
-	return generateCursorObservabilityPluginInDir(files, CursorObservabilitySlug(cfg), cfg)
+	name := CursorObservabilitySlug(cfg)
+	return generateCursorObservabilityPluginInDir(files, path.Join(cursorPluginRoot, name), name, cfg)
 }
 
 // generateCursorObservabilityPluginFlat emits the same files at the root
 // (no subdir) for direct ZIP installation.
 func generateCursorObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
-	return generateCursorObservabilityPluginInDir(files, "", cfg)
+	return generateCursorObservabilityPluginInDir(files, "", CursorObservabilitySlug(cfg), cfg)
 }
 
-func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
-	name := subdir
-	if name == "" {
-		name = CursorObservabilitySlug(cfg)
-	}
+func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, name string, cfg GenerateConfig) error {
 	pluginJSON, err := marshalJSON(cursorPluginMeta{
 		Name:        name,
 		DisplayName: "Observability (Cursor)",
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		Version:     pluginManifestVersion(cfg),
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
+		Author:      cursorAuthor{Name: cfg.OrgName, Email: cfg.OrgEmail},
 		Homepage:    "https://getgram.ai",
 	})
 	if err != nil {
@@ -658,6 +678,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir stri
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
 	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
+	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "cursor")
 
 	return nil
@@ -749,6 +770,7 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
 	files[path.Join(subdir, "hooks/identity.sh")] = renderDeviceAgentIdentityScript()
+	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "codex")
 	files[path.Join(subdir, "hooks/hook_async.sh")] = renderCodexAsyncHookScript()
 
@@ -869,90 +891,128 @@ if [ -f "$script_dir/identity.sh" ]; then
   # shellcheck source=/dev/null
   . "$script_dir/identity.sh"
 fi
+# shellcheck source=/dev/null
+. "$script_dir/http.sh"
 `
 }
 
-func renderClaudePromptIDSourceSnippet() string {
-	return `if [ -f "$script_dir/prompt-id.sh" ]; then
-  # shellcheck source=/dev/null
-  . "$script_dir/prompt-id.sh"
-fi
-`
-}
+// renderSharedHTTPScript emits hooks/http.sh: the retryable transport sourced
+// by every generated hook script. It must stay byte-for-byte identical to the
+// checked-in hooks/plugin-claude/hooks/http.sh so local-dev and generated
+// plugins behave the same. gram_http_post retries transient connection resets
+// and 5xx with backoff while reusing one Idempotency-Key across attempts, so
+// the server (which de-duplicates on that key) stores a redelivery once.
+func renderSharedHTTPScript() []byte {
+	return []byte(`# Shared retryable HTTP helper for Gram hook senders.
+#
+# Sourced (not executed) by every plugin's send/hook scripts so all plugins
+# share one transport with identical retry and idempotency behavior.
+#
+# Why retries are safe: the server de-duplicates on the per-invocation
+# Idempotency-Key header (see gram_http_post), so re-sending the same request
+# after a transient reset stores the event exactly once.
+#
+# Usage:
+#   . "$script_dir/http.sh"
+#   gram_http_post "$url" "$payload" max_time [extra curl args...]
+#   # then read $GRAM_HTTP_CODE (e.g. "200", "000") and $GRAM_HTTP_BODY.
+#
+# gram_http_post returns 0 once curl produced a definitive HTTP status (any
+# code, including 4xx/5xx — the caller decides allow/block from $GRAM_HTTP_CODE)
+# and non-zero only when every attempt failed to reach the server.
 
-func renderClaudePromptIDSnippet() string {
-	return `if type gram_enrich_prompt_id_payload >/dev/null 2>&1; then
-  payload=$(gram_enrich_prompt_id_payload "$payload")
-fi
-`
-}
+GRAM_HTTP_MAX_ATTEMPTS="${GRAM_HTTP_MAX_ATTEMPTS:-4}"
+GRAM_HTTP_BACKOFF_BASE="${GRAM_HTTP_BACKOFF_BASE:-1}"
 
-func renderClaudePromptIDScript() []byte {
-	return []byte(`#!/usr/bin/env bash
-# Generated by Speakeasy. Do not edit — overwritten on every publish.
-
-gram_enrich_prompt_id_payload() {
-  local payload="${1:-}"
-  if ! command -v python3 >/dev/null 2>&1; then
-    printf '%s' "$payload"
-    return
+# gram_new_idempotency_token emits one token per shell invocation, captured
+# once and reused across retries so every attempt of the same logical delivery
+# carries the same token.
+gram_new_idempotency_token() {
+  if [ -n "${GRAM_IDEMPOTENCY_TOKEN:-}" ]; then
+    printf '%s' "$GRAM_IDEMPOTENCY_TOKEN"
+    return 0
   fi
-
-  local enriched
-  enriched=$(printf '%s' "$payload" | python3 -c '
-import json
-import os
-import sys
-
-payload = sys.stdin.read()
-try:
-    data = json.loads(payload)
-except Exception:
-    print(payload, end="")
-    raise SystemExit
-
-if data.get("hook_event_name") != "Stop":
-    print(payload, end="")
-    raise SystemExit
-
-session_id = data.get("session_id") or ""
-transcript_path = data.get("transcript_path") or ""
-last_user_prompt_id = ""
-
-try:
-    with open(os.path.expanduser(transcript_path), encoding="utf-8") as f:
-        for line in f:
-            try:
-                record = json.loads(line)
-            except Exception:
-                continue
-            candidate = record.get("promptId")
-            if not candidate:
-                continue
-            if (record.get("sessionId") or record.get("session_id") or "") != session_id:
-                continue
-            if record.get("type") != "user":
-                continue
-
-            last_user_prompt_id = candidate
-except Exception:
-    last_user_prompt_id = ""
-
-if last_user_prompt_id:
-    data["LastUserPromptID"] = last_user_prompt_id
-    additional_data = data.get("additional_data")
-    if not isinstance(additional_data, dict):
-        additional_data = {}
-    additional_data["LastUserPromptID"] = last_user_prompt_id
-    data["additional_data"] = additional_data
-
-print(json.dumps(data, separators=(",", ":")), end="")
-' 2>/dev/null) || true
-  if [ -n "$enriched" ]; then
-    printf '%s' "$enriched"
+  if command -v uuidgen >/dev/null 2>&1; then
+    GRAM_IDEMPOTENCY_TOKEN=$(uuidgen | tr '[:upper:]' '[:lower:]')
+  elif [ -r /proc/sys/kernel/random/uuid ]; then
+    GRAM_IDEMPOTENCY_TOKEN=$(cat /proc/sys/kernel/random/uuid)
   else
-    printf '%s' "$payload"
+    GRAM_IDEMPOTENCY_TOKEN="$(date +%s)-$$-${RANDOM:-0}${RANDOM:-0}"
   fi
+  printf '%s' "$GRAM_IDEMPOTENCY_TOKEN"
+}
+
+# _gram_http_is_transient returns 0 for a transient failure worth retrying: a
+# connection-level error (no response) or a 5xx. A clean 2xx/3xx/4xx is a
+# definitive answer and must NOT be retried.
+_gram_http_is_transient() {
+  local curl_exit="$1"
+  local http_code="$2"
+  case "$curl_exit" in
+    # 6 DNS, 7 connect, 28 timeout, 35 TLS handshake, 52 empty reply,
+    # 55 send error, 56 recv error (the connection-reset class).
+    6 | 7 | 28 | 35 | 52 | 55 | 56) return 0 ;;
+  esac
+  if [ "$curl_exit" -ne 0 ] && { [ -z "$http_code" ] || [ "$http_code" = "000" ]; }; then
+    return 0
+  fi
+  if [ "$http_code" -ge 500 ] 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
+# gram_http_post POSTs $2 to $1 with a per-attempt timeout of $3 seconds,
+# retrying transient failures with backoff. Remaining args pass verbatim to
+# curl. It always adds Content-Type and the reused Idempotency-Key header.
+gram_http_post() {
+  local _url="$1"
+  local _payload="$2"
+  local _max_time="$3"
+  shift 3
+
+  local _token
+  _token=$(gram_new_idempotency_token)
+
+  local attempt=1
+  local response curl_exit
+  GRAM_HTTP_CODE="000"
+  GRAM_HTTP_BODY=""
+  while [ "$attempt" -le "$GRAM_HTTP_MAX_ATTEMPTS" ]; do
+    response=$(printf '%s' "$_payload" | curl -s -w "\n%{http_code}" -X POST \
+      -H "Content-Type: application/json" \
+      -H "Idempotency-Key: ${_token}" \
+      "$@" \
+      --data-binary @- \
+      --max-time "$_max_time" \
+      "$_url")
+    curl_exit=$?
+
+    GRAM_HTTP_CODE=$(printf '%s' "$response" | tail -1)
+    GRAM_HTTP_BODY=$(printf '%s' "$response" | sed '$d')
+
+    if ! _gram_http_is_transient "$curl_exit" "$GRAM_HTTP_CODE"; then
+      # Definitive: a 2xx/3xx/4xx (success) or a non-transient curl error
+      # (bad usage/URL — retrying won't help). Distinguish via the code.
+      if [ "$curl_exit" -eq 0 ]; then
+        return 0
+      fi
+      return 1
+    fi
+
+    if [ "$attempt" -lt "$GRAM_HTTP_MAX_ATTEMPTS" ]; then
+      sleep "$((GRAM_HTTP_BACKOFF_BASE * attempt))"
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  # Exhausted retries. A real HTTP status (e.g. a persistent 5xx) → report
+  # success so the caller can act on the code; otherwise the server was
+  # unreachable.
+  if [ "$GRAM_HTTP_CODE" != "000" ] && [ -n "$GRAM_HTTP_CODE" ]; then
+    return 0
+  fi
+  return 1
 }
 `)
 }
@@ -1004,12 +1064,6 @@ func renderHookScript(cfg GenerateConfig, platform string) []byte {
 	}
 
 	authConfigSnippet := renderCurlAuthConfigSnippet(cfg, 2)
-	claudePromptIDSourceSnippet := ""
-	claudePromptIDSnippet := ""
-	if platform == "claude" {
-		claudePromptIDSourceSnippet = renderClaudePromptIDSourceSnippet()
-		claudePromptIDSnippet = renderClaudePromptIDSnippet()
-	}
 
 	// %%{http_code} → %{http_code} in the emitted script (curl write-out format).
 	// %%s           → %s           in the emitted script (printf format).
@@ -1213,20 +1267,18 @@ if [ -n "$hook_hostname" ]; then
   hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
 fi
 
-response=$(printf '%%s' "$payload" | curl -s -w "\n%%{http_code}" -X POST \
-  -H "Content-Type: application/json" \
+# gram_http_post (http.sh) retries transient resets so a single reset no
+# longer blocks the tool call; the server still decides allow/block.
+gram_http_post "${server_url}/rpc/hooks.codex" "$payload" 10 \
   ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
-  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
-  --data-binary @- \
-  --max-time 10 \
-  "${server_url}/rpc/hooks.codex")
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"}
 
-http_code=$(echo "$response" | tail -1)
-body=$(echo "$response" | sed '$d')
+http_code="$GRAM_HTTP_CODE"
+body="$GRAM_HTTP_BODY"
 
 # curl returns 000 on connection failure — treat as block so an unreachable
 # Speakeasy server cannot silently bypass blocking policies.
-if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 400 ] 2>/dev/null; then
   exit 0
 fi
 
@@ -1262,12 +1314,10 @@ server_url="${GRAM_HOOKS_SERVER_URL:-%s}"
 
 %s
 %s
-%s
 payload=$(cat)
 if type gram_enrich_identity_payload >/dev/null 2>&1; then
   payload=$(gram_enrich_identity_payload "$payload")
 fi
-%s
 
 hook_hostname=$(hostname 2>/dev/null || true)
 hook_hostname_header=()
@@ -1275,22 +1325,20 @@ if [ -n "$hook_hostname" ]; then
   hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
 fi
 
-response=$(printf '%%s' "$payload" | curl -s -w "\n%%{http_code}" -X POST \
-  -H "Content-Type: application/json" \
+# gram_http_post (http.sh) retries transient resets so a single reset no
+# longer blocks the tool call; the server still decides allow/block.
+gram_http_post "${server_url}/rpc/hooks.%s" "$payload" 10 \
   ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
-  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
-  --data-binary @- \
-  --max-time 10 \
-  "${server_url}/rpc/hooks.%s")
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"}
 
-http_code=$(echo "$response" | tail -1)
-body=$(echo "$response" | sed '$d')
+http_code="$GRAM_HTTP_CODE"
+body="$GRAM_HTTP_BODY"
 
 echo "$body"
 
 # curl returns 000 on connection failure — treat as block so an unreachable
 # Speakeasy server cannot silently bypass blocking policies.
-if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 400 ] 2>/dev/null; then
   exit 0
 fi
 
@@ -1307,7 +1355,7 @@ fi
 
 echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
 exit 2
-`, keyPrefix, cfg.ServerURL, authConfigSnippet, renderIdentitySourceSnippet(), claudePromptIDSourceSnippet, claudePromptIDSnippet, platform)
+`, keyPrefix, cfg.ServerURL, authConfigSnippet, renderIdentitySourceSnippet(), platform)
 }
 
 func renderCodexAsyncHookScript() []byte {
@@ -1489,13 +1537,11 @@ p["additional_data"] = ad
 print(json.dumps(p))
 ') || enriched="$payload"
 
-curl -s -o /dev/null -X POST \
-  -H "Content-Type: application/json" \
+# Fire-and-forget through the shared helper (http.sh) so a transient reset
+# retries instead of dropping the inventory. The result is ignored.
+gram_http_post "${server_url}/rpc/hooks.claude" "$enriched" 30 \
   ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
-  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
-  -d "$enriched" \
-  --max-time 30 \
-  "${server_url}/rpc/hooks.claude" >/dev/null 2>&1 || true
+  ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} >/dev/null 2>&1 || true
 
 exit 0
 `, keyPrefix, cfg.ServerURL, authConfigSnippet, renderIdentitySourceSnippet())
@@ -1854,7 +1900,7 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		DisplayName: displayName,
 		Description: p.Description,
 		Version:     pluginManifestVersion(cfg),
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
+		Author:      cursorAuthor{Name: cfg.OrgName, Email: ""},
 		Homepage:    "https://getgram.ai",
 	})
 	if err != nil {
@@ -1896,9 +1942,17 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 // --- JSON types ---
 
 type marketplaceManifest struct {
-	Name    string             `json:"name"`
-	Owner   marketplaceOwner   `json:"owner"`
-	Plugins []marketplaceEntry `json:"plugins"`
+	Name     string               `json:"name"`
+	Owner    marketplaceOwner     `json:"owner"`
+	Metadata *marketplaceMetadata `json:"metadata,omitempty"`
+	Plugins  []marketplaceEntry   `json:"plugins"`
+}
+
+// marketplaceMetadata carries optional marketplace-level settings. Cursor uses
+// pluginRoot to declare the subdirectory that contains all plugins, letting
+// plugin sources be referenced by bare name relative to that root.
+type marketplaceMetadata struct {
+	PluginRoot string `json:"pluginRoot,omitempty"`
 }
 
 type marketplaceOwner struct {
@@ -1946,8 +2000,16 @@ type cursorPluginMeta struct {
 	DisplayName string       `json:"displayName"`
 	Description string       `json:"description"`
 	Version     string       `json:"version"`
-	Author      pluginAuthor `json:"author"`
+	Author      cursorAuthor `json:"author"`
 	Homepage    string       `json:"homepage"`
+}
+
+// cursorAuthor matches Cursor's documented plugin author schema (name + optional
+// email). Cursor does not recognize a url sub-field — the author URL belongs in
+// the top-level homepage/repository fields instead.
+type cursorAuthor struct {
+	Name  string `json:"name"`
+	Email string `json:"email,omitempty"`
 }
 
 type cursorMCPConfig struct {

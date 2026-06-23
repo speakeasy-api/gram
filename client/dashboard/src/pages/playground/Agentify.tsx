@@ -66,7 +66,6 @@ export const AgentifyProvider = ({
 
     const result = await generateObject({
       model,
-      mode: "json",
       prompt: `
 <instructions>
   You will be given a chat history, a statement of intent, and a basic skeleton of an agent.

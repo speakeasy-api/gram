@@ -49,3 +49,9 @@ Represents a chat from the Gram API.
 ### updatedAt
 
 > **updatedAt**: `string` \| `Date`
+
+***
+
+### has\_more\_before?
+
+> `optional` **has\_more\_before**: `boolean`

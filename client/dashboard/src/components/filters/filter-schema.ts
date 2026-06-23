@@ -170,6 +170,24 @@ export function isDimensionActive(
   }
 }
 
+/**
+ * Whether a dimension's value equals its default ("empty") value. Drives whether
+ * a chip shows a clear (×) button: clearing an at-default chip is a no-op, so we
+ * hide the × for default pinned chips (e.g. "All servers" or a daterange already
+ * on its `defaultPreset`). Differs from `!isDimensionActive` only for daterange,
+ * whose default may be a non-null preset.
+ */
+export function isDimensionAtDefault(
+  dim: FilterDimension,
+  value: FilterValueByKind[FilterKind],
+): boolean {
+  if (dim.kind === "daterange") {
+    const v = value as DateRangeValue;
+    return v.customRange === null && v.preset === (dim.defaultPreset ?? null);
+  }
+  return !isDimensionActive(dim, value);
+}
+
 /** Resolve a raw value to its option label, falling back to the raw value. */
 function optionLabel(
   value: string,

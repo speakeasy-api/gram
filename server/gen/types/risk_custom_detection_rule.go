@@ -18,8 +18,13 @@ type RiskCustomDetectionRule struct {
 	Title string
 	// Description of what the rule detects.
 	Description string
-	// RE2-compatible regex pattern.
+	// Legacy RE2-compatible regex pattern (read-only). Live for existing rules;
+	// evaluated as content.match(regex) when detection_expr is empty. New rules
+	// author detection_expr instead.
 	Regex string
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding. Supersedes regex.
+	DetectionExpr *string
 	// Severity level for findings produced by this rule.
 	Severity string
 	// When the custom detection rule was created.
