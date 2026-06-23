@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -70,6 +71,26 @@ func statusResponse(method string, status int) *http.Response {
 	rec.WriteHeader(status)
 	resp := rec.Result()
 	resp.Request = httptest.NewRequest(method, "https://app.fly.dev/tool-call", http.NoBody)
+	return resp
+}
+
+// countingBody is a response body that records how many times it is closed, so
+// tests can assert the retry loop closes the responses it discards.
+type countingBody struct {
+	io.Reader
+	closes *int
+}
+
+func (b countingBody) Close() error {
+	*b.closes++
+	return nil
+}
+
+// retryableStatusResponse builds a response whose body increments *closes when
+// closed, for asserting the retry loop drains and closes discarded responses.
+func retryableStatusResponse(method string, status int, closes *int) *http.Response {
+	resp := statusResponse(method, status)
+	resp.Body = countingBody{Reader: strings.NewReader("runner at capacity"), closes: closes}
 	return resp
 }
 
@@ -289,6 +310,32 @@ func TestRetryWithBackoff_HTTPPostNotRetriedOnThrottleStatus(t *testing.T) {
 		require.Equalf(t, 1, calls, "the HTTP tool policy must not retry POSTs on %d", status)
 		require.NoErrorf(t, resp.Body.Close(), "status %d", status)
 	}
+}
+
+// A retried 429/503 response must have its body drained and closed before the
+// next attempt, or each retry leaks the body and its keep-alive connection. The
+// final returned response stays open for the caller.
+func TestRetryWithBackoff_ClosesDiscardedResponseBodies(t *testing.T) {
+	t.Parallel()
+
+	closes := 0
+	calls := 0
+	resp, err := retryWithBackoff(t.Context(), fastRetryConfigWith(map[string][]int{
+		http.MethodPost: {http.StatusTooManyRequests},
+	}), func() (*http.Response, error) {
+		calls++
+		if calls < 3 {
+			return retryableStatusResponse(http.MethodPost, http.StatusTooManyRequests, &closes), nil
+		}
+		return okResponse(), nil
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, 3, calls)
+	require.Equal(t, 2, closes, "each discarded 429 response body must be closed to avoid leaking the connection")
+	require.NoError(t, resp.Body.Close())
 }
 
 // A zero-value config (no caller wired a RetryConfig) must still run the request

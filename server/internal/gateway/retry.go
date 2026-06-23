@@ -181,6 +181,17 @@ func retryWithBackoff(
 
 	for attempt := range maxAttempts {
 		if attempt > 0 {
+			// Discard the previous attempt's response before retrying: drain a bounded
+			// amount so the keep-alive connection can be reused, then close the body so
+			// it (and its connection) is not leaked across attempts. resp is nil after a
+			// retried transport error, so guard it. The final, returned response is
+			// never closed here — the loop exits without re-entering this block — so the
+			// caller still receives an open body.
+			if resp != nil {
+				_, _ = io.CopyN(io.Discard, resp.Body, 64*1024)
+				_ = resp.Body.Close()
+			}
+
 			// Jitter the wait (full jitter on top of delayInterval as a floor) so a
 			// wave of simultaneously-throttled requests does not retry in lockstep.
 			// delayInterval carries either the exponential backoff or a server
@@ -219,7 +230,7 @@ func retryWithBackoff(
 			if parsedNumber, err := strconv.ParseInt(retryAfter, 10, 64); err == nil && parsedNumber > 0 {
 				retryAfterDuration := time.Duration(parsedNumber) * time.Second
 				delayInterval = min(retryAfterDuration, retryBackoff.maxInterval)
-			} else if parsedDate, err := time.Parse(time.RFC1123, retryAfter); err == nil {
+			} else if parsedDate, err := http.ParseTime(retryAfter); err == nil {
 				retryAfterDuration := time.Until(parsedDate)
 				if retryAfterDuration > 0 {
 					delayInterval = min(retryAfterDuration, retryBackoff.maxInterval)
