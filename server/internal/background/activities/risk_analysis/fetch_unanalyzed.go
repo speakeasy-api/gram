@@ -34,14 +34,13 @@ func NewFetchUnanalyzed(logger *slog.Logger, tracerProvider trace.TracerProvider
 // PolicyForAnalysis carries the policy metadata the coordinator needs to
 // construct AnalyzeBatchArgs for each active policy.
 type PolicyForAnalysis struct {
-	ID                   uuid.UUID
-	OrganizationID       string
-	Version              int64
-	Sources              []string
-	MessageTypes         []string
-	PresidioEntities     []string
-	PromptInjectionRules []string
-	CustomRuleIds        []string
+	ID               uuid.UUID
+	OrganizationID   string
+	Version          int64
+	Sources          []string
+	MessageTypes     []string
+	PresidioEntities []string
+	CustomRuleIds    []string
 }
 
 type FetchUnanalyzedArgs struct {
@@ -100,14 +99,13 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 	}
 	for i, p := range policies {
 		result.Policies[i] = PolicyForAnalysis{
-			ID:                   p.ID,
-			OrganizationID:       p.OrganizationID,
-			Version:              p.Version,
-			Sources:              p.Sources,
-			MessageTypes:         p.MessageTypes,
-			PresidioEntities:     p.PresidioEntities,
-			PromptInjectionRules: p.PromptInjectionRules,
-			CustomRuleIds:        p.CustomRuleIds,
+			ID:               p.ID,
+			OrganizationID:   p.OrganizationID,
+			Version:          p.Version,
+			Sources:          p.Sources,
+			MessageTypes:     p.MessageTypes,
+			PresidioEntities: p.PresidioEntities,
+			CustomRuleIds:    p.CustomRuleIds,
 		}
 	}
 
