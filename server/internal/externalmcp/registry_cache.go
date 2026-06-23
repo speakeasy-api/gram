@@ -14,10 +14,10 @@ import (
 
 const registryCacheTTL = 24 * time.Hour
 
-// CachedListServersResponse wraps a list of external MCP servers for caching.
+// CachedListServersResponse wraps a list of external MCP server summaries for caching.
 type CachedListServersResponse struct {
 	Key        string
-	Servers    []*types.ExternalMCPServer
+	Servers    []*types.ExternalMCPServerEntry
 	NextCursor *string
 }
 
