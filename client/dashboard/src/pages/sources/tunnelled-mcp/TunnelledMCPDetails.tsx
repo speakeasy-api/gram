@@ -869,34 +869,36 @@ export function TunnelledMcpSetupTabs({
   const serviceVersion = "2026.06.1";
   const upstream = "http://localhost:3000/mcp";
   const clusterUpstream = "http://127.0.0.1:3000/mcp";
+  const dockerUpstream = `http://hello-world-mcp-${slug}:3000/mcp`;
   const gateway = "wss://tunnel.getgram.ai/connect";
+  const helloWorldPython = `from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP(
+    "hello-world",
+    host="0.0.0.0",
+    port=3000,
+    stateless_http=True,
+    json_response=True,
+)
+
+@mcp.tool()
+def hello(name: str = "world") -> str:
+    """Return a friendly greeting."""
+    return f"Hello, {name}!"
+
+@mcp.resource("hello://world")
+def hello_resource() -> str:
+    return "Hello from a tunnelled MCP server."
+
+if __name__ == "__main__":
+    mcp.run(transport="streamable-http")`;
   const kubernetes = `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: hello-world-mcp
 data:
   server.py: |
-    from mcp.server.fastmcp import FastMCP
-
-    mcp = FastMCP(
-        "hello-world",
-        host="0.0.0.0",
-        port=3000,
-        stateless_http=True,
-        json_response=True,
-    )
-
-    @mcp.tool()
-    def hello(name: str = "world") -> str:
-        """Return a friendly greeting."""
-        return f"Hello, {name}!"
-
-    @mcp.resource("hello://world")
-    def hello_resource() -> str:
-        return "Hello from a tunnelled MCP server."
-
-    if __name__ == "__main__":
-        mcp.run(transport="streamable-http")
+${indentSnippet(helloWorldPython, 4)}
 ---
 apiVersion: v1
 kind: Secret
@@ -956,9 +958,35 @@ spec:
         - name: hello-world-mcp
           configMap:
             name: hello-world-mcp`;
-  const docker = `docker run --rm --name gram-tunnel-${slug} \\
+  const docker = `mkdir -p gram-tunnel-${slug}
+cd gram-tunnel-${slug}
+
+cat > server.py <<'PY'
+${helloWorldPython}
+PY
+
+cat > Dockerfile <<'DOCKERFILE'
+FROM python:3.12-slim
+RUN pip install "mcp[cli]>=1.27,<2"
+WORKDIR /app
+COPY server.py .
+EXPOSE 3000
+CMD ["python", "server.py"]
+DOCKERFILE
+
+docker build -t hello-world-mcp-${slug}:local .
+docker network create gram-tunnel-${slug} >/dev/null 2>&1 || true
+docker rm -f hello-world-mcp-${slug} gram-tunnel-${slug} >/dev/null 2>&1 || true
+trap 'docker rm -f hello-world-mcp-${slug} >/dev/null 2>&1' EXIT
+
+docker run -d --rm --name hello-world-mcp-${slug} \\
+  --network gram-tunnel-${slug} \\
+  hello-world-mcp-${slug}:local
+
+docker run --rm --name gram-tunnel-${slug} \\
+  --network gram-tunnel-${slug} \\
   -e GRAM_TUNNEL_KEY=${shellQuote(renderedKey)} \\
-  -e GRAM_TUNNEL_UPSTREAM=${shellQuote("http://host.docker.internal:3000/mcp")} \\
+  -e GRAM_TUNNEL_UPSTREAM=${shellQuote(dockerUpstream)} \\
   -e GRAM_TUNNEL_ENDPOINT=${shellQuote(gateway)} \\
   -e GRAM_MCP_SERVICE_ID=${shellQuote(serviceId)} \\
   -e GRAM_MCP_SERVICE_SLUG=${shellQuote(slug)} \\
@@ -1010,6 +1038,13 @@ spec:
           <CodeBlock language="yaml">{kubernetes}</CodeBlock>
         </TabsContent>
         <TabsContent value="docker" className="mt-4">
+          <div className="mb-3">
+            <Type variant="subheading">Hello world MCP container</Type>
+            <Type muted small className="mt-1">
+              Build a tiny Python MCP image and run the tunnel agent on the same
+              Docker network.
+            </Type>
+          </div>
           <CodeBlock language="bash">{docker}</CodeBlock>
         </TabsContent>
         <TabsContent value="cli" className="mt-4">
@@ -1095,6 +1130,14 @@ function slugForSnippet(name: string | undefined): string {
 
 function yamlQuote(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function indentSnippet(value: string, spaces: number): string {
+  const indent = " ".repeat(spaces);
+  return value
+    .split("\n")
+    .map((line) => (line ? `${indent}${line}` : ""))
+    .join("\n");
 }
 
 function shellQuote(value: string): string {
