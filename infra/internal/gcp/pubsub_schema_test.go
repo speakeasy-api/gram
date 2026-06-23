@@ -105,6 +105,55 @@ message Foo {
 	require.Equal(t, want, got)
 }
 
+// TestScrubSchemaDefinition_MultiLineFileOption confirms a multi-line file-level
+// option is removed in full — its body must not leak into the scrubbed output.
+func TestScrubSchemaDefinition_MultiLineFileOption(t *testing.T) {
+	t.Parallel()
+
+	src := `edition = "2024";
+package test.v1;
+import "gcp/pubsub/v1/options.proto";
+
+option (custom.thing) = {
+  alpha: "x"
+  beta: { gamma: 1 }
+};
+
+message Foo {
+  string a = 1;
+  option (gcp.pubsub.v1.topic) = {};
+}
+`
+
+	want := `edition = "2024";
+message Foo {
+  string a = 1;
+}
+`
+
+	got, err := scrubSchemaDefinition(src)
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+}
+
+// TestScrubSchemaDefinition_InlineBlockComment confirms a block comment between
+// tokens is replaced by whitespace so the tokens stay separated.
+func TestScrubSchemaDefinition_InlineBlockComment(t *testing.T) {
+	t.Parallel()
+
+	src := `edition = "2024";
+message Foo {
+  repeated /* note */ string tags = 1;
+  option (gcp.pubsub.v1.topic) = {};
+}
+`
+
+	got, err := scrubSchemaDefinition(src)
+	require.NoError(t, err)
+	require.NotContains(t, got, "repeatedstring")
+	require.Contains(t, got, "string tags = 1;")
+}
+
 // TestScrubSchemaDefinition_MissingOption fails when no topic option is present,
 // since every qualifying source must carry one.
 func TestScrubSchemaDefinition_MissingOption(t *testing.T) {

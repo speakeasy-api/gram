@@ -2,6 +2,7 @@ package infra
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/urfave/cli/v2"
@@ -36,6 +37,11 @@ func newGenCCCommand() *cli.Command {
 			protoRoot := strings.TrimSpace(c.Path("proto-root"))
 			if protoRoot == "" {
 				return fmt.Errorf("--proto-root must not be empty")
+			}
+			if info, err := os.Stat(protoRoot); err != nil {
+				return fmt.Errorf("--proto-root %q is not accessible: %w", protoRoot, err)
+			} else if !info.IsDir() {
+				return fmt.Errorf("--proto-root %q is not a directory", protoRoot)
 			}
 			if len(gen.Descriptors) == 0 {
 				return fmt.Errorf("embedded descriptor set is empty: cannot generate pubsub topology")

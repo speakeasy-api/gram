@@ -173,16 +173,17 @@ func topicInTree(messages protoreflect.MessageDescriptors) protoreflect.MessageD
 }
 
 // scrubSchemaDefinition turns a topic proto's source into a compact, standalone
-// schema definition that GCP Pub/Sub accepts. It strips all comments and blank
-// lines, removes the message-level topic option block, and drops file-level
-// statements that are noise to a schema: all imports, the package directive, and
-// file-level options (e.g. go_package). Message-level options (e.g. a message's
-// own `option deprecated = true`) are part of the type definition and are kept,
-// as are the edition declaration, the message, and its fields.
+// schema definition that GCP Pub/Sub accepts: the edition declaration followed
+// by the single top-level message, with comments and blank lines removed and the
+// message-level topic option block stripped out.
 //
-// Stripping every import is deliberate: a self-contained schema needs none, and
-// removing them turns any leftover reference to an imported/external type into a
-// compile failure at the validation step, which is how such types are rejected.
+// It emits exactly those two constructs rather than deleting unwanted file-level
+// statements one by one. This is what keeps the result self-contained — the
+// package directive, all imports, and any file-level option (including a
+// multi-line aggregate option whose body spans several lines) are simply never
+// emitted. Dropping imports while keeping the message is also how external types
+// are rejected: a field referencing an imported type is retained but its import
+// is gone, so it fails to resolve at the validation step.
 func scrubSchemaDefinition(src string) (string, error) {
 	decommented := stripProtoComments(src)
 
@@ -191,38 +192,72 @@ func scrubSchemaDefinition(src string) (string, error) {
 		return "", err
 	}
 
-	lines := strings.Split(withoutOption, "\n")
-	out := make([]string, 0, len(lines))
-	depth := 0
-	for _, line := range lines {
-		// A line is "file level" when it begins outside any message body. The
-		// package directive and file-level options only ever appear here, while
-		// a message's own options sit at depth >= 1 and must be preserved.
-		atFileLevel := depth == 0
-		depth += netBraceDelta(line)
+	edition := editionDeclaration(withoutOption)
+	if edition == "" {
+		return "", errors.New("no edition or syntax declaration found in schema source")
+	}
 
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
+	message, err := topLevelMessageBlock(withoutOption)
+	if err != nil {
+		return "", err
+	}
+
+	out := []string{edition}
+	for line := range strings.SplitSeq(message, "\n") {
+		if strings.TrimSpace(line) == "" {
 			continue
-		}
-		if atFileLevel {
-			switch {
-			case strings.HasPrefix(trimmed, "import "):
-				continue
-			case strings.HasPrefix(trimmed, "package "):
-				continue
-			case strings.HasPrefix(trimmed, "option "):
-				continue
-			}
 		}
 		out = append(out, strings.TrimRight(line, " \t"))
 	}
 
-	if len(out) == 0 {
-		return "", errors.New("scrubbed schema definition is empty")
+	return strings.Join(out, "\n") + "\n", nil
+}
+
+// editionDeclaration returns the file's `edition = ...;` (or `syntax = ...;`)
+// line, trimmed of trailing whitespace, or "" if absent. It is always the file's
+// first statement, so the first matching line is the declaration.
+func editionDeclaration(src string) string {
+	for line := range strings.SplitSeq(src, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "edition") || strings.HasPrefix(trimmed, "syntax") {
+			return strings.TrimRight(line, " \t")
+		}
+	}
+	return ""
+}
+
+// topLevelMessageBlock returns the source of the single top-level message, from
+// its `message X {` line through the matching closing brace. The caller has
+// already verified the file declares exactly one top-level message, so the first
+// `message ` line is it — a message's own nested messages are declared inside its
+// body, which is reached only after this line.
+func topLevelMessageBlock(src string) (string, error) {
+	lines := strings.Split(src, "\n")
+
+	start := -1
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "message ") {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return "", errors.New("no top-level message found in schema source")
 	}
 
-	return strings.Join(out, "\n") + "\n", nil
+	depth := 0
+	opened := false
+	for i := start; i < len(lines); i++ {
+		depth += netBraceDelta(lines[i])
+		if depth > 0 {
+			opened = true
+		}
+		if opened && depth <= 0 {
+			return strings.Join(lines[start:i+1], "\n"), nil
+		}
+	}
+
+	return "", errors.New("unterminated top-level message in schema source")
 }
 
 // netBraceDelta returns a line's `{` count minus its `}` count, ignoring braces
@@ -292,7 +327,11 @@ func stripProtoComments(src string) string {
 				b.WriteByte('\n')
 			}
 		case c == '/' && i+1 < len(src) && src[i+1] == '*':
-			// Block comment: skip through the closing "*/".
+			// Block comment: replace it with a single space so adjacent tokens
+			// stay separated (a block comment is whitespace in proto, so
+			// "repeated/* */string" must not become "repeatedstring"), then skip
+			// to the closing "*/".
+			b.WriteByte(' ')
 			i += 2
 			for i+1 < len(src) && (src[i] != '*' || src[i+1] != '/') {
 				i++
