@@ -9,7 +9,10 @@ import {
   type ExclusionSheetState,
   GLOBAL_SCOPE,
 } from "@/pages/security/exclusion-sheet";
-import { getRuleTitleFallback } from "@/pages/security/risk-utils";
+import {
+  getCategoryCodeForFinding,
+  getRuleTitleFallback,
+} from "@/pages/security/risk-utils";
 import type {
   ChatMessage,
   ClaudeToolUsage,
@@ -108,7 +111,10 @@ const CLAUDE_OTEL_LOG_URN = "claude-code:otel:logs";
 
 function getRiskBadgeLabel(result: RiskResult): string {
   if (result.ruleId === "llm_judge") return getRuleTitleFallback(result.ruleId);
-  return ruleIdCategoryLabel(result.ruleId) || result.source.toUpperCase();
+  return (
+    ruleIdCategoryLabel(result.ruleId) ||
+    getCategoryCodeForFinding(result.source, result.ruleId)
+  );
 }
 
 function shouldShowRiskRuleId(result: RiskResult): boolean {
@@ -1275,7 +1281,9 @@ function RiskFindingActions({
           className="bg-muted/30 flex items-center justify-between gap-2 rounded-md border px-3 py-1.5"
         >
           <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
-            {[r.ruleId, r.source].filter(Boolean).join(" · ")}
+            {[r.ruleId, getCategoryCodeForFinding(r.source, r.ruleId)]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
