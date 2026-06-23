@@ -8,6 +8,7 @@ import (
 
 	"cloud.google.com/go/pubsub/v2"
 	"github.com/speakeasy-api/gram/infra/internal/attr"
+	"github.com/speakeasy-api/gram/infra/internal/gcp"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -151,6 +152,13 @@ func PubSubSubscriberForMessage[M proto.Message](ctx context.Context, broker Sub
 
 	descriptor := subscription.ProtoReflect().Descriptor()
 	msgref := msg.ProtoReflect()
+
+	// A BigQuery export sink delivers to a table, not to application code, so it
+	// is not consumable. Reject it here rather than letting a caller wire up a
+	// receive loop that would never get messages.
+	if subOptions, ok := gcp.SubscriptionOptionsFromMessage(descriptor); ok && subOptions.GetBigquery() != nil {
+		return nil, fmt.Errorf("subscription %s is a BigQuery export sink and cannot be consumed", descriptor.FullName())
+	}
 
 	if _, ok := msgref.New().Interface().(M); !ok {
 		return nil, fmt.Errorf("proto message %s cannot be constructed as %T", descriptor.FullName(), msg)

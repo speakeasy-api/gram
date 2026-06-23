@@ -23,6 +23,7 @@ flowchart LR
   t_gram_risk_v1_presidio_analysis(["gram-risk-v1-presidio-analysis<br/>(topic)"]):::topic
   s_gram_ping_v2_processor["gram-ping-v2-processor<br/>(sub)"]:::sub
   s_gram_ping_v2_py_processor["gram-ping-v2-py-processor<br/>(sub)"]:::sub
+  s_gram_risk_v1_finding_sink["gram-risk-v1-finding-sink<br/>(sub)"]:::sub
   s_gram_risk_v1_gitleaks_analyzer["gram-risk-v1-gitleaks-analyzer<br/>(sub)"]:::sub
   s_gram_risk_v1_presidio_analyzer["gram-risk-v1-presidio-analyzer<br/>(sub)"]:::sub
 
@@ -40,6 +41,7 @@ flowchart LR
   s_gram_ping_v2_processor -. dead-letter .-> t_gram_ping_v2_processor_dlq
   t_gram_ping_v2_message --> s_gram_ping_v2_py_processor
   s_gram_ping_v2_py_processor -. dead-letter .-> t_gram_ping_v2_py_processor_dlq
+  t_gram_risk_v1_finding --> s_gram_risk_v1_finding_sink
   t_gram_risk_v1_gitleaks_analysis --> s_gram_risk_v1_gitleaks_analyzer
   t_gram_risk_v1_presidio_analysis --> s_gram_risk_v1_presidio_analyzer
   c5[\"📥<br/>server/cmd/gram/streams.go<br/>ping.NewHandler"\]:::go
@@ -69,5 +71,10 @@ flowchart LR
 | --------------------------------------------------------------------------------------- | -------------------------------- | --- | ------------------------------- | --------------------------------------------------------------------------------- |
 | [`gram-ping-v2-processor`](../infra/proto/gram/ping/v2/processor.proto)                 | `gram-ping-v2-message`           | 30s | `gram-ping-v2-processor-dlq`    | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go)                     |
 | [`gram-ping-v2-py-processor`](../infra/proto/gram/ping/v2/processor.proto)              | `gram-ping-v2-message`           | 30s | `gram-ping-v2-py-processor-dlq` | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
+| [`gram-risk-v1-finding-sink`](../infra/proto/gram/risk/v1/finding_sink.proto)           | `gram-risk-v1-finding`           | —   | —                               | —                                                                                 |
 | [`gram-risk-v1-gitleaks-analyzer`](../infra/proto/gram/risk/v1/gitleaks_analyzer.proto) | `gram-risk-v1-gitleaks-analysis` | 1m  | —                               | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go)                     |
 | [`gram-risk-v1-presidio-analyzer`](../infra/proto/gram/risk/v1/presidio_analyzer.proto) | `gram-risk-v1-presidio-analysis` | 1m  | —                               | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
+
+## Notes
+
+- Subscription `gram-risk-v1-finding-sink` has no consumer in `server/` or `pystreams/`.

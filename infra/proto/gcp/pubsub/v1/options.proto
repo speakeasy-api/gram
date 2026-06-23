@@ -36,6 +36,29 @@ message SubscriptionOptions {
   // consumes from (e.g. "outbox.event.v1.Event"). Validated against the
   // discovered topic set during reconciliation.
   string topic = 10;
+  // When set, this subscription is a BigQuery export sink: messages are written
+  // straight into a BigQuery table derived from the topic message's schema
+  // rather than delivered to a consumer. A subscription with this field set
+  // cannot be consumed in code — the subscriber-resolution helpers reject it.
+  BigQuerySinkOptions bigquery = 11;
+}
+
+// BigQuerySinkOptions turns a subscription into a BigQuery export sink. The
+// dataset is derived from the subscription's proto package (dots → underscores,
+// e.g. gram.risk.v1 → gram_risk_v1) and the table from the snake-cased message
+// name (e.g. FindingSink → finding_sink). The table schema is derived from the
+// topic message this subscription consumes, and Pub/Sub writes structured
+// columns using the topic's attached proto schema.
+message BigQuerySinkOptions {
+  // Retention for ingestion-time monthly partitions. Unset defaults to 60 days;
+  // an explicit 0s disables expiration (partitions are kept forever). Presence
+  // is meaningful: this is a message type, so an unset value is distinguishable
+  // from an explicit zero.
+  google.protobuf.Duration partition_expiration = 1;
+  // When true, message fields absent from the BigQuery table schema are dropped
+  // when writing instead of remaining in the subscription backlog. Recommended
+  // for schema evolution.
+  bool drop_unknown_fields = 2;
 }
 
 message RetryPolicy {

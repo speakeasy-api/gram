@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -137,6 +138,18 @@ func TestHandle_SuccessIsAckedOnly(t *testing.T) {
 	require.False(t, cap.nacked, "message should not be nacked on success")
 	require.Equal(t, "msg-ok", gotMeta.ID)
 	require.Equal(t, map[string]string{"k": "v"}, gotMeta.Attributes)
+}
+
+// TestPubSubSubscriberForMessage_RejectsBigQuerySink confirms a BigQuery export
+// sink (a subscription marker carrying the `bigquery` option) cannot be resolved
+// into a consumable subscriber. The guard fires before the broker is touched, so
+// a nil broker is fine here.
+func TestPubSubSubscriberForMessage_RejectsBigQuerySink(t *testing.T) {
+	t.Parallel()
+
+	_, err := PubSubSubscriberForMessage(t.Context(), nil, &riskv1.Finding{}, &riskv1.FindingSink{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "BigQuery export sink")
 }
 
 func TestHandle_DeliveryAttemptOmittedWhenNil(t *testing.T) {

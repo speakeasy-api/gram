@@ -8,11 +8,17 @@ import (
 	"math"
 	"slices"
 
+	bigqueryv1beta1 "github.com/GoogleCloudPlatform/k8s-config-connector/pkg/clients/generated/apis/bigquery/v1beta1"
 	kccv1alpha1 "github.com/GoogleCloudPlatform/k8s-config-connector/pkg/clients/generated/apis/k8s/v1alpha1"
 	pubsubv1beta1 "github.com/GoogleCloudPlatform/k8s-config-connector/pkg/clients/generated/apis/pubsub/v1beta1"
 	"github.com/ettle/strcase"
 	"github.com/speakeasy-api/gram/infra/internal/attr"
 )
+
+// timePartitioningMonth is the Config Connector TableTimePartitioning `type`
+// value for monthly partitions. With no partition field set, BigQuery
+// partitions on ingestion time (the _PARTITIONTIME pseudo-column).
+const timePartitioningMonth = "MONTH"
 
 // protoMessageLabel is the metadata label key carrying the fully qualified
 // protobuf message name a topic or subscription was generated from.
@@ -37,7 +43,7 @@ const schemaEncodingBinary = "BINARY"
 // option is left unattached — its ID may point at a shared, externally-owned
 // topic, so binding a per-message schema to it could collide with other
 // producers — and the skip is logged.
-func buildPubSubValues(ctx context.Context, logger *slog.Logger, topics []DesiredTopic, subs []DesiredSubscription, schemas []DesiredSchema) pubSubValuesDocument {
+func buildPubSubValues(ctx context.Context, logger *slog.Logger, topics []DesiredTopic, subs []DesiredSubscription, schemas []DesiredSchema) ccValuesDocument {
 	sortedTopics := slices.Clone(topics)
 	slices.SortFunc(sortedTopics, func(a, b DesiredTopic) int {
 		return cmp.Compare(a.Name, b.Name)
@@ -111,7 +117,7 @@ func buildPubSubValues(ctx context.Context, logger *slog.Logger, topics []Desire
 		})
 	}
 
-	return pubSubValuesDocument{
+	return ccValuesDocument{
 		PubSub: pubSubValues{
 			Enabled:       true,
 			APIs:          []string{pubsubAPI},
@@ -119,6 +125,65 @@ func buildPubSubValues(ctx context.Context, logger *slog.Logger, topics []Desire
 			Subscriptions: subValues,
 			Schemas:       schemaValues,
 		},
+	}
+}
+
+// buildBigQueryValues projects the discovered BigQuery datasets and tables into
+// a stable, sorted Helm values section. Tables are partitioned monthly on
+// ingestion time; a partition expiration is emitted only when enabled. The
+// section is disabled (and carries no APIs) when no export sinks were declared,
+// so the chart enables the BigQuery API only when something needs it.
+func buildBigQueryValues(datasets []DesiredBigQueryDataset, tables []DesiredBigQueryTable) bigQueryValues {
+	sortedDatasets := slices.Clone(datasets)
+	slices.SortFunc(sortedDatasets, func(a, b DesiredBigQueryDataset) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
+
+	sortedTables := slices.Clone(tables)
+	slices.SortFunc(sortedTables, func(a, b DesiredBigQueryTable) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
+
+	datasetValues := make([]bigQueryDatasetValue, 0, len(sortedDatasets))
+	for _, dataset := range sortedDatasets {
+		datasetValues = append(datasetValues, bigQueryDatasetValue{
+			Name:   dataset.Name,
+			Labels: maps.Clone(dataset.Labels),
+			Spec:   bigqueryv1beta1.BigQueryDatasetSpec{},
+		})
+	}
+
+	tableValues := make([]bigQueryTableValue, 0, len(sortedTables))
+	for _, table := range sortedTables {
+		spec := bigqueryv1beta1.BigQueryTableSpec{
+			DatasetRef: kccv1alpha1.ResourceRef{Name: table.Dataset},
+			Schema:     new(table.Schema),
+			TimePartitioning: &bigqueryv1beta1.TableTimePartitioning{
+				Type: timePartitioningMonth,
+			},
+		}
+		if table.PartitionExpirationEnabled {
+			spec.TimePartitioning.ExpirationMs = new(table.PartitionExpiration.Milliseconds())
+		}
+
+		tableValues = append(tableValues, bigQueryTableValue{
+			Name:   table.Name,
+			Labels: labelsWithProtoMessage(table.Labels, table.ProtoMessage),
+			Spec:   spec,
+		})
+	}
+
+	enabled := len(datasetValues) > 0 || len(tableValues) > 0
+	var apis []string
+	if enabled {
+		apis = []string{bigqueryAPI}
+	}
+
+	return bigQueryValues{
+		Enabled:  enabled,
+		APIs:     apis,
+		Datasets: datasetValues,
+		Tables:   tableValues,
 	}
 }
 
@@ -214,6 +279,17 @@ func subscriptionSpec(desired DesiredSubscription) pubsubv1beta1.PubSubSubscript
 		spec.DeadLetterPolicy = &pubsubv1beta1.SubscriptionDeadLetterPolicy{
 			DeadLetterTopicRef:  &kccv1alpha1.ResourceRef{Name: desired.DeadLetterTopic},
 			MaxDeliveryAttempts: new(int64(desired.MaxDeliveryAttempts)),
+		}
+	}
+
+	if desired.BigQuery != nil {
+		// useTopicSchema makes Pub/Sub write the message's fields to matching
+		// table columns using the topic's attached proto schema, rather than
+		// dumping the payload into a single `data` column.
+		spec.BigqueryConfig = &pubsubv1beta1.SubscriptionBigqueryConfig{
+			TableRef:          kccv1alpha1.ResourceRef{Name: desired.BigQuery.TableID},
+			UseTopicSchema:    new(true),
+			DropUnknownFields: new(desired.BigQuery.DropUnknownFields),
 		}
 	}
 

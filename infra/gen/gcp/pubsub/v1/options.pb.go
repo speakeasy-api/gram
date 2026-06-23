@@ -157,6 +157,7 @@ type SubscriptionOptions struct {
 	xxx_hidden_Filter              *string                `protobuf:"bytes,8,opt,name=filter"`
 	xxx_hidden_DeadLetter          *DeadLetterPolicy      `protobuf:"bytes,9,opt,name=dead_letter,json=deadLetter"`
 	xxx_hidden_Topic               *string                `protobuf:"bytes,10,opt,name=topic"`
+	xxx_hidden_Bigquery            *BigQuerySinkOptions   `protobuf:"bytes,11,opt,name=bigquery"`
 	XXX_raceDetectHookData         protoimpl.RaceDetectHookData
 	XXX_presence                   [1]uint32
 	unknownFields                  protoimpl.UnknownFields
@@ -267,9 +268,16 @@ func (x *SubscriptionOptions) GetTopic() string {
 	return ""
 }
 
+func (x *SubscriptionOptions) GetBigquery() *BigQuerySinkOptions {
+	if x != nil {
+		return x.xxx_hidden_Bigquery
+	}
+	return nil
+}
+
 func (x *SubscriptionOptions) SetName(v string) {
 	x.xxx_hidden_Name = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 11)
 }
 
 func (x *SubscriptionOptions) SetRetention(v *durationpb.Duration) {
@@ -278,7 +286,7 @@ func (x *SubscriptionOptions) SetRetention(v *durationpb.Duration) {
 
 func (x *SubscriptionOptions) SetRetainAckedMessages(v bool) {
 	x.xxx_hidden_RetainAckedMessages = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 11)
 }
 
 func (x *SubscriptionOptions) SetAckDeadline(v *durationpb.Duration) {
@@ -299,7 +307,7 @@ func (x *SubscriptionOptions) SetLabels(v map[string]string) {
 
 func (x *SubscriptionOptions) SetFilter(v string) {
 	x.xxx_hidden_Filter = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 11)
 }
 
 func (x *SubscriptionOptions) SetDeadLetter(v *DeadLetterPolicy) {
@@ -308,7 +316,11 @@ func (x *SubscriptionOptions) SetDeadLetter(v *DeadLetterPolicy) {
 
 func (x *SubscriptionOptions) SetTopic(v string) {
 	x.xxx_hidden_Topic = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 11)
+}
+
+func (x *SubscriptionOptions) SetBigquery(v *BigQuerySinkOptions) {
+	x.xxx_hidden_Bigquery = v
 }
 
 func (x *SubscriptionOptions) HasName() bool {
@@ -374,6 +386,13 @@ func (x *SubscriptionOptions) HasTopic() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 9)
 }
 
+func (x *SubscriptionOptions) HasBigquery() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Bigquery != nil
+}
+
 func (x *SubscriptionOptions) ClearName() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_Name = nil
@@ -414,6 +433,10 @@ func (x *SubscriptionOptions) ClearTopic() {
 	x.xxx_hidden_Topic = nil
 }
 
+func (x *SubscriptionOptions) ClearBigquery() {
+	x.xxx_hidden_Bigquery = nil
+}
+
 type SubscriptionOptions_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -433,6 +456,11 @@ type SubscriptionOptions_builder struct {
 	// consumes from (e.g. "outbox.event.v1.Event"). Validated against the
 	// discovered topic set during reconciliation.
 	Topic *string
+	// When set, this subscription is a BigQuery export sink: messages are written
+	// straight into a BigQuery table derived from the topic message's schema
+	// rather than delivered to a consumer. A subscription with this field set
+	// cannot be consumed in code — the subscriber-resolution helpers reject it.
+	Bigquery *BigQuerySinkOptions
 }
 
 func (b0 SubscriptionOptions_builder) Build() *SubscriptionOptions {
@@ -440,12 +468,12 @@ func (b0 SubscriptionOptions_builder) Build() *SubscriptionOptions {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Name != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 11)
 		x.xxx_hidden_Name = b.Name
 	}
 	x.xxx_hidden_Retention = b.Retention
 	if b.RetainAckedMessages != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 11)
 		x.xxx_hidden_RetainAckedMessages = *b.RetainAckedMessages
 	}
 	x.xxx_hidden_AckDeadline = b.AckDeadline
@@ -453,13 +481,127 @@ func (b0 SubscriptionOptions_builder) Build() *SubscriptionOptions {
 	x.xxx_hidden_RetryPolicy = b.RetryPolicy
 	x.xxx_hidden_Labels = b.Labels
 	if b.Filter != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 11)
 		x.xxx_hidden_Filter = b.Filter
 	}
 	x.xxx_hidden_DeadLetter = b.DeadLetter
 	if b.Topic != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 11)
 		x.xxx_hidden_Topic = b.Topic
+	}
+	x.xxx_hidden_Bigquery = b.Bigquery
+	return m0
+}
+
+// BigQuerySinkOptions turns a subscription into a BigQuery export sink. The
+// dataset is derived from the subscription's proto package (dots → underscores,
+// e.g. gram.risk.v1 → gram_risk_v1) and the table from the snake-cased message
+// name (e.g. FindingSink → finding_sink). The table schema is derived from the
+// topic message this subscription consumes, and Pub/Sub writes structured
+// columns using the topic's attached proto schema.
+type BigQuerySinkOptions struct {
+	state                          protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_PartitionExpiration *durationpb.Duration   `protobuf:"bytes,1,opt,name=partition_expiration,json=partitionExpiration"`
+	xxx_hidden_DropUnknownFields   bool                   `protobuf:"varint,2,opt,name=drop_unknown_fields,json=dropUnknownFields"`
+	XXX_raceDetectHookData         protoimpl.RaceDetectHookData
+	XXX_presence                   [1]uint32
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
+}
+
+func (x *BigQuerySinkOptions) Reset() {
+	*x = BigQuerySinkOptions{}
+	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BigQuerySinkOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BigQuerySinkOptions) ProtoMessage() {}
+
+func (x *BigQuerySinkOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *BigQuerySinkOptions) GetPartitionExpiration() *durationpb.Duration {
+	if x != nil {
+		return x.xxx_hidden_PartitionExpiration
+	}
+	return nil
+}
+
+func (x *BigQuerySinkOptions) GetDropUnknownFields() bool {
+	if x != nil {
+		return x.xxx_hidden_DropUnknownFields
+	}
+	return false
+}
+
+func (x *BigQuerySinkOptions) SetPartitionExpiration(v *durationpb.Duration) {
+	x.xxx_hidden_PartitionExpiration = v
+}
+
+func (x *BigQuerySinkOptions) SetDropUnknownFields(v bool) {
+	x.xxx_hidden_DropUnknownFields = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 2)
+}
+
+func (x *BigQuerySinkOptions) HasPartitionExpiration() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_PartitionExpiration != nil
+}
+
+func (x *BigQuerySinkOptions) HasDropUnknownFields() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
+}
+
+func (x *BigQuerySinkOptions) ClearPartitionExpiration() {
+	x.xxx_hidden_PartitionExpiration = nil
+}
+
+func (x *BigQuerySinkOptions) ClearDropUnknownFields() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 1)
+	x.xxx_hidden_DropUnknownFields = false
+}
+
+type BigQuerySinkOptions_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Retention for ingestion-time monthly partitions. Unset defaults to 60 days;
+	// an explicit 0s disables expiration (partitions are kept forever). Presence
+	// is meaningful: this is a message type, so an unset value is distinguishable
+	// from an explicit zero.
+	PartitionExpiration *durationpb.Duration
+	// When true, message fields absent from the BigQuery table schema are dropped
+	// when writing instead of remaining in the subscription backlog. Recommended
+	// for schema evolution.
+	DropUnknownFields *bool
+}
+
+func (b0 BigQuerySinkOptions_builder) Build() *BigQuerySinkOptions {
+	m0 := &BigQuerySinkOptions{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_PartitionExpiration = b.PartitionExpiration
+	if b.DropUnknownFields != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 2)
+		x.xxx_hidden_DropUnknownFields = *b.DropUnknownFields
 	}
 	return m0
 }
@@ -474,7 +616,7 @@ type RetryPolicy struct {
 
 func (x *RetryPolicy) Reset() {
 	*x = RetryPolicy{}
-	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[2]
+	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -486,7 +628,7 @@ func (x *RetryPolicy) String() string {
 func (*RetryPolicy) ProtoMessage() {}
 
 func (x *RetryPolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[2]
+	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -569,7 +711,7 @@ type DeadLetterPolicy struct {
 
 func (x *DeadLetterPolicy) Reset() {
 	*x = DeadLetterPolicy{}
-	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[3]
+	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -581,7 +723,7 @@ func (x *DeadLetterPolicy) String() string {
 func (*DeadLetterPolicy) ProtoMessage() {}
 
 func (x *DeadLetterPolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[3]
+	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -707,7 +849,7 @@ const file_gcp_pubsub_v1_options_proto_rawDesc = "" +
 	"\x06labels\x18\x03 \x03(\v2'.gcp.pubsub.v1.TopicOptions.LabelsEntryR\x06labels\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc8\x04\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x88\x05\n" +
 	"\x13SubscriptionOptions\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x127\n" +
 	"\tretention\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\tretention\x122\n" +
@@ -720,10 +862,14 @@ const file_gcp_pubsub_v1_options_proto_rawDesc = "" +
 	"\vdead_letter\x18\t \x01(\v2\x1f.gcp.pubsub.v1.DeadLetterPolicyR\n" +
 	"deadLetter\x12\x14\n" +
 	"\x05topic\x18\n" +
-	" \x01(\tR\x05topic\x1a9\n" +
+	" \x01(\tR\x05topic\x12>\n" +
+	"\bbigquery\x18\v \x01(\v2\".gcp.pubsub.v1.BigQuerySinkOptionsR\bbigquery\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x93\x01\n" +
+	"\x13BigQuerySinkOptions\x12L\n" +
+	"\x14partition_expiration\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\x13partitionExpiration\x12.\n" +
+	"\x13drop_unknown_fields\x18\x02 \x01(\bR\x11dropUnknownFields\"\x95\x01\n" +
 	"\vRetryPolicy\x12B\n" +
 	"\x0fminimum_backoff\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\x0eminimumBackoff\x12B\n" +
 	"\x0fmaximum_backoff\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x0emaximumBackoff\"Z\n" +
@@ -733,37 +879,40 @@ const file_gcp_pubsub_v1_options_proto_rawDesc = "" +
 	"\x05topic\x12\x1f.google.protobuf.MessageOptions\x18ц\x03 \x01(\v2\x1b.gcp.pubsub.v1.TopicOptionsR\x05topic:i\n" +
 	"\fsubscription\x12\x1f.google.protobuf.MessageOptions\x18҆\x03 \x01(\v2\".gcp.pubsub.v1.SubscriptionOptionsR\fsubscriptionB@Z>github.com/speakeasy-api/gram/infra/gen/gcp/pubsub/v1;pubsubv1b\beditionsp\xe9\a"
 
-var file_gcp_pubsub_v1_options_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_gcp_pubsub_v1_options_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_gcp_pubsub_v1_options_proto_goTypes = []any{
 	(*TopicOptions)(nil),                // 0: gcp.pubsub.v1.TopicOptions
 	(*SubscriptionOptions)(nil),         // 1: gcp.pubsub.v1.SubscriptionOptions
-	(*RetryPolicy)(nil),                 // 2: gcp.pubsub.v1.RetryPolicy
-	(*DeadLetterPolicy)(nil),            // 3: gcp.pubsub.v1.DeadLetterPolicy
-	nil,                                 // 4: gcp.pubsub.v1.TopicOptions.LabelsEntry
-	nil,                                 // 5: gcp.pubsub.v1.SubscriptionOptions.LabelsEntry
-	(*durationpb.Duration)(nil),         // 6: google.protobuf.Duration
-	(*descriptorpb.MessageOptions)(nil), // 7: google.protobuf.MessageOptions
+	(*BigQuerySinkOptions)(nil),         // 2: gcp.pubsub.v1.BigQuerySinkOptions
+	(*RetryPolicy)(nil),                 // 3: gcp.pubsub.v1.RetryPolicy
+	(*DeadLetterPolicy)(nil),            // 4: gcp.pubsub.v1.DeadLetterPolicy
+	nil,                                 // 5: gcp.pubsub.v1.TopicOptions.LabelsEntry
+	nil,                                 // 6: gcp.pubsub.v1.SubscriptionOptions.LabelsEntry
+	(*durationpb.Duration)(nil),         // 7: google.protobuf.Duration
+	(*descriptorpb.MessageOptions)(nil), // 8: google.protobuf.MessageOptions
 }
 var file_gcp_pubsub_v1_options_proto_depIdxs = []int32{
-	6,  // 0: gcp.pubsub.v1.TopicOptions.retention_hint:type_name -> google.protobuf.Duration
-	4,  // 1: gcp.pubsub.v1.TopicOptions.labels:type_name -> gcp.pubsub.v1.TopicOptions.LabelsEntry
-	6,  // 2: gcp.pubsub.v1.SubscriptionOptions.retention:type_name -> google.protobuf.Duration
-	6,  // 3: gcp.pubsub.v1.SubscriptionOptions.ack_deadline:type_name -> google.protobuf.Duration
-	6,  // 4: gcp.pubsub.v1.SubscriptionOptions.expiration_ttl:type_name -> google.protobuf.Duration
-	2,  // 5: gcp.pubsub.v1.SubscriptionOptions.retry_policy:type_name -> gcp.pubsub.v1.RetryPolicy
-	5,  // 6: gcp.pubsub.v1.SubscriptionOptions.labels:type_name -> gcp.pubsub.v1.SubscriptionOptions.LabelsEntry
-	3,  // 7: gcp.pubsub.v1.SubscriptionOptions.dead_letter:type_name -> gcp.pubsub.v1.DeadLetterPolicy
-	6,  // 8: gcp.pubsub.v1.RetryPolicy.minimum_backoff:type_name -> google.protobuf.Duration
-	6,  // 9: gcp.pubsub.v1.RetryPolicy.maximum_backoff:type_name -> google.protobuf.Duration
-	7,  // 10: gcp.pubsub.v1.topic:extendee -> google.protobuf.MessageOptions
-	7,  // 11: gcp.pubsub.v1.subscription:extendee -> google.protobuf.MessageOptions
-	0,  // 12: gcp.pubsub.v1.topic:type_name -> gcp.pubsub.v1.TopicOptions
-	1,  // 13: gcp.pubsub.v1.subscription:type_name -> gcp.pubsub.v1.SubscriptionOptions
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	12, // [12:14] is the sub-list for extension type_name
-	10, // [10:12] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	7,  // 0: gcp.pubsub.v1.TopicOptions.retention_hint:type_name -> google.protobuf.Duration
+	5,  // 1: gcp.pubsub.v1.TopicOptions.labels:type_name -> gcp.pubsub.v1.TopicOptions.LabelsEntry
+	7,  // 2: gcp.pubsub.v1.SubscriptionOptions.retention:type_name -> google.protobuf.Duration
+	7,  // 3: gcp.pubsub.v1.SubscriptionOptions.ack_deadline:type_name -> google.protobuf.Duration
+	7,  // 4: gcp.pubsub.v1.SubscriptionOptions.expiration_ttl:type_name -> google.protobuf.Duration
+	3,  // 5: gcp.pubsub.v1.SubscriptionOptions.retry_policy:type_name -> gcp.pubsub.v1.RetryPolicy
+	6,  // 6: gcp.pubsub.v1.SubscriptionOptions.labels:type_name -> gcp.pubsub.v1.SubscriptionOptions.LabelsEntry
+	4,  // 7: gcp.pubsub.v1.SubscriptionOptions.dead_letter:type_name -> gcp.pubsub.v1.DeadLetterPolicy
+	2,  // 8: gcp.pubsub.v1.SubscriptionOptions.bigquery:type_name -> gcp.pubsub.v1.BigQuerySinkOptions
+	7,  // 9: gcp.pubsub.v1.BigQuerySinkOptions.partition_expiration:type_name -> google.protobuf.Duration
+	7,  // 10: gcp.pubsub.v1.RetryPolicy.minimum_backoff:type_name -> google.protobuf.Duration
+	7,  // 11: gcp.pubsub.v1.RetryPolicy.maximum_backoff:type_name -> google.protobuf.Duration
+	8,  // 12: gcp.pubsub.v1.topic:extendee -> google.protobuf.MessageOptions
+	8,  // 13: gcp.pubsub.v1.subscription:extendee -> google.protobuf.MessageOptions
+	0,  // 14: gcp.pubsub.v1.topic:type_name -> gcp.pubsub.v1.TopicOptions
+	1,  // 15: gcp.pubsub.v1.subscription:type_name -> gcp.pubsub.v1.SubscriptionOptions
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	14, // [14:16] is the sub-list for extension type_name
+	12, // [12:14] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_gcp_pubsub_v1_options_proto_init() }
@@ -777,7 +926,7 @@ func file_gcp_pubsub_v1_options_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gcp_pubsub_v1_options_proto_rawDesc), len(file_gcp_pubsub_v1_options_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 2,
 			NumServices:   0,
 		},

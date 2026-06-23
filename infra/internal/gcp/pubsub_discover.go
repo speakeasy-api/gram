@@ -85,6 +85,21 @@ type DesiredSubscription struct {
 	DeadLetterTopic     string
 	MaxDeliveryAttempts int32
 	ProtoMessage        string
+	// BigQuery is set when the subscription is a BigQuery export sink rather than
+	// a consumable subscription. The table schema, dataset, and partitioning are
+	// derived separately by DiscoverBigQuery; this carries only what the
+	// subscription spec's bigqueryConfig needs.
+	BigQuery *DesiredBigQuerySink
+}
+
+// DesiredBigQuerySink marks a subscription as a BigQuery export sink and carries
+// the fields the PubSubSubscription's bigqueryConfig references. The dataset ID
+// is derived from the marker's proto package and the table ID from its message
+// name; both are computed by bigQueryDatasetID / bigQueryTableID.
+type DesiredBigQuerySink struct {
+	DatasetID         string
+	TableID           string
+	DropUnknownFields bool
 }
 
 func DiscoverPubSub(descriptorBytes []byte) ([]DesiredTopic, []DesiredSubscription, error) {
@@ -285,6 +300,14 @@ func desiredSubscriptionFromOptions(message protoreflect.MessageDescriptor, subO
 		desired.MaxDeliveryAttempts = dl.GetMaxDeliveryAttempts()
 	}
 
+	if bq := subOptions.GetBigquery(); bq != nil {
+		desired.BigQuery = &DesiredBigQuerySink{
+			DatasetID:         bigQueryDatasetID(message),
+			TableID:           bigQueryTableID(message),
+			DropUnknownFields: bq.GetDropUnknownFields(),
+		}
+	}
+
 	return desired
 }
 
@@ -336,6 +359,22 @@ func dedupeAndValidate(topics []DesiredTopic, subs []DesiredSubscription) ([]Des
 
 		if err := validateRetryPolicy(sub.RetryPolicy); err != nil {
 			return nil, nil, fmt.Errorf("invalid retry policy for subscription %q on %s: %w", sub.Name, sub.ProtoMessage, err)
+		}
+
+		if sub.BigQuery != nil {
+			// A BigQuery export sink delivers to a table, never to a consumer, so a
+			// dead-letter policy (which redelivers to a DLQ topic for reprocessing)
+			// is meaningless on it. Reject the combination rather than silently
+			// synthesizing an unreachable DLQ topic.
+			if sub.DeadLetterTopic != "" {
+				return nil, nil, fmt.Errorf("subscription %q on %s is a BigQuery sink and must not declare a dead_letter policy", sub.Name, sub.ProtoMessage)
+			}
+			if err := validateBigQueryDatasetID(sub.BigQuery.DatasetID); err != nil {
+				return nil, nil, fmt.Errorf("invalid BigQuery dataset for subscription %q on %s: %w", sub.Name, sub.ProtoMessage, err)
+			}
+			if err := validateBigQueryTableID(sub.BigQuery.TableID); err != nil {
+				return nil, nil, fmt.Errorf("invalid BigQuery table for subscription %q on %s: %w", sub.Name, sub.ProtoMessage, err)
+			}
 		}
 
 		if existing, exists := subByName[sub.Name]; exists {

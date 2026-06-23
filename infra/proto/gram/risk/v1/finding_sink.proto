@@ -1,0 +1,20 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+// FindingSink exports every Finding into BigQuery for analytics. The table
+// schema is derived from gram.risk.v1.Finding; the dataset is gram_risk_v1 and
+// the table is finding_sink. As an export sink it is not consumable in code —
+// the subscriber helpers reject it.
+message FindingSink {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.risk.v1.Finding"
+    bigquery: {
+      drop_unknown_fields: true
+    }
+  };
+}

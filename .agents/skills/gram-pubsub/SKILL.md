@@ -50,7 +50,9 @@ The option definitions live in `infra/proto/gcp/pubsub/v1/options.proto`:
 - `(gcp.pubsub.v1.subscription)` — `SubscriptionOptions`: optional `name`,
   required `topic` (the **proto full name** of the topic-declaring message, e.g.
   `"gram.outbox.v1.Event"`), plus `retention`, `ack_deadline`, `retry_policy`,
-  `filter`, `dead_letter`, `expiration_ttl`, `retain_acked_messages`, `labels`.
+  `filter`, `dead_letter`, `expiration_ttl`, `retain_acked_messages`, `labels`,
+  and `bigquery` (turns the subscription into a BigQuery export sink — see
+  "BigQuery export sinks").
 
 ## Authoring a topic
 
@@ -110,6 +112,56 @@ schema as the source and is labeled `dlq_for: <subscription>`. This is why
 subscription IDs are length-capped below the topic limit: room must be left for
 the `-dlq` suffix.
 
+### BigQuery export sinks
+
+A subscription can export its topic's messages straight into a BigQuery table
+instead of being consumed by code. Add a `bigquery` block to the subscription
+option; the marker is otherwise an ordinary subscription (it still points `topic`
+at the topic message). See `infra/proto/gram/risk/v1/finding_sink.proto`:
+
+```proto
+message FindingSink {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.risk.v1.Finding"
+    bigquery: {
+      drop_unknown_fields: true
+    }
+  };
+}
+```
+
+The generator emits three things from this:
+
+- A **BigQuery dataset** named after the marker's proto package with dots →
+  underscores (`gram.risk.v1` → `gram_risk_v1`).
+- A **BigQuery table** named after the snake-cased marker message name
+  (`FindingSink` → `finding_sink`), whose **schema is derived from the topic
+  message's fields** (`gram.risk.v1.Finding`). Scalar proto kinds map to STRING /
+  INTEGER / FLOAT / BOOLEAN / BYTES, enums to STRING, repeated fields to
+  `REPEATED`, and nested messages to `RECORD`. The table is partitioned **monthly
+  on ingestion time** (`_PARTITIONTIME`).
+- A **PubSubSubscription** with `bigqueryConfig` (`useTopicSchema: true`, plus the
+  `drop_unknown_fields` toggle), so Pub/Sub writes structured columns using the
+  topic's attached proto schema.
+
+`BigQuerySinkOptions`:
+
+- `partition_expiration` (Duration) — monthly-partition retention. **Unset
+  defaults to 60 days; an explicit `0s` disables expiration** (partitions kept
+  forever); any positive value is used as-is.
+- `drop_unknown_fields` (bool) — drop message fields absent from the table schema
+  instead of leaving them in the backlog; recommended for schema evolution.
+
+A BigQuery sink must **not** declare a `dead_letter` policy (generation fails if
+it does), since there is no consumer to redeliver to. Discovery and schema
+derivation live in `infra/internal/gcp/bigquery.go`.
+
+**Export sinks are not consumable.** The subscriber helpers reject them:
+`gcp.PubSubSubscriberForMessage` (Go) returns an error and
+`pubsub_subscriber_for_message` / `pubsub_subscriber_for_message_async` (Python)
+raise `ValueError`. So do not register a BigQuery sink in the `gram streams`
+runner — there is nothing to receive.
+
 ## Regenerating after a proto change
 
 Always run the generator after editing any `.proto` under `infra/proto/` and
@@ -129,12 +181,13 @@ committed.
 
 ## How generation works (`infra/internal/gcp/`)
 
-| File                 | Responsibility                                                                                                                                                                          |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pubsub_discover.go` | Walks the descriptor set, extracts options, resolves names, dedupes, validates, synthesizes DLQ topics. The `DesiredTopic` / `DesiredSubscription` structs are the in-memory topology.  |
-| `cc_pubsub.go`       | Projects the topology into sorted Config Connector specs (`buildPubSubValues`).                                                                                                         |
-| `values.go`          | The Helm values document types (`pubSubValuesDocument`). Specs embed the real Config Connector `PubSubTopicSpec` / `PubSubSubscriptionSpec` types so field names match the CRD exactly. |
-| `cc.go`              | `ConfigConnectorPubSub.Provision` orchestrates discover → build → write, emitting the `# Code generated … DO NOT EDIT.` YAML.                                                           |
+| File                 | Responsibility                                                                                                                                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pubsub_discover.go` | Walks the descriptor set, extracts options, resolves names, dedupes, validates, synthesizes DLQ topics. The `DesiredTopic` / `DesiredSubscription` structs are the in-memory topology.                                               |
+| `cc_pubsub.go`       | Projects the topology into sorted Config Connector specs (`buildPubSubValues`).                                                                                                                                                      |
+| `values.go`          | The Helm values document types (`pubSubValuesDocument`). Specs embed the real Config Connector `PubSubTopicSpec` / `PubSubSubscriptionSpec` types so field names match the CRD exactly.                                              |
+| `cc.go`              | `ConfigConnectorPubSub.Provision` orchestrates discover → build → write, emitting the `# Code generated … DO NOT EDIT.` YAML.                                                                                                        |
+| `bigquery.go`        | Discovers BigQuery export sinks (`DiscoverBigQuery`), derives the table schema from the topic message's fields, and resolves dataset/table IDs. Projected by `buildBigQueryValues` in `cc_pubsub.go` into the `bigquery` values key. |
 
 Key behaviors worth knowing:
 

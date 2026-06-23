@@ -33,6 +33,8 @@ from gram_infra.pubsub import (
         ("gram.ping.v2.Message", "gram-ping-v2-message"),
         ("gram.ping.v2.Processor", "gram-ping-v2-processor"),
         ("gram.outbox.v1.Event", "gram-outbox-v1-event"),
+        # BigQuery sink marker: its subscription ID must match what Go derives.
+        ("gram.risk.v1.FindingSink", "gram-risk-v1-finding-sink"),
         ("fooBar", "foo-bar"),
         ("HTTPServer", "http-server"),
         ("already-kebab", "already-kebab"),

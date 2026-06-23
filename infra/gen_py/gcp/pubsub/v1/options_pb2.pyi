@@ -32,7 +32,7 @@ class TopicOptions(_message.Message):
     def __init__(self, name: _Optional[str] = ..., retention_hint: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., labels: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class SubscriptionOptions(_message.Message):
-    __slots__ = ("name", "retention", "retain_acked_messages", "ack_deadline", "expiration_ttl", "retry_policy", "labels", "filter", "dead_letter", "topic")
+    __slots__ = ("name", "retention", "retain_acked_messages", "ack_deadline", "expiration_ttl", "retry_policy", "labels", "filter", "dead_letter", "topic", "bigquery")
     class LabelsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -50,6 +50,7 @@ class SubscriptionOptions(_message.Message):
     FILTER_FIELD_NUMBER: _ClassVar[int]
     DEAD_LETTER_FIELD_NUMBER: _ClassVar[int]
     TOPIC_FIELD_NUMBER: _ClassVar[int]
+    BIGQUERY_FIELD_NUMBER: _ClassVar[int]
     name: str
     retention: _duration_pb2.Duration
     retain_acked_messages: bool
@@ -60,7 +61,16 @@ class SubscriptionOptions(_message.Message):
     filter: str
     dead_letter: DeadLetterPolicy
     topic: str
-    def __init__(self, name: _Optional[str] = ..., retention: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., retain_acked_messages: _Optional[bool] = ..., ack_deadline: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., expiration_ttl: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., retry_policy: _Optional[_Union[RetryPolicy, _Mapping]] = ..., labels: _Optional[_Mapping[str, str]] = ..., filter: _Optional[str] = ..., dead_letter: _Optional[_Union[DeadLetterPolicy, _Mapping]] = ..., topic: _Optional[str] = ...) -> None: ...
+    bigquery: BigQuerySinkOptions
+    def __init__(self, name: _Optional[str] = ..., retention: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., retain_acked_messages: _Optional[bool] = ..., ack_deadline: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., expiration_ttl: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., retry_policy: _Optional[_Union[RetryPolicy, _Mapping]] = ..., labels: _Optional[_Mapping[str, str]] = ..., filter: _Optional[str] = ..., dead_letter: _Optional[_Union[DeadLetterPolicy, _Mapping]] = ..., topic: _Optional[str] = ..., bigquery: _Optional[_Union[BigQuerySinkOptions, _Mapping]] = ...) -> None: ...
+
+class BigQuerySinkOptions(_message.Message):
+    __slots__ = ("partition_expiration", "drop_unknown_fields")
+    PARTITION_EXPIRATION_FIELD_NUMBER: _ClassVar[int]
+    DROP_UNKNOWN_FIELDS_FIELD_NUMBER: _ClassVar[int]
+    partition_expiration: _duration_pb2.Duration
+    drop_unknown_fields: bool
+    def __init__(self, partition_expiration: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., drop_unknown_fields: _Optional[bool] = ...) -> None: ...
 
 class RetryPolicy(_message.Message):
     __slots__ = ("minimum_backoff", "maximum_backoff")

@@ -140,6 +140,15 @@ def require_subscription_for_message(
     msg_descriptor, topic_options = require_topic_options(message_type)
     sub_descriptor, sub_options = require_subscription_options(subscription_type)
 
+    # A BigQuery export sink delivers to a table, not to application code, so it
+    # is not consumable. Every broker and both public subscriber helpers route
+    # through here, so rejecting it once covers them all.
+    if sub_options.HasField("bigquery"):
+        raise ValueError(
+            f"subscription {sub_descriptor.full_name} is a BigQuery export sink "
+            "and cannot be consumed"
+        )
+
     declared_topic = sub_options.topic.strip()
     message_full_name = msg_descriptor.full_name
     if declared_topic != message_full_name:
