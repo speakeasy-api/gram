@@ -11,7 +11,7 @@ fan out many publishes and collect them afterwards::
 
     from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
     from gram_infra.pubsub import EmulatedPubSubBroker, pubsub_publisher_for_message
-    from gram.ping.v1 import ping_pb2
+    from gram.ping.v2 import ping_pb2
 
     async def example() -> None:
         with EmulatedPubSubBroker(

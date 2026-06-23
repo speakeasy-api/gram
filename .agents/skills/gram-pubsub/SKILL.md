@@ -243,7 +243,7 @@ func NewHandler(logger *slog.Logger) *Handler {
     return &Handler{logger: logger}
 }
 
-func (h *Handler) Handle(ctx context.Context, m *pingv1.Message, _ gcp.MessageMetadata) error {
+func (h *Handler) Handle(ctx context.Context, m *pingv2.Message, _ gcp.MessageMetadata) error {
     // ... do the work ...
     return nil
 }
@@ -270,15 +270,15 @@ marked block with `mustReceive`:
 ```go
 // Start subscription receivers in this block
 {
-    mustReceive(rg, &pingv1.Message{}, &pingv1.Processor{}, ping.NewHandler(logger))
+    mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger))
 }
 ```
 
 The three positional arguments mirror the proto declarations:
 
-- `&pingv1.Message{}` — the **topic** message; its type fixes `M`, the payload
+- `&pingv2.Message{}` — the **topic** message; its type fixes `M`, the payload
   your handler receives.
-- `&pingv1.Processor{}` — the **subscription** marker message (the one carrying
+- `&pingv2.Processor{}` — the **subscription** marker message (the one carrying
   `(gcp.pubsub.v1.subscription)`).
 - `ping.NewHandler(...)` — your handler, with its dependencies injected from the
   ones the `Action` already constructed. If a handler needs the db or redis,

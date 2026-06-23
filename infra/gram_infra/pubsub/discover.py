@@ -262,7 +262,7 @@ def to_kebab(value: str) -> str:
     """Lower-case kebab-case a string, mirroring ettle/strcase ToKebab.
 
     Used to derive Pub/Sub resource IDs from proto full names, e.g.
-    ``gram.ping.v1.Message`` -> ``gram-ping-v1-message``. Must stay byte-for-byte
+    ``gram.ping.v2.Message`` -> ``gram-ping-v2-message``. Must stay byte-for-byte
     compatible with the Go layer or the two languages will resolve different
     names; ``tests/test_naming.py`` guards this against the known proto names.
 

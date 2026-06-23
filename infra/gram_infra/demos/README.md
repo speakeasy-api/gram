@@ -43,9 +43,9 @@ one `anyio.run` uses (trio is a dev dependency via `anyio[trio]`).
 ## What they show
 
 - `pubsub_publisher_for_message(broker, ping_pb2.Message)` — a publisher for the
-  topic declared by the `(gcp.pubsub.v1.topic)` option on `gram.ping.v1.Message`.
+  topic declared by the `(gcp.pubsub.v1.topic)` option on `gram.ping.v2.Message`.
 - `pubsub_subscriber_for_message(broker, ping_pb2.Message, processor_pb2.Processor)`
-  — a subscriber for the `gram.ping.v1.Processor` subscription delivering
+  — a subscriber for the `gram.ping.v2.Processor` subscription delivering
   `Message` payloads.
 - Messages are protobuf-marshaled and tagged with `content-type` and `schema`
   attributes, so they interoperate with the Go publisher/subscriber.
