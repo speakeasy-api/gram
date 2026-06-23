@@ -1069,6 +1069,272 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "test")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskTestDetectionRule", "type": "mutation"}`)
 	})
+
+	// --- Policy evals ("session replay") -------------------------------------
+	// Run a policy NON-ENFORCING over a sampled set of historical messages to
+	// gauge efficacy/cost before enabling it. All endpoints are org-admin gated
+	// in the implementation (mirrors the other risk management endpoints) and
+	// scoped to the project.
+
+	Method("createPolicyEvalRun", func() {
+		Description("Start a non-enforcing policy eval run over a sample of historical messages. Provide either an existing policy_id or a candidate config (for an unsaved draft).")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "The saved policy to evaluate. Omit when supplying a candidate config for a draft.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("candidate", PolicyEvalCandidateConfig, "An unsaved candidate policy config to evaluate. Provide instead of policy_id to dry-run a draft before saving.")
+			Attribute("sample", PolicyEvalSampleDefinition, "How to select the historical messages this run scans.")
+			Required("sample")
+		})
+
+		Result(PolicyEvalRun)
+
+		HTTP(func() {
+			POST("/rpc/risk.evals.create")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createPolicyEvalRun")
+		Meta("openapi:extension:x-speakeasy-group", "risk.evals")
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCreatePolicyEvalRun", "type": "mutation"}`)
+	})
+
+	Method("listPolicyEvalRuns", func() {
+		Description("List policy eval runs for the current project, newest first.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "Optional policy ID to filter runs by.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("cursor", String, "Cursor to fetch the next page of runs.")
+			Attribute("limit", Int, "Maximum number of runs to return per page.", func() {
+				Minimum(1)
+				Maximum(100)
+			})
+		})
+
+		Result(ListPolicyEvalRunsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.evals.list")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("policy_id")
+			Param("cursor")
+			Param("limit")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listPolicyEvalRuns")
+		Meta("openapi:extension:x-speakeasy-group", "risk.evals")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPolicyEvalRuns", "type": "query"}`)
+	})
+
+	Method("getPolicyEvalRun", func() {
+		Description("Get a policy eval run by ID, including its rolled-up run statistics.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The eval run ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(PolicyEvalRun)
+
+		HTTP(func() {
+			GET("/rpc/risk.evals.get")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getPolicyEvalRun")
+		Meta("openapi:extension:x-speakeasy-group", "risk.evals")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskGetPolicyEvalRun", "type": "query"}`)
+	})
+
+	Method("listPolicyEvalFindings", func() {
+		Description("List findings produced by a policy eval run, with sample message context.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("run_id", String, "The eval run ID whose findings to list.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("cursor", String, "Cursor to fetch the next page of findings.")
+			Attribute("limit", Int, "Maximum number of findings to return per page.", func() {
+				Minimum(1)
+				Maximum(200)
+			})
+			Required("run_id")
+		})
+
+		Result(ListPolicyEvalFindingsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.evals.findings.list")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("run_id")
+			Param("cursor")
+			Param("limit")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listPolicyEvalFindings")
+		Meta("openapi:extension:x-speakeasy-group", "risk.evals")
+		Meta("openapi:extension:x-speakeasy-name-override", "listFindings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPolicyEvalFindings", "type": "query"}`)
+	})
+
+	Method("cancelPolicyEvalRun", func() {
+		Description("Cancel an in-progress policy eval run.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The eval run ID to cancel.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(PolicyEvalRun)
+
+		HTTP(func() {
+			POST("/rpc/risk.evals.cancel")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "cancelPolicyEvalRun")
+		Meta("openapi:extension:x-speakeasy-group", "risk.evals")
+		Meta("openapi:extension:x-speakeasy-name-override", "cancel")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCancelPolicyEvalRun", "type": "mutation"}`)
+	})
+})
+
+// PolicyEvalSampleDefinition describes how a run selects the historical messages
+// it scans. mode=auto uses lookback_days/last_n_sessions/max_messages; mode=manual
+// uses an explicit, pinned message_ids list (cherry-picked, stable for re-runs).
+var PolicyEvalSampleDefinition = Type("PolicyEvalSampleDefinition", func() {
+	Attribute("mode", String, "Sampling mode: auto (window/last-N, stratified) or manual (explicit pinned message ids).", func() {
+		Enum("auto", "manual")
+	})
+	Attribute("lookback_days", Int, "auto mode: only consider messages created within this many days.", func() {
+		Minimum(1)
+		Maximum(365)
+	})
+	Attribute("last_n_sessions", Int, "auto mode: cap to the most recent N sessions.", func() {
+		Minimum(1)
+	})
+	Attribute("max_messages", Int, "Hard cap on the number of messages scanned (bounds run cost).", func() {
+		Minimum(1)
+		Maximum(10000)
+	})
+	Attribute("message_ids", ArrayOf(String), "manual mode: the explicit, pinned set of chat message ids to scan.")
+	Required("mode", "max_messages")
+})
+
+// PolicyEvalCandidateConfig is an unsaved policy configuration evaluated by a
+// draft run. Mirrors the evaluable fields of a saved policy.
+var PolicyEvalCandidateConfig = Type("PolicyEvalCandidateConfig", func() {
+	Attribute("policy_type", String, "standard or prompt_based.", func() {
+		Enum("standard", "prompt_based")
+	})
+	Attribute("sources", ArrayOf(String), "Detection sources to enable.")
+	Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
+	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids to drop.")
+	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach.")
+	Attribute("message_types", ArrayOf(String), "Message types in scope; empty means all.")
+	Attribute("scope_include", String, "CEL scope predicate.")
+	Attribute("scope_exempt", String, "CEL exemption predicate.")
+	Attribute("prompt", String, "prompt_based: the guardrail prompt the judge evaluates.")
+	Attribute("model_config", shared.RiskPolicyModelConfig, "prompt_based: per-policy judge model configuration.")
+	Required("policy_type")
+})
+
+// PolicyEvalRun is an eval run header plus its rolled-up statistics.
+var PolicyEvalRun = Type("PolicyEvalRun", func() {
+	Attribute("id", String, "The eval run ID.", func() { Format(FormatUUID) })
+	Attribute("risk_policy_id", String, "The evaluated saved policy, or null for a draft run.", func() { Format(FormatUUID) })
+	Attribute("risk_policy_version", Int64, "Pinned policy version for saved runs.")
+	Attribute("status", String, "Run status.", func() {
+		Enum("pending", "running", "completed", "cancelled", "failed")
+	})
+	Attribute("sample", PolicyEvalSampleDefinition, "The resolved sample definition.")
+	Attribute("requested_by", String, "URN of the principal that started the run.")
+	Attribute("messages_scanned", Int64, "Number of messages scanned.")
+	Attribute("findings_count", Int64, "Number of findings produced.")
+	Attribute("total_cost_usd", Float64, "Total judge cost for the run, in USD (0 for deterministic-only policies).")
+	Attribute("input_tokens", Int64, "Total judge input tokens.")
+	Attribute("output_tokens", Int64, "Total judge output tokens.")
+	Attribute("judge_latency_p50_ms", Int, "p50 judge call latency in milliseconds.")
+	Attribute("judge_latency_p95_ms", Int, "p95 judge call latency in milliseconds.")
+	Attribute("error", String, "Failure reason when status is failed.")
+	Attribute("created_at", String, "When the run was created.", func() { Format(FormatDateTime) })
+	Attribute("started_at", String, "When the run started.", func() { Format(FormatDateTime) })
+	Attribute("completed_at", String, "When the run reached a terminal state.", func() { Format(FormatDateTime) })
+	Attribute("expires_at", String, "When the run and its findings are eligible for GC.", func() { Format(FormatDateTime) })
+	Required("id", "status", "messages_scanned", "findings_count", "total_cost_usd", "created_at")
+})
+
+// PolicyEvalFinding is one finding from an eval run, with display context.
+var PolicyEvalFinding = Type("PolicyEvalFinding", func() {
+	Attribute("id", String, "The finding ID.", func() { Format(FormatUUID) })
+	Attribute("run_id", String, "The eval run that produced this finding.", func() { Format(FormatUUID) })
+	Attribute("chat_message_id", String, "The scanned message.", func() { Format(FormatUUID) })
+	Attribute("source", String, "Detection source (e.g. gitleaks, presidio, llm_judge, custom).")
+	Attribute("rule_id", String, "Canonical rule id.")
+	Attribute("description", String, "Why this was flagged.")
+	Attribute("match", String, "Matched substring (sensitive; may be redacted).")
+	Attribute("start_pos", Int, "Inclusive start offset of the match.")
+	Attribute("end_pos", Int, "Exclusive end offset of the match.")
+	Attribute("confidence", Float64, "Confidence in [0,1].")
+	Attribute("tags", ArrayOf(String), "Rule tags.")
+	Attribute("created_at", String, "When the finding was recorded.", func() { Format(FormatDateTime) })
+	Attribute("chat_id", String, "The session the message belongs to.", func() { Format(FormatUUID) })
+	Attribute("chat_title", String, "The session title, when available.")
+	Attribute("chat_user_id", String, "The session's external user id, when available.")
+	Required("id", "run_id", "chat_message_id", "source", "created_at")
+})
+
+var ListPolicyEvalRunsResult = Type("ListPolicyEvalRunsResult", func() {
+	Attribute("runs", ArrayOf(PolicyEvalRun), "The list of eval runs.")
+	Attribute("next_cursor", String, "Cursor for the next page of runs.")
+	Required("runs")
+})
+
+var ListPolicyEvalFindingsResult = Type("ListPolicyEvalFindingsResult", func() {
+	Attribute("findings", ArrayOf(PolicyEvalFinding), "The list of eval findings.")
+	Attribute("next_cursor", String, "Cursor for the next page of findings.")
+	Required("findings")
 })
 
 var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", func() {
