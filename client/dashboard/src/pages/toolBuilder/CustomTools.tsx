@@ -16,6 +16,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
+import { toast } from "sonner";
 import { CustomToolsEmptyState } from "./CustomToolsEmptyState";
 import { MustacheHighlight } from "./ToolBuilder";
 import { ToolifyDialog, ToolifyProvider } from "./Toolify";
@@ -91,6 +92,7 @@ function CustomToolCard({ template }: { template: PromptTemplate }) {
 
   const deleteTemplate = useDeleteTemplateMutation({
     onSuccess: () => {
+      toast.success("Tool deleted");
       void invalidateAllTemplates(queryClient);
     },
   });

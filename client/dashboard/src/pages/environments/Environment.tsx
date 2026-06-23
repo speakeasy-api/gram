@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@speakeasy-api/moonshine";
@@ -203,6 +204,7 @@ function EnvironmentPageInner() {
         action: "environment_deleted",
       });
       void environment!.refetch();
+      toast.success("Environment deleted");
       void navigate("/environments");
     },
   });
@@ -218,6 +220,7 @@ function EnvironmentPageInner() {
       setEnvValues({});
       setEditedFields(new Set());
       setDeletedFields(new Set());
+      toast.success("Variables saved");
     },
     onError: (error) => {
       console.error(

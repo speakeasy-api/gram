@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
@@ -116,6 +117,7 @@ export function LogsAgentsContent(): JSX.Element {
               current?.id === chatId ? null : current,
             );
             void invalidateAllListChats(queryClient);
+            toast.success("Chat deleted");
           },
         },
       );

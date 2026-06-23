@@ -512,6 +512,7 @@ function CustomRuleDetail({
       await onUpdate({ title, description, regex });
       savedValuesRef.current = { title, description, regex };
       setSaveState("saved");
+      toast.success("Detection rule updated");
       if (savedTimerRef.current !== undefined) {
         window.clearTimeout(savedTimerRef.current);
       }

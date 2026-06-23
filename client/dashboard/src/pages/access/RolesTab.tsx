@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
@@ -123,6 +124,7 @@ export function RolesTab(): JSX.Element {
         invalidateAllRoles(queryClient),
         invalidateAllMembers(queryClient),
       ]);
+      toast.success("Role deleted");
     },
   });
 

@@ -38,9 +38,14 @@ export function AssistantStatusToggle({
   const isActive = assistant.status === AssistantStatus.Active;
 
   const updateAssistant = useAssistantsUpdateMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void invalidateAllAssistantsList(queryClient);
       onUpdated?.();
+      toast.success(
+        variables.request.updateAssistantForm.status === AssistantStatus.Active
+          ? "Assistant activated"
+          : "Assistant paused",
+      );
     },
     onError: () => {
       toast.error("Failed to update assistant status");

@@ -367,6 +367,8 @@ export function MCPAuthenticationTab({
           });
         }
       }
+
+      toast.success("Variables added");
     }
 
     for (const entry of entries) {

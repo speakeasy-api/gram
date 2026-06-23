@@ -5,6 +5,7 @@ import { AuthLayout } from "@/pages/login/components/login-section";
 import { JourneyDemo } from "@/pages/login/components/journey-demo";
 import { DemoBookingFlow } from "@/pages/demo/components/DemoBookingFlow";
 import { LogOutIcon } from "lucide-react";
+import { handleError } from "@/lib/errors";
 
 export default function BookDemo(): JSX.Element {
   const client = useSdkClient();
@@ -18,8 +19,12 @@ export default function BookDemo(): JSX.Element {
   });
 
   const handleLogout = async () => {
-    await client.auth.logout();
-    window.location.href = "/login";
+    try {
+      await client.auth.logout();
+      window.location.href = "/login";
+    } catch (err) {
+      handleError(err, { title: "Failed to log out" });
+    }
   };
 
   return (

@@ -32,6 +32,7 @@ import {
 import { Info } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Chart } from "react-chartjs-2";
+import { toast } from "sonner";
 import { UsageProgress } from "./usage-controls";
 
 ChartJS.register(
@@ -314,6 +315,7 @@ export const TumAdminSection = (): JSX.Element => {
   const mutation = useSetBillingMetadataMutation({
     onSuccess: () => {
       void invalidateAllGetTokensUnderManagement(queryClient);
+      toast.success("Contract terms saved");
     },
   });
 

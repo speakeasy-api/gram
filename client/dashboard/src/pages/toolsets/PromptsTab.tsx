@@ -9,6 +9,7 @@ import { PromptTemplate } from "@gram/client/models/components";
 import { useUpdateToolsetMutation } from "@gram/client/react-query";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
+import { toast } from "sonner";
 import { PromptTemplateCard } from "../prompts/Prompts";
 import { ToolsetsGraphic } from "./ToolsetsEmptyState";
 import { usePrompts } from "../prompts/usePrompts";
@@ -33,27 +34,41 @@ export function PromptsTabContent({
       return;
     }
 
-    updateToolsetMutation.mutate({
-      request: {
-        slug: toolset.slug,
-        updateToolsetRequestBody: {
-          promptTemplateNames: [...currentPromptNames, prompt.name],
+    updateToolsetMutation.mutate(
+      {
+        request: {
+          slug: toolset.slug,
+          updateToolsetRequestBody: {
+            promptTemplateNames: [...currentPromptNames, prompt.name],
+          },
         },
       },
-    });
+      {
+        onSuccess: () => {
+          toast.success("Prompt added");
+        },
+      },
+    );
   };
 
   const removePromptFromToolset = (promptName: string) => {
-    updateToolsetMutation.mutate({
-      request: {
-        slug: toolset.slug,
-        updateToolsetRequestBody: {
-          promptTemplateNames: currentPromptNames.filter(
-            (name) => name !== promptName,
-          ),
+    updateToolsetMutation.mutate(
+      {
+        request: {
+          slug: toolset.slug,
+          updateToolsetRequestBody: {
+            promptTemplateNames: currentPromptNames.filter(
+              (name) => name !== promptName,
+            ),
+          },
         },
       },
-    });
+      {
+        onSuccess: () => {
+          toast.success("Prompt removed");
+        },
+      },
+    );
   };
 
   const hasPrompts = toolsetPrompts && toolsetPrompts.length > 0;

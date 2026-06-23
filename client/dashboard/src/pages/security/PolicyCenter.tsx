@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
@@ -661,37 +662,43 @@ function PolicyCenterContent() {
       const promptMessageTypes =
         policyMessageTypesForPayload(selectedMessageTypes);
       if (editingPolicy) {
-        updateMutation.mutate({
-          request: {
-            updateRiskPolicyRequestBody: {
-              id: editingPolicy.id,
-              name,
-              enabled: formEnabled,
-              prompt,
-              messageTypes: promptMessageTypes,
-              action: formAction,
-              autoName: formAutoName,
-              ...(modelConfig ? { modelConfig } : {}),
-              ...userMessagePayload,
+        updateMutation.mutate(
+          {
+            request: {
+              updateRiskPolicyRequestBody: {
+                id: editingPolicy.id,
+                name,
+                enabled: formEnabled,
+                prompt,
+                messageTypes: promptMessageTypes,
+                action: formAction,
+                autoName: formAutoName,
+                ...(modelConfig ? { modelConfig } : {}),
+                ...userMessagePayload,
+              },
             },
           },
-        });
+          { onSuccess: () => void toast.success("Policy updated") },
+        );
       } else {
-        createMutation.mutate({
-          request: {
-            createRiskPolicyRequestBody: {
-              name,
-              policyType: "prompt_based",
-              enabled: formEnabled,
-              prompt,
-              messageTypes: promptMessageTypes,
-              action: formAction,
-              autoName: formAutoName,
-              ...(modelConfig ? { modelConfig } : {}),
-              ...userMessagePayload,
+        createMutation.mutate(
+          {
+            request: {
+              createRiskPolicyRequestBody: {
+                name,
+                policyType: "prompt_based",
+                enabled: formEnabled,
+                prompt,
+                messageTypes: promptMessageTypes,
+                action: formAction,
+                autoName: formAutoName,
+                ...(modelConfig ? { modelConfig } : {}),
+                ...userMessagePayload,
+              },
             },
           },
-        });
+          { onSuccess: () => void toast.success("Policy created") },
+        );
       }
       return;
     }
@@ -716,64 +723,81 @@ function PolicyCenterContent() {
     const audiencePrincipalUrns =
       formAudienceType === "targeted" ? [...selectedAudiencePrincipalUrns] : [];
     if (editingPolicy) {
-      updateMutation.mutate({
-        request: {
-          updateRiskPolicyRequestBody: {
-            id: editingPolicy.id,
-            name: formName,
-            enabled: formEnabled,
-            sources,
-            presidioEntities,
-            promptInjectionRules,
-            disabledRules: payloadDisabled,
-            customRuleIds: [...selectedCustomRuleIds],
-            messageTypes,
-            action,
-            audienceType: formAudienceType,
-            audiencePrincipalUrns,
-            autoName: formAutoName,
-            userMessage: formUserMessage,
+      updateMutation.mutate(
+        {
+          request: {
+            updateRiskPolicyRequestBody: {
+              id: editingPolicy.id,
+              name: formName,
+              enabled: formEnabled,
+              sources,
+              presidioEntities,
+              promptInjectionRules,
+              disabledRules: payloadDisabled,
+              customRuleIds: [...selectedCustomRuleIds],
+              messageTypes,
+              action,
+              audienceType: formAudienceType,
+              audiencePrincipalUrns,
+              autoName: formAutoName,
+              userMessage: formUserMessage,
+            },
           },
         },
-      });
+        { onSuccess: () => void toast.success("Policy updated") },
+      );
     } else {
-      createMutation.mutate({
-        request: {
-          createRiskPolicyRequestBody: {
-            ...(formAutoName ? {} : { name: formName }),
-            enabled: formEnabled,
-            sources,
-            presidioEntities,
-            promptInjectionRules,
-            disabledRules: payloadDisabled,
-            customRuleIds: [...selectedCustomRuleIds],
-            messageTypes,
-            action,
-            audienceType: formAudienceType,
-            audiencePrincipalUrns,
-            autoName: formAutoName,
-            ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
+      createMutation.mutate(
+        {
+          request: {
+            createRiskPolicyRequestBody: {
+              ...(formAutoName ? {} : { name: formName }),
+              enabled: formEnabled,
+              sources,
+              presidioEntities,
+              promptInjectionRules,
+              disabledRules: payloadDisabled,
+              customRuleIds: [...selectedCustomRuleIds],
+              messageTypes,
+              action,
+              audienceType: formAudienceType,
+              audiencePrincipalUrns,
+              autoName: formAutoName,
+              ...(formUserMessage.trim()
+                ? { userMessage: formUserMessage }
+                : {}),
+            },
           },
         },
-      });
+        { onSuccess: () => void toast.success("Policy created") },
+      );
     }
   };
 
   const handleDelete = (row: PolicyRow) => {
-    deleteMutation.mutate({ request: { id: row.policy.id } });
+    deleteMutation.mutate(
+      { request: { id: row.policy.id } },
+      { onSuccess: () => void toast.success("Policy deleted") },
+    );
   };
 
   const handleToggle = (policy: RiskPolicy, enabled: boolean) => {
-    updateMutation.mutate({
-      request: {
-        updateRiskPolicyRequestBody: {
-          id: policy.id,
-          name: policy.name,
-          enabled,
-          messageTypes: policy.messageTypes ?? [],
+    updateMutation.mutate(
+      {
+        request: {
+          updateRiskPolicyRequestBody: {
+            id: policy.id,
+            name: policy.name,
+            enabled,
+            messageTypes: policy.messageTypes ?? [],
+          },
         },
       },
-    });
+      {
+        onSuccess: () =>
+          void toast.success(enabled ? "Policy enabled" : "Policy disabled"),
+      },
+    );
   };
 
   // Empty state for the Policies tab only. It must NOT short-circuit the whole
@@ -802,19 +826,22 @@ function PolicyCenterContent() {
             new Set<RuleCategory>(["secrets", "pii"]),
             new Set(),
           );
-          createMutation.mutate({
-            request: {
-              createRiskPolicyRequestBody: {
-                autoName: true,
-                enabled: true,
-                sources,
-                presidioEntities,
-                promptInjectionRules,
-                disabledRules: payloadDisabled,
-                customRuleIds: [],
+          createMutation.mutate(
+            {
+              request: {
+                createRiskPolicyRequestBody: {
+                  autoName: true,
+                  enabled: true,
+                  sources,
+                  presidioEntities,
+                  promptInjectionRules,
+                  disabledRules: payloadDisabled,
+                  customRuleIds: [],
+                },
               },
             },
-          });
+            { onSuccess: () => void toast.success("Policy created") },
+          );
         }}
         disabled={createMutation.isPending}
       >

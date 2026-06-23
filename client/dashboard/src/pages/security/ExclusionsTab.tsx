@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
 import { Switch } from "@/components/ui/switch";
@@ -57,19 +58,27 @@ export function ExclusionsTab({
   });
 
   const handleToggle = (exclusion: RiskExclusion, enabled: boolean) => {
-    updateMutation.mutate({
-      request: {
-        updateRiskExclusionRequestBody: {
-          id: exclusion.id,
-          matchType: exclusion.matchType,
-          matchValue: exclusion.matchValue,
-          ruleIdFilter: exclusion.ruleIdFilter,
-          sourceFilter: exclusion.sourceFilter,
-          riskPolicyId: exclusion.riskPolicyId,
-          enabled,
+    updateMutation.mutate(
+      {
+        request: {
+          updateRiskExclusionRequestBody: {
+            id: exclusion.id,
+            matchType: exclusion.matchType,
+            matchValue: exclusion.matchValue,
+            ruleIdFilter: exclusion.ruleIdFilter,
+            sourceFilter: exclusion.sourceFilter,
+            riskPolicyId: exclusion.riskPolicyId,
+            enabled,
+          },
         },
       },
-    });
+      {
+        onSuccess: () =>
+          void toast.success(
+            enabled ? "Exclusion enabled" : "Exclusion disabled",
+          ),
+      },
+    );
   };
 
   const columns: Column<RiskExclusion>[] = [
@@ -133,7 +142,10 @@ export function ExclusionsTab({
           <ExclusionActionsMenu
             onEdit={() => onSheetChange({ mode: "edit", exclusion })}
             onDelete={() => {
-              deleteMutation.mutate({ request: { id: exclusion.id } });
+              deleteMutation.mutate(
+                { request: { id: exclusion.id } },
+                { onSuccess: () => void toast.success("Exclusion deleted") },
+              );
             }}
           />
         </div>

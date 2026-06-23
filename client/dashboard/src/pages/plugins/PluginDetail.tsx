@@ -98,6 +98,7 @@ export default function PluginDetail(): JSX.Element | null {
     onSuccess: () => {
       setIsEditOpen(false);
       void invalidateAll();
+      toast.success("Plugin updated");
     },
   });
 
@@ -105,11 +106,15 @@ export default function PluginDetail(): JSX.Element | null {
     onSuccess: () => {
       setIsAddServerOpen(false);
       void invalidateAll();
+      toast.success("Server added");
     },
   });
 
   const removeServerMutation = useRemovePluginServerMutation({
-    onSuccess: () => invalidateAll(),
+    onSuccess: () => {
+      void invalidateAll();
+      toast.success("Server removed");
+    },
   });
 
   const handleRemoveServer = (server: PluginServer) => {

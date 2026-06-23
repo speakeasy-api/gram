@@ -23,6 +23,7 @@ import { useUpdateToolsetMutation } from "@gram/client/react-query";
 import { Dialog, Stack } from "@speakeasy-api/moonshine";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { GettingStartedInstructions } from "@/components/functions/GettingStartedInstructions";
 import { ResourcesEmptyState } from "./ResourcesEmptyState";
 
@@ -58,27 +59,41 @@ export function ResourcesTabContent({
       return;
     }
 
-    updateToolsetMutation.mutate({
-      request: {
-        slug: toolset.slug,
-        updateToolsetRequestBody: {
-          resourceUrns: [...currentResourceUrns, resourceUrn],
+    updateToolsetMutation.mutate(
+      {
+        request: {
+          slug: toolset.slug,
+          updateToolsetRequestBody: {
+            resourceUrns: [...currentResourceUrns, resourceUrn],
+          },
         },
       },
-    });
+      {
+        onSuccess: () => {
+          toast.success("Resource added");
+        },
+      },
+    );
   };
 
   const removeResourceFromToolset = (resourceUrn: string) => {
-    updateToolsetMutation.mutate({
-      request: {
-        slug: toolset.slug,
-        updateToolsetRequestBody: {
-          resourceUrns: currentResourceUrns.filter(
-            (urn) => urn !== resourceUrn,
-          ),
+    updateToolsetMutation.mutate(
+      {
+        request: {
+          slug: toolset.slug,
+          updateToolsetRequestBody: {
+            resourceUrns: currentResourceUrns.filter(
+              (urn) => urn !== resourceUrn,
+            ),
+          },
         },
       },
-    });
+      {
+        onSuccess: () => {
+          toast.success("Resource removed");
+        },
+      },
+    );
   };
 
   // Show empty state if no resources exist at all in the system

@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -50,6 +51,7 @@ export function ChangeRoleDialog({
         invalidateAllMembers(queryClient),
         invalidateAllRoles(queryClient),
       ]);
+      toast.success("Roles updated");
       onOpenChange(false);
     },
   });

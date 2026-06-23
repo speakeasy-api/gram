@@ -52,6 +52,7 @@ import { AnimatePresence, motion, useMotionValue } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
+import { handleError } from "@/lib/errors";
 import { useMcpSlugValidation } from "../mcp/mcp-details-utils";
 import { DeploymentLogs } from "./UploadOpenAPI";
 import { useUploadOpenAPISteps } from "./upload-openapi-utils";
@@ -788,7 +789,13 @@ const UploadStep = ({
 
   const onContinue = async () => {
     setToolsetName(slugify(apiName || "my-mcp-server"));
-    const deployment = await createDeployment(undefined, true);
+    let deployment;
+    try {
+      deployment = await createDeployment(undefined, true);
+    } catch (err) {
+      handleError(err, { title: "Failed to generate tools" });
+      return;
+    }
 
     if (
       deployment?.openapiv3ToolCount === 0 ||

@@ -21,6 +21,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy } from "lucide-react";
 import { useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
+import { toast } from "sonner";
 
 export default function OrgApiKeys(): JSX.Element {
   // We need an outer component wrapping the inner as the key fetching request
@@ -59,6 +60,7 @@ function OrgApiKeysInner() {
   const createKeyMutation = useCreateAPIKeyMutation({
     onSuccess: async (data) => {
       setNewlyCreatedKey(data);
+      toast.success("API key created");
       await invalidateListAPIKeys(queryClient, [{ gramSession: "" }]);
       await queryClient.refetchQueries({
         queryKey: ["@gram/client", "keys", "list"],
@@ -69,6 +71,7 @@ function OrgApiKeysInner() {
   const revokeKeyMutation = useRevokeAPIKeyMutation({
     onSuccess: async () => {
       setKeyToRevoke(null);
+      toast.success("API key revoked");
       await invalidateListAPIKeys(queryClient, [{ gramSession: "" }]);
       await queryClient.refetchQueries({
         queryKey: ["@gram/client", "keys", "list"],

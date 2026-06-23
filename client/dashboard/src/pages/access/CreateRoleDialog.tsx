@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -206,6 +207,7 @@ export function CreateRoleDialog({
         invalidateAllMembers(queryClient),
       ]);
       onRoleCreated?.(name);
+      toast.success("Role created");
       handleClose();
     },
   });
@@ -216,6 +218,7 @@ export function CreateRoleDialog({
         invalidateAllRoles(queryClient),
         invalidateAllMembers(queryClient),
       ]);
+      toast.success("Role updated");
       handleClose();
     },
   });

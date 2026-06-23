@@ -323,6 +323,7 @@ export function PlaygroundAuth({
       // values so the user can retry without retyping.
       setEditedKeys(new Set());
       setUserProvidedValues({});
+      toast.success("Credentials saved");
     } catch {
       // Error toast is already shown by usePlaygroundEnvironment.
     }

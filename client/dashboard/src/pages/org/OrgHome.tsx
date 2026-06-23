@@ -62,6 +62,8 @@ import { Link, useNavigate } from "react-router";
 import { getActorLabel, renderVerb } from "@/lib/audit-log-format";
 
 import { ActionBadge, ActionDot } from "@/components/auditlogs/feed";
+import { handleError } from "@/lib/errors";
+import { toast } from "sonner";
 
 const PROJECT_LIMIT = 6;
 const AUDIT_PREVIEW_LIMIT = 8;
@@ -192,14 +194,19 @@ function OrgHomeInner() {
       : otherProjects.slice(0, PROJECT_LIMIT);
 
   const createProject = async (name: string) => {
-    const result = await client.projects.create({
-      createProjectRequestBody: {
-        name,
-        organizationId: organization.id,
-      },
-    });
-    setNewProjectName("");
-    void navigate(`/${orgSlug}/projects/${result.project.slug}`);
+    try {
+      const result = await client.projects.create({
+        createProjectRequestBody: {
+          name,
+          organizationId: organization.id,
+        },
+      });
+      setNewProjectName("");
+      toast.success("Project created");
+      void navigate(`/${orgSlug}/projects/${result.project.slug}`);
+    } catch (err) {
+      handleError(err, { title: "Failed to create project" });
+    }
   };
 
   const getFacepileMembers = (projectSlug: string): AccessMember[] => {
