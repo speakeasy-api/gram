@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
+    "build:cel-wasm": "mise run gen:celwasm",
+    "prebuild": "if command -v mise >/dev/null 2>&1; then pnpm build:cel-wasm; else echo 'mise/Go unavailable; skipping cel.wasm build (CEL editor falls back to server-side validation)'; fi",
     "build": "vite build",
     "lint": "pnpm lint:format && pnpm lint:no-barrels && pnpm lint:oxlint && pnpm type-check",
     "lint:oxlint": "oxlint --type-aware",
