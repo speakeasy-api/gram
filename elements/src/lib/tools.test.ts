@@ -11,12 +11,12 @@ import {
   type UIMessage,
   type UIMessagePart,
 } from "ai";
-import { MockLanguageModelV2 } from "ai/test";
+import { MockLanguageModelV3 } from "ai/test";
 
 type MockStream = Extract<
   NonNullable<
     NonNullable<
-      ConstructorParameters<typeof MockLanguageModelV2>[0]
+      ConstructorParameters<typeof MockLanguageModelV3>[0]
     >["doStream"]
   >,
   (...a: never[]) => PromiseLike<{ stream: ReadableStream<unknown> }>
@@ -70,8 +70,16 @@ function toolCallChunks(opts: {
     },
     {
       type: "finish",
-      finishReason: "tool-calls",
-      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      finishReason: { unified: "tool-calls", raw: undefined },
+      usage: {
+        inputTokens: {
+          total: 1,
+          noCache: 1,
+          cacheRead: undefined,
+          cacheWrite: undefined,
+        },
+        outputTokens: { total: 1, text: 1, reasoning: undefined },
+      },
     },
   ];
 }
@@ -118,7 +126,7 @@ async function streamToolCallOnly(toolCallId: string): Promise<UIMessage[]> {
     },
   } as unknown as ToolSet;
 
-  const model = new MockLanguageModelV2({
+  const model = new MockLanguageModelV3({
     doStream: async () => ({
       stream: makeStream([
         ...toolCallChunks({
@@ -174,10 +182,13 @@ describe("frontend tool Skip flow (sendAutomaticallyWhen fix)", () => {
       false,
     );
 
-    // And the resulting model-message sequence contains a bogus `role: "tool"`
-    // with empty content — the provider will reject this as an invalid tool
-    // message, surfacing to the user as the "needs role: assistant" error.
-    const modelMsgs = convertToModelMessages(follow);
+    // The resulting model-message sequence has an assistant `tool-call` with no
+    // matching tool result. (In ai v5 `convertToModelMessages` fabricated a
+    // bogus empty `role: "tool"` message here; ai v6 instead drops the
+    // unresolved call entirely and the next turn is the follow-up user message.)
+    // Either way the sequence is invalid — a tool-call with no result — which is
+    // exactly the state the `sendAutomaticallyWhen` fix prevents.
+    const modelMsgs = await convertToModelMessages(follow);
     const assistantIdx = modelMsgs.findIndex(
       (m) =>
         m.role === "assistant" &&
@@ -187,8 +198,9 @@ describe("frontend tool Skip flow (sendAutomaticallyWhen fix)", () => {
         ),
     );
     expect(assistantIdx).toBeGreaterThanOrEqual(0);
-    expect(modelMsgs[assistantIdx + 1]?.role).toBe("tool");
-    expect(modelMsgs[assistantIdx + 1]?.content).toEqual([]);
+    // No valid tool result was produced for the unresolved tool-call.
+    expect(modelMsgs.some((m) => m.role === "tool")).toBe(false);
+    expect(modelMsgs[assistantIdx + 1]?.role).not.toBe("tool");
   });
 
   it("once the tool-result is patched onto the message, sendAutomaticallyWhen fires and the sequence is valid", async () => {
@@ -237,7 +249,7 @@ describe("frontend tool Skip flow (sendAutomaticallyWhen fix)", () => {
 
     // And the sequence handed to the model is well-formed (assistant
     // tool-call is followed by a real role:"tool" message with a result).
-    const modelMsgs = convertToModelMessages(patched);
+    const modelMsgs = await convertToModelMessages(patched);
     const assistantIdx = modelMsgs.findIndex(
       (m) =>
         m.role === "assistant" &&

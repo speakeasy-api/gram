@@ -1,12 +1,6 @@
 import { Ellipsis, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { CodeBlock } from "@/components/ui/code-block";
 import { ruleIdCategoryLabel } from "@/pages/security/rule-ids";
 import { serializeExclusionExpression } from "@/pages/security/exclusion-expression";
@@ -15,24 +9,34 @@ import {
   type ExclusionSheetState,
   GLOBAL_SCOPE,
 } from "@/pages/security/exclusion-sheet";
-import { getRuleTitleFallback } from "@/pages/security/risk-utils";
+import {
+  getCategoryCodeForFinding,
+  getRuleTitleFallback,
+} from "@/pages/security/risk-utils";
 import type {
   ChatMessage,
   ClaudeToolUsage,
   TelemetryLogRecord,
 } from "@gram/client/models/components";
 import { useSearchLogsMutation } from "@gram/client/react-query";
-import { useLoadChatAllGenerations } from "./useLoadChatAllGenerations";
+import { useChatTranscript } from "./useChatTranscript";
+import {
+  type RiskLoadKey,
+  useChatRiskTranscript,
+} from "./useChatRiskTranscript";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { useRevealAll } from "@/pages/security/reveal-all-context";
 import { useRBAC } from "@/hooks/useRBAC";
-import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { format } from "date-fns";
 import {
   createContext,
   type ReactNode,
+  useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -66,11 +70,11 @@ import { TraceEntryIcon } from "./TraceEntryIcon";
 import {
   DEFAULT_ENABLED_ENTRY_TYPES,
   ENTRY_TYPE_META,
+  FILTERABLE_ENTRY_TYPES,
   type FilterableTraceEntryType,
   type ToolCall,
   type TraceEntryType,
   getEntryTypeCounts,
-  getRiskEntryCount,
   getTraceEntryType,
   getVisibleMessages,
   parseToolCalls,
@@ -107,7 +111,10 @@ const CLAUDE_OTEL_LOG_URN = "claude-code:otel:logs";
 
 function getRiskBadgeLabel(result: RiskResult): string {
   if (result.ruleId === "llm_judge") return getRuleTitleFallback(result.ruleId);
-  return ruleIdCategoryLabel(result.ruleId) || result.source.toUpperCase();
+  return (
+    ruleIdCategoryLabel(result.ruleId) ||
+    getCategoryCodeForFinding(result.source, result.ruleId)
+  );
 }
 
 function shouldShowRiskRuleId(result: RiskResult): boolean {
@@ -225,107 +232,234 @@ function getSeverityBadgeVariant(
   }
 }
 
-function ChatMessagesList({
+// LoadDivider is the full-width affordance shown at the top/bottom of the
+// transcript (load older/newer) and inside the risk view between disjoint
+// findings (fill the gap).
+function LoadDivider({
+  label,
+  loading,
+  onClick,
+  icon,
+}: {
+  label: string;
+  loading?: boolean;
+  onClick: () => void;
+  icon: "chevron-up" | "chevron-down" | "ellipsis";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      className="text-muted-foreground hover:bg-muted/50 flex w-full items-center justify-center gap-2 border-y border-dashed py-2 text-xs transition-colors disabled:opacity-60"
+    >
+      {!loading && <Icon name={icon} className="size-3.5" />}
+      {loading ? "Loading…" : label}
+    </button>
+  );
+}
+
+// TranscriptBody renders the loaded messages as a flat list (the latest
+// generation is paginated by seq, so it stays single-segment) with load
+// affordances. In risk mode it also renders a gap divider after any message
+// that precedes an un-loaded stretch between findings.
+// A flat, virtualizable row model: load affordances and gap fillers become
+// rows alongside messages so the whole transcript is one virtual list.
+type TranscriptRow =
+  | { kind: "loadTop" }
+  | { kind: "message"; message: ChatMessage }
+  | { kind: "gap"; afterSeq: number }
+  | { kind: "loadBottom" };
+
+// Stable per-row key so the virtualizer keeps measured sizes (and DOM identity)
+// across prepends/appends instead of re-measuring everything on each page load.
+function transcriptRowKey(row: TranscriptRow): string {
+  switch (row.kind) {
+    case "loadTop":
+      return "load-top";
+    case "loadBottom":
+      return "load-bottom";
+    case "gap":
+      return `gap:${row.afterSeq}`;
+    case "message":
+      return `m:${row.message.id}`;
+  }
+}
+
+function TranscriptBody({
+  mode,
   messages,
   riskResultsByMessage,
   claudeUsageByMessage,
   claudeToolUsageByToolUseId,
   collapseNonRisk,
   enabledEntryTypes,
-  riskOnly,
+  hasMoreBefore,
+  hasMoreAfter,
+  onLoadOlder,
+  onLoadNewer,
+  isFetchingOlder,
+  isFetchingNewer,
+  gaps,
+  onLoadGap,
+  riskLoadingKey,
+  scrollElement,
 }: {
+  mode: "normal" | "risk";
   messages: ChatMessage[];
   riskResultsByMessage: Map<string, RiskResult[]>;
   claudeUsageByMessage: Map<string, ClaudeUsageMatch>;
   claudeToolUsageByToolUseId: Map<string, ClaudeToolUsage>;
   collapseNonRisk?: boolean;
   enabledEntryTypes: FilterableTraceEntryType[];
-  riskOnly: boolean;
+  hasMoreBefore: boolean;
+  hasMoreAfter: boolean;
+  onLoadOlder: () => void;
+  onLoadNewer: () => void;
+  isFetchingOlder?: boolean;
+  isFetchingNewer?: boolean;
+  gaps?: Set<number>;
+  onLoadGap?: (afterSeq: number) => void;
+  riskLoadingKey?: RiskLoadKey | null;
+  scrollElement: HTMLDivElement | null;
 }) {
+  // Risk filtering is server-side now; this only applies the entry-type filter.
   const visibleMessages = useMemo(
     () =>
       getVisibleMessages({
         messages,
         enabledEntryTypes,
-        riskOnly,
+        riskOnly: false,
         riskResultsByMessage,
       }),
-    [enabledEntryTypes, messages, riskOnly, riskResultsByMessage],
+    [enabledEntryTypes, messages, riskResultsByMessage],
   );
 
-  const groups = useMemo(() => {
-    const byGeneration = new Map<number, ChatMessage[]>();
-    for (const m of visibleMessages) {
-      const list = byGeneration.get(m.generation) ?? [];
-      list.push(m);
-      byGeneration.set(m.generation, list);
+  const rows = useMemo<TranscriptRow[]>(() => {
+    const out: TranscriptRow[] = [];
+    if (hasMoreBefore) out.push({ kind: "loadTop" });
+    // Gap anchors, ascending. We place each divider after the last visible
+    // message whose seq is <= the anchor, so the affordance survives even when
+    // the exact boundary message is hidden by the entry-type filter.
+    const gapAnchors =
+      mode === "risk" && gaps ? [...gaps].sort((a, b) => a - b) : [];
+    let gi = 0;
+    for (let i = 0; i < visibleMessages.length; i++) {
+      const message = visibleMessages[i]!;
+      out.push({ kind: "message", message });
+      const nextSeq =
+        i + 1 < visibleMessages.length ? visibleMessages[i + 1]!.seq : Infinity;
+      while (gi < gapAnchors.length && gapAnchors[gi]! < nextSeq) {
+        if (gapAnchors[gi]! >= message.seq) {
+          out.push({ kind: "gap", afterSeq: gapAnchors[gi]! });
+        }
+        gi++;
+      }
     }
-    return Array.from(byGeneration.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([generation, items]) => ({ generation, messages: items }));
-  }, [visibleMessages]);
+    if (hasMoreAfter) out.push({ kind: "loadBottom" });
+    return out;
+  }, [visibleMessages, hasMoreBefore, hasMoreAfter, gaps, mode]);
 
-  const maxGeneration =
-    groups.length > 0 ? groups[groups.length - 1]!.generation : 0;
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollElement,
+    // Rough first-paint guess; real heights are measured via measureElement.
+    estimateSize: () => 64,
+    overscan: 8,
+    getItemKey: (index) => transcriptRowKey(rows[index]!),
+  });
+
+  // Normal mode opens chat-style at the newest message. Use the virtualizer's
+  // scrollToIndex (measurement-aware) rather than scrollTop=scrollHeight, which
+  // would land mid-list because heights aren't measured on first paint. Runs
+  // once per mount; the parent remounts this via key={chatId} on chat switch.
+  const didInitialScrollRef = useRef(false);
+  useEffect(() => {
+    if (mode !== "normal" || didInitialScrollRef.current) return;
+    if (rows.length === 0 || !scrollElement) return;
+    didInitialScrollRef.current = true;
+    virtualizer.scrollToIndex(rows.length - 1, { align: "end" });
+  }, [mode, rows.length, scrollElement, virtualizer]);
 
   if (visibleMessages.length === 0) {
     return (
-      <div className="border-muted border-t p-6">
+      <div className="p-6">
         <div className="text-muted-foreground rounded-lg border border-dashed p-6 text-center text-sm">
-          No entries match the selected filters.
+          {mode === "risk"
+            ? "No risk findings in this chat."
+            : "No entries match the selected filters."}
         </div>
       </div>
     );
   }
 
-  // A single segment (no compaction has ever occurred) stays flat — no accordion.
-  if (maxGeneration === 0) {
-    return (
-      <Stack direction="vertical" className="border-muted border-b">
-        {visibleMessages.map((message) => (
+  const renderRow = (row: TranscriptRow) => {
+    switch (row.kind) {
+      case "loadTop":
+        return (
+          <LoadDivider
+            icon="chevron-up"
+            label={
+              mode === "risk" ? "Load earlier messages" : "Load older messages"
+            }
+            loading={
+              mode === "risk" ? riskLoadingKey === "before" : isFetchingOlder
+            }
+            onClick={onLoadOlder}
+          />
+        );
+      case "loadBottom":
+        return (
+          <LoadDivider
+            icon="chevron-down"
+            label={
+              mode === "risk" ? "Load later messages" : "Load newer messages"
+            }
+            loading={
+              mode === "risk" ? riskLoadingKey === "after" : isFetchingNewer
+            }
+            onClick={onLoadNewer}
+          />
+        );
+      case "gap":
+        return (
+          <LoadDivider
+            icon="ellipsis"
+            label="Load messages in between"
+            loading={riskLoadingKey === `gap:${row.afterSeq}`}
+            onClick={() => onLoadGap?.(row.afterSeq)}
+          />
+        );
+      case "message":
+        return (
           <MessageItem
-            key={message.id}
-            message={message}
-            riskResults={riskResultsByMessage.get(message.id)}
-            claudeUsage={claudeUsageByMessage.get(message.id)}
+            message={row.message}
+            riskResults={riskResultsByMessage.get(row.message.id)}
+            claudeUsage={claudeUsageByMessage.get(row.message.id)}
             claudeToolUsageByToolUseId={claudeToolUsageByToolUseId}
             collapseNonRisk={collapseNonRisk}
           />
-        ))}
-      </Stack>
-    );
-  }
+        );
+    }
+  };
 
   return (
-    <Accordion type="multiple" defaultValue={[`gen-${maxGeneration}`]}>
-      {groups.map(({ generation, messages: groupMessages }) => (
-        <AccordionItem key={generation} value={`gen-${generation}`}>
-          <AccordionTrigger>
-            <div className="flex items-center gap-2">
-              <span>Conversation segment {generation + 1}</span>
-              <span className="text-muted-foreground text-xs font-normal">
-                {groupMessages.length} message
-                {groupMessages.length === 1 ? "" : "s"}
-              </span>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent>
-            <Stack direction="vertical">
-              {groupMessages.map((message) => (
-                <MessageItem
-                  key={message.id}
-                  message={message}
-                  riskResults={riskResultsByMessage.get(message.id)}
-                  claudeUsage={claudeUsageByMessage.get(message.id)}
-                  claudeToolUsageByToolUseId={claudeToolUsageByToolUseId}
-                  collapseNonRisk={collapseNonRisk}
-                />
-              ))}
-            </Stack>
-          </AccordionContent>
-        </AccordionItem>
+    <div
+      className="border-muted relative w-full border-b"
+      style={{ height: `${virtualizer.getTotalSize()}px` }}
+    >
+      {virtualizer.getVirtualItems().map((virtualRow) => (
+        <div
+          key={virtualRow.key}
+          data-index={virtualRow.index}
+          ref={virtualizer.measureElement}
+          className="absolute top-0 left-0 w-full"
+          style={{ transform: `translateY(${virtualRow.start}px)` }}
+        >
+          {renderRow(rows[virtualRow.index]!)}
+        </div>
       ))}
-    </Accordion>
+    </div>
   );
 }
 
@@ -1147,7 +1281,9 @@ function RiskFindingActions({
           className="bg-muted/30 flex items-center justify-between gap-2 rounded-md border px-3 py-1.5"
         >
           <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
-            {[r.ruleId, r.source].filter(Boolean).join(" · ")}
+            {[r.ruleId, getCategoryCodeForFinding(r.source, r.ruleId)]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1289,13 +1425,76 @@ function ChatDetailPanel({
   const [riskOnly, setRiskOnly] = useState(initialRiskOnly);
   const [exclusionState, setExclusionState] =
     useState<ExclusionSheetState | null>(null);
-  const {
-    chat,
-    messages: chatMessages,
-    isLoading: chatLoading,
-    isLoadingMore: chatLoadingMore,
-    hasErrors: chatLoadHasErrors,
-  } = useLoadChatAllGenerations(chatId);
+  // Normal-mode transcript stays enabled even in risk mode so the panel shell
+  // (cost, tokens, source, agent usage — only populated on the newest page)
+  // never blanks out when toggling Risk only.
+  const transcript = useChatTranscript(chatId, true);
+  const riskTranscript = useChatRiskTranscript(chatId, riskOnly);
+  const chat = transcript.chat;
+  const chatMessages = riskOnly ? riskTranscript.messages : transcript.messages;
+  const chatLoading = transcript.isLoading;
+  const chatLoadHasErrors = riskOnly
+    ? riskTranscript.isError
+    : transcript.isError;
+  const messagesLoading =
+    riskOnly && riskTranscript.isLoading && chatMessages.length === 0;
+
+  // Infinite-scroll plumbing for the message pane. Older loads prepend, so we
+  // anchor on distance-from-bottom to avoid the viewport jumping; the first
+  // normal-mode page scrolls to the newest message (chat-style, scroll up for
+  // older).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Also track the scroll node in state: the virtualizer lives in a child
+  // component and needs the element (not just a ref) to establish its viewport
+  // — a ref alone is null on the child's first render and react-virtual won't
+  // recover without an option change.
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
+  const setScrollNode = useCallback((node: HTMLDivElement | null) => {
+    scrollRef.current = node;
+    setScrollEl(node);
+  }, []);
+  const anchorRef = useRef<number | null>(null);
+
+  const loadOlder = useCallback(() => {
+    const el = scrollRef.current;
+    if (el) anchorRef.current = el.scrollHeight - el.scrollTop;
+    if (riskOnly) riskTranscript.loadBefore();
+    else transcript.fetchOlder();
+  }, [riskOnly, riskTranscript, transcript]);
+
+  const loadNewer = useCallback(() => {
+    if (riskOnly) riskTranscript.loadAfter();
+    else transcript.fetchNewer();
+  }, [riskOnly, riskTranscript, transcript]);
+
+  const hasMoreBefore = riskOnly
+    ? riskTranscript.hasMoreBefore
+    : transcript.hasMoreBefore;
+  const hasMoreAfter = riskOnly
+    ? riskTranscript.hasMoreAfter
+    : transcript.hasMoreAfter;
+
+  const handleTranscriptScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const el = e.currentTarget;
+      if (el.scrollTop < 200 && hasMoreBefore) loadOlder();
+      const distanceFromBottom =
+        el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (distanceFromBottom < 200 && hasMoreAfter) loadNewer();
+    },
+    [hasMoreBefore, hasMoreAfter, loadOlder, loadNewer],
+  );
+
+  // Restore the scroll anchor after older messages prepend so the viewport
+  // doesn't jump. (Initial scroll-to-newest is handled inside TranscriptBody via
+  // the virtualizer, which is measurement-aware.)
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el && anchorRef.current != null) {
+      el.scrollTop = el.scrollHeight - anchorRef.current;
+      anchorRef.current = null;
+    }
+  }, [chatMessages.length]);
 
   // Fetch telemetry logs for this chat
   const {
@@ -1365,7 +1564,7 @@ function ChatDetailPanel({
     return buildClaudeToolUsageByToolUseId(tools);
   }, [chat?.agentUsage]);
 
-  if (chatLoading) {
+  if (chatLoading && !chat) {
     return (
       <div className="p-8">
         <SheetTitle>Loading</SheetTitle>
@@ -1390,14 +1589,38 @@ function ChatDetailPanel({
   const duration = Math.round(
     (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
   );
-  const entryTypeCounts = getEntryTypeCounts(chatMessages);
-  const visibleEntryCount = getVisibleMessages({
-    messages: chatMessages,
-    enabledEntryTypes,
-    riskOnly,
-    riskResultsByMessage,
-  }).length;
-  const riskEntryCount = getRiskEntryCount(chatMessages, riskResultsByMessage);
+  // Filter-bar counts come from the server's whole-generation totals: messages
+  // are paginated, so counting the loaded page understates them (it would read
+  // "Showing 150 of 150" on a 19k-message chat). Fall back to the loaded page
+  // only if a response predates the totals field.
+  const totals = chat.totals;
+  const entryTypeCounts: Record<FilterableTraceEntryType, number> = totals
+    ? {
+        user: totals.userMessages,
+        assistant: totals.assistantMessages,
+        tool_call: totals.toolCalls,
+        tool_result: totals.toolResults,
+      }
+    : getEntryTypeCounts(chatMessages);
+  // Denominator sums the four entry types (system rows are excluded from both
+  // counts, so the fallback can't use chatMessages.length, which includes them).
+  const totalEntryCount = totals
+    ? totals.total
+    : FILTERABLE_ENTRY_TYPES.reduce(
+        (sum, type) => sum + entryTypeCounts[type],
+        0,
+      );
+  // "Showing X of Y entries": X is the sum of the currently-enabled types'
+  // totals, so toggling a type off subtracts its whole-generation count.
+  const visibleEntryCount = FILTERABLE_ENTRY_TYPES.reduce(
+    (sum, type) =>
+      enabledEntryTypes.includes(type) ? sum + entryTypeCounts[type] : sum,
+    0,
+  );
+  // Generation-scoped risk count, consistent with the risk-windowed transcript
+  // (which loads the same generation). Keeps the Risk-only toggle enabled before
+  // any risky message is paged in.
+  const riskEntryCount = totals ? totals.riskOnly : riskResultsByMessage.size;
 
   return (
     <div className="bg-background flex h-full flex-col">
@@ -1508,7 +1731,7 @@ function ChatDetailPanel({
         {/* Overview Tab */}
         <TabsContent
           value="overview"
-          className="m-0 flex-1 overflow-y-auto data-[state=inactive]:hidden"
+          className="m-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
         >
           {/* Metadata Grid */}
           <div className="bg-muted/10 border-b p-6">
@@ -1547,7 +1770,7 @@ function ChatDetailPanel({
                 <div className="text-muted-foreground mb-1 text-xs">
                   Messages:
                 </div>
-                <div className="text-sm font-medium">{chatMessages.length}</div>
+                <div className="text-sm font-medium">{chat.numMessages}</div>
               </div>
               <div>
                 <div className="text-muted-foreground mb-1 text-xs">
@@ -1606,20 +1829,15 @@ function ChatDetailPanel({
 
           {chatLoadHasErrors && (
             <div className="border-destructive/30 bg-destructive/10 text-destructive border-b px-6 py-3 text-sm">
-              Some older conversation segments failed to load. The transcript
-              below is incomplete.
-            </div>
-          )}
-          {chatLoadingMore && !chatLoadHasErrors && (
-            <div className="text-muted-foreground border-b px-6 py-2 text-xs">
-              Loading older conversation segments…
+              Some messages failed to load. The transcript below may be
+              incomplete.
             </div>
           )}
 
           <EntryTypeFilterBar
             value={enabledEntryTypes}
             counts={entryTypeCounts}
-            totalCount={chatMessages.length}
+            totalCount={totalEntryCount}
             visibleCount={visibleEntryCount}
             onChange={setEnabledEntryTypes}
             riskOnly={riskOnly}
@@ -1627,24 +1845,48 @@ function ChatDetailPanel({
             onRiskOnlyChange={setRiskOnly}
           />
 
-          {/* Chat Messages */}
-          <CreateExclusionContext.Provider
-            value={
-              canManageChat
-                ? (result) => setExclusionState(findingToExclusionState(result))
-                : null
-            }
+          {/* Chat Messages (own scroll area; metadata + filters stay pinned) */}
+          <div
+            ref={setScrollNode}
+            onScroll={handleTranscriptScroll}
+            className="min-h-0 flex-1 overflow-y-auto"
           >
-            <ChatMessagesList
-              messages={chatMessages}
-              riskResultsByMessage={riskResultsByMessage}
-              claudeUsageByMessage={claudeUsageByMessage}
-              claudeToolUsageByToolUseId={claudeToolUsageByToolUseId}
-              collapseNonRisk={collapseNonRisk}
-              enabledEntryTypes={enabledEntryTypes}
-              riskOnly={riskOnly}
-            />
-          </CreateExclusionContext.Provider>
+            <CreateExclusionContext.Provider
+              value={
+                canManageChat
+                  ? (result) =>
+                      setExclusionState(findingToExclusionState(result))
+                  : null
+              }
+            >
+              {messagesLoading ? (
+                <div className="text-muted-foreground p-6 text-center text-sm">
+                  Loading risk findings…
+                </div>
+              ) : (
+                <TranscriptBody
+                  key={chatId}
+                  mode={riskOnly ? "risk" : "normal"}
+                  messages={chatMessages}
+                  riskResultsByMessage={riskResultsByMessage}
+                  claudeUsageByMessage={claudeUsageByMessage}
+                  claudeToolUsageByToolUseId={claudeToolUsageByToolUseId}
+                  collapseNonRisk={collapseNonRisk}
+                  enabledEntryTypes={enabledEntryTypes}
+                  hasMoreBefore={hasMoreBefore}
+                  hasMoreAfter={hasMoreAfter}
+                  onLoadOlder={loadOlder}
+                  onLoadNewer={loadNewer}
+                  isFetchingOlder={transcript.isFetchingOlder}
+                  isFetchingNewer={transcript.isFetchingNewer}
+                  gaps={riskOnly ? riskTranscript.gaps : undefined}
+                  onLoadGap={riskOnly ? riskTranscript.loadGap : undefined}
+                  riskLoadingKey={riskOnly ? riskTranscript.loadingKey : null}
+                  scrollElement={scrollEl}
+                />
+              )}
+            </CreateExclusionContext.Provider>
+          </div>
           <ExclusionSheet
             state={exclusionState}
             onOpenChange={(open) => {

@@ -136,6 +136,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		CSRFToken:           csrfToken,
 		Subject:             subject,
 		CreatedAt:           time.Now(),
+		FirstParty:          false,
 	}
 
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {

@@ -30,6 +30,8 @@ function server(remotes: ExternalMCPRemote[]): PulseMCPServer {
     registrySpecifier: "test/server",
     version: "0.1.0",
     meta: {},
+    toolCount: 0,
+    isReadOnly: false,
     remotes,
   };
 }

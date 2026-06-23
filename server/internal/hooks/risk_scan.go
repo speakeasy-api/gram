@@ -2,213 +2,74 @@ package hooks
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 
-	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
 
-// scanClaudeForEnforcement extracts the scannable text from a Claude hook
-// payload, resolves the project (plugin-auth context populated by Gram-Key +
-// Gram-Project wins; session metadata is the legacy fallback), and runs the
-// risk scanner. Returns nil when the scanner is unavailable, the project cannot
-// be resolved, or no enforcing policy matches.
-//
-// The authCtx fallback is critical for UserPromptSubmit on the very first
-// hook of a session: Claude Code's OTEL Logs exporter is async, so the
-// `/rpc/hooks.otel/v1/logs` request that seeds session metadata in Redis
-// can land after the first UserPromptSubmit. Without this fallback, the
-// first prompt of every session slips through unscanned even when the
-// plugin authenticated the request.
-func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.ClaudePayload) *risk.ScanResult {
-	if s.riskScanner == nil || payload.SessionID == nil {
+func (s *Service) scanUserPromptForEnforcement(ctx context.Context, ev *hookevents.UserPromptSubmit) *risk.ScanResult {
+	if ev == nil {
 		return nil
 	}
-
-	hookEvent, ok := parseClaudeHookEvent(payload.HookEventName)
-	if !ok {
-		return nil
-	}
-
-	text := extractClaudeText(payload, hookEvent)
-	// A no-arg/no-output tool call carries an empty body but still names a tool
-	// (+ MCP server/function) a tool-scoped prompt policy can match, so only skip
-	// when there is neither body nor tool attribution.
-	toolName := conv.PtrValOr(payload.ToolName, "")
-	if text == "" && toolName == "" {
-		return nil
-	}
-
-	scanContext, err := s.resolveClaudeScanContext(ctx, payload)
-	if err != nil {
-		s.logger.WarnContext(ctx, "could not resolve Claude risk scan context",
-			attr.SlogError(err),
-			attr.SlogEvent("risk_scan_context_error"),
-		)
-		return nil
-	}
-
-	messageType, ok := hookEventToMessageType(hookEvent)
-	if !ok {
-		return nil
-	}
-
-	result, err := s.riskScanner.ScanForEnforcement(ctx, scanContext.organizationID, scanContext.projectID, scanContext.userID, text, messageType, toolName)
-	if err != nil {
-		s.logger.WarnContext(ctx, "risk scan failed for Claude hook",
-			attr.SlogError(err),
-			attr.SlogEvent("risk_scan_error"),
-		)
-		return nil
-	}
-
-	return result
+	return s.scanHookEventForEnforcement(ctx, ev.Event, ev.Prompt, message.User, "")
 }
 
-type claudeScanContext struct {
-	organizationID string
-	projectID      uuid.UUID
-	userID         string
+func (s *Service) scanToolRequestForEnforcement(ctx context.Context, ev *hookevents.BeforeToolUse) *risk.ScanResult {
+	if ev == nil {
+		return nil
+	}
+	return s.scanHookEventForEnforcement(ctx, ev.Event, marshalToJSON(ev.ToolInput), message.ToolRequest, ev.ToolName)
 }
 
-// resolveClaudeScanContext resolves the org/project/user used to scope a Claude
-// hook risk scan. The plugin-auth context populated by Gram-Key + Gram-Project
-// wins when present. Session metadata cached by the OTEL Logs endpoint remains
-// the fallback for legacy hooks without plugin auth.
-func (s *Service) resolveClaudeScanContext(ctx context.Context, payload *gen.ClaudePayload) (claudeScanContext, error) {
-	if payload == nil {
-		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, errors.New("claude payload is nil")
+func (s *Service) scanMCPRequestForEnforcement(ctx context.Context, ev *hookevents.BeforeMCPExecution) *risk.ScanResult {
+	if ev == nil {
+		return nil
 	}
-	if payload.SessionID == nil || *payload.SessionID == "" {
-		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, errors.New("claude payload missing session id")
-	}
-	sessionID := *payload.SessionID
-	payloadUserEmail := ""
-	if payload.UserEmail != nil {
-		payloadUserEmail = *payload.UserEmail
-	}
-	metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, payloadUserEmail)
-	if err != nil {
-		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, fmt.Errorf("resolve claude session metadata: %w", err)
-	}
-	if strings.TrimSpace(metadata.UserEmail) == "" {
-		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, errors.New("claude session metadata missing user email")
-	}
-	projectID, err := uuid.Parse(metadata.ProjectID)
-	if err != nil {
-		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, fmt.Errorf("parse claude project id: %w", err)
-	}
-
-	return claudeScanContext{
-		organizationID: metadata.GramOrgID,
-		projectID:      projectID,
-		userID:         metadata.UserID,
-	}, nil
+	return s.scanHookEventForEnforcement(ctx, ev.Event, marshalToJSON(ev.ToolInput), message.ToolRequest, ev.ToolName)
 }
 
-// scanCursorForEnforcement runs the risk scanner for a Cursor hook payload.
-// Unlike Claude, Cursor hooks are authenticated so the project ID is known.
-func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.CursorPayload, orgID, projectID, userID string) *risk.ScanResult {
+func (s *Service) scanPermissionRequestForEnforcement(ctx context.Context, ev *hookevents.PermissionRequest) *risk.ScanResult {
+	if ev == nil {
+		return nil
+	}
+	return s.scanHookEventForEnforcement(ctx, ev.Event, marshalToJSON(ev.ToolInput), message.ToolRequest, ev.ToolName)
+}
+
+func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents.Event, text string, messageType message.Type, toolName string) *risk.ScanResult {
 	if s.riskScanner == nil {
 		return nil
 	}
 
-	hookEvent, ok := parseCursorHookEvent(payload.HookEventName)
-	if !ok {
-		return nil
-	}
-
-	text := extractCursorText(payload, hookEvent)
 	// Empty body + tool attribution still matters for tool-scoped policies; only
 	// skip when there is neither.
-	toolName := conv.PtrValOr(payload.ToolName, "")
 	if text == "" && toolName == "" {
 		return nil
 	}
 
-	pid, err := uuid.Parse(projectID)
-	if err != nil {
+	if messageType == "" {
 		return nil
 	}
 
-	messageType, ok := hookEventToMessageType(hookEvent)
-	if !ok {
+	if ev.Context.OrganizationID == "" || ev.Context.ProjectID == uuid.Nil {
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, orgID, pid, userID, text, messageType, toolName)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, text, messageType, toolName)
 	if err != nil {
-		s.logger.WarnContext(ctx, "risk scan failed for Cursor hook",
+		s.logger.WarnContext(ctx, "risk scan failed for hook event",
 			attr.SlogError(err),
 			attr.SlogEvent("risk_scan_error"),
+			attr.SlogHookSource(string(ev.Provider)),
+			attr.SlogHookEvent(ev.RawEventType),
 		)
 		return nil
 	}
 
 	return result
-}
-
-// scanCodexForEnforcement runs the risk scanner for a Codex hook payload.
-// Like Cursor, Codex hooks are authenticated so the project ID is known.
-func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.CodexPayload, orgID, projectID, userID string) *risk.ScanResult {
-	if s.riskScanner == nil {
-		return nil
-	}
-
-	hookEvent, ok := parseCodexHookEvent(payload.HookEventName)
-	if !ok {
-		return nil
-	}
-
-	text := extractCodexText(payload, hookEvent)
-	// Empty body + tool attribution still matters for tool-scoped policies; only
-	// skip when there is neither.
-	toolName := conv.PtrValOr(payload.ToolName, "")
-	if text == "" && toolName == "" {
-		return nil
-	}
-
-	pid, err := uuid.Parse(projectID)
-	if err != nil {
-		return nil
-	}
-
-	messageType, ok := hookEventToMessageType(hookEvent)
-	if !ok {
-		return nil
-	}
-
-	result, err := s.riskScanner.ScanForEnforcement(ctx, orgID, pid, userID, text, messageType, toolName)
-	if err != nil {
-		s.logger.WarnContext(ctx, "risk scan failed for Codex hook",
-			attr.SlogError(err),
-			attr.SlogEvent("risk_scan_error"),
-		)
-		return nil
-	}
-
-	return result
-}
-
-func hookEventToMessageType(hookEvent HookEvent) (message.Type, bool) {
-	switch hookEvent {
-	case HookEventUserPromptSubmit, HookEventBeforeSubmitPrompt:
-		return message.User, true
-	case HookEventPreToolUse, HookEventBeforeMCPExecution, HookEventPermissionRequest:
-		return message.ToolRequest, true
-	case HookEventPostToolUse:
-		return message.ToolResponse, true
-	default:
-		return "", false
-	}
 }
 
 // renderUserBlockReason returns the message shown to the agent when a tool
@@ -222,75 +83,4 @@ func renderUserBlockReason(userMessage *string, auditReason string) string {
 		return *userMessage
 	}
 	return auditReason
-}
-
-// extractClaudeText returns the scannable text content from a Claude hook payload.
-func extractClaudeText(payload *gen.ClaudePayload, hookEvent HookEvent) string {
-	switch hookEvent {
-	case HookEventUserPromptSubmit:
-		if payload.Prompt != nil {
-			return *payload.Prompt
-		}
-	case HookEventPreToolUse:
-		if payload.ToolInput != nil {
-			b, err := json.Marshal(payload.ToolInput)
-			if err != nil {
-				return ""
-			}
-			return string(b)
-		}
-	case HookEventPostToolUse:
-		if payload.ToolResponse != nil {
-			b, err := json.Marshal(payload.ToolResponse)
-			if err != nil {
-				return ""
-			}
-			return string(b)
-		}
-	default:
-		return ""
-	}
-	return ""
-}
-
-// extractCursorText returns the scannable text content from a Cursor hook payload.
-func extractCursorText(payload *gen.CursorPayload, hookEvent HookEvent) string {
-	switch hookEvent {
-	case HookEventBeforeSubmitPrompt:
-		if payload.Prompt != nil {
-			return *payload.Prompt
-		}
-	case HookEventPreToolUse, HookEventBeforeMCPExecution:
-		if payload.ToolInput != nil {
-			b, err := json.Marshal(payload.ToolInput)
-			if err != nil {
-				return ""
-			}
-			return string(b)
-		}
-	default:
-		return ""
-	}
-	return ""
-}
-
-// extractCodexText returns the scannable text content from a Codex hook payload.
-func extractCodexText(payload *gen.CodexPayload, hookEvent HookEvent) string {
-	switch hookEvent {
-	case HookEventUserPromptSubmit:
-		if payload.Prompt != nil {
-			return *payload.Prompt
-		}
-	case HookEventPreToolUse, HookEventPermissionRequest:
-		if payload.ToolInput != nil {
-			b, err := json.Marshal(payload.ToolInput)
-			if err != nil {
-				return ""
-			}
-			return string(b)
-		}
-	default:
-		return ""
-	}
-	return ""
 }

@@ -42,7 +42,8 @@ type ListChatsResponseBody struct {
 // LoadChatResponseBody is the type of the "chat" service "loadChat" endpoint
 // HTTP response body.
 type LoadChatResponseBody struct {
-	// The list of messages in the chat for the returned generation
+	// The list of messages in the chat for the returned generation, ordered oldest
+	// to newest by `seq`.
 	Messages []*ChatMessageResponseBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
 	// The generation that this response's messages belong to. A generation is an
 	// immutable snapshot of the transcript; a new one is opened on compaction or
@@ -52,8 +53,22 @@ type LoadChatResponseBody struct {
 	// history, walk from `max_generation` down to 0, requesting each generation in
 	// turn.
 	MaxGeneration *int `form:"max_generation,omitempty" json:"max_generation,omitempty" xml:"max_generation,omitempty"`
+	// Whether older messages exist before the first message in this page (within
+	// the returned generation). Load them with a `before_seq` cursor.
+	HasMoreBefore *bool `form:"has_more_before,omitempty" json:"has_more_before,omitempty" xml:"has_more_before,omitempty"`
+	// Whether newer messages exist after the last message in this page (within the
+	// returned generation). Load them with an `after_seq` cursor.
+	HasMoreAfter *bool `form:"has_more_after,omitempty" json:"has_more_after,omitempty" xml:"has_more_after,omitempty"`
+	// Present only when `risk_only` was requested: contiguous runs of returned
+	// messages, each spanning a risk finding and its surrounding context. Use each
+	// segment's cursors to expand it.
+	RiskSegments []*RiskSegmentResponseBody `form:"risk_segments,omitempty" json:"risk_segments,omitempty" xml:"risk_segments,omitempty"`
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsageResponseBody `form:"agent_usage,omitempty" json:"agent_usage,omitempty" xml:"agent_usage,omitempty"`
+	// Whole-generation trace-entry totals for the returned generation. Because
+	// messages are paginated, callers must use these (not the length of
+	// `messages`) to render filter-bar counts.
+	Totals *ChatTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
 	// The ID of the chat
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The title of the chat
@@ -1234,6 +1249,11 @@ type ChatOverviewResponseBody struct {
 type ChatMessageResponseBody struct {
 	// The ID of the message
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Monotonic sequence number of the message. Strictly increasing within a chat;
+	// use it as the keyset cursor for `before_seq`/`after_seq` pagination. Not
+	// contiguous (the sequence is shared across chats), so do not infer gaps from
+	// arithmetic differences.
+	Seq *int64 `form:"seq,omitempty" json:"seq,omitempty" xml:"seq,omitempty"`
 	// The role of the message
 	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
 	// The content of the message — string for plain text, array for
@@ -1258,6 +1278,20 @@ type ChatMessageResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Conversation generation — bumps on compaction or edit divergence
 	Generation *int `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+}
+
+// RiskSegmentResponseBody is used to define fields on response body types.
+type RiskSegmentResponseBody struct {
+	// The `seq` of the first (oldest) message in this segment.
+	FirstSeq *int64 `form:"first_seq,omitempty" json:"first_seq,omitempty" xml:"first_seq,omitempty"`
+	// The `seq` of the last (newest) message in this segment.
+	LastSeq *int64 `form:"last_seq,omitempty" json:"last_seq,omitempty" xml:"last_seq,omitempty"`
+	// Whether messages exist before this segment within the generation. Expand
+	// with a `before_seq` request using `first_seq`.
+	HasMoreBefore *bool `form:"has_more_before,omitempty" json:"has_more_before,omitempty" xml:"has_more_before,omitempty"`
+	// Whether messages exist after this segment within the generation. Expand with
+	// an `after_seq` request using `last_seq`.
+	HasMoreAfter *bool `form:"has_more_after,omitempty" json:"has_more_after,omitempty" xml:"has_more_after,omitempty"`
 }
 
 // AgentUsageResponseBody is used to define fields on response body types.
@@ -1318,6 +1352,24 @@ type ClaudeToolUsageResponseBody struct {
 	InputSizeBytes *int64 `form:"input_size_bytes,omitempty" json:"input_size_bytes,omitempty" xml:"input_size_bytes,omitempty"`
 	// Serialized tool result size in bytes.
 	ResultSizeBytes *int64 `form:"result_size_bytes,omitempty" json:"result_size_bytes,omitempty" xml:"result_size_bytes,omitempty"`
+}
+
+// ChatTotalsResponseBody is used to define fields on response body types.
+type ChatTotalsResponseBody struct {
+	// Total trace entries in the generation (sum of the four entry-type counts;
+	// the `of N entries` denominator).
+	Total *int64 `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
+	// Number of user messages in the generation.
+	UserMessages *int64 `form:"user_messages,omitempty" json:"user_messages,omitempty" xml:"user_messages,omitempty"`
+	// Number of assistant messages (without tool calls) in the generation.
+	AssistantMessages *int64 `form:"assistant_messages,omitempty" json:"assistant_messages,omitempty" xml:"assistant_messages,omitempty"`
+	// Number of messages carrying tool calls in the generation.
+	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+	// Number of tool-result messages in the generation.
+	ToolResults *int64 `form:"tool_results,omitempty" json:"tool_results,omitempty" xml:"tool_results,omitempty"`
+	// Number of messages with an active (found, non-suppressed) risk finding in
+	// the generation.
+	RiskOnly *int64 `form:"risk_only,omitempty" json:"risk_only,omitempty" xml:"risk_only,omitempty"`
 }
 
 // NewGenerateTitleRequestBody builds the HTTP request body from the payload of
@@ -1511,6 +1563,8 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 	v := &chat.Chat{
 		Generation:           *body.Generation,
 		MaxGeneration:        *body.MaxGeneration,
+		HasMoreBefore:        *body.HasMoreBefore,
+		HasMoreAfter:         *body.HasMoreAfter,
 		ID:                   *body.ID,
 		Title:                *body.Title,
 		UserID:               body.UserID,
@@ -1534,8 +1588,21 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 		}
 		v.Messages[i] = unmarshalChatMessageResponseBodyToChatChatMessage(val)
 	}
+	if body.RiskSegments != nil {
+		v.RiskSegments = make([]*chat.RiskSegment, len(body.RiskSegments))
+		for i, val := range body.RiskSegments {
+			if val == nil {
+				v.RiskSegments[i] = nil
+				continue
+			}
+			v.RiskSegments[i] = unmarshalRiskSegmentResponseBodyToChatRiskSegment(val)
+		}
+	}
 	if body.AgentUsage != nil {
 		v.AgentUsage = unmarshalAgentUsageResponseBodyToChatAgentUsage(body.AgentUsage)
+	}
+	if body.Totals != nil {
+		v.Totals = unmarshalChatTotalsResponseBodyToChatChatTotals(body.Totals)
 	}
 
 	return v
@@ -2348,6 +2415,12 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	if body.MaxGeneration == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_generation", "body"))
 	}
+	if body.HasMoreBefore == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_more_before", "body"))
+	}
+	if body.HasMoreAfter == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_more_after", "body"))
+	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -2373,8 +2446,20 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 			}
 		}
 	}
+	for _, e := range body.RiskSegments {
+		if e != nil {
+			if err2 := ValidateRiskSegmentResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.AgentUsage != nil {
 		if err2 := ValidateAgentUsageResponseBody(body.AgentUsage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Totals != nil {
+		if err2 := ValidateChatTotalsResponseBody(body.Totals); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -3899,6 +3984,9 @@ func ValidateChatMessageResponseBody(body *ChatMessageResponseBody) (err error) 
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
+	if body.Seq == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("seq", "body"))
+	}
 	if body.Role == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("role", "body"))
 	}
@@ -3913,6 +4001,24 @@ func ValidateChatMessageResponseBody(body *ChatMessageResponseBody) (err error) 
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRiskSegmentResponseBody runs the validations defined on
+// RiskSegmentResponseBody
+func ValidateRiskSegmentResponseBody(body *RiskSegmentResponseBody) (err error) {
+	if body.FirstSeq == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("first_seq", "body"))
+	}
+	if body.LastSeq == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_seq", "body"))
+	}
+	if body.HasMoreBefore == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_more_before", "body"))
+	}
+	if body.HasMoreAfter == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_more_after", "body"))
 	}
 	return
 }
@@ -4024,6 +4130,30 @@ func ValidateClaudeToolUsageResponseBody(body *ClaudeToolUsageResponseBody) (err
 	}
 	if body.ResultSizeBytes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("result_size_bytes", "body"))
+	}
+	return
+}
+
+// ValidateChatTotalsResponseBody runs the validations defined on
+// ChatTotalsResponseBody
+func ValidateChatTotalsResponseBody(body *ChatTotalsResponseBody) (err error) {
+	if body.Total == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
+	}
+	if body.UserMessages == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_messages", "body"))
+	}
+	if body.AssistantMessages == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assistant_messages", "body"))
+	}
+	if body.ToolCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
+	}
+	if body.ToolResults == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_results", "body"))
+	}
+	if body.RiskOnly == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("risk_only", "body"))
 	}
 	return
 }

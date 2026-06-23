@@ -444,19 +444,22 @@ func TestListChats_DateRangeAndSortUseLastMessageTimestamp(t *testing.T) {
 	oldCreatedAt := now.Add(-7 * 24 * time.Hour)
 	newCreatedAt := now.Add(-2 * time.Hour)
 
+	// Assign explicit, distinct message timestamps so the last_message_timestamp
+	// ordering is deterministic without relying on a wall-clock gap. resumedOldChat
+	// gets the more recent message, so it sorts first under desc.
 	newerCreatedChat := seedChatAtTime(t, ctx, ti, "ext-activity", newCreatedAt)
 	_, err := repo.New(ti.conn).SeedChatMessage(ctx, repo.SeedChatMessageParams{
 		ChatID:    newerCreatedChat,
 		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: now.Add(-10 * time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	require.NoError(t, err)
-
-	time.Sleep(10 * time.Millisecond)
 
 	resumedOldChat := seedChatAtTime(t, ctx, ti, "ext-activity", oldCreatedAt)
 	_, err = repo.New(ti.conn).SeedChatMessage(ctx, repo.SeedChatMessageParams{
 		ChatID:    resumedOldChat,
 		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: now.Add(-5 * time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -481,19 +484,22 @@ func TestListChats_SortByLastMessageTimestampAscending(t *testing.T) {
 	ti := newTestChatService(t)
 	ctx := externalUserCtx(t, ti, "ext-activity-asc")
 
+	// Distinct message timestamps make the asc ordering deterministic without a
+	// wall-clock gap: firstActiveChat's message precedes lastActiveChat's.
+	now := time.Now().UTC()
 	firstActiveChat := seedChat(t, ctx, ti, "", "ext-activity-asc", "first active")
 	_, err := repo.New(ti.conn).SeedChatMessage(ctx, repo.SeedChatMessageParams{
 		ChatID:    firstActiveChat,
 		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: now.Add(-10 * time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	require.NoError(t, err)
-
-	time.Sleep(10 * time.Millisecond)
 
 	lastActiveChat := seedChat(t, ctx, ti, "", "ext-activity-asc", "last active")
 	_, err = repo.New(ti.conn).SeedChatMessage(ctx, repo.SeedChatMessageParams{
 		ChatID:    lastActiveChat,
 		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: now.Add(-5 * time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	require.NoError(t, err)
 

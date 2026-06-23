@@ -988,11 +988,11 @@ func unmarshalMCPRegistryResponseBodyToTypesMCPRegistry(v *MCPRegistryResponseBo
 	return res
 }
 
-// unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer builds a
-// value of type *types.ExternalMCPServer from a value of type
-// *ExternalMCPServerResponseBody.
-func unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer(v *ExternalMCPServerResponseBody) *types.ExternalMCPServer {
-	res := &types.ExternalMCPServer{
+// unmarshalExternalMCPServerEntryResponseBodyToTypesExternalMCPServerEntry
+// builds a value of type *types.ExternalMCPServerEntry from a value of type
+// *ExternalMCPServerEntryResponseBody.
+func unmarshalExternalMCPServerEntryResponseBodyToTypesExternalMCPServerEntry(v *ExternalMCPServerEntryResponseBody) *types.ExternalMCPServerEntry {
+	res := &types.ExternalMCPServerEntry{
 		RegistrySpecifier:                   *v.RegistrySpecifier,
 		Version:                             *v.Version,
 		Description:                         *v.Description,
@@ -1003,16 +1003,8 @@ func unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer(v *ExternalM
 		Title:                               v.Title,
 		IconURL:                             v.IconURL,
 		Meta:                                v.Meta,
-	}
-	if v.Tools != nil {
-		res.Tools = make([]*types.ExternalMCPTool, len(v.Tools))
-		for i, val := range v.Tools {
-			if val == nil {
-				res.Tools[i] = nil
-				continue
-			}
-			res.Tools[i] = unmarshalExternalMCPToolResponseBodyToTypesExternalMCPTool(val)
-		}
+		ToolCount:                           *v.ToolCount,
+		IsReadOnly:                          *v.IsReadOnly,
 	}
 	if v.Remotes != nil {
 		res.Remotes = make([]*types.ExternalMCPRemote, len(v.Remotes))
@@ -1023,23 +1015,6 @@ func unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer(v *ExternalM
 			}
 			res.Remotes[i] = unmarshalExternalMCPRemoteResponseBodyToTypesExternalMCPRemote(val)
 		}
-	}
-
-	return res
-}
-
-// unmarshalExternalMCPToolResponseBodyToTypesExternalMCPTool builds a value of
-// type *types.ExternalMCPTool from a value of type
-// *ExternalMCPToolResponseBody.
-func unmarshalExternalMCPToolResponseBodyToTypesExternalMCPTool(v *ExternalMCPToolResponseBody) *types.ExternalMCPTool {
-	if v == nil {
-		return nil
-	}
-	res := &types.ExternalMCPTool{
-		Name:        v.Name,
-		Description: v.Description,
-		InputSchema: v.InputSchema,
-		Annotations: v.Annotations,
 	}
 
 	return res
@@ -1117,6 +1092,23 @@ func unmarshalExternalMCPRemoteVariableResponseBodyToTypesExternalMCPRemoteVaria
 		for i, val := range v.Choices {
 			res.Choices[i] = val
 		}
+	}
+
+	return res
+}
+
+// unmarshalExternalMCPToolResponseBodyToTypesExternalMCPTool builds a value of
+// type *types.ExternalMCPTool from a value of type
+// *ExternalMCPToolResponseBody.
+func unmarshalExternalMCPToolResponseBodyToTypesExternalMCPTool(v *ExternalMCPToolResponseBody) *types.ExternalMCPTool {
+	if v == nil {
+		return nil
+	}
+	res := &types.ExternalMCPTool{
+		Name:        v.Name,
+		Description: v.Description,
+		InputSchema: v.InputSchema,
+		Annotations: v.Annotations,
 	}
 
 	return res

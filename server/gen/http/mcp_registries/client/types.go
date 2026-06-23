@@ -24,7 +24,7 @@ type ListRegistriesResponseBody struct {
 // "listCatalog" endpoint HTTP response body.
 type ListCatalogResponseBody struct {
 	// List of available MCP servers
-	Servers []*ExternalMCPServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	Servers []*ExternalMCPServerEntryResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Pagination cursor for the next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -818,9 +818,9 @@ type MCPRegistryResponseBody struct {
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 }
 
-// ExternalMCPServerResponseBody is used to define fields on response body
+// ExternalMCPServerEntryResponseBody is used to define fields on response body
 // types.
-type ExternalMCPServerResponseBody struct {
+type ExternalMCPServerEntryResponseBody struct {
 	// Server specifier used to look up in the registry (e.g.,
 	// 'io.github.user/server')
 	RegistrySpecifier *string `form:"registry_specifier,omitempty" json:"registry_specifier,omitempty" xml:"registry_specifier,omitempty"`
@@ -844,22 +844,12 @@ type ExternalMCPServerResponseBody struct {
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
 	// Opaque metadata from the registry
 	Meta any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
-	// Tools available on the server
-	Tools []*ExternalMCPToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Number of tools the server exposes
+	ToolCount *int `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	// Whether every tool on the server is read-only
+	IsReadOnly *bool `form:"is_read_only,omitempty" json:"is_read_only,omitempty" xml:"is_read_only,omitempty"`
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
-}
-
-// ExternalMCPToolResponseBody is used to define fields on response body types.
-type ExternalMCPToolResponseBody struct {
-	// Name of the tool
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Description of the tool
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Input schema for the tool
-	InputSchema any `form:"input_schema,omitempty" json:"input_schema,omitempty" xml:"input_schema,omitempty"`
-	// Annotations for the tool
-	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
 }
 
 // ExternalMCPRemoteResponseBody is used to define fields on response body
@@ -904,6 +894,18 @@ type ExternalMCPRemoteVariableResponseBody struct {
 	Default *string `form:"default,omitempty" json:"default,omitempty" xml:"default,omitempty"`
 	// Allowed values for the variable
 	Choices []string `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
+}
+
+// ExternalMCPToolResponseBody is used to define fields on response body types.
+type ExternalMCPToolResponseBody struct {
+	// Name of the tool
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Description of the tool
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Input schema for the tool
+	InputSchema any `form:"input_schema,omitempty" json:"input_schema,omitempty" xml:"input_schema,omitempty"`
+	// Annotations for the tool
+	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
 }
 
 // NewClearCacheUnauthorized builds a mcpRegistries service clearCache endpoint
@@ -1228,13 +1230,13 @@ func NewListCatalogResultOK(body *ListCatalogResponseBody) *mcpregistries.ListCa
 	v := &mcpregistries.ListCatalogResult{
 		NextCursor: body.NextCursor,
 	}
-	v.Servers = make([]*types.ExternalMCPServer, len(body.Servers))
+	v.Servers = make([]*types.ExternalMCPServerEntry, len(body.Servers))
 	for i, val := range body.Servers {
 		if val == nil {
 			v.Servers[i] = nil
 			continue
 		}
-		v.Servers[i] = unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer(val)
+		v.Servers[i] = unmarshalExternalMCPServerEntryResponseBodyToTypesExternalMCPServerEntry(val)
 	}
 
 	return v
@@ -1603,7 +1605,7 @@ func ValidateListCatalogResponseBody(body *ListCatalogResponseBody) (err error) 
 	}
 	for _, e := range body.Servers {
 		if e != nil {
-			if err2 := ValidateExternalMCPServerResponseBody(e); err2 != nil {
+			if err2 := ValidateExternalMCPServerEntryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -2626,9 +2628,9 @@ func ValidateMCPRegistryResponseBody(body *MCPRegistryResponseBody) (err error) 
 	return
 }
 
-// ValidateExternalMCPServerResponseBody runs the validations defined on
-// ExternalMCPServerResponseBody
-func ValidateExternalMCPServerResponseBody(body *ExternalMCPServerResponseBody) (err error) {
+// ValidateExternalMCPServerEntryResponseBody runs the validations defined on
+// ExternalMCPServerEntryResponseBody
+func ValidateExternalMCPServerEntryResponseBody(body *ExternalMCPServerEntryResponseBody) (err error) {
 	if body.RegistrySpecifier == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("registry_specifier", "body"))
 	}
@@ -2637,6 +2639,12 @@ func ValidateExternalMCPServerResponseBody(body *ExternalMCPServerResponseBody) 
 	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.ToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
+	}
+	if body.IsReadOnly == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_read_only", "body"))
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))

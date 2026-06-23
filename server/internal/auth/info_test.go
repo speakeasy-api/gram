@@ -36,7 +36,7 @@ func TestService_Info(t *testing.T) {
 
 		// Create and store a session first
 		session := sessions.Session{
-			SessionID:            "test-session-id",
+			SessionID:            t.Name(),
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",
@@ -109,7 +109,7 @@ func TestService_Info(t *testing.T) {
 
 		// Create and store a session first
 		session := sessions.Session{
-			SessionID:            "test-session-id",
+			SessionID:            t.Name(),
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID, // First org is active
 			WorkOSSessionID:      "",
@@ -383,7 +383,7 @@ func TestService_Info(t *testing.T) {
 
 		// Create and store a session first
 		session := sessions.Session{
-			SessionID:            "test-session-id",
+			SessionID:            t.Name(),
 			UserID:               userInfo.UserID,
 			ActiveOrganizationID: userInfo.Organizations[0].ID,
 			WorkOSSessionID:      "",

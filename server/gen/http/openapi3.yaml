@@ -7001,7 +7001,7 @@ paths:
                 type: query
     /rpc/chat.load:
         get:
-            description: Load a chat by its ID. Messages are paginated one generation per request; omit `generation` to receive the latest generation.
+            description: 'Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding.'
             operationId: loadChat
             parameters:
                 - allowEmptyValue: true
@@ -7021,6 +7021,43 @@ paths:
                     format: int64
                     minimum: 0
                     type: integer
+                - allowEmptyValue: true
+                  description: Maximum number of messages to return for this page.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Maximum number of messages to return for this page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: 'Keyset cursor: return the page of messages with `seq` strictly less than this value (older messages). The returned `messages` are always ordered oldest to newest by `seq`, like every other response. Use the `seq` of the oldest message you currently hold to load the previous page. Ignored when `risk_only` is set. Mutually exclusive with `after_seq`; if both are supplied, `after_seq` takes precedence.'
+                  in: query
+                  name: before_seq
+                  schema:
+                    description: 'Keyset cursor: return the page of messages with `seq` strictly less than this value (older messages). The returned `messages` are always ordered oldest to newest by `seq`, like every other response. Use the `seq` of the oldest message you currently hold to load the previous page. Ignored when `risk_only` is set. Mutually exclusive with `after_seq`; if both are supplied, `after_seq` takes precedence.'
+                    format: int64
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: 'Keyset cursor: return the page of messages with `seq` strictly greater than this value (newer messages). The returned `messages` are always ordered oldest to newest by `seq`. Use the `seq` of the newest message you currently hold to load the next page. Ignored when `risk_only` is set. Mutually exclusive with `before_seq`; if both are supplied, `after_seq` takes precedence.'
+                  in: query
+                  name: after_seq
+                  schema:
+                    description: 'Keyset cursor: return the page of messages with `seq` strictly greater than this value (newer messages). The returned `messages` are always ordered oldest to newest by `seq`. Use the `seq` of the newest message you currently hold to load the next page. Ignored when `risk_only` is set. Mutually exclusive with `before_seq`; if both are supplied, `after_seq` takes precedence.'
+                    format: int64
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request.
+                  in: query
+                  name: risk_only
+                  schema:
+                    default: false
+                    description: When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request.
+                    type: boolean
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -33124,7 +33161,7 @@ paths:
                 name: UserSessionFacets
     /rpc/userSessions.mint:
         post:
-            description: Mint a user_session for an issuer-gated toolset on behalf of the authenticated dashboard user. The minted JWT matches the shape of the one /mcp/{slug}/token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.
+            description: 'Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: either a toolset (/mcp) or a remote MCP server (/x/mcp). Exactly one of toolset_id or mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client''s bearer.'
             operationId: mintUserSession
             parameters:
                 - allowEmptyValue: true
@@ -35141,6 +35178,12 @@ components:
                     type: integer
                     description: The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.
                     format: int64
+                has_more_after:
+                    type: boolean
+                    description: Whether newer messages exist after the last message in this page (within the returned generation). Load them with an `after_seq` cursor.
+                has_more_before:
+                    type: boolean
+                    description: Whether older messages exist before the first message in this page (within the returned generation). Load them with a `before_seq` cursor.
                 id:
                     type: string
                     description: The ID of the chat
@@ -35156,7 +35199,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ChatMessage'
-                    description: The list of messages in the chat for the returned generation
+                    description: The list of messages in the chat for the returned generation, ordered oldest to newest by `seq`.
                 num_messages:
                     type: integer
                     description: The number of messages in the chat
@@ -35165,6 +35208,11 @@ components:
                     type: integer
                     description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
                     format: int64
+                risk_segments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskSegment'
+                    description: 'Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment''s cursors to expand it.'
                 source:
                     type: string
                     description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
@@ -35187,6 +35235,8 @@ components:
                     type: integer
                     description: Total tokens (input + output) used in this chat
                     format: int64
+                totals:
+                    $ref: '#/components/schemas/ChatTotals'
                 updated_at:
                     type: string
                     description: When the chat was last updated.
@@ -35198,6 +35248,8 @@ components:
                 - messages
                 - generation
                 - max_generation
+                - has_more_before
+                - has_more_after
                 - id
                 - title
                 - num_messages
@@ -35235,6 +35287,10 @@ components:
                 role:
                     type: string
                     description: The role of the message
+                seq:
+                    type: integer
+                    description: Monotonic sequence number of the message. Strictly increasing within a chat; use it as the keyset cursor for `before_seq`/`after_seq` pagination. Not contiguous (the sequence is shared across chats), so do not infer gaps from arithmetic differences.
+                    format: int64
                 tool_call_id:
                     type: string
                     description: The tool call ID of the message
@@ -35246,6 +35302,7 @@ components:
                     description: The ID of the user who created the message
             required:
                 - id
+                - seq
                 - role
                 - model
                 - created_at
@@ -35376,6 +35433,41 @@ components:
                 - total_input_tokens
                 - total_output_tokens
                 - total_tokens
+        ChatTotals:
+            type: object
+            properties:
+                assistant_messages:
+                    type: integer
+                    description: Number of assistant messages (without tool calls) in the generation.
+                    format: int64
+                risk_only:
+                    type: integer
+                    description: Number of messages with an active (found, non-suppressed) risk finding in the generation.
+                    format: int64
+                tool_calls:
+                    type: integer
+                    description: Number of messages carrying tool calls in the generation.
+                    format: int64
+                tool_results:
+                    type: integer
+                    description: Number of tool-result messages in the generation.
+                    format: int64
+                total:
+                    type: integer
+                    description: Total trace entries in the generation (sum of the four entry-type counts; the `of N entries` denominator).
+                    format: int64
+                user_messages:
+                    type: integer
+                    description: Number of user messages in the generation.
+                    format: int64
+            description: 'Trace-entry counts across the entire returned generation, independent of pagination. Each message maps to exactly one entry: a message carrying tool calls counts as a tool call regardless of role, otherwise the role decides.'
+            required:
+                - total
+                - user_messages
+                - assistant_messages
+                - tool_calls
+                - tool_results
+                - risk_only
         ClaudeAgentUsage:
             type: object
             properties:
@@ -37716,6 +37808,64 @@ components:
                 - registry_specifier
                 - version
                 - description
+        ExternalMCPServerEntry:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of what the server does
+                icon_url:
+                    type: string
+                    description: URL to the server's icon
+                    format: uri
+                is_read_only:
+                    type: boolean
+                    description: Whether every tool on the server is read-only
+                mcp_server_id:
+                    type: string
+                    description: ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)
+                    format: uuid
+                meta:
+                    description: Opaque metadata from the registry
+                organization_mcp_collection_registry_id:
+                    type: string
+                    description: ID of the internal collection registry this server came from
+                    format: uuid
+                registry_id:
+                    type: string
+                    description: ID of the external MCP registry this server came from
+                    format: uuid
+                registry_specifier:
+                    type: string
+                    description: Server specifier used to look up in the registry (e.g., 'io.github.user/server')
+                    example: io.modelcontextprotocol.anonymous/exa
+                remotes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExternalMCPRemote'
+                    description: Available remote endpoints for the server
+                title:
+                    type: string
+                    description: Display name for the server
+                tool_count:
+                    type: integer
+                    description: Number of tools the server exposes
+                    format: int64
+                toolset_id:
+                    type: string
+                    description: ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)
+                    format: uuid
+                version:
+                    type: string
+                    description: Semantic version of the server
+                    example: 1.0.0
+            description: A summary of an MCP server from an external registry, returned by catalog listings
+            required:
+                - registry_specifier
+                - version
+                - description
+                - tool_count
+                - is_read_only
         ExternalMCPTool:
             type: object
             properties:
@@ -39570,7 +39720,7 @@ components:
                 servers:
                     type: array
                     items:
-                        $ref: '#/components/schemas/ExternalMCPServer'
+                        $ref: '#/components/schemas/ExternalMCPServerEntry'
                     description: List of available MCP servers
             required:
                 - servers
@@ -40977,18 +41127,20 @@ components:
         MintUserSessionRequestBody:
             type: object
             properties:
+                mcp_server_id:
+                    type: string
+                    description: Bind the JWT to this remote MCP server's user_session_issuer audience (the /x/mcp convention, since remote servers have no toolset). Mutually exclusive with toolset_id; exactly one must be set. Must be issuer-gated and live in the caller's project.
+                    format: uuid
                 toolset_id:
                     type: string
-                    description: The toolset to bind the minted JWT to. Must be issuer-gated and live in the caller's project.
+                    description: Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with mcp_server_id; exactly one must be set. Must be issuer-gated and live in the caller's project.
                     format: uuid
-            required:
-                - toolset_id
         MintUserSessionResponseBody:
             type: object
             properties:
                 access_token:
                     type: string
-                    description: 'The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the toolset''s /mcp/{slug} surface.'
+                    description: 'The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.'
                 expires_in:
                     type: integer
                     description: Lifetime of the access token in seconds.
@@ -44164,6 +44316,29 @@ components:
                 - category
                 - rules
                 - total
+        RiskSegment:
+            type: object
+            properties:
+                first_seq:
+                    type: integer
+                    description: The `seq` of the first (oldest) message in this segment.
+                    format: int64
+                has_more_after:
+                    type: boolean
+                    description: Whether messages exist after this segment within the generation. Expand with an `after_seq` request using `last_seq`.
+                has_more_before:
+                    type: boolean
+                    description: Whether messages exist before this segment within the generation. Expand with a `before_seq` request using `first_seq`.
+                last_seq:
+                    type: integer
+                    description: The `seq` of the last (newest) message in this segment.
+                    format: int64
+            description: A contiguous run of messages in the risk-only view, covering one or more risk findings plus their surrounding context. Messages for a segment are the entries of `Chat.messages` whose `seq` falls within `[first_seq, last_seq]`.
+            required:
+                - first_seq
+                - last_seq
+                - has_more_before
+                - has_more_after
         RiskUserBreakdownResult:
             type: object
             properties:

@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -19,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -105,7 +108,15 @@ func (m *mockBillingRepo) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, e
 }
 
 func (m *mockBillingRepo) ValidateAndParseWebhookEvent(ctx context.Context, payload []byte, header http.Header) (*billing.PolarWebhookPayload, error) {
-	return nil, fmt.Errorf("not implemented")
+	args := m.Called(ctx, payload, header)
+	if args.Get(0) == nil {
+		return nil, fmt.Errorf("mock: %w", args.Error(1))
+	}
+	wp, ok := args.Get(0).(*billing.PolarWebhookPayload)
+	if !ok {
+		return nil, fmt.Errorf("mock: unexpected type %T", args.Get(0))
+	}
+	return wp, args.Error(1)
 }
 
 func (m *mockBillingRepo) InvalidateBillingCustomerCaches(ctx context.Context, orgID string) error {
@@ -151,6 +162,7 @@ func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, 
 		authz:       authzEngine,
 		repo:        repo.New(db),
 		billingRepo: billingRepo,
+		orgRepo:     orgRepo.New(db),
 	}
 }
 
@@ -287,6 +299,32 @@ func TestGetPeriodUsage_ActualServerCountFromDB(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, 7, result.ActualEnabledServerCount, "should use DB count, not cached value")
+}
+
+func TestHandlePolarWebhook_OrgNotFound(t *testing.T) {
+	t.Parallel()
+	orgID := "org-does-not-exist"
+
+	payload := &billing.PolarWebhookPayload{Type: "subscription.created"}
+	payload.Data.Customer = &billing.WebhookCustomer{ExternalID: orgID}
+
+	billingMock := &mockBillingRepo{}
+	billingMock.On("ValidateAndParseWebhookEvent", mock.Anything, mock.Anything, mock.Anything).
+		Return(payload, nil)
+	svc := newTestService(t, billingMock, orgID, 0)
+
+	req := httptest.NewRequest(http.MethodPost, "/rpc/polar.webhook", strings.NewReader("{}"))
+	rec := httptest.NewRecorder()
+
+	err := svc.HandlePolarWebhook(rec, req)
+
+	require.Error(t, err)
+	var se *oops.ShareableError
+	require.ErrorAs(t, err, &se)
+	require.Equal(t, oops.CodeNotFound, se.Code,
+		"a webhook for an unknown polar external id should map to CodeNotFound, not CodeUnexpected")
+	// We never get past the org lookup, so no cache invalidation should occur.
+	billingMock.AssertNotCalled(t, "InvalidateBillingCustomerCaches", mock.Anything, mock.Anything)
 }
 
 func TestCreateTopUpCheckout_BillingErrorMapsToCodeUnexpected(t *testing.T) {

@@ -42,6 +42,7 @@ from typing import (
 import anyio
 import anyio.from_thread
 import anyio.to_thread
+import asyncer
 import structlog
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from google.cloud.pubsub_v1.subscriber.scheduler import Scheduler
@@ -493,7 +494,22 @@ class Subscriber[M: Message]:
         finally:
             limiter.release()
 
-    def _parse(self, message) -> tuple[M, MessageMetadata] | None:
+    async def _log_off_loop(self, method, event, /, **fields) -> None:
+        """Emit a structlog record on a worker thread, off the event loop.
+
+        structlog renders synchronously, and on the dev ``ConsoleRenderer`` a
+        traceback render (rich) can stall the loop for tens of milliseconds —
+        enough to trip the blocking-IO guard the consuming services run. This
+        receive loop bridges blocking pubsub threads onto the loop, so it must
+        never block; offloading the render keeps it responsive. ``asyncer``
+        (anyio-based) is used rather than structlog's ``a*`` methods because
+        those are asyncio-only (``run_in_executor``) and would break the trio
+        backend. Pass the exception explicitly via ``exc_info`` — ``sys.exc_info``
+        is not visible from the worker thread.
+        """
+        await asyncer.asyncify(method)(event, **fields)
+
+    async def _parse(self, message) -> tuple[M, MessageMetadata] | None:
         """Unmarshal a raw message into its proto type + metadata.
 
         Returns ``None`` (after nacking) when the payload fails to decode, so a
@@ -502,23 +518,27 @@ class Subscriber[M: Message]:
         pure-Python protobuf backend a malformed payload can surface as e.g.
         ``UnicodeDecodeError``, and letting it escape would tear down the whole
         receive loop over one poison message (the Go layer likewise nacks on any
-        unmarshal error). Only synchronous code runs in the ``try``, so no
-        cancellation exception can be swallowed here.
+        unmarshal error). Only synchronous code runs in the decode ``try``, so no
+        cancellation exception can be swallowed there.
         """
         delivery_attempt = getattr(message, "delivery_attempt", None)
 
         instance = self._message_type()
         try:
             instance.ParseFromString(message.data)
-        except Exception:
-            self._logger.warning(
+        except Exception as exc:
+            # Nack before logging: the log render is awaited (offloaded to a
+            # thread), so a cancellation there must not skip disposing of the
+            # message.
+            message.nack()
+            await self._log_off_loop(
+                self._logger.warning,
                 "failed to unmarshal pubsub message",
-                exc_info=True,
+                exc_info=exc,
                 topic_proto_name=self._topic_proto_name,
                 subscription_proto_name=self._subscription_proto_name,
                 message_id=message.message_id,
             )
-            message.nack()
             return None
 
         metadata = MessageMetadata(
@@ -529,7 +549,7 @@ class Subscriber[M: Message]:
         return instance, metadata
 
     async def _dispatch(self, message, callback: MessageCallback[M]) -> None:
-        parsed = self._parse(message)
+        parsed = await self._parse(message)
         if parsed is None:
             return
         instance, metadata = parsed
@@ -547,10 +567,12 @@ class Subscriber[M: Message]:
             # The callback raised — either a deliberate nack signal or an
             # unexpected error. Catch BaseException (not just Exception) so that
             # even a SystemExit-style error from a single message can't tear down
-            # the receive loop. Log with full diagnostic context and nack so the
-            # message is redelivered, and eventually dead-lettered if it keeps
-            # failing.
-            self._logger.error(
+            # the receive loop. Nack so the message is redelivered (and
+            # eventually dead-lettered if it keeps failing) before the awaited
+            # log render, then record full diagnostic context off the loop.
+            message.nack()
+            await self._log_off_loop(
+                self._logger.error,
                 "error processing pubsub message",
                 exc_info=exc,
                 topic_proto_name=self._topic_proto_name,
@@ -560,7 +582,6 @@ class Subscriber[M: Message]:
                 if metadata.delivery_attempt is not None
                 else 0,
             )
-            message.nack()
             return
         message.ack()
 
@@ -592,7 +613,7 @@ class _MessageIterator[M: Message]:
                 raw = await self._recv.receive()
             except anyio.EndOfStream:
                 await self._end_of_stream()
-            parsed = self._subscriber._parse(raw)
+            parsed = await self._subscriber._parse(raw)
             if parsed is None:
                 # Malformed payload: _parse already nacked it. Skip and pull next.
                 continue
