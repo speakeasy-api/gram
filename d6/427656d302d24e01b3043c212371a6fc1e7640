@@ -1,0 +1,27 @@
+server/internal/risk/scanner.go
+  s_5e8039f9d96e02::t_2b9e0b3ce8c821 191
+  s_5e8039f9d96e02::t_6ba464378e4dcf 378
+server/internal/background/activities/risk_analysis/message_view.go
+  s_5e8039f9d96e02::t_ae766a6e8883d2 31-32
+server/internal/background/activities/risk_analysis/celadapter.go
+  s_5e8039f9d96e02::t_ce3b259166d59a 70
+  s_5e8039f9d96e02::t_1a897c878500ff 13-15
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_5e8039f9d96e02::t_6c023e6f8b67c5 223
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "d6427656d302d24e01b3043c212371a6fc1e7640",
+  "prompts": {},
+  "sessions": {
+    "s_5e8039f9d96e02": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7204e23b-9892-40b9-9abd-f538d9fb898d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

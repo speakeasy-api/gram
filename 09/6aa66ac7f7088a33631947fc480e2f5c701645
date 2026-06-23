@@ -1,0 +1,29 @@
+server/internal/risk/celenv/reference.go
+  s_e5457925ae460d::t_118f699cf72b1e 3-6,8-18,21-29,32-38,41,44,51-71,73-81,83-89
+server/internal/risk/celenv/reference_test.go
+  s_e5457925ae460d::t_118f699cf72b1e 3-6,17-19,21-26,29-33,35-36,38-44,46,48-49,53-56,61-64,67-68,70-72,74-75,78-80,82,84-99
+server/internal/risk/celenv/celenv_test.go
+  s_e5457925ae460d::t_cbf757da8f3e3f 318,320,322,324,335
+server/internal/risk/celenv/completion.go
+  s_e5457925ae460d::t_118f699cf72b1e 1-170
+server/internal/risk/celenv/celenv.go
+  s_e5457925ae460d::t_cbf757da8f3e3f 116-122,124-172,174,179-189,191-193,195-196
+server/internal/risk/celenv/completion_test.go
+  s_e5457925ae460d::t_118f699cf72b1e 1-90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "096aa66ac7f7088a33631947fc480e2f5c701645",
+  "prompts": {},
+  "sessions": {
+    "s_e5457925ae460d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "27e802d5-8b32-4910-b9fd-7266730d92eb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}
