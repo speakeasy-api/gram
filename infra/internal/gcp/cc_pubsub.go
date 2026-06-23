@@ -2,6 +2,8 @@ package gcp
 
 import (
 	"cmp"
+	"context"
+	"log/slog"
 	"maps"
 	"math"
 	"slices"
@@ -9,6 +11,7 @@ import (
 	kccv1alpha1 "github.com/GoogleCloudPlatform/k8s-config-connector/pkg/clients/generated/apis/k8s/v1alpha1"
 	pubsubv1beta1 "github.com/GoogleCloudPlatform/k8s-config-connector/pkg/clients/generated/apis/pubsub/v1beta1"
 	"github.com/ettle/strcase"
+	"github.com/speakeasy-api/gram/infra/internal/attr"
 )
 
 // protoMessageLabel is the metadata label key carrying the fully qualified
@@ -19,10 +22,22 @@ const protoMessageLabel = "proto_message"
 // protobuf message name of the topic a subscription consumes.
 const topicMessageLabel = "topic_proto_message"
 
+// schemaEncodingBinary is the Config Connector TopicSchemaSettings `encoding`
+// value for messages validated as wire-format protobuf. The runtime publisher
+// marshals proto messages to binary, so attached schemas validate against the
+// binary encoding rather than JSON.
+const schemaEncodingBinary = "BINARY"
+
 // buildPubSubValues projects the discovered topology into a stable, sorted Helm
 // values document. Topics and subscriptions are sorted by name so the generated
 // file diffs cleanly across runs.
-func buildPubSubValues(topics []DesiredTopic, subs []DesiredSubscription, schemas []DesiredSchema) pubSubValuesDocument {
+//
+// A topic gets its generated schema attached (via schemaSettings) when one was
+// derived from the same proto message. A topic that sets an explicit `name`
+// option is left unattached — its ID may point at a shared, externally-owned
+// topic, so binding a per-message schema to it could collide with other
+// producers — and the skip is logged.
+func buildPubSubValues(ctx context.Context, logger *slog.Logger, topics []DesiredTopic, subs []DesiredSubscription, schemas []DesiredSchema) pubSubValuesDocument {
 	sortedTopics := slices.Clone(topics)
 	slices.SortFunc(sortedTopics, func(a, b DesiredTopic) int {
 		return cmp.Compare(a.Name, b.Name)
@@ -38,12 +53,36 @@ func buildPubSubValues(topics []DesiredTopic, subs []DesiredSubscription, schema
 		return cmp.Compare(a.Name, b.Name)
 	})
 
+	// Index schemas by their source proto message so a topic can find the schema
+	// derived from the same message regardless of the topic's resolved ID.
+	schemaByProtoMessage := make(map[string]DesiredSchema, len(sortedSchemas))
+	for _, schema := range sortedSchemas {
+		schemaByProtoMessage[schema.ProtoMessage] = schema
+	}
+
 	topicValues := make([]pubSubTopicValue, 0, len(sortedTopics))
 	for _, topic := range sortedTopics {
+		spec := topicSpec(topic)
+
+		if schema, ok := schemaByProtoMessage[topic.ProtoMessage]; ok {
+			if topic.NameOverridden {
+				logger.InfoContext(ctx,
+					"skipping pubsub schema attachment for topic with explicit name option",
+					attr.SlogGCPTopicQualifiedName(topic.Name),
+					attr.SlogTopicProtoName(topic.ProtoMessage),
+				)
+			} else {
+				spec.SchemaSettings = &pubsubv1beta1.TopicSchemaSettings{
+					Encoding:  new(schemaEncodingBinary),
+					SchemaRef: kccv1alpha1.ResourceRef{Name: schema.Name},
+				}
+			}
+		}
+
 		topicValues = append(topicValues, pubSubTopicValue{
 			Name:   topic.Name,
 			Labels: labelsWithProtoMessage(topic.Labels, topic.ProtoMessage),
-			Spec:   topicSpec(topic),
+			Spec:   spec,
 		})
 	}
 

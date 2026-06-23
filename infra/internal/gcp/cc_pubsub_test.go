@@ -68,7 +68,7 @@ func TestBuildPubSubValues_StableOrder(t *testing.T) {
 		},
 	}
 
-	doc := buildPubSubValues(topics, subs, []DesiredSchema{})
+	doc := buildPubSubValues(t.Context(), slog.New(slog.DiscardHandler), topics, subs, []DesiredSchema{})
 
 	require.True(t, doc.PubSub.Enabled)
 	require.Equal(t, []string{pubsubAPI}, doc.PubSub.APIs)
@@ -117,6 +117,71 @@ func TestBuildPubSubValues_StableOrder(t *testing.T) {
 	require.Equal(t, "604800s", *zebra.MessageRetentionDuration)
 }
 
+// TestBuildPubSubValues_SchemaAttachment verifies that a topic derived from the
+// same proto message as a generated schema gets that schema attached via
+// schemaSettings, unless the topic sets an explicit name option (in which case
+// the schema is left unattached).
+func TestBuildPubSubValues_SchemaAttachment(t *testing.T) {
+	t.Parallel()
+
+	topics := []DesiredTopic{
+		{
+			Name:           "example-v1-event",
+			Labels:         map[string]string{"managed_by": managedByLabel},
+			ProtoMessage:   "example.v1.Event",
+			NameOverridden: false,
+		},
+		{
+			// Same proto message as a schema, but an explicit name override.
+			Name:           "shared-topic",
+			Labels:         map[string]string{"managed_by": managedByLabel},
+			ProtoMessage:   "example.v1.Shared",
+			NameOverridden: true,
+		},
+		{
+			// No matching schema (e.g. a synthesized DLQ topic).
+			Name:         "example-v1-event-dlq",
+			Labels:       map[string]string{"managed_by": managedByLabel, "dlq_for": "example-v1-processor"},
+			ProtoMessage: "example.v1.Processor",
+		},
+	}
+
+	schemas := []DesiredSchema{
+		{
+			Name:         "example-v1-event",
+			ProtoMessage: "example.v1.Event",
+			Definition:   "edition = \"2024\";\n",
+			Labels:       map[string]string{"managed_by": managedByLabel},
+		},
+		{
+			Name:         "example-v1-shared",
+			ProtoMessage: "example.v1.Shared",
+			Definition:   "edition = \"2024\";\n",
+			Labels:       map[string]string{"managed_by": managedByLabel},
+		},
+	}
+
+	doc := buildPubSubValues(t.Context(), slog.New(slog.DiscardHandler), topics, nil, schemas)
+
+	byName := map[string]pubSubTopicValue{}
+	for _, topic := range doc.PubSub.Topics {
+		byName[topic.Name] = topic
+	}
+
+	// Topic with no name override gets the matching schema attached.
+	event := byName["example-v1-event"].Spec
+	require.NotNil(t, event.SchemaSettings)
+	require.Equal(t, "example-v1-event", event.SchemaSettings.SchemaRef.Name)
+	require.NotNil(t, event.SchemaSettings.Encoding)
+	require.Equal(t, schemaEncodingBinary, *event.SchemaSettings.Encoding)
+
+	// Topic with an explicit name override is left unattached.
+	require.Nil(t, byName["shared-topic"].Spec.SchemaSettings)
+
+	// Topic without a matching schema is left unattached.
+	require.Nil(t, byName["example-v1-event-dlq"].Spec.SchemaSettings)
+}
+
 func TestCCPubSub_WriteValues(t *testing.T) {
 	t.Parallel()
 
@@ -130,7 +195,7 @@ func TestCCPubSub_WriteValues(t *testing.T) {
 		{Name: "outbox-processor", Topic: "outbox-event", TopicMessage: "gram.outbox.v1.Event", AckDeadline: 30 * time.Second, Labels: map[string]string{"managed_by": managedByLabel}, ProtoMessage: "gram.outbox.v1.Processor"},
 	}
 
-	err := cc.writeValues(t.Context(), buildPubSubValues(topics, subs, []DesiredSchema{}))
+	err := cc.writeValues(t.Context(), buildPubSubValues(t.Context(), slog.New(slog.DiscardHandler), topics, subs, []DesiredSchema{}))
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(out)
