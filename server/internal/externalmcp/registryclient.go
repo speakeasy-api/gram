@@ -81,7 +81,7 @@ type ListServersParams struct {
 
 // ListServersResult is the result of a ListServers call.
 type ListServersResult struct {
-	Servers    []*types.ExternalMCPServer
+	Servers    []*types.ExternalMCPServerEntry
 	NextCursor *string
 }
 
@@ -267,7 +267,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 	}
 
 	registryID := registry.ID.String()
-	servers := make([]*types.ExternalMCPServer, 0, len(listResp.Servers))
+	servers := make([]*types.ExternalMCPServerEntry, 0, len(listResp.Servers))
 	for _, s := range listResp.Servers {
 
 		if s.Meta.Version.Status == "deleted" {
@@ -279,14 +279,31 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			iconURL = &s.Server.Icons[0].Src
 		}
 
-		tools := make([]*types.ExternalMCPTool, 0)
-		for _, tool := range s.Meta.Version.FirstRemote.Tools {
-			tools = append(tools, &types.ExternalMCPTool{
-				Name:        &tool.Name,
-				Description: &tool.Description,
-				InputSchema: tool.InputSchema,
-				Annotations: tool.Annotations,
-			})
+		// The catalog list view needs only a tool count and a read-only flag
+		// (for the card badge and the tool-behavior filter); it never reads the
+		// tool definitions, whose JSON Schemas dominate the registry payload
+		// (repeated in the top-level tools list and across every _meta remote
+		// slot). Compute the two scalars the list needs, then drop the tools from
+		// the _meta blob and omit the top-level tools array entirely. The detail
+		// page fetches full tools via getServerDetails.
+		listTools := s.Meta.Version.FirstRemote.Tools
+		toolCount := len(listTools)
+		isReadOnly := toolCount > 0
+		for _, tool := range listTools {
+			if readOnly, _ := tool.Annotations["readOnlyHint"].(bool); !readOnly {
+				isReadOnly = false
+				break
+			}
+		}
+
+		for _, remote := range []*serverRemoteMeta{
+			&s.Meta.Version.FirstRemote,
+			&s.Meta.Version.SecondRemote,
+			&s.Meta.Version.ThirdRemote,
+			&s.Meta.Version.FourthRemote,
+			&s.Meta.Version.FifthRemote,
+		} {
+			remote.Tools = nil
 		}
 
 		var remotes []*types.ExternalMCPRemote
@@ -304,7 +321,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			return ListServersResult{}, fmt.Errorf("convert meta: %w", err)
 		}
 
-		server := &types.ExternalMCPServer{
+		servers = append(servers, &types.ExternalMCPServerEntry{
 			RegistrySpecifier:                   s.Server.Name,
 			Version:                             s.Server.Version,
 			Description:                         s.Server.Description,
@@ -315,11 +332,10 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			Title:                               s.Server.Title,
 			IconURL:                             iconURL,
 			Meta:                                meta,
-			Tools:                               tools,
+			ToolCount:                           toolCount,
+			IsReadOnly:                          isReadOnly,
 			Remotes:                             remotes,
-		}
-
-		servers = append(servers, server)
+		})
 	}
 
 	nextCursor := listResp.Metadata.NextCursor

@@ -302,7 +302,7 @@ function ExclusionExamples() {
     ['match == "value"', "exact literal match"],
     ['match ~= "regex"', "regex (RE2 syntax, ≤ 512 chars)"],
     ['rule_id == "pii.email_address"', "suppress a specific rule"],
-    ['source == "presidio"', "suppress a source"],
+    ['source == "prompt_injection"', "suppress a source"],
     ['entity_type == "EMAIL_ADDRESS"', "suppress by entity type"],
   ];
   return (

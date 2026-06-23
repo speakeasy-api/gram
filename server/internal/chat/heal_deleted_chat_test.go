@@ -11,6 +11,7 @@ import (
 
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // seedThreadBackedChat creates a chat backed by a live assistant thread.
@@ -61,9 +62,15 @@ func TestUpsertChat_HealsDeletedThreadBackedChat(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	// SoftDeleteChat refuses to delete a chat backing a live thread (that guard is
+	// the point of the sibling PR). To exercise self-heal we have to land in the
+	// wedged state some other way — legacy rows, direct DB manipulation, or a future
+	// code path that bypasses the guard — so use the test-only bypass.
+	tr := testrepo.New(ti.conn)
+
 	// Thread-backed deleted chat heals on the next write.
 	threadChatID := seedThreadBackedChat(t, ctx, ti)
-	require.NoError(t, r.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{ID: threadChatID, ProjectID: ti.projectID}))
+	require.NoError(t, tr.ForceSoftDeleteChat(ctx, threadChatID))
 	_, err := r.GetChat(ctx, threadChatID)
 	require.ErrorIs(t, err, pgx.ErrNoRows, "chat should be soft-deleted before the write")
 
@@ -74,7 +81,8 @@ func TestUpsertChat_HealsDeletedThreadBackedChat(t *testing.T) {
 	// A plain chat with no thread stays deleted: a write must not resurrect a chat
 	// the user intentionally deleted.
 	plainChatID := seedChat(t, ctx, ti, "", "ext-user", "Plain Chat")
-	require.NoError(t, r.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{ID: plainChatID, ProjectID: ti.projectID}))
+	_, err = r.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{ID: plainChatID, ProjectID: ti.projectID})
+	require.NoError(t, err)
 	upsert(plainChatID)
 	_, err = r.GetChat(ctx, plainChatID)
 	require.ErrorIs(t, err, pgx.ErrNoRows, "intentionally-deleted plain chat must stay deleted")

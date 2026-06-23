@@ -116,6 +116,20 @@ func (q *Queries) CreateOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const forceSoftDeleteChat = `-- name: ForceSoftDeleteChat :exec
+UPDATE chats
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+`
+
+// Bypasses the production SoftDeleteChat guard (which refuses to delete a chat
+// backing a live assistant thread) so tests can wedge the database into the
+// legacy/abnormal state that the runtime's self-heal exists to recover from.
+func (q *Queries) ForceSoftDeleteChat(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteChat, id)
+	return err
+}
+
 const getDeploymentFunctionInfraOverrides = `-- name: GetDeploymentFunctionInfraOverrides :many
 SELECT memory_mib_override, scale_override FROM deployments_functions WHERE deployment_id = $1
 `

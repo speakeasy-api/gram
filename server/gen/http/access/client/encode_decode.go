@@ -5461,12 +5461,6 @@ func unmarshalRoleGrantResponseBodyToAccessRoleGrant(v *RoleGrantResponseBody) *
 	res := &access.RoleGrant{
 		Scope: *v.Scope,
 	}
-	if v.Effect != nil {
-		res.Effect = *v.Effect
-	}
-	if v.Effect == nil {
-		res.Effect = "allow"
-	}
 	if v.Selectors != nil {
 		res.Selectors = make([]*access.Selector, len(v.Selectors))
 		for i, val := range v.Selectors {
@@ -5503,14 +5497,7 @@ func unmarshalSelectorResponseBodyToAccessSelector(v *SelectorResponseBody) *acc
 // *RoleGrantRequestBody from a value of type *access.RoleGrant.
 func marshalAccessRoleGrantToRoleGrantRequestBody(v *access.RoleGrant) *RoleGrantRequestBody {
 	res := &RoleGrantRequestBody{
-		Scope:  v.Scope,
-		Effect: v.Effect,
-	}
-	{
-		var zero string
-		if res.Effect == zero {
-			res.Effect = "allow"
-		}
+		Scope: v.Scope,
 	}
 	if v.Selectors != nil {
 		res.Selectors = make([]*SelectorRequestBody, len(v.Selectors))
@@ -5548,14 +5535,7 @@ func marshalAccessSelectorToSelectorRequestBody(v *access.Selector) *SelectorReq
 // *access.RoleGrant from a value of type *RoleGrantRequestBody.
 func marshalRoleGrantRequestBodyToAccessRoleGrant(v *RoleGrantRequestBody) *access.RoleGrant {
 	res := &access.RoleGrant{
-		Scope:  v.Scope,
-		Effect: v.Effect,
-	}
-	{
-		var zero string
-		if res.Effect == zero {
-			res.Effect = "allow"
-		}
+		Scope: v.Scope,
 	}
 	if v.Selectors != nil {
 		res.Selectors = make([]*access.Selector, len(v.Selectors))
@@ -5594,9 +5574,11 @@ func marshalSelectorRequestBodyToAccessSelector(v *SelectorRequestBody) *access.
 // *ScopeDefinitionResponseBody.
 func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinitionResponseBody) *access.ScopeDefinition {
 	res := &access.ScopeDefinition{
-		Slug:         *v.Slug,
-		Description:  *v.Description,
-		ResourceType: *v.ResourceType,
+		Slug:           *v.Slug,
+		Description:    *v.Description,
+		ResourceType:   *v.ResourceType,
+		Visibility:     *v.Visibility,
+		ExclusionScope: v.ExclusionScope,
 	}
 
 	return res
@@ -5626,12 +5608,6 @@ func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberRespon
 func unmarshalListRoleGrantResponseBodyToAccessListRoleGrant(v *ListRoleGrantResponseBody) *access.ListRoleGrant {
 	res := &access.ListRoleGrant{
 		Scope: *v.Scope,
-	}
-	if v.Effect != nil {
-		res.Effect = *v.Effect
-	}
-	if v.Effect == nil {
-		res.Effect = "allow"
 	}
 	if v.SubScopes != nil {
 		res.SubScopes = make([]string, len(v.SubScopes))

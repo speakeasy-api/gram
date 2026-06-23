@@ -7,7 +7,10 @@ import {
   type ExclusionSheetState,
   GLOBAL_SCOPE,
 } from "@/pages/security/exclusion-sheet";
-import { getRuleTitleFallback } from "@/pages/security/risk-utils";
+import {
+  getCategoryCodeForFinding,
+  getRuleTitleFallback,
+} from "@/pages/security/risk-utils";
 import { useRevealAll } from "@/pages/security/reveal-all-context";
 
 /** Soft warning (yellow) wash for a *non-sensitive* flagged span — always shown,
@@ -25,7 +28,10 @@ const SENSITIVE_MARK_REVEALED = "bg-red-700/15 text-red-700 ring-red-700/30";
 
 export function getRiskBadgeLabel(result: RiskResult): string {
   if (result.ruleId === "llm_judge") return getRuleTitleFallback(result.ruleId);
-  return ruleIdCategoryLabel(result.ruleId) || result.source.toUpperCase();
+  return (
+    ruleIdCategoryLabel(result.ruleId) ||
+    getCategoryCodeForFinding(result.source, result.ruleId)
+  );
 }
 
 export function shouldShowRiskRuleId(result: RiskResult): boolean {

@@ -32717,7 +32717,7 @@ paths:
         name: UserSessionFacets
   /rpc/userSessions.mint:
     post:
-      description: Mint a user_session for an issuer-gated toolset on behalf of the authenticated dashboard user. The minted JWT matches the shape of the one /mcp/{slug}/token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.
+      description: 'Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: either a toolset (/mcp) or a remote MCP server (/x/mcp). Exactly one of toolset_id or mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client''s bearer.'
       operationId: mintUserSession
       parameters:
         - allowEmptyValue: true
@@ -37372,6 +37372,64 @@ components:
         - registry_specifier
         - version
         - description
+    ExternalMCPServerEntry:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Description of what the server does
+        icon_url:
+          type: string
+          description: URL to the server's icon
+          format: uri
+        is_read_only:
+          type: boolean
+          description: Whether every tool on the server is read-only
+        mcp_server_id:
+          type: string
+          description: ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)
+          format: uuid
+        meta:
+          description: Opaque metadata from the registry
+        organization_mcp_collection_registry_id:
+          type: string
+          description: ID of the internal collection registry this server came from
+          format: uuid
+        registry_id:
+          type: string
+          description: ID of the external MCP registry this server came from
+          format: uuid
+        registry_specifier:
+          type: string
+          description: Server specifier used to look up in the registry (e.g., 'io.github.user/server')
+          example: io.modelcontextprotocol.anonymous/exa
+        remotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalMCPRemote'
+          description: Available remote endpoints for the server
+        title:
+          type: string
+          description: Display name for the server
+        tool_count:
+          type: integer
+          description: Number of tools the server exposes
+          format: int64
+        toolset_id:
+          type: string
+          description: ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)
+          format: uuid
+        version:
+          type: string
+          description: Semantic version of the server
+          example: 1.0.0
+      description: A summary of an MCP server from an external registry, returned by catalog listings
+      required:
+        - registry_specifier
+        - version
+        - description
+        - tool_count
+        - is_read_only
     ExternalMCPTool:
       type: object
       properties:
@@ -39226,7 +39284,7 @@ components:
         servers:
           type: array
           items:
-            $ref: '#/components/schemas/ExternalMCPServer'
+            $ref: '#/components/schemas/ExternalMCPServerEntry'
           description: List of available MCP servers
       required:
         - servers
@@ -39751,26 +39809,28 @@ components:
     ListRoleGrant:
       type: object
       properties:
-        effect:
-          type: string
-          description: Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
-          default: allow
-          enum:
-            - allow
-            - deny
         scope:
           type: string
           description: The scope slug this grant applies to.
           enum:
             - org:read
+            - org:blocked_read
             - org:admin
+            - org:blocked_admin
             - project:read
+            - project:blocked_read
             - project:write
+            - project:blocked_write
             - mcp:read
+            - mcp:blocked_read
             - mcp:write
+            - mcp:blocked_write
             - mcp:connect
+            - mcp:blocked_connect
             - environment:read
+            - environment:blocked_read
             - environment:write
+            - environment:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
         selectors:
@@ -39784,14 +39844,23 @@ components:
             type: string
             enum:
               - org:read
+              - org:blocked_read
               - org:admin
+              - org:blocked_admin
               - project:read
+              - project:blocked_read
               - project:write
+              - project:blocked_write
               - mcp:read
+              - mcp:blocked_read
               - mcp:write
+              - mcp:blocked_write
               - mcp:connect
+              - mcp:blocked_connect
               - environment:read
+              - environment:blocked_read
               - environment:write
+              - environment:blocked_write
               - risk_policy:evaluate
               - risk_policy:bypass
           description: The inherited scopes the primary scope grants.
@@ -40622,18 +40691,20 @@ components:
     MintUserSessionRequestBody:
       type: object
       properties:
+        mcp_server_id:
+          type: string
+          description: Bind the JWT to this remote MCP server's user_session_issuer audience (the /x/mcp convention, since remote servers have no toolset). Mutually exclusive with toolset_id; exactly one must be set. Must be issuer-gated and live in the caller's project.
+          format: uuid
         toolset_id:
           type: string
-          description: The toolset to bind the minted JWT to. Must be issuer-gated and live in the caller's project.
+          description: Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with mcp_server_id; exactly one must be set. Must be issuer-gated and live in the caller's project.
           format: uuid
-      required:
-        - toolset_id
     MintUserSessionResponseBody:
       type: object
       properties:
         access_token:
           type: string
-          description: 'The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the toolset''s /mcp/{slug} surface.'
+          description: 'The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.'
         expires_in:
           type: integer
           description: Lifetime of the access token in seconds.
@@ -43917,26 +43988,28 @@ components:
     RoleGrant:
       type: object
       properties:
-        effect:
-          type: string
-          description: Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
-          default: allow
-          enum:
-            - allow
-            - deny
         scope:
           type: string
           description: The scope slug this grant applies to.
           enum:
             - org:read
+            - org:blocked_read
             - org:admin
+            - org:blocked_admin
             - project:read
+            - project:blocked_read
             - project:write
+            - project:blocked_write
             - mcp:read
+            - mcp:blocked_read
             - mcp:write
+            - mcp:blocked_write
             - mcp:connect
+            - mcp:blocked_connect
             - environment:read
+            - environment:blocked_read
             - environment:write
+            - environment:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
         selectors:
@@ -44000,6 +44073,20 @@ components:
         description:
           type: string
           description: What this scope protects.
+        exclusion_scope:
+          type: string
+          description: The scope used to store exception rules for this scope.
+          enum:
+            - org:blocked_read
+            - org:blocked_admin
+            - project:blocked_read
+            - project:blocked_write
+            - mcp:blocked_read
+            - mcp:blocked_write
+            - mcp:blocked_connect
+            - environment:blocked_read
+            - environment:blocked_write
+            - risk_policy:bypass
         resource_type:
           type: string
           description: The type of resource this scope applies to.
@@ -44014,20 +44101,36 @@ components:
           description: Unique scope identifier.
           enum:
             - org:read
+            - org:blocked_read
             - org:admin
+            - org:blocked_admin
             - project:read
+            - project:blocked_read
             - project:write
+            - project:blocked_write
             - mcp:read
+            - mcp:blocked_read
             - mcp:write
+            - mcp:blocked_write
             - mcp:connect
+            - mcp:blocked_connect
             - environment:read
+            - environment:blocked_read
             - environment:write
+            - environment:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
+        visibility:
+          type: string
+          description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
+          enum:
+            - user_visible
+            - internal
       required:
         - slug
         - description
         - resource_type
+        - visibility
     SearchChatsFilter:
       type: object
       properties:

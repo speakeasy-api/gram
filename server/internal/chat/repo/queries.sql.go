@@ -1828,6 +1828,49 @@ func (q *Queries) ListUserFeedbackForChat(ctx context.Context, chatID uuid.UUID)
 	return items, nil
 }
 
+const seedAssistant = `-- name: SeedAssistant :one
+INSERT INTO assistants (project_id, organization_id, name, model, instructions)
+VALUES ($1, $2, $3, 'anthropic/claude-opus-4.8', 'be helpful')
+RETURNING id
+`
+
+type SeedAssistantParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Name           string
+}
+
+// Test fixture: insert a minimal assistant and return its id.
+func (q *Queries) SeedAssistant(ctx context.Context, arg SeedAssistantParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedAssistant, arg.ProjectID, arg.OrganizationID, arg.Name)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedAssistantThread = `-- name: SeedAssistantThread :exec
+INSERT INTO assistant_threads (assistant_id, project_id, correlation_id, chat_id, source_kind)
+VALUES ($1, $2, $3, $4, 'cron')
+`
+
+type SeedAssistantThreadParams struct {
+	AssistantID   uuid.UUID
+	ProjectID     uuid.UUID
+	CorrelationID string
+	ChatID        uuid.UUID
+}
+
+// Test fixture: insert an active assistant thread backed by a chat.
+func (q *Queries) SeedAssistantThread(ctx context.Context, arg SeedAssistantThreadParams) error {
+	_, err := q.db.Exec(ctx, seedAssistantThread,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.CorrelationID,
+		arg.ChatID,
+	)
+	return err
+}
+
 const seedChatAtTime = `-- name: SeedChatAtTime :one
 INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
@@ -1933,22 +1976,72 @@ func (q *Queries) SeedRiskResult(ctx context.Context, arg SeedRiskResultParams) 
 	return err
 }
 
-const softDeleteChat = `-- name: SoftDeleteChat :exec
-UPDATE chats
-SET deleted_at = clock_timestamp()
-WHERE id = $1
-  AND project_id = $2
-  AND deleted IS FALSE
+const seedSoftDeleteAssistant = `-- name: SeedSoftDeleteAssistant :exec
+UPDATE assistants SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+// Test fixture: soft-delete an assistant (mirrors DeleteAssistant, which leaves
+// its threads behind).
+func (q *Queries) SeedSoftDeleteAssistant(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, seedSoftDeleteAssistant, id)
+	return err
+}
+
+const softDeleteChat = `-- name: SoftDeleteChat :one
+WITH guard AS (
+  SELECT
+    c.id,
+    EXISTS (
+      SELECT 1
+      FROM assistant_threads t
+      JOIN assistants a ON a.id = t.assistant_id
+      WHERE t.chat_id = c.id
+        AND t.project_id = $1
+        AND t.deleted IS FALSE
+        AND a.deleted IS FALSE
+    ) AS backs_live_thread
+  FROM chats c
+  WHERE c.id = $2
+    AND c.project_id = $1
+    AND c.deleted IS FALSE
+),
+del AS (
+  UPDATE chats
+  SET deleted_at = clock_timestamp()
+  WHERE id = $2
+    AND project_id = $1
+    AND deleted IS FALSE
+    AND id IN (SELECT id FROM guard WHERE backs_live_thread IS FALSE)
+  RETURNING id
+)
+SELECT
+  EXISTS (SELECT 1 FROM del) AS deleted,
+  COALESCE((SELECT backs_live_thread FROM guard), FALSE)::boolean AS backs_live_thread
 `
 
 type SoftDeleteChatParams struct {
-	ID        uuid.UUID
 	ProjectID uuid.UUID
+	ID        uuid.UUID
 }
 
-func (q *Queries) SoftDeleteChat(ctx context.Context, arg SoftDeleteChatParams) error {
-	_, err := q.db.Exec(ctx, softDeleteChat, arg.ID, arg.ProjectID)
-	return err
+type SoftDeleteChatRow struct {
+	Deleted         bool
+	BacksLiveThread bool
+}
+
+// Soft-delete a chat unless it backs a live assistant thread, and report the
+// disposition in a single statement so the caller never has to re-query (which
+// would race with concurrent thread create/delete). `guard` snapshots whether
+// the chat exists in-project, undeleted, and is thread-backed; `del` deletes it
+// only when not thread-backed. Both CTEs share one statement snapshot, so the
+// delete and the diagnosis are consistent: a live (existing, undeleted)
+// thread-backed chat always yields backs_live_thread=true (caller returns 409)
+// and is never silently reported as a successful no-op.
+func (q *Queries) SoftDeleteChat(ctx context.Context, arg SoftDeleteChatParams) (SoftDeleteChatRow, error) {
+	row := q.db.QueryRow(ctx, softDeleteChat, arg.ProjectID, arg.ID)
+	var i SoftDeleteChatRow
+	err := row.Scan(&i.Deleted, &i.BacksLiveThread)
+	return i, err
 }
 
 const updateAIIntegrationConfigChatCursor = `-- name: UpdateAIIntegrationConfigChatCursor :exec

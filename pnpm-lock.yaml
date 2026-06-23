@@ -77,6 +77,9 @@ importers:
 
   client/dashboard:
     dependencies:
+      '@ai-sdk/mcp':
+        specifier: ^1.0.0
+        version: 1.0.48(zod@4.3.6)
       '@ai-sdk/react':
         specifier: 'catalog:'
         version: 3.0.74(react@19.2.7)(zod@4.3.6)
@@ -10506,6 +10509,13 @@ snapshots:
       pkce-challenge: 5.0.0
       zod: 4.2.1
 
+  '@ai-sdk/mcp@1.0.48(zod@4.3.6)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.10
+      '@ai-sdk/provider-utils': 4.0.28(zod@4.3.6)
+      pkce-challenge: 5.0.0
+      zod: 4.3.6
+
   '@ai-sdk/provider-utils@4.0.13(zod@4.2.1)':
     dependencies:
       '@ai-sdk/provider': 3.0.7
@@ -10526,6 +10536,13 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.0
       zod: 4.2.1
+
+  '@ai-sdk/provider-utils@4.0.28(zod@4.3.6)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.10
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.1.0
+      zod: 4.3.6
 
   '@ai-sdk/provider@3.0.10':
     dependencies:

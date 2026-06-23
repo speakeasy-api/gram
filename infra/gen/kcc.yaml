@@ -68,21 +68,6 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-risk-v1-presidio-analysis
-  - labels:
-      deprecated: "true"
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-risk-v1-presidio-scanner
-      topic_proto_message: gram-risk-v1-presidio-request
-    name: gram-risk-v1-presidio-scanner
-    spec:
-      ackDeadlineSeconds: 60
-      messageRetentionDuration: 2592000s
-      retainAckedMessages: true
-      retryPolicy:
-        maximumBackoff: 600s
-        minimumBackoff: 10s
-      topicRef:
-        name: gram-risk-v1-presidio-request
   topics:
   - labels:
       managed_by: proto-pubsub-orchestrator
@@ -118,12 +103,5 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-presidio-analysis
     name: gram-risk-v1-presidio-analysis
-    spec:
-      messageRetentionDuration: 604800s
-  - labels:
-      deprecated: "true"
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-risk-v1-presidio-request
-    name: gram-risk-v1-presidio-request
     spec:
       messageRetentionDuration: 604800s

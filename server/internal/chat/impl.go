@@ -1125,12 +1125,21 @@ func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload
 		return oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
 	}
 
-	err = s.repo.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{
+	// SoftDeleteChat deletes the chat unless it backs a live assistant thread, and
+	// reports the disposition in one statement (no racy re-query). A live-thread
+	// chat reloads its conversation every turn, so a soft-deleted backing chat
+	// would wedge the thread — refuse with a conflict. A no-op that isn't
+	// thread-backed (chat absent / already deleted / other project) is a success,
+	// matching the prior project-scoped behavior.
+	res, err := s.repo.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{
 		ID:        chatID,
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "soft delete chat").LogError(ctx, s.logger)
+	}
+	if !res.Deleted && res.BacksLiveThread {
+		return oops.E(oops.CodeConflict, nil, "cannot delete a chat that backs an assistant thread").LogError(ctx, s.logger)
 	}
 
 	return nil

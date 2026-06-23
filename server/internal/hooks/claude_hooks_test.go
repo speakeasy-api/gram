@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
 
@@ -52,7 +53,7 @@ func (s userScopedShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context,
 	return true, nil
 }
 
-func TestResolveClaudeScanContext_PrefersAuthContextProjectOverCachedMetadata(t *testing.T) {
+func TestNormalizeClaudeHookEvent_PrefersAuthContextProjectOverCachedMetadata(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -68,19 +69,26 @@ func TestResolveClaudeScanContext_PrefersAuthContextProjectOverCachedMetadata(t 
 		UserEmail: "cached-scan@example.com",
 	}, 0))
 
-	got, err := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
-		SessionID: &sessionID,
-	})
+	normalized, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+	}, time.Now())
 	require.NoError(t, err)
-	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
-	assert.Equal(t, *authCtx.ProjectID, got.projectID)
-	assert.Empty(t, got.userID)
+	require.NotNil(t, normalized)
+	got, ok := normalized.(*hookevents.UserPromptSubmit)
+	require.True(t, ok)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.Context.OrganizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.Context.ProjectID)
+	assert.Empty(t, got.Context.User.ID)
 }
 
-func TestResolveClaudeScanContext_RejectsMetadataWithoutUserEmail(t *testing.T) {
+func TestNormalizeClaudeHookEvent_AllowsMissingUserEmail(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
 
 	sessionID := uuid.NewString()
 	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
@@ -89,16 +97,21 @@ func TestResolveClaudeScanContext_RejectsMetadataWithoutUserEmail(t *testing.T) 
 		UserEmail: "",
 	}, 0))
 
-	got, err := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
-		SessionID: &sessionID,
-	})
-	require.ErrorContains(t, err, "claude session metadata missing user email")
-	assert.Empty(t, got.organizationID)
-	assert.Equal(t, uuid.Nil, got.projectID)
-	assert.Empty(t, got.userID)
+	normalized, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+	}, time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, normalized)
+	got, ok := normalized.(*hookevents.UserPromptSubmit)
+	require.True(t, ok)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.Context.OrganizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.Context.ProjectID)
+	assert.Empty(t, got.Context.User.ID)
+	assert.Empty(t, got.Context.User.Email)
 }
 
-func TestResolveClaudeScanContext_ResolvesPayloadEmailBeforeAuthUserID(t *testing.T) {
+func TestNormalizeClaudeHookEvent_ResolvesPayloadEmailBeforeAuthUserID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -111,17 +124,22 @@ func TestResolveClaudeScanContext_ResolvesPayloadEmailBeforeAuthUserID(t *testin
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
 
 	sessionID := uuid.NewString()
-	got, err := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
-		SessionID: &sessionID,
-		UserEmail: &userEmail,
-	})
+	normalized, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+	}, time.Now())
 	require.NoError(t, err)
-	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
-	assert.Equal(t, *authCtx.ProjectID, got.projectID)
-	assert.Equal(t, userID, got.userID)
+	require.NotNil(t, normalized)
+	got, ok := normalized.(*hookevents.UserPromptSubmit)
+	require.True(t, ok)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.Context.OrganizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.Context.ProjectID)
+	assert.Equal(t, userID, got.Context.User.ID)
+	assert.Equal(t, userEmail, got.Context.User.Email)
 }
 
-func TestResolveClaudeScanContext_ResolvesAuthContextActorFromCachedEmail(t *testing.T) {
+func TestNormalizeClaudeHookEvent_ResolvesAuthContextActorFromCachedEmail(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -147,13 +165,18 @@ func TestResolveClaudeScanContext_ResolvesAuthContextActorFromCachedEmail(t *tes
 		ProjectID:   uuid.NewString(),
 	}, 0))
 
-	got, err := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
-		SessionID: &sessionID,
-	})
+	normalized, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+	}, time.Now())
 	require.NoError(t, err)
-	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
-	assert.Equal(t, *authCtx.ProjectID, got.projectID)
-	assert.Equal(t, userID, got.userID)
+	require.NotNil(t, normalized)
+	got, ok := normalized.(*hookevents.UserPromptSubmit)
+	require.True(t, ok)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.Context.OrganizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.Context.ProjectID)
+	assert.Equal(t, userID, got.Context.User.ID)
+	assert.Equal(t, userEmail, got.Context.User.Email)
 }
 
 // When the request authenticated via Gram-Key + Gram-Project, handlePreToolUse

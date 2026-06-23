@@ -3,6 +3,14 @@ INSERT INTO chat_messages (chat_id, project_id, role, content)
 VALUES (@chat_id, @project_id, @role, @content)
 RETURNING id;
 
+-- name: ForceSoftDeleteChat :exec
+-- Bypasses the production SoftDeleteChat guard (which refuses to delete a chat
+-- backing a live assistant thread) so tests can wedge the database into the
+-- legacy/abnormal state that the runtime's self-heal exists to recover from.
+UPDATE chats
+SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
 -- name: UpdateChatMessageCreatedAt :exec
 UPDATE chat_messages
 SET created_at = @created_at

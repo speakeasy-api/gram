@@ -24,10 +24,12 @@ type Service interface {
 	// List available user session facet values (clients, users, servers) in the
 	// caller's project.
 	ListFacets(context.Context, *ListFacetsPayload) (res *ListUserSessionFacetsResult, err error)
-	// Mint a user_session for an issuer-gated toolset on behalf of the
-	// authenticated dashboard user. The minted JWT matches the shape of the one
-	// /mcp/{slug}/token would emit after a successful OAuth dance, so the runtime
-	// MCP gateway validates it through the same path as a real MCP client's bearer.
+	// Mint a user_session on behalf of the authenticated dashboard user, bound to
+	// an issuer-gated audience: either a toolset (/mcp) or a remote MCP server
+	// (/x/mcp). Exactly one of toolset_id or mcp_server_id must be provided. The
+	// minted JWT matches the shape /token would emit after a successful OAuth
+	// dance, so the runtime MCP gateway validates it through the same path as a
+	// real MCP client's bearer.
 	MintUserSession(context.Context, *MintUserSessionPayload) (res *MintUserSessionResult, err error)
 	// Push the session's jti into the revocation cache and soft-delete the row.
 	RevokeUserSession(context.Context, *RevokeUserSessionPayload) (err error)
@@ -105,9 +107,15 @@ type ListUserSessionsResult struct {
 // MintUserSessionPayload is the payload type of the userSessions service
 // mintUserSession method.
 type MintUserSessionPayload struct {
-	// The toolset to bind the minted JWT to. Must be issuer-gated and live in the
+	// Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with
+	// mcp_server_id; exactly one must be set. Must be issuer-gated and live in the
 	// caller's project.
-	ToolsetID        string
+	ToolsetID *string
+	// Bind the JWT to this remote MCP server's user_session_issuer audience (the
+	// /x/mcp convention, since remote servers have no toolset). Mutually exclusive
+	// with toolset_id; exactly one must be set. Must be issuer-gated and live in
+	// the caller's project.
+	McpServerID      *string
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -116,7 +124,7 @@ type MintUserSessionPayload struct {
 // mintUserSession method.
 type MintUserSessionResult struct {
 	// The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests
-	// to the toolset's /mcp/{slug} surface.
+	// to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.
 	AccessToken string
 	// Lifetime of the access token in seconds.
 	ExpiresIn int

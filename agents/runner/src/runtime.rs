@@ -29,7 +29,7 @@ use tokio::sync::{OnceCell, oneshot};
 use agentkit_compaction::{AgentBuilderCompactorExt, CompactionReason, Compactor};
 
 use crate::clip::ClippedToolSource;
-use crate::compaction::{PersistingCompactor, build_compactor};
+use crate::compaction::{Compaction, PersistingCompactor, PrimaryCompaction, build_compactor};
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_bootstrap_client, build_http};
@@ -366,7 +366,7 @@ async fn spawn_thread(
     let compactor_http = build_http(compactor_http_client, tokens.clone());
     let compactor_adapter = CompletionsAdapter::with_client(provider, compactor_http);
 
-    let compactor = build_compactor(
+    let compaction = build_compactor(
         &bootstrap.compaction,
         &bootstrap.chat_id,
         &thread_id,
@@ -375,14 +375,6 @@ async fn spawn_thread(
         host.gram_client.clone(),
         tokens.clone(),
     )?;
-    // An inline agent compactor runs right before the next model request, so
-    // OnTurnEnd's persistence-only output would be sent upstream. Run it
-    // terminally instead (see `run_loop`); Threshold shrinks-to-fit, so inline.
-    let (inline_compactor, turn_end_compactor) = if bootstrap.compaction.runs_at_turn_end() {
-        (None, compactor)
-    } else {
-        (compactor, None)
-    };
 
     let mut transcript = Vec::new();
     if !bootstrap.instructions.is_empty() {
@@ -419,9 +411,30 @@ async fn spawn_thread(
         .observer(TracingReporter::new())
         .transcript(transcript);
 
-    if let Some(compactor) = inline_compactor {
-        builder = builder.compactor(compactor);
-    }
+    // Register the loop mutator(s): the policy's own compactor (Threshold's
+    // shrink-to-fit, or OnTurnEnd's cache-replay mutator) plus the universal
+    // mid-turn safety fallback when present. The OnTurnEnd `terminal` pass runs
+    // explicitly at turn end in `run_loop`.
+    let turn_end_compactor = match compaction {
+        Some(Compaction { primary, fallback }) => {
+            let terminal = match primary {
+                Some(PrimaryCompaction::Inline(compactor)) => {
+                    builder = builder.compactor(compactor);
+                    None
+                }
+                Some(PrimaryCompaction::TurnEnd { mutator, terminal }) => {
+                    builder = builder.compactor(mutator);
+                    Some(terminal)
+                }
+                None => None,
+            };
+            if let Some(fallback) = fallback {
+                builder = builder.compactor(fallback);
+            }
+            terminal
+        }
+        None => None,
+    };
 
     let agent = builder
         .build()

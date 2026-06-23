@@ -194,7 +194,7 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 	}
 
 	// Aggregate servers from all registries
-	var allServers []*types.ExternalMCPServer
+	var allServers []*types.ExternalMCPServerEntry
 	var registryResults []ListServersResult
 	for _, registry := range registries {
 		result, err := s.registryClient.ListServers(ctx, Registry{

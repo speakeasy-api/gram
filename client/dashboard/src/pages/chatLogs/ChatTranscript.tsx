@@ -63,6 +63,7 @@ import {
   resultsAreSensitive,
   useRowReveal,
 } from "./chatRiskHelpers";
+import { getCategoryCodeForFinding } from "@/pages/security/risk-utils";
 import { CreateExclusionContext } from "./exclusionContext";
 
 interface RowContext {
@@ -283,7 +284,9 @@ function TurnActions({ results }: { results: RiskResult[] }) {
             <ShieldOff className="size-3.5" />
             Create exclusion
             {actionable.length > 1 &&
-              `: ${[r.ruleId, r.source].filter(Boolean).join(" · ")}`}
+              `: ${[r.ruleId, getCategoryCodeForFinding(r.source, r.ruleId)]
+                .filter(Boolean)
+                .join(" · ")}`}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

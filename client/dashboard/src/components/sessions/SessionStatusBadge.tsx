@@ -1,6 +1,6 @@
+import { Badge } from "@speakeasy-api/moonshine";
 import type { UserSession } from "@gram/client/models/components";
 
-import { Badge } from "@/components/ui/badge";
 import { sessionStatus, STATUS_PRESENTATION } from "@/lib/user-session-status";
 
 export function SessionStatusBadge({
@@ -9,5 +9,9 @@ export function SessionStatusBadge({
   session: UserSession;
 }): JSX.Element {
   const p = STATUS_PRESENTATION[sessionStatus(session)];
-  return <Badge variant={p.badgeVariant}>{p.label}</Badge>;
+  return (
+    <Badge size="sm" variant={p.badgeVariant} background>
+      <Badge.Text>{p.label}</Badge.Text>
+    </Badge>
+  );
 }
