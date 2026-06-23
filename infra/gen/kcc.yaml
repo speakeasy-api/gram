@@ -5,44 +5,6 @@ pubsub:
   enabled: true
   subscriptions:
   - labels:
-      deprecated: "true"
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-ping-v1-processor
-      topic_proto_message: gram-ping-v1-message
-    name: gram-ping-v1-processor
-    spec:
-      ackDeadlineSeconds: 30
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-ping-v1-processor-dlq
-        maxDeliveryAttempts: 5
-      messageRetentionDuration: 3600s
-      retainAckedMessages: true
-      retryPolicy:
-        maximumBackoff: 600s
-        minimumBackoff: 10s
-      topicRef:
-        name: gram-ping-v1-message
-  - labels:
-      deprecated: "true"
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-ping-v1-py-processor
-      topic_proto_message: gram-ping-v1-message
-    name: gram-ping-v1-py-processor
-    spec:
-      ackDeadlineSeconds: 30
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-ping-v1-py-processor-dlq
-        maxDeliveryAttempts: 5
-      messageRetentionDuration: 3600s
-      retainAckedMessages: true
-      retryPolicy:
-        maximumBackoff: 600s
-        minimumBackoff: 10s
-      topicRef:
-        name: gram-ping-v1-message
-  - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-ping-v2-processor
       topic_proto_message: gram-ping-v2-message
@@ -107,27 +69,6 @@ pubsub:
       topicRef:
         name: gram-risk-v1-presidio-analysis
   topics:
-  - labels:
-      deprecated: "true"
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-ping-v1-message
-    name: gram-ping-v1-message
-    spec:
-      messageRetentionDuration: 86400s
-  - labels:
-      deprecated: "true"
-      dlq_for: gram-ping-v1-processor
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-ping-v1-processor
-    name: gram-ping-v1-processor-dlq
-    spec: {}
-  - labels:
-      deprecated: "true"
-      dlq_for: gram-ping-v1-py-processor
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-ping-v1-py-processor
-    name: gram-ping-v1-py-processor-dlq
-    spec: {}
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-ping-v2-message
