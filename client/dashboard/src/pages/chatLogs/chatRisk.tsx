@@ -113,6 +113,27 @@ function MaskedMatchInline({ value }: { value: string }): ReactNode {
   );
 }
 
+type FindingSpan = { match: string; field?: string; path?: string };
+
+// spansOf returns a finding's matched spans: the spans array when the backend
+// attributed several (e.g. a custom rule matching a tool's function and its
+// arguments on the same call), else the single primary match for legacy rows.
+function spansOf(r: RiskResult): FindingSpan[] {
+  const fromSpans = (r.spans ?? [])
+    .filter((s) => s.match)
+    .map((s) => ({ match: s.match, field: s.field, path: s.path }));
+  if (fromSpans.length > 0) return fromSpans;
+  return r.match ? [{ match: r.match }] : [];
+}
+
+// spanFieldLabel renders a span's attribution: the matched message field plus any
+// JSON sub-path, so "Write" reads as "tool.function" and a drilled value as
+// "tool.args.command". Null when the detector didn't attribute a field.
+function spanFieldLabel(span: FindingSpan): string | null {
+  if (!span.field) return null;
+  return span.path ? `${span.field}.${span.path}` : span.field;
+}
+
 /** Compact "N risks" badge with a popover listing each unique finding. */
 export function RiskBadge({
   results,
@@ -126,13 +147,19 @@ export function RiskBadge({
    * to the default destructive badge. */
   trigger?: ReactElement;
 }): ReactNode {
-  const unique = useMemo(() => {
-    const grouped = new Map<string, { result: RiskResult; count: number }>();
+  const findings = useMemo(() => {
+    const grouped = new Map<
+      string,
+      { result: RiskResult; spans: FindingSpan[]; count: number }
+    >();
     for (const r of results) {
-      const key = `${r.source} ${r.ruleId ?? ""} ${r.match ?? ""}`;
+      const spans = spansOf(r);
+      const key = `${r.source}|${r.ruleId ?? ""}|${spans
+        .map((s) => `${s.field ?? ""}:${s.path ?? ""}:${s.match}`)
+        .join("|")}`;
       const hit = grouped.get(key);
       if (hit) hit.count++;
-      else grouped.set(key, { result: r, count: 1 });
+      else grouped.set(key, { result: r, spans, count: 1 });
     }
     return [...grouped.values()];
   }, [results]);
@@ -154,7 +181,7 @@ export function RiskBadge({
                 name="shield-alert"
                 className={`mr-1 ${compact ? "size-2.5" : "size-3"}`}
               />
-              {unique.length} {unique.length === 1 ? "Risk" : "Risks"}
+              {findings.length} {findings.length === 1 ? "Risk" : "Risks"}
             </Badge>
           </button>
         )}
@@ -167,7 +194,7 @@ export function RiskBadge({
         <div className="space-y-3">
           <div className="text-sm font-semibold">Risk Findings</div>
           <div className="divide-border divide-y">
-            {unique.map(({ result: r, count }) => (
+            {findings.map(({ result: r, spans, count }) => (
               <div key={r.id} className="py-2 first:pt-0 last:pb-0">
                 <div className="flex items-center gap-2">
                   <Badge variant="destructive" className="shrink-0 text-[10px]">
@@ -192,7 +219,26 @@ export function RiskBadge({
                     {r.description}
                   </p>
                 )}
-                {r.match && <MaskedMatchInline value={r.match} />}
+                {spans.length > 0 && (
+                  <div className="mt-1 flex flex-col gap-1">
+                    {spans.map((span, i) => {
+                      const label = spanFieldLabel(span);
+                      return (
+                        <div
+                          key={`${label ?? ""}-${span.match}-${i}`}
+                          className="flex flex-wrap items-center gap-1 text-xs"
+                        >
+                          {label && (
+                            <code className="text-muted-foreground font-mono">
+                              {label}:
+                            </code>
+                          )}
+                          <MaskedMatchInline value={span.match} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 {r.tags && r.tags.length > 0 && (
                   <div className="mt-1 flex flex-wrap gap-1">
                     {r.tags.map((tag) => (
