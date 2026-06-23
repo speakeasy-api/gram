@@ -24,6 +24,7 @@ func loadPayload(id string) *gen.LoadChatPayload {
 		Limit:             50,
 		BeforeSeq:         nil,
 		AfterSeq:          nil,
+		FromStart:         false,
 		RiskOnly:          false,
 	}
 }
@@ -160,6 +161,65 @@ func TestLoadChat_KeysetPagination(t *testing.T) {
 	require.Equal(t, seqs[24], fwd.Messages[4].Seq)
 	require.False(t, fwd.HasMoreAfter)
 	require.True(t, fwd.HasMoreBefore)
+}
+
+// TestLoadChat_FromStart loads the oldest page (start of the thread) ascending,
+// reports nothing older, and pages forward from there with after_seq.
+func TestLoadChat_FromStart(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, ctx, ti, "u", "", "from-start chat")
+	ids := seedNMessages(t, ctx, ti, chatID, 25)
+	seqs := allSeqs(t, ctx, ti, chatID, ids)
+
+	// First page: oldest 10 (positions 1..10), nothing older, newer remain.
+	p := loadPayload(chatID.String())
+	p.FromStart = true
+	p.Limit = 10
+	page1, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, page1.Messages, 10)
+	require.Equal(t, seqs[0], page1.Messages[0].Seq)
+	require.Equal(t, seqs[9], page1.Messages[9].Seq)
+	require.False(t, page1.HasMoreBefore, "start of thread has nothing older")
+	require.True(t, page1.HasMoreAfter)
+	require.Equal(t, 25, page1.NumMessages)
+
+	// Scroll forward from the from-start page → positions 11..20.
+	p = loadPayload(chatID.String())
+	p.Limit = 10
+	p.AfterSeq = &page1.Messages[9].Seq
+	page2, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, page2.Messages, 10)
+	require.Equal(t, seqs[10], page2.Messages[0].Seq)
+	require.True(t, page2.HasMoreBefore)
+	require.True(t, page2.HasMoreAfter)
+
+	// from_start with a limit covering everything: whole thread, both edges done.
+	p = loadPayload(chatID.String())
+	p.FromStart = true
+	p.Limit = 200
+	all, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, all.Messages, 25)
+	require.Equal(t, seqs[0], all.Messages[0].Seq)
+	require.False(t, all.HasMoreBefore)
+	require.False(t, all.HasMoreAfter)
+
+	// before_seq takes precedence over from_start (documented): with both set, we
+	// page backward from the cursor (newest page below it), so older may remain.
+	p = loadPayload(chatID.String())
+	p.FromStart = true
+	p.Limit = 10
+	p.BeforeSeq = &seqs[24]
+	pref, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, pref.Messages, 10)
+	require.Equal(t, seqs[14], pref.Messages[0].Seq, "before_seq path returns the page below the cursor, not the thread start")
+	require.True(t, pref.HasMoreBefore)
 }
 
 // TestLoadChat_RiskOnly_Window verifies a single finding yields one ±5 segment.

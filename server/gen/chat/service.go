@@ -22,9 +22,10 @@ type Service interface {
 	// Load a chat by its ID. Messages within a generation are paginated by `seq`
 	// keyset: omit cursors to receive the newest page, pass `before_seq` to load
 	// older messages (scroll up) or `after_seq` to load newer ones (scroll down).
-	// Omit `generation` to receive the latest generation. Set `risk_only` to
-	// return only messages with risk findings plus a few messages of surrounding
-	// context per finding.
+	// Set `from_start` to receive the oldest page (the start of the thread)
+	// instead of the newest. Omit `generation` to receive the latest generation.
+	// Set `risk_only` to return only messages with risk findings plus a few
+	// messages of surrounding context per finding.
 	LoadChat(context.Context, *LoadChatPayload) (res *Chat, err error)
 	// Generate a title for a chat based on its messages
 	GenerateTitle(context.Context, *GenerateTitlePayload) (res *GenerateTitleResult, err error)
@@ -371,6 +372,11 @@ type LoadChatPayload struct {
 	// exclusive with `before_seq`; if both are supplied, `after_seq` takes
 	// precedence.
 	AfterSeq *int64
+	// When true, return the oldest page of the generation (the start of the
+	// thread), ordered oldest to newest, with `has_more_before=false`. Page
+	// forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`,
+	// or `risk_only` is set.
+	FromStart bool
 	// When true, return only messages that have active risk findings, each padded
 	// with a fixed window of surrounding messages, grouped into contiguous
 	// segments (see `risk_segments`). Cursors are ignored in this mode; expand a

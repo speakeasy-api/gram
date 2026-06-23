@@ -512,13 +512,14 @@ LIMIT @lim::integer;
 
 -- name: ListChatMessagesAfterPage :many
 -- Keyset page within a generation, oldest first. Returns messages with seq
--- strictly greater than @after_seq. Fetch @lim = pageSize+1 to detect whether
--- more newer rows remain.
+-- strictly greater than @after_seq, or the oldest page (start of the thread)
+-- when @after_seq is NULL. Fetch @lim = pageSize+1 to detect whether more newer
+-- rows remain.
 SELECT cm.* FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
   AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
   AND cm.generation = @generation::integer
-  AND cm.seq > @after_seq::bigint
+  AND (sqlc.narg('after_seq')::bigint IS NULL OR cm.seq > sqlc.narg('after_seq')::bigint)
 ORDER BY cm.seq ASC
 LIMIT @lim::integer;
 

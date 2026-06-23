@@ -80,7 +80,7 @@ var _ = Service("chat", func() {
 	})
 
 	Method("loadChat", func() {
-		Description("Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding.")
+		Description("Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -101,6 +101,9 @@ var _ = Service("chat", func() {
 			Attribute("after_seq", Int64, "Keyset cursor: return the page of messages with `seq` strictly greater than this value (newer messages). The returned `messages` are always ordered oldest to newest by `seq`. Use the `seq` of the newest message you currently hold to load the next page. Ignored when `risk_only` is set. Mutually exclusive with `before_seq`; if both are supplied, `after_seq` takes precedence.", func() {
 				Minimum(1)
 			})
+			Attribute("from_start", Boolean, "When true, return the oldest page of the generation (the start of the thread), ordered oldest to newest, with `has_more_before=false`. Page forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`, or `risk_only` is set.", func() {
+				Default(false)
+			})
 			Attribute("risk_only", Boolean, "When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request.", func() {
 				Default(false)
 			})
@@ -116,6 +119,7 @@ var _ = Service("chat", func() {
 			Param("limit")
 			Param("before_seq")
 			Param("after_seq")
+			Param("from_start")
 			Param("risk_only")
 			security.SessionHeader()
 			security.ProjectHeader()

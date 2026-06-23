@@ -173,7 +173,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 
 // BuildLoadChatPayload builds the payload for the chat loadChat endpoint from
 // CLI flags.
-func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatRiskOnly string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
+func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatFromStart string, chatLoadChatRiskOnly string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
 	var err error
 	var id string
 	{
@@ -249,6 +249,15 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 			}
 		}
 	}
+	var fromStart bool
+	{
+		if chatLoadChatFromStart != "" {
+			fromStart, err = strconv.ParseBool(chatLoadChatFromStart)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for fromStart, must be BOOL")
+			}
+		}
+	}
 	var riskOnly bool
 	{
 		if chatLoadChatRiskOnly != "" {
@@ -282,6 +291,7 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 	v.Limit = limit
 	v.BeforeSeq = beforeSeq
 	v.AfterSeq = afterSeq
+	v.FromStart = fromStart
 	v.RiskOnly = riskOnly
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

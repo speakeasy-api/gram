@@ -81,6 +81,7 @@ func (s *LoadChat) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		Limit:             limit,
 		BeforeSeq:         input.BeforeSeq,
 		AfterSeq:          input.AfterSeq,
+		FromStart:         false,
 		RiskOnly:          riskOnly,
 	})
 	if err != nil {
