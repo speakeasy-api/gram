@@ -271,15 +271,18 @@ function useAuthenticationOverview(
   const hasIssuer = !!userSessionIssuerId;
   const hasRemote = (clientsResult?.result.items.length ?? 0) > 0;
 
-  // Only probe the upstream for OAuth metadata while no remote identity is
-  // connected — once a remote_session_client exists the gap is closed, so the
-  // RFC 9728 probe is wasted work.
+  // Only probe the upstream for OAuth metadata once the server is gram-gated
+  // (has a USI) but no remote identity is connected. A server with no USI is
+  // NEEDS SETUP regardless of upstream OAuth, so probing it would both waste an
+  // RFC 9728 round-trip and mislabel it ACTION NEEDED. Once a
+  // remote_session_client exists the gap is already closed, so the probe is
+  // wasted work there too.
   const { status: probeStatus } = useProtectedResourceMetadata(
     mcpServer.remoteMcpServerId,
-    !hasRemote,
+    hasIssuer && !hasRemote,
   );
   const upstreamNeedsOAuth = probeStatus === "available";
-  const oauthGap = upstreamNeedsOAuth && !hasRemote;
+  const oauthGap = upstreamNeedsOAuth && hasIssuer && !hasRemote;
 
   const state = deriveAuthState({
     isPublic: mcpServer.visibility === "public",
