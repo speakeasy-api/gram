@@ -21,8 +21,12 @@ export default defineConfig({
       peerDeps: true,
       optionalDeps: false,
       devDeps: false,
-      // react-original is a virtual alias resolved by reactCompat() at consumer build time
-      include: ["react-original"],
+      // react-original is a virtual alias resolved by reactCompat() at consumer build time.
+      // react-markdown/remark-gfm pull `decode-named-character-reference`, whose browser
+      // build runs `document.createElement` at module top-level — bundling that breaks SSR
+      // consumers (e.g. the Next.js example prerendering /chat). Externalize so the consumer's
+      // bundler resolves the SSR-safe (node) variant instead.
+      include: ["react-original", "react-markdown", "remark-gfm"],
     }),
   ],
   build: {

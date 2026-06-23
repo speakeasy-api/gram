@@ -8,6 +8,7 @@ import { recommended } from "@/plugins";
 import { chart } from "@/plugins/chart";
 import { generativeUI } from "@/plugins/generative-ui";
 import { parseSegments } from "./MessageContent.parser";
+import { Markdown } from "./Markdown";
 
 const SUPPORTED_LANGUAGES: Record<string, FC<{ code: string }>> = {
   chart: chart.Component as FC<{ code: string }>,
@@ -35,6 +36,10 @@ export interface MessageContentProps {
   content: string;
   /** Optional className applied to the root container. */
   className?: string;
+  /** Render plain-text segments as markdown (matching `<MarkdownText />`)
+   * instead of preformatted text. Fenced `chart`/`ui` blocks still render as
+   * widgets either way. */
+  markdown?: boolean;
 }
 
 /**
@@ -51,6 +56,7 @@ export interface MessageContentProps {
 export const MessageContent: FC<MessageContentProps> = ({
   content,
   className,
+  markdown = false,
 }) => {
   const segments = useMemo(() => parseSegments(content), [content]);
 
@@ -62,6 +68,9 @@ export const MessageContent: FC<MessageContentProps> = ({
           {segments.map((seg, i) => {
             if (seg.type === "text") {
               if (seg.text.trim() === "") return null;
+              if (markdown) {
+                return <Markdown key={i}>{seg.text}</Markdown>;
+              }
               return (
                 <div key={i} className="whitespace-pre-wrap">
                   {seg.text}

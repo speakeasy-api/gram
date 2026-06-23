@@ -7,7 +7,10 @@ import {
   ChevronRightIcon,
   ChevronUpIcon,
   CopyIcon,
+  EyeIcon,
+  EyeOffIcon,
   LoaderIcon,
+  TriangleAlertIcon,
   XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -65,6 +68,30 @@ interface ToolAnnotations {
   openWorldHint?: boolean;
 }
 
+/** Marks a tool section (arguments/output) as containing flagged substrings,
+ * so the section header shows a warning and the expanded body lets you jump
+ * between matches. */
+/** One flagged finding within a tool section. */
+interface SectionMatch {
+  /** Literal substring to highlight and step to. */
+  value: string;
+  /** Short rule label shown when this match is active (e.g. "pii.phone_number"). */
+  label?: string;
+  /** Optional action for this finding, surfaced as a button while it is the
+   * active match (e.g. open the create-exclusion flow). */
+  onExclude?: () => void;
+}
+
+interface SectionHighlight {
+  /** Findings to highlight and step through with the next/prev controls. */
+  matches: SectionMatch[];
+  /** Dot out the matched characters until the viewer reveals them (secrets). */
+  masked?: boolean;
+  /** Optional host-supplied badge rendered in the section header (e.g. a risk
+   * pill). Replaces the default warning icon when present. */
+  headerBadge?: React.ReactNode;
+}
+
 interface ToolUIProps {
   /** Display name of the tool */
   name: string;
@@ -80,6 +107,10 @@ interface ToolUIProps {
   result?: string | Record<string, unknown> | { content: ContentItem[] };
   /** Whether the tool card starts expanded */
   defaultExpanded?: boolean;
+  /** Flag matches inside the arguments (risk review). */
+  requestHighlight?: SectionHighlight;
+  /** Flag matches inside the output (risk review). */
+  resultHighlight?: SectionHighlight;
   /** Additional class names */
   className?: string;
   /** MCP tool annotations */
@@ -101,6 +132,8 @@ interface ToolUISectionProps {
   highlightSyntax?: boolean;
   /** Language hint for syntax highlighting */
   language?: BundledLanguage;
+  /** Flagged substrings — renders a navigable highlighted view + header icon. */
+  highlight?: SectionHighlight;
 }
 
 /* -----------------------------------------------------------------------------
@@ -255,7 +288,7 @@ function SyntaxHighlightedCode({
         {
           pre(node) {
             node.properties.class =
-              "w-full py-3 px-4 max-h-[300px] overflow-y-auto whitespace-pre-wrap text-left text-sm";
+              "w-full py-3 px-4 max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all text-left text-sm";
           },
         },
       ],
@@ -280,7 +313,7 @@ function SyntaxHighlightedCode({
   if (!canHighlight || !highlightedCode) {
     return (
       <div className={cn("w-full", className)}>
-        <pre className="max-h-[300px] w-full overflow-y-auto bg-slate-800/90 px-4 py-3 text-sm whitespace-pre-wrap text-slate-100">
+        <pre className="max-h-[300px] w-full overflow-y-auto bg-slate-800/90 px-4 py-3 text-sm break-all whitespace-pre-wrap text-slate-100">
           {displayText}
         </pre>
         {showMoreButton}
@@ -295,6 +328,204 @@ function SyntaxHighlightedCode({
         dangerouslySetInnerHTML={{ __html: highlightedCode }}
       />
       {showMoreButton}
+    </div>
+  );
+}
+
+/* -----------------------------------------------------------------------------
+ * HighlightedCode - plain code view with flagged matches you can step through
+ * -------------------------------------------------------------------------- */
+
+interface MatchHit {
+  start: number;
+  end: number;
+  /** Index into the `matches` array that produced this hit. */
+  matchIndex: number;
+}
+
+function findMatchHits(text: string, values: string[]): MatchHit[] {
+  const hits: MatchHit[] = [];
+  values.forEach((value, matchIndex) => {
+    if (!value) return;
+    let from = 0;
+    let idx = text.indexOf(value, from);
+    while (idx !== -1) {
+      hits.push({ start: idx, end: idx + value.length, matchIndex });
+      from = idx + value.length;
+      idx = text.indexOf(value, from);
+    }
+  });
+  hits.sort((a, b) => a.start - b.start);
+  // Coalesce overlapping ranges so the renderer's sequential, non-overlapping
+  // slice walk stays correct. A merged range keeps the first hit's matchIndex
+  // (overlapping distinct findings are rare; correct rendering wins).
+  const merged: MatchHit[] = [];
+  for (const hit of hits) {
+    const last = merged[merged.length - 1];
+    if (last && hit.start <= last.end) last.end = Math.max(last.end, hit.end);
+    else merged.push({ ...hit });
+  }
+  return merged;
+}
+
+function maskMatch(value: string): string {
+  // Mask character-for-character so toggling reveal doesn't change the length
+  // (the tool view is monospace, so equal length means zero layout shift).
+  return "•".repeat(value.length);
+}
+
+function HighlightedCode({
+  text,
+  matches,
+  masked,
+}: {
+  text: string;
+  matches: SectionMatch[];
+  masked?: boolean;
+}): React.JSX.Element {
+  const hits = React.useMemo(
+    () =>
+      findMatchHits(
+        text,
+        matches.map((m) => m.value),
+      ),
+    [text, matches],
+  );
+  const count = hits.length;
+  const [active, setActive] = useState(0);
+  const [revealed, setRevealed] = useState(!masked);
+  const markRefs = React.useRef<Array<HTMLElement | null>>([]);
+  const preRef = React.useRef<HTMLPreElement>(null);
+
+  useEffect(() => {
+    if (active >= count && count > 0) setActive(0);
+  }, [count, active]);
+  // Center the active match within the code block *only* — adjust the <pre>'s
+  // own scrollTop rather than scrollIntoView(), which would also yank the
+  // surrounding sheet. Runs on mount (focus the first match) and on each step.
+  useEffect(() => {
+    const pre = preRef.current;
+    const mark = markRefs.current[active];
+    if (!pre || !mark) return;
+    const markRect = mark.getBoundingClientRect();
+    const preRect = pre.getBoundingClientRect();
+    pre.scrollTop +=
+      markRect.top - preRect.top - pre.clientHeight / 2 + markRect.height / 2;
+  }, [active, count]);
+
+  const go = (delta: number) => {
+    if (count === 0) return;
+    setActive((a) => (a + delta + count) % count);
+  };
+
+  const activeMatch = hits[active]
+    ? matches[hits[active]!.matchIndex]
+    : undefined;
+
+  const segments: React.ReactNode[] = [];
+  let pos = 0;
+  hits.forEach((hit, i) => {
+    if (hit.start > pos)
+      segments.push(<span key={`t${i}`}>{text.slice(pos, hit.start)}</span>);
+    const value = text.slice(hit.start, hit.end);
+    segments.push(
+      <mark
+        key={`m${i}`}
+        ref={(el) => {
+          markRefs.current[i] = el;
+        }}
+        className={cn(
+          // Red chip, fixed-width mono, lightened for the dark code surface. The
+          // active (currently navigated) match pops so prev/next navigation +
+          // auto-scroll have a visible target; the rest stay a darker red.
+          "rounded-sm px-0.5 font-mono ring-1",
+          i === active
+            ? "bg-red-700 text-red-50 ring-red-400"
+            : "bg-red-900 text-red-300 ring-red-800",
+        )}
+      >
+        {masked && !revealed ? maskMatch(value) : value}
+      </mark>,
+    );
+    pos = hit.end;
+  });
+  if (pos < text.length)
+    segments.push(<span key="tail">{text.slice(pos)}</span>);
+
+  return (
+    <div className="w-full">
+      {count > 0 && (
+        <div className="flex items-center justify-between gap-3 bg-slate-900 px-4 py-2 text-xs text-slate-300">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex shrink-0 items-center gap-1.5 font-medium text-amber-400">
+              <TriangleAlertIcon className="size-3.5" />
+              {count} flagged {count === 1 ? "match" : "matches"}
+            </span>
+            {activeMatch?.label && (
+              <span className="truncate rounded bg-slate-700/60 px-1.5 py-0.5 font-mono text-slate-300">
+                {activeMatch.label}
+              </span>
+            )}
+            {activeMatch?.onExclude && (
+              <button
+                type="button"
+                onClick={activeMatch.onExclude}
+                title="Create an exclusion for this finding"
+                className="shrink-0 rounded px-1.5 py-0.5 text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
+              >
+                Create exclusion
+              </button>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-3 text-slate-400">
+            {masked && (
+              <button
+                type="button"
+                onClick={() => setRevealed((r) => !r)}
+                className="inline-flex items-center gap-1 transition-colors hover:text-slate-100"
+              >
+                {revealed ? (
+                  <EyeIcon className="size-3.5" />
+                ) : (
+                  <EyeOffIcon className="size-3.5" />
+                )}
+                {revealed ? "Hide" : "Reveal"}
+              </button>
+            )}
+            {count >= 1 && (
+              <div className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => go(-1)}
+                  disabled={count <= 1}
+                  className="rounded p-1 transition-colors hover:bg-slate-700 hover:text-slate-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                  aria-label="Previous match"
+                >
+                  <ChevronUpIcon className="size-3.5" />
+                </button>
+                <span className="text-slate-300 tabular-nums">
+                  {active + 1}/{count}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => go(1)}
+                  disabled={count <= 1}
+                  className="rounded p-1 transition-colors hover:bg-slate-700 hover:text-slate-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                  aria-label="Next match"
+                >
+                  <ChevronDownIcon className="size-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      <pre
+        ref={preRef}
+        className="max-h-[300px] w-full overflow-y-auto bg-slate-800/90 px-4 py-3 text-sm break-all whitespace-pre-wrap text-slate-100"
+      >
+        {segments}
+      </pre>
     </div>
   );
 }
@@ -355,7 +586,7 @@ function StructuredResultContent({
             return (
               <pre
                 key={index}
-                className="px-4 py-3 text-sm whitespace-pre-wrap"
+                className="px-4 py-3 text-sm break-all whitespace-pre-wrap"
               >
                 {JSON.stringify(item, null, 2)}
               </pre>
@@ -376,6 +607,7 @@ function ToolUISection({
   defaultExpanded = false,
   highlightSyntax = true,
   language = "json",
+  highlight,
 }: ToolUISectionProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
@@ -387,13 +619,23 @@ function ToolUISection({
       ? content
       : JSON.stringify(content, null, 2);
 
+  const matchCount = highlight?.matches?.length ?? 0;
+
+  let headerIndicator: React.ReactNode = null;
+  if (highlight?.headerBadge) headerIndicator = highlight.headerBadge;
+  else if (matchCount > 0)
+    headerIndicator = <TriangleAlertIcon className="size-3.5 text-amber-500" />;
+
   return (
     <div data-slot="tool-ui-section" className="border-t border-border">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex w-full cursor-pointer items-center justify-between px-5 py-2.5 text-left transition-colors hover:bg-accent/50"
       >
-        <span className="text-sm text-muted-foreground">{title}</span>
+        <span className="flex items-center gap-2 text-sm text-muted-foreground">
+          {title}
+          {headerIndicator}
+        </span>
         <div className="flex items-center gap-1">
           <CopyButton content={contentString} />
           <ChevronRightIcon
@@ -406,12 +648,20 @@ function ToolUISection({
       </button>
       {isExpanded && (
         <div className="border-t border-border">
-          {isStructured ? (
+          {matchCount > 0 ? (
+            // Flagged content must go through the masked/highlighted view even
+            // when it's structured, otherwise secrets render in clear text.
+            <HighlightedCode
+              text={contentString}
+              matches={highlight!.matches}
+              masked={highlight?.masked}
+            />
+          ) : isStructured ? (
             <StructuredResultContent content={content} />
           ) : highlightSyntax ? (
             <SyntaxHighlightedCode text={contentString} language={language} />
           ) : (
-            <pre className="overflow-x-auto px-4 py-3 text-sm whitespace-pre-wrap text-foreground">
+            <pre className="px-4 py-3 text-sm break-all whitespace-pre-wrap text-foreground">
               {contentString}
             </pre>
           )}
@@ -435,6 +685,8 @@ function ToolUI({
   request,
   result,
   defaultExpanded = false,
+  requestHighlight,
+  resultHighlight,
   className,
   annotations,
   onApproveOnce,
@@ -542,6 +794,8 @@ function ToolUI({
               content={request}
               highlightSyntax
               language="json"
+              highlight={requestHighlight}
+              defaultExpanded={(requestHighlight?.matches?.length ?? 0) > 0}
             />
           )}
           {/* Hide output when approval is pending */}
@@ -551,6 +805,8 @@ function ToolUI({
               content={result}
               highlightSyntax
               language="json"
+              highlight={resultHighlight}
+              defaultExpanded={(resultHighlight?.matches?.length ?? 0) > 0}
             />
           )}
         </div>
@@ -797,6 +1053,10 @@ function ToolUIGroup({
  * Exports
  * -------------------------------------------------------------------------- */
 
+ToolUI.displayName = "ToolUI";
+ToolUISection.displayName = "ToolUISection";
+SyntaxHighlightedCode.displayName = "SyntaxHighlightedCode";
+
 export {
   ToolUI,
   ToolUISection,
@@ -811,4 +1071,6 @@ export type {
   ToolUIGroupProps,
   ToolStatus,
   ContentItem,
+  SectionHighlight,
+  SectionMatch,
 };

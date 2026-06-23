@@ -241,7 +241,11 @@ export function SessionTable({
           setSort(nextSort);
           setPage(0);
         }}
-        noResultsMessage="No sessions in this slice."
+        noResultsMessage={
+          <div className="text-muted-foreground p-6 text-center text-sm">
+            No sessions in this slice.
+          </div>
+        }
       />
       {sessions.length >= DEFAULT_LIMIT && (
         <Type small className="text-muted-foreground">

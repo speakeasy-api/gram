@@ -1,47 +1,35 @@
-import { Ellipsis, Eye, EyeOff } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CodeBlock } from "@/components/ui/code-block";
-import { ruleIdCategoryLabel } from "@/pages/security/rule-ids";
-import { serializeExclusionExpression } from "@/pages/security/exclusion-expression";
+import { format, formatDistanceToNow } from "date-fns";
 import {
-  ExclusionSheet,
-  type ExclusionSheetState,
-  GLOBAL_SCOPE,
-} from "@/pages/security/exclusion-sheet";
+  ArrowLeft,
+  ChevronDown,
+  Info,
+  Sparkles,
+  SlidersHorizontal,
+  User,
+  Wrench,
+} from "lucide-react";
 import {
-  getCategoryCodeForFinding,
-  getRuleTitleFallback,
-} from "@/pages/security/risk-utils";
-import type {
-  ChatMessage,
-  ClaudeToolUsage,
-  TelemetryLogRecord,
-} from "@gram/client/models/components";
-import { useSearchLogsMutation } from "@gram/client/react-query";
-import { useChatTranscript } from "./useChatTranscript";
-import {
-  type RiskLoadKey,
-  useChatRiskTranscript,
-} from "./useChatRiskTranscript";
-import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
-import { useRevealAll } from "@/pages/security/reveal-all-context";
-import { useRBAC } from "@/hooks/useRBAC";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { format } from "date-fns";
-import {
-  createContext,
+  type ComponentType,
   type ReactNode,
   useCallback,
-  useContext,
   useEffect,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
-import { Dialog } from "@/components/ui/dialog";
+import {
+  Badge,
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  Icon,
+} from "@speakeasy-api/moonshine";
+import type { ChatOverview, RiskResult } from "@gram/client/models/components";
+import { useSearchLogsMutation } from "@gram/client/react-query";
+import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Sheet,
   SheetContent,
@@ -53,80 +41,87 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Button,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@speakeasy-api/moonshine";
-import type { RiskResult } from "@gram/client/models/components";
+import { Dialog } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
-import { MessageContent } from "@gram-ai/elements";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useIsAdmin } from "@/contexts/Auth";
-import { toast } from "sonner";
-import { EntryTypeFilterBar } from "./TraceEntryFilterBar";
-import { TraceEntryIcon } from "./TraceEntryIcon";
 import {
-  DEFAULT_ENABLED_ENTRY_TYPES,
-  ENTRY_TYPE_META,
-  FILTERABLE_ENTRY_TYPES,
-  type FilterableTraceEntryType,
-  type ToolCall,
-  type TraceEntryType,
-  getEntryTypeCounts,
-  getTraceEntryType,
-  getVisibleMessages,
-  parseToolCalls,
-} from "./traceEntries";
+  ExclusionEditor,
+  type ExclusionSheetState,
+} from "@/pages/security/exclusion-sheet";
+import { useChatTranscript } from "./useChatTranscript";
+import { useChatRiskTranscript } from "./useChatRiskTranscript";
+import { CreateExclusionContext } from "./exclusionContext";
+import { findingToExclusionState } from "./chatRiskHelpers";
 import {
-  type ClaudeUsageMatch,
+  ChatTranscript,
+  type RowContext,
+  type TranscriptPagination,
+} from "./ChatTranscript";
+import {
+  buildDisplayItems,
+  buildTranscript,
+  type MessageCategory,
+  rowCategory,
+  rowIsFlagged,
+} from "./transcript";
+import { cn } from "@/lib/utils";
+import {
   buildClaudeToolUsageByToolUseId,
   buildClaudeUsageByMessageId,
-  formatByteCount,
-  formatDurationFromNanos,
   formatTokenCount,
   formatUsageCost,
 } from "./claudeUsage";
+import { filterPanelTelemetryLogs, filterToolLogs } from "./chatLogFilters";
+import { ToolCallsView } from "./chatLogViews";
+import { exportTraceDataAsJson } from "./chatExport";
+
+const PANEL_TELEMETRY_LOG_LIMIT = 100;
 
 interface ChatDetailPanelProps {
   chatId: string;
   onClose: () => void;
   onDelete: (chatId: string) => void;
-  /** When true, messages without risk findings are collapsed to a single line. */
-  collapseNonRisk?: boolean;
-  initialRiskOnly?: boolean;
+  /** Risk-focused view: collapse the transcript to the flagged messages plus a
+   * few of context either side, expandable via "show more". Implies dimming. */
+  riskFocus?: boolean;
+  /** Dim non-flagged rows to spotlight findings, without the risk windowing.
+   * Use from risk-filtered lists (e.g. Agent Sessions filtered to has_risk). */
+  dimNonRisk?: boolean;
 }
 
 interface ChatDetailSheetProps extends Omit<ChatDetailPanelProps, "chatId"> {
   chatId: string | null;
 }
 
+type ViewMode = "chat" | "tools" | "exclusion";
+
+// Identity for a finding, used to optimistically hide it the moment an exclusion
+// is created for it (the server reconcile is async, so a refetch lags).
+function findingKey(r: RiskResult): string {
+  return `${r.source}|${r.ruleId ?? ""}|${r.match ?? ""}`;
+}
+
 function getTraceId(chatId: string): string {
   return `trace-${chatId.slice(0, 3)}`;
 }
 
-const PANEL_TELEMETRY_LOG_LIMIT = 100;
-const CLAUDE_OTEL_LOG_URN = "claude-code:otel:logs";
-
-function getRiskBadgeLabel(result: RiskResult): string {
-  if (result.ruleId === "llm_judge") return getRuleTitleFallback(result.ruleId);
-  return (
-    ruleIdCategoryLabel(result.ruleId) ||
-    getCategoryCodeForFinding(result.source, result.ruleId)
-  );
-}
-
-function shouldShowRiskRuleId(result: RiskResult): boolean {
-  return Boolean(result.ruleId) && result.ruleId !== "llm_judge";
+function totalTokensFor(chat: {
+  totalTokens?: number;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+}): number {
+  if (chat.totalTokens && chat.totalTokens > 0) return chat.totalTokens;
+  return (chat.totalInputTokens || 0) + (chat.totalOutputTokens || 0);
 }
 
 export function ChatDetailSheet({
   chatId,
   onClose,
   onDelete,
-  collapseNonRisk,
-  initialRiskOnly,
+  riskFocus,
+  dimNonRisk,
 }: ChatDetailSheetProps): JSX.Element {
   return (
     <Sheet
@@ -136,7 +131,7 @@ export function ChatDetailSheet({
       }}
     >
       <SheetContent
-        className="w-[min(720px,calc(100vw-2rem))] sm:max-w-[720px]"
+        className="w-[min(760px,calc(100vw-2rem))] sm:max-w-[760px]"
         showCloseButton={false}
       >
         {chatId && (
@@ -144,8 +139,8 @@ export function ChatDetailSheet({
             chatId={chatId}
             onClose={onClose}
             onDelete={onDelete}
-            collapseNonRisk={collapseNonRisk}
-            initialRiskOnly={initialRiskOnly}
+            riskFocus={riskFocus}
+            dimNonRisk={dimNonRisk}
           />
         )}
       </SheetContent>
@@ -153,1254 +148,322 @@ export function ChatDetailSheet({
   );
 }
 
-function downloadJsonFile(filename: string, data: unknown) {
-  const json = JSON.stringify(data, null, 2);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function getTraceExportSlug(chat: { id: string; title?: string | null }) {
-  const titleSlug = chat.title
-    ?.toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 40);
-
-  return titleSlug || chat.id.slice(0, 8);
-}
-
-function exportTraceDataAsJson({
-  chatId,
-  chat,
-  messages,
-  telemetryLogLimit,
-  telemetryLogs,
-  riskResults,
-}: {
-  chatId: string;
-  chat: {
-    id: string;
-    title?: string | null;
-  };
-  messages: ChatMessage[];
-  telemetryLogLimit: number;
-  telemetryLogs: TelemetryLogRecord[];
-  riskResults: RiskResult[];
-}) {
-  try {
-    const exported = {
-      schemaVersion: 1,
-      exportScope: "chat_detail_panel",
-      exportedAt: new Date().toISOString(),
-      chatId,
-      telemetryLogsQuery: {
-        filter: { gramChatId: chatId },
-        limit: telemetryLogLimit,
-        loadedCount: telemetryLogs.length,
-      },
-      panelData: {
-        chat,
-        messages,
-        telemetryLogs,
-        riskResults,
-      },
-    };
-
-    downloadJsonFile(`trace-${getTraceExportSlug(chat)}.json`, exported);
-  } catch {
-    toast.error("Failed to export trace data");
-  }
-}
-
-function getSeverityBadgeVariant(
-  severity?: string,
-): "destructive" | "warning" | "neutral" {
-  switch (severity?.toUpperCase()) {
-    case "ERROR":
-    case "FATAL":
-      return "destructive";
-    case "WARN":
-      return "warning";
-    case undefined:
-    default:
-      return "neutral";
-  }
-}
-
-// LoadDivider is the full-width affordance shown at the top/bottom of the
-// transcript (load older/newer) and inside the risk view between disjoint
-// findings (fill the gap).
-function LoadDivider({
-  label,
-  loading,
-  onClick,
-  icon,
-}: {
-  label: string;
-  loading?: boolean;
-  onClick: () => void;
-  icon: "chevron-up" | "chevron-down" | "ellipsis";
-}) {
+function MetaRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={loading}
-      className="text-muted-foreground hover:bg-muted/50 flex w-full items-center justify-center gap-2 border-y border-dashed py-2 text-xs transition-colors disabled:opacity-60"
-    >
-      {!loading && <Icon name={icon} className="size-3.5" />}
-      {loading ? "Loading…" : label}
-    </button>
-  );
-}
-
-// TranscriptBody renders the loaded messages as a flat list (the latest
-// generation is paginated by seq, so it stays single-segment) with load
-// affordances. In risk mode it also renders a gap divider after any message
-// that precedes an un-loaded stretch between findings.
-// A flat, virtualizable row model: load affordances and gap fillers become
-// rows alongside messages so the whole transcript is one virtual list.
-type TranscriptRow =
-  | { kind: "loadTop" }
-  | { kind: "message"; message: ChatMessage }
-  | { kind: "gap"; afterSeq: number }
-  | { kind: "loadBottom" };
-
-// Stable per-row key so the virtualizer keeps measured sizes (and DOM identity)
-// across prepends/appends instead of re-measuring everything on each page load.
-function transcriptRowKey(row: TranscriptRow): string {
-  switch (row.kind) {
-    case "loadTop":
-      return "load-top";
-    case "loadBottom":
-      return "load-bottom";
-    case "gap":
-      return `gap:${row.afterSeq}`;
-    case "message":
-      return `m:${row.message.id}`;
-  }
-}
-
-function TranscriptBody({
-  mode,
-  messages,
-  riskResultsByMessage,
-  claudeUsageByMessage,
-  claudeToolUsageByToolUseId,
-  collapseNonRisk,
-  enabledEntryTypes,
-  hasMoreBefore,
-  hasMoreAfter,
-  onLoadOlder,
-  onLoadNewer,
-  isFetchingOlder,
-  isFetchingNewer,
-  gaps,
-  onLoadGap,
-  riskLoadingKey,
-  scrollElement,
-}: {
-  mode: "normal" | "risk";
-  messages: ChatMessage[];
-  riskResultsByMessage: Map<string, RiskResult[]>;
-  claudeUsageByMessage: Map<string, ClaudeUsageMatch>;
-  claudeToolUsageByToolUseId: Map<string, ClaudeToolUsage>;
-  collapseNonRisk?: boolean;
-  enabledEntryTypes: FilterableTraceEntryType[];
-  hasMoreBefore: boolean;
-  hasMoreAfter: boolean;
-  onLoadOlder: () => void;
-  onLoadNewer: () => void;
-  isFetchingOlder?: boolean;
-  isFetchingNewer?: boolean;
-  gaps?: Set<number>;
-  onLoadGap?: (afterSeq: number) => void;
-  riskLoadingKey?: RiskLoadKey | null;
-  scrollElement: HTMLDivElement | null;
-}) {
-  // Risk filtering is server-side now; this only applies the entry-type filter.
-  const visibleMessages = useMemo(
-    () =>
-      getVisibleMessages({
-        messages,
-        enabledEntryTypes,
-        riskOnly: false,
-        riskResultsByMessage,
-      }),
-    [enabledEntryTypes, messages, riskResultsByMessage],
-  );
-
-  const rows = useMemo<TranscriptRow[]>(() => {
-    const out: TranscriptRow[] = [];
-    if (hasMoreBefore) out.push({ kind: "loadTop" });
-    // Gap anchors, ascending. We place each divider after the last visible
-    // message whose seq is <= the anchor, so the affordance survives even when
-    // the exact boundary message is hidden by the entry-type filter.
-    const gapAnchors =
-      mode === "risk" && gaps ? [...gaps].sort((a, b) => a - b) : [];
-    let gi = 0;
-    for (let i = 0; i < visibleMessages.length; i++) {
-      const message = visibleMessages[i]!;
-      out.push({ kind: "message", message });
-      const nextSeq =
-        i + 1 < visibleMessages.length ? visibleMessages[i + 1]!.seq : Infinity;
-      while (gi < gapAnchors.length && gapAnchors[gi]! < nextSeq) {
-        if (gapAnchors[gi]! >= message.seq) {
-          out.push({ kind: "gap", afterSeq: gapAnchors[gi]! });
-        }
-        gi++;
-      }
-    }
-    if (hasMoreAfter) out.push({ kind: "loadBottom" });
-    return out;
-  }, [visibleMessages, hasMoreBefore, hasMoreAfter, gaps, mode]);
-
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => scrollElement,
-    // Rough first-paint guess; real heights are measured via measureElement.
-    estimateSize: () => 64,
-    overscan: 8,
-    getItemKey: (index) => transcriptRowKey(rows[index]!),
-  });
-
-  // Normal mode opens chat-style at the newest message. Use the virtualizer's
-  // scrollToIndex (measurement-aware) rather than scrollTop=scrollHeight, which
-  // would land mid-list because heights aren't measured on first paint. Runs
-  // once per mount; the parent remounts this via key={chatId} on chat switch.
-  const didInitialScrollRef = useRef(false);
-  useEffect(() => {
-    if (mode !== "normal" || didInitialScrollRef.current) return;
-    if (rows.length === 0 || !scrollElement) return;
-    didInitialScrollRef.current = true;
-    virtualizer.scrollToIndex(rows.length - 1, { align: "end" });
-  }, [mode, rows.length, scrollElement, virtualizer]);
-
-  if (visibleMessages.length === 0) {
-    return (
-      <div className="p-6">
-        <div className="text-muted-foreground rounded-lg border border-dashed p-6 text-center text-sm">
-          {mode === "risk"
-            ? "No risk findings in this chat."
-            : "No entries match the selected filters."}
-        </div>
-      </div>
-    );
-  }
-
-  const renderRow = (row: TranscriptRow) => {
-    switch (row.kind) {
-      case "loadTop":
-        return (
-          <LoadDivider
-            icon="chevron-up"
-            label={
-              mode === "risk" ? "Load earlier messages" : "Load older messages"
-            }
-            loading={
-              mode === "risk" ? riskLoadingKey === "before" : isFetchingOlder
-            }
-            onClick={onLoadOlder}
-          />
-        );
-      case "loadBottom":
-        return (
-          <LoadDivider
-            icon="chevron-down"
-            label={
-              mode === "risk" ? "Load later messages" : "Load newer messages"
-            }
-            loading={
-              mode === "risk" ? riskLoadingKey === "after" : isFetchingNewer
-            }
-            onClick={onLoadNewer}
-          />
-        );
-      case "gap":
-        return (
-          <LoadDivider
-            icon="ellipsis"
-            label="Load messages in between"
-            loading={riskLoadingKey === `gap:${row.afterSeq}`}
-            onClick={() => onLoadGap?.(row.afterSeq)}
-          />
-        );
-      case "message":
-        return (
-          <MessageItem
-            message={row.message}
-            riskResults={riskResultsByMessage.get(row.message.id)}
-            claudeUsage={claudeUsageByMessage.get(row.message.id)}
-            claudeToolUsageByToolUseId={claudeToolUsageByToolUseId}
-            collapseNonRisk={collapseNonRisk}
-          />
-        );
-    }
-  };
-
-  return (
-    <div
-      className="border-muted relative w-full border-b"
-      style={{ height: `${virtualizer.getTotalSize()}px` }}
-    >
-      {virtualizer.getVirtualItems().map((virtualRow) => (
-        <div
-          key={virtualRow.key}
-          data-index={virtualRow.index}
-          ref={virtualizer.measureElement}
-          className="absolute top-0 left-0 w-full"
-          style={{ transform: `translateY(${virtualRow.start}px)` }}
-        >
-          {renderRow(rows[virtualRow.index]!)}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function MessageItem({
-  message,
-  riskResults,
-  claudeUsage,
-  claudeToolUsageByToolUseId,
-  collapseNonRisk,
-}: {
-  message: ChatMessage;
-  riskResults: RiskResult[] | undefined;
-  claudeUsage: ClaudeUsageMatch | undefined;
-  claudeToolUsageByToolUseId: Map<string, ClaudeToolUsage>;
-  collapseNonRisk?: boolean;
-}) {
-  const hasRisk = !!riskResults && riskResults.length > 0;
-  const hasSensitiveContent =
-    riskResults?.some(
-      (r) => r.source === "gitleaks" || r.source === "presidio",
-    ) ?? false;
-  const [expanded, setExpanded] = useState(!collapseNonRisk || hasRisk);
-  const [contentRevealed, setContentRevealed] = useState(false);
-  const isCollapsed = !expanded;
-
-  useEffect(() => {
-    if (!collapseNonRisk || hasRisk) {
-      setExpanded(true);
-    }
-  }, [collapseNonRisk, hasRisk]);
-
-  const parsedToolCalls = useMemo(
-    () => parseToolCalls(message.toolCalls),
-    [message.toolCalls],
-  );
-  const entryType = getTraceEntryType(message, parsedToolCalls);
-  const entryMeta = ENTRY_TYPE_META[entryType];
-  const label =
-    entryType === "tool_call"
-      ? `Tool Call: ${parsedToolCalls?.[0]?.function?.name ?? "unknown"}`
-      : entryMeta.label;
-  const toolUsage =
-    entryType === "tool_call"
-      ? claudeToolUsageByToolUseId.get(parsedToolCalls?.[0]?.id ?? "")
-      : entryType === "tool_result"
-        ? claudeToolUsageByToolUseId.get(message.toolCallId ?? "")
-        : undefined;
-
-  return (
-    <div>
-      <MessageItemToggle
-        createdAt={message.createdAt}
-        entryType={entryType}
-        isCollapsed={isCollapsed}
-        label={label}
-        onToggle={() => setExpanded((current) => !current)}
-        riskResults={riskResults}
-        claudeUsage={entryType === "user" ? claudeUsage : undefined}
-        claudeToolUsage={toolUsage}
-      />
-
-      {isCollapsed ? null : (
-        <div className="pt-0 pr-3 pb-3 pl-12">
-          <TraceEntryBody
-            contentRevealed={contentRevealed}
-            entryType={entryType}
-            hasSensitiveContent={hasSensitiveContent}
-            message={message}
-            onRevealContent={() => setContentRevealed(true)}
-            parsedToolCalls={parsedToolCalls}
-          />
-          {hasRisk && riskResults && (
-            <RiskFindingActions
-              results={riskResults}
-              canHide={hasSensitiveContent && contentRevealed}
-              onHide={() => setContentRevealed(false)}
-            />
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MessageItemToggle({
-  createdAt,
-  claudeUsage,
-  claudeToolUsage,
-  entryType,
-  isCollapsed,
-  label,
-  onToggle,
-  riskResults,
-}: {
-  createdAt: Date | string | undefined;
-  claudeUsage: ClaudeUsageMatch | undefined;
-  claudeToolUsage: ClaudeToolUsage | undefined;
-  entryType: TraceEntryType;
-  isCollapsed: boolean;
-  label: string;
-  onToggle: () => void;
-  riskResults: RiskResult[] | undefined;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={!isCollapsed}
-      className={cn(
-        "flex w-full items-center gap-3 px-3 py-2",
-        "text-muted-foreground truncate text-sm transition-colors",
-        "border-t-muted border-y border-b-transparent",
-      )}
-    >
-      <TraceEntryIcon entryType={entryType} />
-      {createdAt && (
-        <span className="font-mono text-xs">
-          {format(new Date(createdAt), "HH:mm:ss")}
-        </span>
-      )}
-      <span className="font-semibold">{label}</span>
-
-      {riskResults && riskResults.length > 0 && (
-        <RiskBadgePopover results={riskResults} />
-      )}
-
-      <span className="min-w-0 flex-1" />
-
-      {claudeUsage && <ClaudeUsageBadge usage={claudeUsage} />}
-      {claudeToolUsage && (
-        <ToolByteBadge
-          bytes={
-            entryType === "tool_call"
-              ? claudeToolUsage.inputSizeBytes
-              : claudeToolUsage.resultSizeBytes
-          }
-        />
-      )}
-
-      <Icon
-        name="chevron-down"
-        className={cn(
-          "size-3 shrink-0 transition-transform",
-          isCollapsed && "-rotate-90",
-        )}
-      />
-    </button>
-  );
-}
-
-function ToolByteBadge({ bytes }: { bytes: number }) {
-  if (bytes <= 0) return null;
-  return (
-    <Badge variant="neutral" className="shrink-0 text-xs">
-      <Badge.Text>{formatByteCount(bytes)}</Badge.Text>
-    </Badge>
-  );
-}
-
-function ClaudeUsageBadge({ usage }: { usage: ClaudeUsageMatch }) {
-  const { turn, match } = usage;
-  const duration = formatDurationFromNanos(
-    turn.startTimeUnixNano,
-    turn.endTimeUnixNano,
-  );
-
-  const rows = [
-    ["Input", turn.inputTokens.toLocaleString()],
-    ["Output", turn.outputTokens.toLocaleString()],
-    ["Cache read", turn.cacheReadTokens.toLocaleString()],
-    ["Cache creation", turn.cacheCreationTokens.toLocaleString()],
-    ["Total tokens", turn.totalTokens.toLocaleString()],
-    ["Cost", formatUsageCost(turn.costUsd)],
-    ["Requests", turn.requestCount.toLocaleString()],
-    ["Models", turn.models.length > 0 ? turn.models.join(", ") : "unknown"],
-    [
-      "Query sources",
-      turn.querySources.length > 0 ? turn.querySources.join(", ") : "unknown",
-    ],
-    ...(duration ? [["Duration", duration]] : []),
-    ...(match === "ordered" ? [["Match", "estimated by turn order"]] : []),
-  ];
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <span className="cursor-pointer" onClick={(e) => e.stopPropagation()}>
-          <Badge variant="neutral" className="shrink-0 text-xs">
-            <Icon name="dollar-sign" className="mr-1 size-3" />
-            {formatUsageCost(turn.costUsd)} ·{" "}
-            {formatTokenCount(turn.totalTokens)} tokens
-          </Badge>
-        </span>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        className="w-80"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="space-y-3">
-          <div>
-            <div className="text-sm font-semibold">Claude Usage</div>
-            <div className="text-muted-foreground font-mono text-[11px]">
-              {turn.promptId}
-            </div>
-          </div>
-          <div className="divide-border divide-y">
-            {rows.map(([label, value]) => (
-              <div
-                key={label}
-                className="flex items-start justify-between gap-3 py-1.5 text-xs"
-              >
-                <span className="text-muted-foreground">{label}</span>
-                <span className="max-w-44 text-right font-medium break-words">
-                  {value}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function TraceEntryBody({
-  contentRevealed,
-  entryType,
-  hasSensitiveContent,
-  message,
-  onRevealContent,
-  parsedToolCalls,
-}: {
-  contentRevealed: boolean;
-  entryType: TraceEntryType;
-  hasSensitiveContent: boolean;
-  message: ChatMessage;
-  onRevealContent: () => void;
-  parsedToolCalls: ToolCall[] | null;
-}) {
-  switch (entryType) {
-    case "tool_call":
-      return (
-        <ToolCallEntry
-          contentRevealed={contentRevealed}
-          hasSensitiveContent={hasSensitiveContent}
-          onRevealContent={onRevealContent}
-          toolCalls={parsedToolCalls ?? []}
-        />
-      );
-    case "tool_result":
-      return (
-        <ToolResultEntry
-          content={message.content}
-          contentRevealed={contentRevealed}
-          hasSensitiveContent={hasSensitiveContent}
-          onRevealContent={onRevealContent}
-          toolCallId={message.toolCallId}
-        />
-      );
-    case "system":
-      return (
-        <SystemEntry
-          content={message.content}
-          contentRevealed={contentRevealed}
-          hasSensitiveContent={hasSensitiveContent}
-          onRevealContent={onRevealContent}
-        />
-      );
-    case "assistant":
-    case "user":
-      return (
-        <TextMessageEntry
-          content={message.content}
-          contentRevealed={contentRevealed}
-          hasSensitiveContent={hasSensitiveContent}
-          onRevealContent={onRevealContent}
-          entryType={entryType}
-        />
-      );
-  }
-}
-
-function EntryContentFrame({
-  entryType,
-  children,
-}: {
-  entryType?: TraceEntryType;
-  children: ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "border-muted min-w-0 overflow-hidden rounded-md border text-sm",
-        {
-          "bg-muted/30 border-neutral-default": entryType === "user",
-          "bg-information-softest border-information-softest":
-            entryType === "assistant",
-        },
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SensitiveContentGate({
-  children,
-  contentRevealed,
-  hasSensitiveContent,
-  onRevealContent,
-}: {
-  children: ReactNode;
-  contentRevealed: boolean;
-  hasSensitiveContent: boolean;
-  onRevealContent: () => void;
-}) {
-  if (hasSensitiveContent && !contentRevealed) {
-    return <MaskedContent onReveal={onRevealContent} />;
-  }
-
-  return <>{children}</>;
-}
-
-function ToolCallEntry({
-  contentRevealed,
-  hasSensitiveContent,
-  onRevealContent,
-  toolCalls,
-}: {
-  contentRevealed: boolean;
-  hasSensitiveContent: boolean;
-  onRevealContent: () => void;
-  toolCalls: ToolCall[];
-}) {
-  return (
-    <div className="space-y-2">
-      {toolCalls.map((toolCall, idx) => (
-        <EntryContentFrame key={toolCall.id || idx} entryType={"tool_call"}>
-          <SensitiveContentGate
-            contentRevealed={contentRevealed}
-            hasSensitiveContent={hasSensitiveContent}
-            onRevealContent={onRevealContent}
-          >
-            <div className="p-3">
-              <div className="flex items-center gap-2">
-                <span className="truncate font-semibold">
-                  {toolCall.function?.name || toolCall.name || "Tool Call"}
-                </span>
-                {toolCall.id && (
-                  <Badge variant="neutral" className="ml-auto">
-                    <Badge.Text>{toolCall.id}</Badge.Text>
-                  </Badge>
-                )}
-              </div>
-            </div>
-            {toolCall.function?.arguments && (
-              <CodeBlock
-                content={
-                  typeof toolCall.function.arguments === "string"
-                    ? toolCall.function.arguments
-                    : JSON.stringify(toolCall.function.arguments, null, 2)
-                }
-                maxHeight={300}
-              />
-            )}
-          </SensitiveContentGate>
-        </EntryContentFrame>
-      ))}
-    </div>
-  );
-}
-
-function ToolResultEntry({
-  content,
-  contentRevealed,
-  hasSensitiveContent,
-  onRevealContent,
-  toolCallId,
-}: {
-  content: unknown;
-  contentRevealed: boolean;
-  hasSensitiveContent: boolean;
-  onRevealContent: () => void;
-  toolCallId: string | undefined;
-}) {
-  return (
-    <EntryContentFrame entryType="tool_result">
-      <SensitiveContentGate
-        contentRevealed={contentRevealed}
-        hasSensitiveContent={hasSensitiveContent}
-        onRevealContent={onRevealContent}
-      >
-        <div className="bg-background/50 p-3">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold">Response</span>
-            {toolCallId && (
-              <Badge variant="neutral" className="ml-auto">
-                <Badge.Text>{toolCallId}</Badge.Text>
-              </Badge>
-            )}
-          </div>
-        </div>
-        <CodeBlock
-          content={
-            typeof content === "string"
-              ? content
-              : content == null
-                ? ""
-                : JSON.stringify(content)
-          }
-          maxHeight={300}
-        />
-      </SensitiveContentGate>
-    </EntryContentFrame>
-  );
-}
-
-function SystemEntry({
-  content,
-  contentRevealed,
-  hasSensitiveContent,
-  onRevealContent,
-}: {
-  content: unknown;
-  contentRevealed: boolean;
-  hasSensitiveContent: boolean;
-  onRevealContent: () => void;
-}) {
-  return (
-    <EntryContentFrame>
-      <SensitiveContentGate
-        contentRevealed={contentRevealed}
-        hasSensitiveContent={hasSensitiveContent}
-        onRevealContent={onRevealContent}
-      >
-        <details className="group overflow-hidden">
-          <summary className="text-muted-foreground hover:bg-muted/50 flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs select-none">
-            <Icon
-              name="chevron-right"
-              className="size-3 transition-transform group-open:rotate-90"
-            />
-            <span>Show content</span>
-          </summary>
-          <div className="border-t p-3 font-mono text-xs whitespace-pre-wrap">
-            {formatMessageContent(content)}
-          </div>
-        </details>
-      </SensitiveContentGate>
-    </EntryContentFrame>
-  );
-}
-
-function TextMessageEntry({
-  content,
-  contentRevealed,
-  hasSensitiveContent,
-  onRevealContent,
-  entryType,
-}: {
-  content: unknown;
-  contentRevealed: boolean;
-  hasSensitiveContent: boolean;
-  onRevealContent: () => void;
-  entryType: TraceEntryType;
-}) {
-  return (
-    <EntryContentFrame entryType={entryType}>
-      <SensitiveContentGate
-        contentRevealed={contentRevealed}
-        hasSensitiveContent={hasSensitiveContent}
-        onRevealContent={onRevealContent}
-      >
-        <div className="overflow-hidden rounded-md p-3">
-          <MessageContent content={formatMessageContent(content)} />
-        </div>
-      </SensitiveContentGate>
-    </EntryContentFrame>
-  );
-}
-
-function formatMessageContent(content: unknown) {
-  return typeof content === "string" ? content.trim() : JSON.stringify(content);
-}
-
-function formatTimestamp(nanos: string): string {
-  const ms = Number(BigInt(nanos) / 1_000_000n);
-  return format(new Date(ms), "HH:mm:ss.SSS");
-}
-
-// Telemetry Logs Tab Component
-function TelemetryLogsTab({
-  logs,
-  isLoading,
-  error,
-}: {
-  logs: TelemetryLogRecord[];
-  isLoading: boolean;
-  error: Error | null;
-}) {
-  if (isLoading) {
-    return (
-      <div className="text-muted-foreground p-6 text-center">
-        Loading telemetry logs...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="text-destructive p-6 text-center">
-        Failed to load logs: {error.message}
-      </div>
-    );
-  }
-
-  if (logs.length === 0) {
-    return (
-      <div className="text-muted-foreground p-6 text-center">
-        No telemetry logs found for this agent session.
-      </div>
-    );
-  }
-
-  return (
-    <div className="divide-border divide-y">
-      {logs.map((log) => (
-        <div key={log.id} className="hover:bg-muted/30 p-4 transition-colors">
-          <div className="flex items-start gap-3">
-            <Badge
-              variant={getSeverityBadgeVariant(log.severityText)}
-              className="mt-0.5 shrink-0"
-            >
-              {log.severityText || "INFO"}
-            </Badge>
-            <div className="min-w-0 flex-1 space-y-1">
-              <div className="text-sm font-medium wrap-break-word">
-                {log.body.trim()}
-              </div>
-              <div className="text-muted-foreground flex items-center gap-3 text-xs">
-                <span>{formatTimestamp(log.timeUnixNano)}</span>
-                {log.service?.name && (
-                  <span className="flex items-center gap-1">
-                    <Icon name="server" className="size-3" />
-                    {log.service.name}
-                  </span>
-                )}
-                {log.traceId && (
-                  <span className="font-mono text-[10px]">
-                    {log.traceId.slice(0, 8)}...
-                  </span>
-                )}
-              </div>
-              {log.attributes && Object.keys(log.attributes).length > 0 && (
-                <details className="mt-2">
-                  <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-xs">
-                    Show attributes
-                  </summary>
-                  <pre className="bg-muted/50 mt-1 overflow-x-auto rounded p-2 text-xs">
-                    {JSON.stringify(log.attributes, null, 2)}
-                  </pre>
-                </details>
-              )}
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function filterToolLogs(logs: TelemetryLogRecord[]): TelemetryLogRecord[] {
-  return logs.filter((log) => {
-    const body = log.body.toLowerCase();
-    const hasToolKeyword =
-      body.includes("tool") ||
-      body.includes("function") ||
-      body.includes("mcp");
-    const attrs = log.attributes || {};
-    const hasToolAttr =
-      attrs.tool_name || attrs.function_name || attrs.gram_urn;
-    return hasToolKeyword || hasToolAttr;
-  });
-}
-
-function filterPanelTelemetryLogs(
-  logs: TelemetryLogRecord[],
-): TelemetryLogRecord[] {
-  return logs.filter((log) => log.attributes?.gram_urn !== CLAUDE_OTEL_LOG_URN);
-}
-
-// Tool Calls Tab Component - filters logs to show only tool-related entries
-function ToolCallsTab({
-  toolLogs,
-  isLoading,
-  error,
-}: {
-  toolLogs: TelemetryLogRecord[];
-  isLoading: boolean;
-  error: Error | null;
-}) {
-  if (isLoading) {
-    return (
-      <div className="text-muted-foreground p-6 text-center">
-        Loading tool call logs...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="text-destructive p-6 text-center">
-        Failed to load tool calls: {error.message}
-      </div>
-    );
-  }
-
-  if (toolLogs.length === 0) {
-    return (
-      <div className="text-muted-foreground p-6 text-center">
-        No tool call logs found for this agent session.
-      </div>
-    );
-  }
-
-  return (
-    <div className="divide-border divide-y">
-      {toolLogs.map((log) => {
-        const attrs = log.attributes || {};
-        const toolName = attrs.tool_name || attrs.function_name || "Unknown";
-        const gramUrn = attrs.gram_urn;
-        const status = attrs.http_status_code;
-
-        return (
-          <div key={log.id} className="hover:bg-muted/30 p-4 transition-colors">
-            <div className="flex items-start gap-3">
-              <div
-                className={cn(
-                  "flex size-8 shrink-0 items-center justify-center rounded-full",
-                  status && status >= 400
-                    ? "bg-destructive/10"
-                    : "bg-primary/10",
-                )}
-              >
-                <Icon
-                  name="zap"
-                  className={cn(
-                    "size-4",
-                    status && status >= 400
-                      ? "text-destructive"
-                      : "text-primary",
-                  )}
-                />
-              </div>
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{toolName}</span>
-                  {status && (
-                    <Badge variant={status >= 400 ? "destructive" : "neutral"}>
-                      {status}
-                    </Badge>
-                  )}
-                </div>
-                {gramUrn && (
-                  <div className="text-muted-foreground font-mono text-xs">
-                    {gramUrn}
-                  </div>
-                )}
-                <div className="text-muted-foreground text-xs">
-                  {formatTimestamp(log.timeUnixNano)}
-                </div>
-                {log.body && (
-                  <div className="text-muted-foreground mt-1 text-sm">
-                    {log.body.trim()}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function MaskedContent({ onReveal }: { onReveal: () => void }) {
-  return (
-    <div className="bg-muted/30 flex items-center gap-2 rounded-lg border border-dashed p-3">
-      <EyeOff className="text-muted-foreground h-4 w-4 shrink-0" />
-      <span className="text-muted-foreground text-sm">
-        This message contains sensitive data.
+    <div className="flex items-start justify-between gap-3 py-1.5 text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="max-w-48 text-right font-medium break-words">
+        {children}
       </span>
-      <button
-        type="button"
-        className="hover:text-foreground text-sm font-medium underline underline-offset-2"
-        onClick={onReveal}
-      >
-        Click to reveal
-      </button>
     </div>
   );
 }
 
-function MaskedMatchInline({ value }: { value: string }) {
-  const reveal = useRevealAll();
-  // Read individual fields into stable scalars so the effect depends on
-  // primitives (not the per-render object useRevealAll returns).
-  const generation = reveal?.generation;
-  const revealAll = reveal?.revealAll ?? false;
-  const [revealed, setRevealed] = useState(revealAll);
-  // Only sync when the global toggle actually fires (generation changes).
-  // Depending on the context object would clobber per-row clicks immediately.
-  const lastSyncedGeneration = useRef(generation);
-  useEffect(() => {
-    if (generation === undefined) return;
-    if (lastSyncedGeneration.current === generation) return;
-    lastSyncedGeneration.current = generation;
-    setRevealed(revealAll);
-  }, [generation, revealAll]);
-
-  if (!revealed) {
-    return (
-      <button
-        type="button"
-        className="text-muted-foreground hover:text-foreground mt-1 inline-flex items-center gap-1 text-xs"
-        onClick={() => setRevealed(true)}
-      >
-        <EyeOff className="h-3 w-3" />
-        <span>Click to reveal</span>
-      </button>
-    );
-  }
-
-  return (
-    <span className="mt-1 inline-flex items-center gap-1">
-      <code className="bg-destructive/10 text-destructive inline-block rounded px-1.5 py-0.5 font-mono text-xs break-all">
-        {value}
-      </code>
-      <button
-        type="button"
-        className="text-muted-foreground hover:text-foreground"
-        onClick={() => setRevealed(false)}
-      >
-        <Eye className="h-3 w-3" />
-      </button>
-    </span>
-  );
-}
-
-// Provides the "Create exclusion" action to risk findings deep in the trace.
-// Null when the viewer lacks org:admin, which hides the action.
-const CreateExclusionContext = createContext<
-  ((result: RiskResult) => void) | null
->(null);
-
-// Pre-fill an exclusion expression from a finding: prefer the literal match,
-// fall back to the rule_id, then the source.
-function findingToExclusionState(result: RiskResult): ExclusionSheetState {
-  let expression: string;
-  if (result.match) {
-    expression = serializeExclusionExpression({
-      matchType: "exact",
-      matchValue: result.match,
-    });
-  } else if (result.ruleId) {
-    expression = serializeExclusionExpression({
-      matchType: "rule_id",
-      matchValue: result.ruleId,
-    });
-  } else {
-    expression = serializeExclusionExpression({
-      matchType: "source",
-      matchValue: result.source,
-    });
-  }
-  return {
-    mode: "create",
-    initialExpression: expression,
-    initialScope: result.policyId ?? GLOBAL_SCOPE,
-  };
-}
-
-// Action bar shown under an expanded risk entry. Each unique finding gets a
-// ⋮ menu: "Create exclusion" (pre-fills from the finding) and, when sensitive
-// content was revealed, "Hide again".
-function RiskFindingActions({
-  results,
-  canHide,
-  onHide,
+function SessionSummary({
+  chat,
+  messageCount,
+  toolCount,
 }: {
-  results: RiskResult[];
-  canHide: boolean;
-  onHide: () => void;
+  chat: {
+    externalUserId?: string;
+    source?: string;
+    createdAt: Date;
+    totalCost?: number;
+    totalInputTokens?: number;
+    totalOutputTokens?: number;
+    totalTokens?: number;
+    lastMessageTimestamp?: Date;
+    updatedAt: Date;
+  };
+  messageCount: number;
+  toolCount: number;
 }) {
-  const openCreateExclusion = useContext(CreateExclusionContext);
-
-  // Each row is purely an action affordance. Exclusions are never applied to
-  // llm_judge findings (the batch path appends them after the exclusion pass,
-  // and there's no real rule with id "llm_judge"), so there's no CTA for them —
-  // and without one the row would be a bare, redundant annotation, so drop it.
-  const seen = new Set<string>();
-  const actionable: { result: RiskResult; canExclude: boolean }[] = [];
-  for (const r of results) {
-    const key = `${r.source}|${r.ruleId ?? ""}|${r.match ?? ""}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const canExclude = Boolean(openCreateExclusion) && r.ruleId !== "llm_judge";
-    if (canExclude || canHide) {
-      actionable.push({ result: r, canExclude });
-    }
-  }
-  if (actionable.length === 0) return null;
-
-  return (
-    <div className="mt-2 space-y-1">
-      {actionable.map(({ result: r, canExclude }) => (
-        <div
-          key={r.id}
-          className="bg-muted/30 flex items-center justify-between gap-2 rounded-md border px-3 py-1.5"
-        >
-          <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
-            {[r.ruleId, getCategoryCodeForFinding(r.source, r.ruleId)]
-              .filter(Boolean)
-              .join(" · ")}
-          </span>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="tertiary" size="sm">
-                <Button.Icon>
-                  <Ellipsis className="h-4 w-4" />
-                </Button.Icon>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {canExclude && (
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onSelect={() => openCreateExclusion?.(r)}
-                >
-                  Create exclusion
-                </DropdownMenuItem>
-              )}
-              {canHide && (
-                <DropdownMenuItem className="cursor-pointer" onSelect={onHide}>
-                  Hide again
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      ))}
-    </div>
+  const tokens = totalTokensFor(chat);
+  const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
+  const duration = Math.round(
+    (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
   );
-}
-
-function RiskBadgePopover({ results }: { results: RiskResult[] }) {
-  // Long messages can repeat the same secret/email many times. Collapse to
-  // distinct (source, ruleId, match) so the popover lists each unique
-  // finding once with an occurrence count instead of an N-row scroll of
-  // identical rows.
-  const unique = useMemo(() => {
-    const grouped = new Map<string, { result: RiskResult; count: number }>();
-    for (const r of results) {
-      const key = `${r.source}\u0000${r.ruleId ?? ""}\u0000${r.match ?? ""}`;
-      const hit = grouped.get(key);
-      if (hit) {
-        hit.count++;
-      } else {
-        grouped.set(key, { result: r, count: 1 });
-      }
-    }
-    return [...grouped.values()];
-  }, [results]);
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="cursor-pointer"
-          onClick={(e) => e.stopPropagation()}
+          className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
         >
-          <Badge variant="destructive" className="text-xs">
-            <Icon name="shield-alert" className="mr-1 size-3" />
-            {unique.length} {unique.length === 1 ? "Risk" : "Risks"}
-          </Badge>
+          {hasCost && (
+            <span className="tabular-nums">
+              {formatUsageCost(chat.totalCost!)}
+            </span>
+          )}
+          {hasCost && tokens > 0 && (
+            <span aria-hidden className="text-muted-foreground/40">
+              |
+            </span>
+          )}
+          {tokens > 0 && <span>{formatTokenCount(tokens)} tokens</span>}
+          {/* No cost telemetry for this session (e.g. ClickHouse miss) — show a
+              neutral "Details" label so the trigger is never an empty pill. */}
+          {!hasCost && tokens === 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <Info className="size-3.5" />
+              Details
+            </span>
+          )}
+          <ChevronDown className="size-3.5" />
         </button>
       </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="max-h-[70vh] w-80 overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="space-y-3">
-          <div className="text-sm font-semibold">Risk Findings</div>
+      <PopoverContent align="end" className="w-72">
+        <div className="space-y-1">
+          <div className="mb-1 text-sm font-semibold">Session details</div>
           <div className="divide-border divide-y">
-            {unique.map(({ result: r, count }) => (
-              <div key={r.id} className="py-2 first:pt-0 last:pb-0">
-                <div className="flex items-center gap-2">
-                  <Badge variant="destructive" className="shrink-0 text-[10px]">
-                    {getRiskBadgeLabel(r)}
-                  </Badge>
-                  {shouldShowRiskRuleId(r) && (
-                    <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
-                      {r.ruleId}
-                    </span>
-                  )}
-                  {count > 1 && (
-                    <Badge
-                      variant="neutral"
-                      className="ml-auto shrink-0 text-[10px]"
-                    >
-                      ×{count}
-                    </Badge>
-                  )}
-                </div>
-                {r.description && (
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    {r.description}
-                  </p>
-                )}
-                {r.match && <MaskedMatchInline value={r.match} />}
-                {r.tags && r.tags.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {r.tags.map((tag) => (
-                      <Badge
-                        key={tag}
-                        variant="neutral"
-                        className="text-[10px]"
-                      >
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+            <MetaRow label="User">{chat.externalUserId || "anonymous"}</MetaRow>
+            {chat.source && (
+              <MetaRow label="Source">
+                <span className="inline-flex items-center gap-1.5">
+                  <HookSourceIcon source={chat.source} className="size-3.5" />
+                  {chat.source}
+                </span>
+              </MetaRow>
+            )}
+            <MetaRow label="Duration">{duration}s</MetaRow>
+            <MetaRow label="Messages">{messageCount}</MetaRow>
+            <MetaRow label="Tool calls">{toolCount}</MetaRow>
+            <MetaRow label="Total cost">
+              {hasCost ? formatUsageCost(chat.totalCost!) : "unknown"}
+            </MetaRow>
+            {chat.totalInputTokens !== undefined && (
+              <MetaRow label="Input tokens">
+                {chat.totalInputTokens.toLocaleString()}
+              </MetaRow>
+            )}
+            {chat.totalOutputTokens !== undefined && (
+              <MetaRow label="Output tokens">
+                {chat.totalOutputTokens.toLocaleString()}
+              </MetaRow>
+            )}
+            {tokens > 0 && (
+              <MetaRow label="Total tokens">{tokens.toLocaleString()}</MetaRow>
+            )}
           </div>
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+const MESSAGE_TYPES: ReadonlyArray<{
+  key: MessageCategory;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+}> = [
+  { key: "user", label: "User", icon: User },
+  { key: "assistant", label: "Assistant", icon: Sparkles },
+  { key: "tool", label: "Tool calls", icon: Wrench },
+];
+
+const ALL_CATEGORIES: ReadonlySet<MessageCategory> = new Set(
+  MESSAGE_TYPES.map((t) => t.key),
+);
+
+/** A single toggle in the header filter bar. */
+/** Header filter bar: a multi-select segmented control over message types and a
+ * "Risky only" switch, separated by a hairline. Right-aligned on its own row. */
+function MessageFilterBar({
+  typeFilter,
+  onTypeFilterChange,
+  riskyOnly,
+  onRiskyOnlyChange,
+}: {
+  typeFilter: ReadonlySet<MessageCategory>;
+  onTypeFilterChange: (next: Set<MessageCategory>) => void;
+  riskyOnly: boolean;
+  onRiskyOnlyChange: (next: boolean) => void;
+}) {
+  const toggleType = (key: MessageCategory) => {
+    const next = new Set(typeFilter);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    // Never leave the transcript fully empty — clearing the last type resets.
+    if (next.size === 0) for (const t of MESSAGE_TYPES) next.add(t.key);
+    onTypeFilterChange(next);
+  };
+
+  return (
+    <div className="flex items-center justify-end gap-3">
+      <div className="bg-muted/40 inline-flex items-center gap-1 rounded-lg border p-1">
+        {MESSAGE_TYPES.map(({ key, label, icon: Glyph }) => {
+          const on = typeFilter.has(key);
+          return (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={on}
+              onClick={() => toggleType(key)}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:border-foreground/40",
+                on
+                  ? "bg-background text-foreground shadow-sm hover:bg-muted/60"
+                  : "text-muted-foreground hover:bg-background hover:text-foreground",
+              )}
+            >
+              <Glyph className="size-3.5" />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="bg-border h-5 w-px" />
+      <div className="flex items-center gap-2">
+        <Switch
+          checked={riskyOnly}
+          onCheckedChange={onRiskyOnlyChange}
+          aria-label="Show only risky messages"
+          className={riskyOnly ? "bg-red-700" : undefined}
+        />
+        <span className="text-muted-foreground text-xs font-medium">
+          Risky only
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ChatDetailHeader({
+  chatId,
+  chat,
+  messageCount,
+  toolCount,
+  canManageChat,
+  showFilter,
+  typeFilter,
+  onTypeFilterChange,
+  riskyOnly,
+  onRiskyOnlyChange,
+  onExport,
+  onDelete,
+  onSetView,
+  onClose,
+}: {
+  chatId: string;
+  chat: Parameters<typeof SessionSummary>[0]["chat"] & { title?: string };
+  messageCount: number;
+  toolCount: number;
+  canManageChat: boolean;
+  showFilter: boolean;
+  typeFilter: ReadonlySet<MessageCategory>;
+  onTypeFilterChange: (next: Set<MessageCategory>) => void;
+  riskyOnly: boolean;
+  onRiskyOnlyChange: (next: boolean) => void;
+  onExport: () => void;
+  onDelete: () => void;
+  onSetView: (view: ViewMode) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="border-b px-4 py-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <SheetTitle className="truncate text-base">
+            {chat.title || getTraceId(chatId)}
+          </SheetTitle>
+          <SheetDescription asChild>
+            <div className="flex flex-col items-start gap-1.5">
+              <span className="text-muted-foreground text-sm">
+                {formatDistanceToNow(new Date(chat.createdAt), {
+                  addSuffix: true,
+                })}{" "}
+                <span className="font-mono">
+                  ({format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm")})
+                </span>
+              </span>
+              <Badge
+                variant="neutral"
+                className="shrink-0 font-mono text-[10px]"
+              >
+                <Badge.Text>{getTraceId(chatId)}</Badge.Text>
+              </Badge>
+            </div>
+          </SheetDescription>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <SessionSummary
+            chat={chat}
+            messageCount={messageCount}
+            toolCount={toolCount}
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
+              >
+                <SlidersHorizontal className="size-4" />
+                Actions
+                <ChevronDown className="size-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onSelect={() => onSetView("tools")}
+              >
+                Tool calls{toolCount > 0 ? ` (${toolCount})` : ""}
+              </DropdownMenuItem>
+              {canManageChat && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onSelect={onExport}
+                  >
+                    Export data
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-destructive cursor-pointer"
+                    onSelect={onDelete}
+                  >
+                    Delete session
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <button
+            onClick={onClose}
+            className="hover:bg-muted rounded-md p-1 transition-colors"
+            aria-label="Close panel"
+          >
+            <Icon name="x" className="size-5" />
+          </button>
+        </div>
+      </div>
+      {showFilter && (
+        <div className="mt-3">
+          <MessageFilterBar
+            typeFilter={typeFilter}
+            onTypeFilterChange={onTypeFilterChange}
+            riskyOnly={riskyOnly}
+            onRiskyOnlyChange={onRiskyOnlyChange}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SubViewBar({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onBack}
+      className="text-muted-foreground hover:text-foreground hover:bg-muted/40 flex w-full items-center gap-2 border-b px-4 py-2 text-sm transition-colors"
+    >
+      <ArrowLeft className="size-4" />
+      <span className="font-medium">Back to chat</span>
+      <span className="text-muted-foreground/70">· {title}</span>
+    </button>
   );
 }
 
@@ -1408,95 +471,51 @@ function ChatDetailPanel({
   chatId,
   onClose,
   onDelete,
-  collapseNonRisk,
-  initialRiskOnly = false,
+  riskFocus = false,
+  dimNonRisk: dimNonRiskProp = false,
 }: ChatDetailPanelProps) {
   const isSuperAdmin = useIsAdmin();
   const { hasScope } = useRBAC();
-  // Export + delete should be available to anyone with org:admin (the scope
-  // that already gates /risk-overview and /risk-events). Falling back to
-  // the platform super-admin flag locked out customer org admins who can
-  // already see the data in this panel.
   const canManageChat = isSuperAdmin || hasScope("org:admin");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [enabledEntryTypes, setEnabledEntryTypes] = useState<
-    FilterableTraceEntryType[]
-  >([...DEFAULT_ENABLED_ENTRY_TYPES]);
-  const [riskOnly, setRiskOnly] = useState(initialRiskOnly);
+  const [view, setView] = useState<ViewMode>("chat");
+  // Header transcript filter — which message types to show (all on by default)
+  // plus an optional "risky only" toggle.
+  const [typeFilter, setTypeFilter] = useState<ReadonlySet<MessageCategory>>(
+    () => new Set(ALL_CATEGORIES),
+  );
+  const [riskyOnly, setRiskyOnly] = useState(false);
   const [exclusionState, setExclusionState] =
     useState<ExclusionSheetState | null>(null);
-  // Normal-mode transcript stays enabled even in risk mode so the panel shell
-  // (cost, tokens, source, agent usage — only populated on the newest page)
-  // never blanks out when toggling Risk only.
-  const transcript = useChatTranscript(chatId, true);
-  const riskTranscript = useChatRiskTranscript(chatId, riskOnly);
-  const chat = transcript.chat;
-  const chatMessages = riskOnly ? riskTranscript.messages : transcript.messages;
-  const chatLoading = transcript.isLoading;
-  const chatLoadHasErrors = riskOnly
-    ? riskTranscript.isError
-    : transcript.isError;
-  const messagesLoading =
-    riskOnly && riskTranscript.isLoading && chatMessages.length === 0;
-
-  // Infinite-scroll plumbing for the message pane. Older loads prepend, so we
-  // anchor on distance-from-bottom to avoid the viewport jumping; the first
-  // normal-mode page scrolls to the newest message (chat-style, scroll up for
-  // older).
-  const scrollRef = useRef<HTMLDivElement>(null);
-  // Also track the scroll node in state: the virtualizer lives in a child
-  // component and needs the element (not just a ref) to establish its viewport
-  // — a ref alone is null on the child's first render and react-virtual won't
-  // recover without an option change.
-  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
-  const setScrollNode = useCallback((node: HTMLDivElement | null) => {
-    scrollRef.current = node;
-    setScrollEl(node);
-  }, []);
-  const anchorRef = useRef<number | null>(null);
-
-  const loadOlder = useCallback(() => {
-    const el = scrollRef.current;
-    if (el) anchorRef.current = el.scrollHeight - el.scrollTop;
-    if (riskOnly) riskTranscript.loadBefore();
-    else transcript.fetchOlder();
-  }, [riskOnly, riskTranscript, transcript]);
-
-  const loadNewer = useCallback(() => {
-    if (riskOnly) riskTranscript.loadAfter();
-    else transcript.fetchNewer();
-  }, [riskOnly, riskTranscript, transcript]);
-
-  const hasMoreBefore = riskOnly
-    ? riskTranscript.hasMoreBefore
-    : transcript.hasMoreBefore;
-  const hasMoreAfter = riskOnly
-    ? riskTranscript.hasMoreAfter
-    : transcript.hasMoreAfter;
-
-  const handleTranscriptScroll = useCallback(
-    (e: React.UIEvent<HTMLDivElement>) => {
-      const el = e.currentTarget;
-      if (el.scrollTop < 200 && hasMoreBefore) loadOlder();
-      const distanceFromBottom =
-        el.scrollHeight - el.scrollTop - el.clientHeight;
-      if (distanceFromBottom < 200 && hasMoreAfter) loadNewer();
-    },
-    [hasMoreBefore, hasMoreAfter, loadOlder, loadNewer],
+  // The finding an in-flight exclusion was opened from, and the set of findings
+  // hidden optimistically after their exclusion was created.
+  const [pendingExclusionKey, setPendingExclusionKey] = useState<string | null>(
+    null,
   );
+  const [optimisticExcluded, setOptimisticExcluded] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
 
-  // Restore the scroll anchor after older messages prepend so the viewport
-  // doesn't jump. (Initial scroll-to-newest is handled inside TranscriptBody via
-  // the virtualizer, which is measurement-aware.)
-  useLayoutEffect(() => {
-    const el = scrollRef.current;
-    if (el && anchorRef.current != null) {
-      el.scrollTop = el.scrollHeight - anchorRef.current;
-      anchorRef.current = null;
-    }
-  }, [chatMessages.length]);
+  // Risk-review contexts — explicit risk focus, or opened from the has-risk
+  // filter — load the server-windowed risk transcript so findings load no matter
+  // which page they sit on, and spotlight them. Plain views paginate the latest
+  // generation by seq keyset. Only the active transcript is enabled so we don't
+  // double-fetch.
+  const dimNonRisk = riskFocus || dimNonRiskProp;
+  // Always load the latest page for chat-level enrichment (cost, agent usage,
+  // source) — the risk-only load omits it. Risk views additionally load the
+  // server-windowed findings and render those instead of the latest page.
+  const transcript = useChatTranscript(chatId, true);
+  const riskTranscript = useChatRiskTranscript(chatId, dimNonRisk);
+  const active = dimNonRisk ? riskTranscript : transcript;
+  // Prefer the enriched (cost/usage) normal-load chat, but fall back to the
+  // active transcript's chat so a risk view still renders if only that load
+  // resolved (otherwise the panel would show "Not found" despite having data).
+  const chat = transcript.chat ?? active.chat;
+  const chatMessages = active.messages;
+  const chatLoading = active.isLoading || transcript.isLoading;
+  const chatLoadHasErrors = active.isError;
 
-  // Fetch telemetry logs for this chat
   const {
     mutate: searchLogs,
     data: logsData,
@@ -1504,23 +523,26 @@ function ChatDetailPanel({
     error: logsError,
   } = useSearchLogsMutation();
 
-  // Trigger log search when chatId changes
   useEffect(() => {
     searchLogs({
       request: {
         searchLogsPayload: {
-          filter: {
-            gramChatId: chatId,
-          },
+          filter: { gramChatId: chatId },
           limit: PANEL_TELEMETRY_LOG_LIMIT,
         },
       },
     });
   }, [chatId, searchLogs]);
 
+  // Reset transient UI state when the panel is pointed at a new session.
   useEffect(() => {
-    setRiskOnly(initialRiskOnly);
-  }, [chatId, initialRiskOnly]);
+    setView("chat");
+    setTypeFilter(new Set(ALL_CATEGORIES));
+    setRiskyOnly(false);
+    setExclusionState(null);
+    setPendingExclusionKey(null);
+    setOptimisticExcluded(new Set());
+  }, [chatId]);
 
   const logs = useMemo(
     () => filterPanelTelemetryLogs(logsData?.logs ?? []),
@@ -1528,33 +550,29 @@ function ChatDetailPanel({
   );
   const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
 
-  // Fetch risk findings for this chat
+  const queryClient = useQueryClient();
   const { data: riskData } = useRiskListResults({ chatId });
-  const riskResults = useMemo(
-    () => riskData?.results ?? [],
-    [riskData?.results],
-  );
+  const riskResults = useMemo(() => {
+    const all = riskData?.results ?? [];
+    if (optimisticExcluded.size === 0) return all;
+    return all.filter((r) => !optimisticExcluded.has(findingKey(r)));
+  }, [riskData?.results, optimisticExcluded]);
   const riskResultsByMessage = useMemo(() => {
     const map = new Map<string, RiskResult[]>();
     for (const r of riskResults) {
       const existing = map.get(r.chatMessageId);
-      if (existing) {
-        existing.push(r);
-      } else {
-        map.set(r.chatMessageId, [r]);
-      }
+      if (existing) existing.push(r);
+      else map.set(r.chatMessageId, [r]);
     }
     return map;
   }, [riskResults]);
+
   const claudeUsageByMessage = useMemo(() => {
     const turns =
       chat?.agentUsage?.type === "claude"
         ? (chat.agentUsage.claude?.turns ?? [])
         : [];
-    return buildClaudeUsageByMessageId({
-      messages: chatMessages,
-      turns,
-    });
+    return buildClaudeUsageByMessageId({ messages: chatMessages, turns });
   }, [chat?.agentUsage, chatMessages]);
   const claudeToolUsageByToolUseId = useMemo(() => {
     const tools =
@@ -1564,7 +582,147 @@ function ChatDetailPanel({
     return buildClaudeToolUsageByToolUseId(tools);
   }, [chat?.agentUsage]);
 
-  if (chatLoading && !chat) {
+  const transcriptRows = useMemo(
+    () => buildTranscript(chatMessages),
+    [chatMessages],
+  );
+  // Apply the header filters at the row level so generation dividers and risk
+  // gaps recompute against exactly what's shown (no orphaned dividers).
+  const filterActive = typeFilter.size < ALL_CATEGORIES.size || riskyOnly;
+  const visibleRows = useMemo(() => {
+    let rows = transcriptRows;
+    if (typeFilter.size < ALL_CATEGORIES.size) {
+      rows = rows.filter((r) => typeFilter.has(rowCategory(r)));
+    }
+    if (riskyOnly) {
+      rows = rows.filter((r) => rowIsFlagged(r, riskResultsByMessage));
+    }
+    return rows;
+  }, [transcriptRows, typeFilter, riskyOnly, riskResultsByMessage]);
+  const hasMoreBefore = active.hasMoreBefore;
+  const hasMoreAfter = active.hasMoreAfter;
+  const riskGaps = dimNonRisk ? riskTranscript.gaps : undefined;
+  const displayItems = useMemo(
+    () =>
+      buildDisplayItems({
+        rows: visibleRows,
+        hasMoreBefore,
+        hasMoreAfter,
+        gaps: riskGaps,
+      }),
+    [visibleRows, hasMoreBefore, hasMoreAfter, riskGaps],
+  );
+
+  // Risk-review contexts (risk focus or the has-risk spotlight) open scrolled to
+  // the first finding, however far down it is. Plain cost/default views open at
+  // the top (first message) — even when the session happens to have findings.
+  const initialScrollIndex = useMemo(() => {
+    if (!dimNonRisk) return null;
+    const idx = displayItems.findIndex(
+      (it) => it.type === "row" && rowIsFlagged(it.row, riskResultsByMessage),
+    );
+    return idx >= 0 ? idx : null;
+  }, [dimNonRisk, displayItems, riskResultsByMessage]);
+
+  const transcriptPagination = useMemo<TranscriptPagination>(
+    () => ({
+      hasMoreBefore,
+      hasMoreAfter,
+      onLoadOlder: () =>
+        dimNonRisk ? riskTranscript.loadBefore() : transcript.fetchOlder(),
+      onLoadNewer: () =>
+        dimNonRisk ? riskTranscript.loadAfter() : transcript.fetchNewer(),
+      isFetchingOlder: dimNonRisk
+        ? riskTranscript.loadingKey === "before"
+        : transcript.isFetchingOlder,
+      isFetchingNewer: dimNonRisk
+        ? riskTranscript.loadingKey === "after"
+        : transcript.isFetchingNewer,
+      onLoadGap: dimNonRisk ? riskTranscript.loadGap : undefined,
+      isLoadingGap: dimNonRisk
+        ? (afterSeq: number) => riskTranscript.loadingKey === `gap:${afterSeq}`
+        : undefined,
+      initialScrollIndex,
+      scrollToFinding: dimNonRisk,
+    }),
+    [
+      hasMoreBefore,
+      hasMoreAfter,
+      dimNonRisk,
+      riskTranscript,
+      transcript,
+      initialScrollIndex,
+    ],
+  );
+
+  const rowCtx = useMemo<RowContext>(
+    () => ({
+      riskResultsByMessage,
+      claudeUsageByMessage,
+      claudeToolUsageByToolUseId,
+      dimNonRisk,
+      userLabel: chat?.externalUserId,
+    }),
+    [
+      riskResultsByMessage,
+      claudeUsageByMessage,
+      claudeToolUsageByToolUseId,
+      dimNonRisk,
+      chat?.externalUserId,
+    ],
+  );
+
+  // "Create exclusion" swaps the transcript for the exclusion editor in-place
+  // (with a back button) rather than stacking a second sheet on top.
+  const openExclusion = useCallback((result: RiskResult) => {
+    setExclusionState(findingToExclusionState(result));
+    setPendingExclusionKey(findingKey(result));
+    setView("exclusion");
+  }, []);
+  const closeExclusion = useCallback(() => {
+    setView("chat");
+    setExclusionState(null);
+    setPendingExclusionKey(null);
+  }, []);
+  const handleExclusionDone = useCallback(() => {
+    if (pendingExclusionKey) {
+      setOptimisticExcluded((prev) => {
+        const next = new Set(prev);
+        next.add(pendingExclusionKey);
+        return next;
+      });
+      // The server reconcile lags, so refetching chat.list still returns the old
+      // per-session risk count. Optimistically drop this chat's count in the
+      // Agent Sessions list cache by the findings the exclusion suppresses here.
+      const removed =
+        (riskData?.results ?? []).filter(
+          (r) => findingKey(r) === pendingExclusionKey,
+        ).length || 1;
+      queryClient.setQueriesData<{ chats?: ChatOverview[] }>(
+        { queryKey: ["@gram/client", "chat", "list"] },
+        (old) => {
+          if (!old?.chats) return old;
+          return {
+            ...old,
+            chats: old.chats.map((c) =>
+              c.id === chatId
+                ? {
+                    ...c,
+                    riskFindingsCount: Math.max(
+                      0,
+                      (c.riskFindingsCount ?? 0) - removed,
+                    ),
+                  }
+                : c,
+            ),
+          };
+        },
+      );
+    }
+    closeExclusion();
+  }, [pendingExclusionKey, closeExclusion, riskData, queryClient, chatId]);
+
+  if (chatLoading) {
     return (
       <div className="p-8">
         <SheetTitle>Loading</SheetTitle>
@@ -1584,341 +742,98 @@ function ChatDetailPanel({
     );
   }
 
-  // Use lastMessageTimestamp if available, otherwise fall back to updatedAt
-  const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
-  const duration = Math.round(
-    (new Date(endTime).getTime() - new Date(chat.createdAt).getTime()) / 1000,
-  );
-  // Filter-bar counts come from the server's whole-generation totals: messages
-  // are paginated, so counting the loaded page understates them (it would read
-  // "Showing 150 of 150" on a 19k-message chat). Fall back to the loaded page
-  // only if a response predates the totals field.
-  const totals = chat.totals;
-  const entryTypeCounts: Record<FilterableTraceEntryType, number> = totals
-    ? {
-        user: totals.userMessages,
-        assistant: totals.assistantMessages,
-        tool_call: totals.toolCalls,
-        tool_result: totals.toolResults,
-      }
-    : getEntryTypeCounts(chatMessages);
-  // Denominator sums the four entry types (system rows are excluded from both
-  // counts, so the fallback can't use chatMessages.length, which includes them).
-  const totalEntryCount = totals
-    ? totals.total
-    : FILTERABLE_ENTRY_TYPES.reduce(
-        (sum, type) => sum + entryTypeCounts[type],
-        0,
-      );
-  // "Showing X of Y entries": X is the sum of the currently-enabled types'
-  // totals, so toggling a type off subtracts its whole-generation count.
-  const visibleEntryCount = FILTERABLE_ENTRY_TYPES.reduce(
-    (sum, type) =>
-      enabledEntryTypes.includes(type) ? sum + entryTypeCounts[type] : sum,
-    0,
-  );
-  // Generation-scoped risk count, consistent with the risk-windowed transcript
-  // (which loads the same generation). Keeps the Risk-only toggle enabled before
-  // any risky message is paged in.
-  const riskEntryCount = totals ? totals.riskOnly : riskResultsByMessage.size;
+  const error = logsError as Error | null;
 
   return (
     <div className="bg-background flex h-full flex-col">
-      {/* Header */}
-      <div className="border-b p-6">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <SheetTitle className="text-xl">{getTraceId(chatId)}</SheetTitle>
-            {status !== "unresolved" && (
-              <Badge
-                variant={
-                  status === "success"
-                    ? "success"
-                    : status === "failure"
-                      ? "destructive"
-                      : "warning"
-                }
-              >
-                <Icon name="circle-check" className="size-3" />
-                {status === "success"
-                  ? "Resolved"
-                  : status === "failure"
-                    ? "Failed"
-                    : "Partial"}
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            {canManageChat && (
-              <>
-                <button
-                  onClick={() =>
-                    exportTraceDataAsJson({
-                      chatId,
-                      chat,
-                      messages: chatMessages,
-                      telemetryLogLimit: PANEL_TELEMETRY_LOG_LIMIT,
-                      telemetryLogs: logs,
-                      riskResults,
-                    })
-                  }
-                  className="hover:bg-muted text-muted-foreground inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
-                  aria-label="Export data as JSON"
-                >
-                  <Icon name="download" className="size-4" />
-                  <span>Export data</span>
-                </button>
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 transition-colors"
-                  aria-label="Delete chat"
-                >
-                  <Icon name="trash-2" className="size-5" />
-                </button>
-              </>
-            )}
-            <button
-              onClick={onClose}
-              className="hover:bg-muted rounded-md p-1 transition-colors"
-              aria-label="Close panel"
-            >
-              <Icon name="x" className="size-5" />
-            </button>
-          </div>
-        </div>
-        <div className="text-muted-foreground mb-3 font-mono text-sm">
-          {format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm:ss")}
-        </div>
-        <SheetDescription className="text-sm">{chat.title}</SheetDescription>
-      </div>
+      <ChatDetailHeader
+        chatId={chatId}
+        chat={chat}
+        messageCount={chat.numMessages}
+        toolCount={toolLogs.length}
+        canManageChat={canManageChat}
+        showFilter={view === "chat"}
+        typeFilter={typeFilter}
+        onTypeFilterChange={setTypeFilter}
+        riskyOnly={riskyOnly}
+        onRiskyOnlyChange={setRiskyOnly}
+        onExport={() => {
+          exportTraceDataAsJson({
+            chatId,
+            chat,
+            messages: chatMessages,
+            telemetryLogLimit: PANEL_TELEMETRY_LOG_LIMIT,
+            telemetryLogs: logs,
+            riskResults,
+          });
+        }}
+        onDelete={() => setShowDeleteConfirm(true)}
+        onSetView={setView}
+        onClose={onClose}
+      />
 
-      {/* Tabs */}
-      <Tabs defaultValue="overview" className="flex min-h-0 flex-1 flex-col">
-        <TabsList className="h-auto w-full justify-start gap-0 rounded-none border-b bg-transparent px-6 py-0">
-          <TabsTrigger
-            value="overview"
-            className="data-[state=active]:border-b-primary relative rounded-none border-0 border-b-2 border-transparent px-4 py-3 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-          >
-            <Icon name="message-circle" className="mr-2 size-4" />
-            Overview
-          </TabsTrigger>
-          <TabsTrigger
-            value="logs"
-            className="data-[state=active]:border-b-primary relative rounded-none border-0 border-b-2 border-transparent px-4 py-3 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-          >
-            <Icon name="list" className="mr-2 size-4" />
-            Telemetry Logs
-            {logs.length > 0 && (
-              <span className="bg-muted ml-1.5 rounded-full px-1.5 text-xs">
-                {logs.length}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger
-            value="tools"
-            className="data-[state=active]:border-b-primary relative rounded-none border-0 border-b-2 border-transparent px-4 py-3 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-          >
-            <Icon name="zap" className="mr-2 size-4" />
-            Tool Calls
-            {toolLogs.length > 0 && (
-              <span className="bg-muted ml-1.5 rounded-full px-1.5 text-xs">
-                {toolLogs.length}
-              </span>
-            )}
-          </TabsTrigger>
-        </TabsList>
+      {chatLoadHasErrors && (
+        <div className="border-destructive/30 bg-destructive/10 text-destructive border-b px-4 py-2 text-xs">
+          Some messages failed to load. The transcript below may be incomplete.
+        </div>
+      )}
 
-        {/* Overview Tab */}
-        <TabsContent
-          value="overview"
-          className="m-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
+      {/* The transcript stays mounted while a sub-view (tools/exclusion) overlays
+          it, so returning lands back at the same scroll position rather than
+          re-scrolling to the first finding. */}
+      <div className="relative flex flex-1 flex-col overflow-hidden">
+        <CreateExclusionContext.Provider
+          value={canManageChat ? openExclusion : null}
         >
-          {/* Metadata Grid */}
-          <div className="bg-muted/10 border-b p-6">
-            <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-              <div>
-                <div className="text-muted-foreground mb-1 text-xs">
-                  User ID:
-                </div>
-                <div className="text-sm font-medium">
-                  {chat.externalUserId || "anonymous"}
-                </div>
-              </div>
-              {chat.source && (
-                <div>
-                  <div className="text-muted-foreground mb-1 text-xs">
-                    Source:
-                  </div>
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    {chat.source.toLowerCase().includes("claude") ||
-                    chat.source.toLowerCase().includes("cursor") ? (
-                      <HookSourceIcon source={chat.source} className="size-4" />
-                    ) : (
-                      <Icon name="globe" className="size-4 opacity-60" />
-                    )}
-                    {chat.source}
-                  </div>
-                </div>
-              )}
-              <div>
-                <div className="text-muted-foreground mb-1 text-xs">
-                  Duration:
-                </div>
-                <div className="text-sm font-medium">{duration}s</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground mb-1 text-xs">
-                  Messages:
-                </div>
-                <div className="text-sm font-medium">{chat.numMessages}</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground mb-1 text-xs">
-                  Tool Calls:
-                </div>
-                <div className="text-sm font-medium">{toolLogs.length}</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground mb-1 text-xs">
-                  Total Cost:
-                </div>
-                <div className="text-sm font-medium">
-                  {chat.totalCost !== undefined && chat.totalCost > 0
-                    ? `$${chat.totalCost.toFixed(4)}`
-                    : "unknown"}
-                </div>
-              </div>
-              {chat.totalInputTokens !== undefined && (
-                <div>
-                  <div className="text-muted-foreground mb-1 text-xs">
-                    Input Tokens:
-                  </div>
-                  <div className="text-sm font-medium">
-                    {chat.totalInputTokens.toLocaleString()}
-                  </div>
-                </div>
-              )}
-              {chat.totalOutputTokens !== undefined && (
-                <div>
-                  <div className="text-muted-foreground mb-1 text-xs">
-                    Output Tokens:
-                  </div>
-                  <div className="text-sm font-medium">
-                    {chat.totalOutputTokens.toLocaleString()}
-                  </div>
-                </div>
-              )}
-              {(chat.totalTokens !== undefined ||
-                (chat.totalInputTokens !== undefined &&
-                  chat.totalOutputTokens !== undefined)) && (
-                <div>
-                  <div className="text-muted-foreground mb-1 text-xs">
-                    Total Tokens:
-                  </div>
-                  <div className="text-sm font-medium">
-                    {(chat.totalTokens && chat.totalTokens > 0
-                      ? chat.totalTokens
-                      : (chat.totalInputTokens || 0) +
-                        (chat.totalOutputTokens || 0)
-                    ).toLocaleString()}
-                  </div>
-                </div>
-              )}
+          <ChatTranscript
+            key={chatId}
+            items={displayItems}
+            ctx={rowCtx}
+            pagination={transcriptPagination}
+            emptyMessage={
+              filterActive
+                ? "No messages match the current filter."
+                : dimNonRisk
+                  ? "No flagged messages in this session."
+                  : "No messages to display."
+            }
+          />
+        </CreateExclusionContext.Provider>
+
+        {view === "tools" && (
+          <div className="bg-background absolute inset-0 z-10 flex flex-col">
+            <SubViewBar title="Tool calls" onBack={() => setView("chat")} />
+            <div className="flex-1 overflow-y-auto">
+              <ToolCallsView
+                toolLogs={toolLogs}
+                isLoading={logsLoading}
+                error={error}
+              />
             </div>
           </div>
+        )}
 
-          {chatLoadHasErrors && (
-            <div className="border-destructive/30 bg-destructive/10 text-destructive border-b px-6 py-3 text-sm">
-              Some messages failed to load. The transcript below may be
-              incomplete.
-            </div>
-          )}
-
-          <EntryTypeFilterBar
-            value={enabledEntryTypes}
-            counts={entryTypeCounts}
-            totalCount={totalEntryCount}
-            visibleCount={visibleEntryCount}
-            onChange={setEnabledEntryTypes}
-            riskOnly={riskOnly}
-            riskCount={riskEntryCount}
-            onRiskOnlyChange={setRiskOnly}
-          />
-
-          {/* Chat Messages (own scroll area; metadata + filters stay pinned) */}
-          <div
-            ref={setScrollNode}
-            onScroll={handleTranscriptScroll}
-            className="min-h-0 flex-1 overflow-y-auto"
-          >
-            <CreateExclusionContext.Provider
-              value={
-                canManageChat
-                  ? (result) =>
-                      setExclusionState(findingToExclusionState(result))
-                  : null
+        {view === "exclusion" && exclusionState && (
+          <div className="bg-background absolute inset-0 z-10 flex flex-col overflow-hidden">
+            <SubViewBar
+              title={
+                exclusionState.mode === "edit"
+                  ? "Edit exclusion"
+                  : "Create exclusion"
               }
-            >
-              {messagesLoading ? (
-                <div className="text-muted-foreground p-6 text-center text-sm">
-                  Loading risk findings…
-                </div>
-              ) : (
-                <TranscriptBody
-                  key={chatId}
-                  mode={riskOnly ? "risk" : "normal"}
-                  messages={chatMessages}
-                  riskResultsByMessage={riskResultsByMessage}
-                  claudeUsageByMessage={claudeUsageByMessage}
-                  claudeToolUsageByToolUseId={claudeToolUsageByToolUseId}
-                  collapseNonRisk={collapseNonRisk}
-                  enabledEntryTypes={enabledEntryTypes}
-                  hasMoreBefore={hasMoreBefore}
-                  hasMoreAfter={hasMoreAfter}
-                  onLoadOlder={loadOlder}
-                  onLoadNewer={loadNewer}
-                  isFetchingOlder={transcript.isFetchingOlder}
-                  isFetchingNewer={transcript.isFetchingNewer}
-                  gaps={riskOnly ? riskTranscript.gaps : undefined}
-                  onLoadGap={riskOnly ? riskTranscript.loadGap : undefined}
-                  riskLoadingKey={riskOnly ? riskTranscript.loadingKey : null}
-                  scrollElement={scrollEl}
-                />
-              )}
-            </CreateExclusionContext.Provider>
+              onBack={closeExclusion}
+            />
+            <p className="text-muted-foreground px-6 pt-4 text-sm">
+              Suppress matching findings retroactively and going forward. Does
+              not re-run analysis.
+            </p>
+            <ExclusionEditor
+              state={exclusionState}
+              onDone={handleExclusionDone}
+            />
           </div>
-          <ExclusionSheet
-            state={exclusionState}
-            onOpenChange={(open) => {
-              if (!open) setExclusionState(null);
-            }}
-          />
-        </TabsContent>
-
-        {/* Telemetry Logs Tab */}
-        <TabsContent
-          value="logs"
-          className="m-0 flex-1 overflow-y-auto data-[state=inactive]:hidden"
-        >
-          <TelemetryLogsTab
-            logs={logs}
-            isLoading={logsLoading}
-            error={logsError as Error | null}
-          />
-        </TabsContent>
-
-        {/* Tool Calls Tab */}
-        <TabsContent
-          value="tools"
-          className="m-0 flex-1 overflow-y-auto data-[state=inactive]:hidden"
-        >
-          <ToolCallsTab
-            toolLogs={toolLogs}
-            isLoading={logsLoading}
-            error={logsError as Error | null}
-          />
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
 
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <Dialog.Content>
