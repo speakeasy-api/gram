@@ -109,6 +109,7 @@ export * from "./externalmcpremote.js";
 export * from "./externalmcpremoteheader.js";
 export * from "./externalmcpremotevariable.js";
 export * from "./externalmcpserver.js";
+export * from "./externalmcpserverentry.js";
 export * from "./externalmcptool.js";
 export * from "./externalmcptooldefinition.js";
 export * from "./externaloauthserver.js";

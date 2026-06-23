@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 2c8642b0cd060ec3a84ec8549c5fd281
+  docChecksum: 5a5af9746aeb4665c6ec68c3745c6d5d
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -326,6 +326,8 @@ trackedFiles:
     last_write_checksum: sha1:e033d008b63ce92099df1591b1e89c632459da34
   docs/models/components/externalmcpserver.md:
     last_write_checksum: sha1:ca245142f4b32155ee6581f7fb02463fe75fb605
+  docs/models/components/externalmcpserverentry.md:
+    last_write_checksum: sha1:8a00d88282da59764721a683b9c5af42532b3ee8
   docs/models/components/externalmcptool.md:
     last_write_checksum: sha1:719b8eb5236a84fd95fcc4c72d4f4eeaa77c065d
   docs/models/components/externalmcptooldefinition.md:
@@ -469,7 +471,7 @@ trackedFiles:
   docs/models/components/listauditlogsresult.md:
     last_write_checksum: sha1:544e05707ab700f2e0fdd7260e344bb34e2d376f
   docs/models/components/listcatalogresponsebody.md:
-    last_write_checksum: sha1:829856adec0b1bcfc0e1cc272f038fff48949045
+    last_write_checksum: sha1:9587eabb596a16607a4d7d55213078ac5c370e4e
   docs/models/components/listchallengebucketsresult.md:
     last_write_checksum: sha1:93c858675bf6d05181da9214a8366fbbc744cb58
   docs/models/components/listchallengesresult.md:
@@ -4429,6 +4431,8 @@ trackedFiles:
     last_write_checksum: sha1:ae7f119fd8c1b29805909e4db1a5526d9570d443
   src/models/components/externalmcpserver.ts:
     last_write_checksum: sha1:1616e32c2edfd82c7b55f53d4b2939af8dc1085c
+  src/models/components/externalmcpserverentry.ts:
+    last_write_checksum: sha1:af44c5b4d7de7a3e7fbed6600aa25e2c7ac2cd44
   src/models/components/externalmcptool.ts:
     last_write_checksum: sha1:55574649b1ec65964750666d902ac9bd87c5e989
   src/models/components/externalmcptooldefinition.ts:
@@ -4525,7 +4529,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:09c08939298d7c599f0b120f5ed1fd02ec6a5264
+    last_write_checksum: sha1:f91e41d89464f18bd568b61ab389516193b715d0
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4554,7 +4558,7 @@ trackedFiles:
   src/models/components/listauditlogsresult.ts:
     last_write_checksum: sha1:0cf35d9c9897ef28b1704ce852431ac287230b9f
   src/models/components/listcatalogresponsebody.ts:
-    last_write_checksum: sha1:e9b091fe2ba997b5cd2dd5567e24a84090a4c442
+    last_write_checksum: sha1:ed58ea13d2f1be1b46a9edebfac1a791653ea11d
   src/models/components/listchallengebucketsresult.ts:
     last_write_checksum: sha1:ed3993965dd9c76a8667153ad2c6d8d85700f4cc
   src/models/components/listchallengesresult.ts:
