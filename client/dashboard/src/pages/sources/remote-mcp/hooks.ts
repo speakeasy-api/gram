@@ -38,17 +38,11 @@ const DEFAULT_ENDPOINT_FAILED_MESSAGE =
 const USER_SESSION_ISSUER_FAILED_MESSAGE =
   "MCP server created, but its login issuer couldn't be set up. Configure authentication from the server's Authentication tab.";
 
-// Give a freshly-created remote-backed mcp_server its one permanent
-// user_session_issuer and link it while the server stays disabled. Every
-// remote server owns exactly one USI from setup, never shared; auth
-// auto-config (and the Configure wizard later) only ever manage the client
-// under it, never create or repoint one.
-//
-// Best-effort: linking the USI makes the server gateable, not yet functional,
-// so a failure here leaves the server parked (disabled, no USI) and only warns
-// — authentication can still be configured by hand from the Authentication
-// tab. A half-built link (USI created, server update failed) is rolled back so
-// it doesn't leak an orphan issuer.
+// Mint a remote-backed server's one permanent user_session_issuer and link it
+// while the server stays disabled, making it gateable. Best-effort: on failure
+// the server is left parked (disabled, no USI) with only a warning, since auth
+// can still be configured by hand. A half-built link (USI created but server
+// update failed) is rolled back so it doesn't leak an orphan issuer.
 async function linkUserSessionIssuer(
   client: SdkClient,
   mcpServer: McpServer,
@@ -271,11 +265,9 @@ export function useLinkMcpServerToRemote(): UseMutationResult<
         },
       });
 
-      // Mirror the create flow: give the re-linked server its one permanent USI
-      // so it behaves identically to a freshly-created one — gateable, and its
-      // upstream-auth gap detectable on the overview tab. Best-effort, same as
-      // create; auto-config of the upstream client is intentionally left to the
-      // Authentication tab here.
+      // Mirror the create flow: give the re-linked server its permanent USI so
+      // it behaves like a freshly-created one. Auto-config of the upstream
+      // client is intentionally left to the Authentication tab here.
       await linkUserSessionIssuer(client, mcpServer);
 
       // Mirror the create flow: pre-stage a default endpoint. Best-effort.

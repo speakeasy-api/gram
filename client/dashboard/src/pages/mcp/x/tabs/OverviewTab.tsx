@@ -251,9 +251,8 @@ function useServerAddressOverview(
 type AuthenticationOverview = OverviewReadiness & {
   state: AuthState;
   secure: boolean;
-  // Upstream advertises OAuth protected-resource metadata, but no upstream
-  // remote_session_client is connected. Gram-only gating can read "secure"
-  // while upstream login still fails for every client — this surfaces that gap.
+  // Upstream advertises OAuth but no remote_session_client is connected. Gram
+  // gating can read "secure" while upstream login still fails for every client.
   missingUpstreamAuth: boolean;
   status: RowStatus | undefined;
 };
@@ -271,12 +270,10 @@ function useAuthenticationOverview(
   const hasIssuer = !!userSessionIssuerId;
   const hasRemote = (clientsResult?.result.items.length ?? 0) > 0;
 
-  // Only probe the upstream for OAuth metadata once the server is gram-gated
-  // (has a USI) but no remote identity is connected. A server with no USI is
-  // NEEDS SETUP regardless of upstream OAuth, so probing it would both waste an
-  // RFC 9728 round-trip and mislabel it ACTION NEEDED. Once a
-  // remote_session_client exists the gap is already closed, so the probe is
-  // wasted work there too.
+  // Probe the upstream for OAuth metadata only when the server is gram-gated
+  // (has a USI) but has no remote client. A server with no USI is NEEDS SETUP
+  // regardless of upstream OAuth, and a connected client already closes the
+  // gap; probing either is wasted work (and would mislabel the no-USI case).
   const { status: probeStatus } = useProtectedResourceMetadata(
     mcpServer.remoteMcpServerId,
     hasIssuer && !hasRemote,
@@ -453,10 +450,9 @@ const AUTH_ROW_COPY: Record<AuthState, string> = {
   none: "No authentication method configured - anyone with the URL can connect.",
 };
 
-// Shown instead of the AuthState copy when the upstream requires OAuth but no
-// upstream identity provider is connected. Takes precedence because the gap
-// makes the row's posture misleading: clients can pass Gram gating yet still
-// fail the upstream login.
+// Shown instead of the AuthState copy on missingUpstreamAuth: the gap makes the
+// row misleading, since clients can pass Gram gating yet still fail upstream
+// login.
 const MISSING_UPSTREAM_AUTH_COPY =
   "The upstream server requires OAuth, but no upstream identity provider is connected. Connect one so clients can authenticate.";
 

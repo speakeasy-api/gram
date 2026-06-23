@@ -48,11 +48,9 @@ export async function autoConfigureRemoteMcpAuth({
   remoteMcpServer,
   mcpServer,
 }: AutoConfigureAuthInput): Promise<AutoConfigureAuthResult> {
-  // Every remote-backed server owns its one user_session_issuer from setup
-  // (created in the dashboard create flow). Auto-config only ever manages the
-  // client under that USI — it never creates or repoints one. With no USI there
-  // is nothing to anchor a client to, so skip silently; setup already surfaced
-  // the link failure.
+  // Every remote-backed server gets its USI at setup; auto-config only attaches
+  // a client under it, never creates one. No USI means nothing to anchor a
+  // client to, so skip silently (setup already surfaced the link failure).
   const userSessionIssuerId = mcpServer.userSessionIssuerId;
   if (!userSessionIssuerId) {
     return skipped("No user session issuer is linked to this server.", false);
@@ -200,9 +198,8 @@ export async function autoConfigureRemoteMcpAuth({
       createdRemoteSessionIssuerId = remoteSessionIssuer.id;
     }
 
-    // Register the freshly-minted upstream client against the server's own USI.
-    // The USI is permanent (created at setup); this only attaches a client to
-    // it. The one_per_issuer constraint keeps it at a single client.
+    // Attach the freshly-registered upstream client to the server's permanent
+    // USI.
     await client.remoteSessionClients.create({
       createRemoteSessionClientForm: {
         remoteSessionIssuerId: remoteSessionIssuer.id,
