@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
+// publishAckTimeout keeps shadow-mode publish drains below the heartbeat window.
 const publishAckTimeout = 10 * time.Second
 
 func drainPublishAcks(ctx context.Context, logger *slog.Logger, warnMsg string, results []gcp.PublishResult) {

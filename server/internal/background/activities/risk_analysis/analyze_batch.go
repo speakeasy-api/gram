@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
@@ -27,8 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
-// AnalyzeBatch scans a batch of messages against enabled detection sources
-// and writes the results back to the database.
+// AnalyzeBatch scans a batch of messages against one risk policy and replaces
+// that policy's stored results for the fetched message IDs.
 type AnalyzeBatch struct {
 	logger          *slog.Logger
 	tracer          trace.Tracer
@@ -97,6 +96,7 @@ type AnalyzeBatchArgs struct {
 	PromptInjectionRules []string
 	CustomRuleIds        []string
 }
+
 type AnalyzeBatchResult struct {
 	Processed int
 	Findings  int
@@ -131,43 +131,25 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		ProjectID: args.ProjectID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		// Policy was deleted (soft or hard) between FetchUnanalyzedMessages
-		// returning IDs and this activity running. FetchUnanalyzed errors out
-		// on the next drain cycle, so there is no infinite loop and no need
-		// to write Found=false rows; the FK to risk_policies might also be
-		// gone on hard-delete.
 		span.SetAttributes(attribute.Bool("risk.policy_deleted", true))
-		a.logger.InfoContext(ctx, "risk policy deleted, skipping batch",
-			attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
-		)
+		a.logger.InfoContext(ctx, "risk policy deleted, skipping batch", attr.SlogRiskPolicyID(args.RiskPolicyID.String()))
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get risk policy: %w", err)
 	}
 	if !policy.Enabled {
-		// Policy was disabled mid-flight. FetchUnanalyzed returns no IDs while
-		// disabled (no infinite loop), and a re-enable bumps the policy
-		// version so FetchUnanalyzedMessageIDs picks these messages up again.
 		span.SetAttributes(attribute.Bool("risk.policy_disabled", true))
-		a.logger.InfoContext(ctx, "risk policy disabled, skipping batch",
-			attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
-		)
+		a.logger.InfoContext(ctx, "risk policy disabled, skipping batch", attr.SlogRiskPolicyID(args.RiskPolicyID.String()))
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
 
-	messages, err := a.fetchContent(ctx, args)
+	rows, err := a.fetchContent(ctx, args)
 	if err != nil {
 		return nil, err
 	}
-	// message_types is the coarse filter; scope_include narrows further on top of
-	// it (not instead of it), scope_exempt takes a matched message out.
-	eng := a.celEng
-	scope, err := CompileScope(eng, policy.ScopeInclude.String, policy.ScopeExempt.String)
-	if err != nil {
-		return nil, fmt.Errorf("compile policy scope: %w", err)
-	}
-	messages = filterMessagesByMessageTypes(messages, args.MessageTypes)
+	rows = filterMessagesByMessageTypes(rows, args.MessageTypes)
+	messages := newBatchMessages(ctx, a.logger, rows)
 	scannedCount = len(messages)
 	if len(messages) == 0 {
 		if err := a.writeResults(ctx, args, nil); err != nil {
@@ -176,16 +158,52 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
 
+	scope, err := CompileScope(a.celEng, policy.ScopeInclude.String, policy.ScopeExempt.String)
+	if err != nil {
+		return nil, fmt.Errorf("compile policy scope: %w", err)
+	}
+	outOfPolicyScope := a.scopeExclusions(ctx, scope, messages)
+
+	var findings [][]Finding
+	switch policy.PolicyType {
+	case PolicyTypePromptBased:
+		findings = a.scanPromptPolicy(ctx, args, policy, messages, outOfPolicyScope)
+	default:
+		findings, err = a.scanStandardPolicyBatch(ctx, args, policy, messages, outOfPolicyScope)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if disabled := NewDisabledRuleSet(policy.DisabledRules); !disabled.Empty() {
+		for i, batch := range findings {
+			findings[i] = disabled.FilterFindings(batch)
+		}
+	}
+
+	rowsToWrite, findingsCount := a.buildRows(ctx, args, messages, findings)
+	if err := a.writeResults(ctx, args, rowsToWrite); err != nil {
+		return nil, err
+	}
+
+	span.SetAttributes(
+		attribute.Int("risk.messages_processed", len(messages)),
+		attribute.Int("risk.findings_count", findingsCount),
+		attribute.Int("risk.rows_written", len(rowsToWrite)),
+	)
+
+	return &AnalyzeBatchResult{
+		Processed: len(messages),
+		Findings:  findingsCount,
+	}, nil
+}
+
+func (a *AnalyzeBatch) scanStandardPolicyBatch(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, outOfPolicyScope []bool) ([][]Finding, error) {
 	customRules, err := a.customRulesForPolicy(ctx, args.ProjectID, policy.CustomRuleIds)
 	if err != nil {
 		return nil, err
 	}
 
-	// Load the going-forward exclusion set (the policy's own exclusions plus any
-	// global ones). It is applied inside scan BEFORE the overlap-dedup pass so
-	// excluding one finding cannot erase an overlapping finding that should
-	// still flag the region. The retroactive reconcile sweep flags
-	// already-stored findings using the same criteria.
 	exclusions, err := repo.New(a.db).ListEnabledExclusionsForPolicy(ctx, repo.ListEnabledExclusionsForPolicyParams{
 		ProjectID:    args.ProjectID,
 		RiskPolicyID: uuid.NullUUID{UUID: args.RiskPolicyID, Valid: true},
@@ -194,52 +212,9 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return nil, fmt.Errorf("list exclusions: %w", err)
 	}
 
-	scopeExcluded := a.scopeExclusions(ctx, scope, messages)
-
-	findings, err := a.scan(ctx, args, messages, customRules, NewExclusionSet(exclusions), scopeExcluded)
-	if err != nil {
-		return nil, err
-	}
-
-	// prompt_based policies are evaluated by the LLM judge rather than the
-	// source-based scanners above. The judge runs on every in-scope message left
-	// after the policy's message_types filter and scope predicates, so it
-	// covers whatever the policy declares.
-	if policy.PolicyType == "prompt_based" {
-		judgeFindings := a.scanPromptJudge(ctx, args, policy, messages, scopeExcluded)
-		for i := range findings {
-			findings[i] = append(findings[i], judgeFindings[i]...)
-		}
-	}
-
-	// Drop findings whose canonical rule_id has been unchecked by the policy
-	// author. Done after the dedup pass so an enabled secret finding still
-	// suppresses an overlapping disabled presidio finding, instead of letting
-	// the disabled rule win the overlap and then disappear (leaving the
-	// region unflagged).
-	if disabled := NewDisabledRuleSet(policy.DisabledRules); !disabled.Empty() {
-		for i, batch := range findings {
-			findings[i] = disabled.FilterFindings(batch)
-		}
-	}
-
-	rows, findingsCount := a.buildRows(ctx, args, messages, findings)
-
-	if err := a.writeResults(ctx, args, rows); err != nil {
-		return nil, err
-	}
-
-	span.SetAttributes(
-		attribute.Int("risk.messages_processed", len(messages)),
-		attribute.Int("risk.findings_count", findingsCount),
-		attribute.Int("risk.rows_written", len(rows)),
-	)
-
-	return &AnalyzeBatchResult{
-		Processed: len(messages),
-		Findings:  findingsCount,
-	}, nil
+	return a.scanStandardPolicy(ctx, args, messages, customRules, NewExclusionSet(exclusions), outOfPolicyScope)
 }
+
 func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) ([]repo.GetMessageContentBatchRow, error) {
 	ctx, fetchSpan := a.tracer.Start(ctx, "risk.fetchContent")
 	defer fetchSpan.End()

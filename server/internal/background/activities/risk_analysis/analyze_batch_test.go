@@ -200,7 +200,7 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		StartPos:          pgtype.Int4{Int32: 0, Valid: true},
 		EndPos:            pgtype.Int4{Int32: 5, Valid: true},
 		Confidence:        pgtype.Float8{Float64: 1, Valid: true},
-		Tags:              nil,
+		Tags:              []string{},
 		DeadLetterReason:  pgtype.Text{},
 	}})
 	require.NoError(t, err)

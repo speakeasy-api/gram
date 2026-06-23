@@ -51,7 +51,7 @@ func TestScanCELRules_CorrelatedToolRule(t *testing.T) {
 		byMatch[f.Match] = f
 		require.Equal(t, SourceCustom, f.Source)
 		require.Equal(t, "custom.bash_drop", f.RuleID)
-		require.Equal(t, "shell:run_bash_command", f.toolCallID)
+		require.Equal(t, "shell:run_bash_command", f.spanGroupKey)
 	}
 	require.Contains(t, byMatch, "bash")
 	require.Contains(t, byMatch, "DROP TABLE")

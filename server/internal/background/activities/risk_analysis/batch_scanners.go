@@ -4,41 +4,29 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
-
 	"go.opentelemetry.io/otel/codes"
 	"go.temporal.io/sdk/activity"
 
-	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
-func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow, customRules []CompiledCELRule, exclusions ExclusionSet, scopeExcluded []bool) ([][]Finding, error) {
+func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRules []CompiledCELRule, exclusions ExclusionSet, outOfPolicyScope []bool) ([][]Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
 	activity.RecordHeartbeat(ctx, 0)
 
-	n := len(messages)
-	contents := make([]string, n)
-	msgids := make([]uuid.UUID, n)
-	for i, msg := range messages {
-		contents[i] = msg.Content
-		msgids[i] = msg.ID
-	}
-
+	contents := messageContents(messages)
 	requestID, err := uuid.NewV7()
 	if err != nil {
+		scanSpan.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("generate scan request id: %w", err)
 	}
 
+	sources := newSourceSet(args.Sources)
+	n := len(messages)
 	gitleaksFindings := make([][]Finding, n)
 	presidioFindings := make([][]Finding, n)
 	shadowMCPFindings := make([][]Finding, n)
@@ -52,106 +40,41 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	var presidioErr error
 	var customErr error
 
-	if slices.Contains(args.Sources, "gitleaks") {
+	if sources.Has(SourceGitleaks) {
 		wg.Go(func() {
-			createdAt := time.Now().UTC().Format(time.RFC3339)
-			publishResults := make([]gcp.PublishResult, len(contents))
-			for i, content := range contents {
-				publishResults[i] = a.gitleaksPub.Publish(ctx, riskv1.GitleaksAnalysis_builder{
-					RequestId:         new(requestID.String()),
-					ChatMessageId:     new(msgids[i].String()),
-					ProjectId:         new(args.ProjectID.String()),
-					OrganizationId:    &args.OrganizationID,
-					RiskPolicyId:      new(args.RiskPolicyID.String()),
-					RiskPolicyVersion: &args.PolicyVersion,
-					CreatedAt:         &createdAt,
-
-					ReplyUrn: nil,
-					Content:  new(content),
-				}.Build())
-			}
-			drainPublishAcks(ctx, a.logger, "failed to publish gitleaks scan request", publishResults)
-
-			results, err := a.scanner.ScanBatchParallel(contents)
+			findings, err := a.scanGitleaks(ctx, args, requestID, messages, contents)
 			if err != nil {
 				gitleaksErr = err
 				return
 			}
-			for i, detections := range results {
-				gitleaksFindings[i] = fromDetections(detections)
-			}
+			gitleaksFindings = findings
 		})
 	}
 
-	if slices.Contains(args.Sources, "presidio") {
+	if sources.Has(SourcePresidio) {
 		wg.Go(func() {
-			createdAt := time.Now().UTC().Format(time.RFC3339)
-			publishResults := make([]gcp.PublishResult, len(contents))
-			for i, content := range contents {
-				publishResults[i] = a.presidioPub.Publish(ctx, riskv1.PresidioAnalysis_builder{
-					RequestId:         new(requestID.String()),
-					ChatMessageId:     new(msgids[i].String()),
-					ProjectId:         new(args.ProjectID.String()),
-					OrganizationId:    &args.OrganizationID,
-					RiskPolicyId:      new(args.RiskPolicyID.String()),
-					RiskPolicyVersion: &args.PolicyVersion,
-					CreatedAt:         &createdAt,
-
-					ReplyUrn: nil,
-					Content:  &content,
-					Entities: args.PresidioEntities,
-				}.Build())
-			}
-			drainPublishAcks(ctx, a.logger, "failed to publish presidio scan request", publishResults)
-
-			results, err := a.piiScanner.AnalyzeBatch(ctx, contents, args.PresidioEntities, func() {
-				activity.RecordHeartbeat(ctx, "presidio")
-			})
-			if results != nil {
-				presidioFindings = results
-			}
+			findings, err := a.scanPresidio(ctx, args, requestID, messages, contents)
+			presidioFindings = findings
 			if err != nil {
 				presidioErr = err
-				a.logger.WarnContext(ctx, "presidio scan returned errors, using partial results", attr.SlogError(err))
-				if a.metrics.presidioScanSkipped != nil {
-					a.metrics.presidioScanSkipped.Add(ctx, 1)
-				}
 			}
 		})
 	}
 
-	if slices.Contains(args.Sources, SourcePromptInjection) {
-		l1Enabled := a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptInjectionUseClassifier)
-		var msgs []JudgeMessage
-		if l1Enabled {
-			msgs = make([]JudgeMessage, len(messages))
-			for i := range messages {
-				msgs[i] = a.judgeMessageForRow(ctx, messages[i])
-			}
-		}
+	if sources.Has(SourcePromptInjection) {
 		wg.Go(func() {
-			results, err := a.piScanner.ScanBatch(ctx, contents, args.OrganizationID, args.ProjectID.String(), msgs, l1Enabled)
-			if err != nil {
-				a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
-				return
-			}
-			promptInjectionFindings = results
-			activity.RecordHeartbeat(ctx, "prompt_injection")
+			promptInjectionFindings = a.scanPromptInjection(ctx, args, messages, contents)
 		})
 	}
 
 	if len(customRules) > 0 {
 		wg.Go(func() {
-			eng := a.celEng
-			for i, msg := range messages {
-				findings, err := ScanCELRules(eng, a.customRuleMessageView(ctx, msg), customRules)
-				if err != nil {
-					customErr = err
-					return
-				}
-				customFindings[i] = findings
+			findings, err := a.scanCustomRules(ctx, messages, customRules)
+			if err != nil {
+				customErr = err
+				return
 			}
-			activity.RecordHeartbeat(ctx, "custom")
+			customFindings = findings
 		})
 	}
 
@@ -161,12 +84,10 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 		scanSpan.SetStatus(codes.Error, gitleaksErr.Error())
 		return nil, fmt.Errorf("gitleaks scan batch: %w", gitleaksErr)
 	}
-
 	if customErr != nil {
 		scanSpan.SetStatus(codes.Error, customErr.Error())
 		return nil, fmt.Errorf("custom rule scan: %w", customErr)
 	}
-
 	if ctx.Err() != nil {
 		err := fmt.Errorf("scan canceled: %w", ctx.Err())
 		if presidioErr != nil {
@@ -176,43 +97,94 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 		return nil, err
 	}
 
-	if slices.Contains(args.Sources, shadowmcp.SourceShadowMCP) {
+	if sources.Has(shadowmcp.SourceShadowMCP) {
 		shadowMCPFindings = a.scanShadowMCP(ctx, args.OrganizationID, args.ProjectID, messages)
-		activity.RecordHeartbeat(ctx, "shadow_mcp")
+		activity.RecordHeartbeat(ctx, shadowmcp.SourceShadowMCP)
 	}
-
-	if slices.Contains(args.Sources, shadowmcp.SourceDestructiveTool) {
+	if sources.Has(shadowmcp.SourceDestructiveTool) {
 		destructiveToolFindings = a.scanDestructiveToolAnnotations(ctx, args.OrganizationID, messages)
-		activity.RecordHeartbeat(ctx, "destructive_tool")
+		activity.RecordHeartbeat(ctx, shadowmcp.SourceDestructiveTool)
 	}
-
-	if slices.Contains(args.Sources, SourceCLIDestructive) {
+	if sources.Has(SourceCLIDestructive) {
 		cliDestructiveFindings = a.scanDestructiveCLICommands(ctx, messages)
-		activity.RecordHeartbeat(ctx, "cli_destructive")
+		activity.RecordHeartbeat(ctx, SourceCLIDestructive)
 	}
 
-	merged := make([][]Finding, n)
-	for i := range n {
-		if scopeExcluded != nil && scopeExcluded[i] {
-			merged[i] = nil
+	return mergeFindings(mergeFindingsInput{
+		outOfPolicyScope:        outOfPolicyScope,
+		exclusions:              exclusions,
+		gitleaksFindings:        gitleaksFindings,
+		presidioFindings:        presidioFindings,
+		shadowMCPFindings:       shadowMCPFindings,
+		destructiveToolFindings: destructiveToolFindings,
+		cliDestructiveFindings:  cliDestructiveFindings,
+		promptInjectionFindings: promptInjectionFindings,
+		customFindings:          customFindings,
+	}), nil
+}
+
+type mergeFindingsInput struct {
+	outOfPolicyScope        []bool
+	exclusions              ExclusionSet
+	gitleaksFindings        [][]Finding
+	presidioFindings        [][]Finding
+	shadowMCPFindings       [][]Finding
+	destructiveToolFindings [][]Finding
+	cliDestructiveFindings  [][]Finding
+	promptInjectionFindings [][]Finding
+	customFindings          [][]Finding
+}
+
+func mergeFindings(in mergeFindingsInput) [][]Finding {
+	merged := make([][]Finding, len(in.gitleaksFindings))
+	for i := range merged {
+		if len(in.outOfPolicyScope) > 0 && in.outOfPolicyScope[i] {
 			continue
 		}
-		combined := slices.Concat(gitleaksFindings[i], presidioFindings[i], shadowMCPFindings[i], destructiveToolFindings[i], cliDestructiveFindings[i], promptInjectionFindings[i], customFindings[i])
-		if !exclusions.Empty() {
-			combined = exclusions.FilterFindings(combined)
+		combined := concatFindings(
+			in.gitleaksFindings[i],
+			in.presidioFindings[i],
+			in.shadowMCPFindings[i],
+			in.destructiveToolFindings[i],
+			in.cliDestructiveFindings[i],
+			in.promptInjectionFindings[i],
+			in.customFindings[i],
+		)
+		if !in.exclusions.Empty() {
+			combined = in.exclusions.FilterFindings(combined)
 		}
 		merged[i] = dedup(combined)
 	}
-	return merged, nil
+	return merged
 }
 
-func (a *AnalyzeBatch) scopeExclusions(ctx context.Context, scope CompiledScope, messages []repo.GetMessageContentBatchRow) []bool {
+func messageContents(messages []batchMessage) []string {
+	contents := make([]string, len(messages))
+	for i, msg := range messages {
+		contents[i] = msg.Content
+	}
+	return contents
+}
+
+func concatFindings(groups ...[]Finding) []Finding {
+	total := 0
+	for _, group := range groups {
+		total += len(group)
+	}
+	out := make([]Finding, 0, total)
+	for _, group := range groups {
+		out = append(out, group...)
+	}
+	return out
+}
+
+func (a *AnalyzeBatch) scopeExclusions(_ context.Context, scope CompiledScope, messages []batchMessage) []bool {
 	if !scope.Active() {
-		return nil
+		return []bool{}
 	}
 	excluded := make([]bool, len(messages))
 	for i, msg := range messages {
-		view := a.customRuleMessageView(ctx, msg)
+		view := batchMessageView(msg)
 		excluded[i] = !scope.Includes(view) || scope.Exempts(view)
 	}
 	return excluded

@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
@@ -35,6 +34,7 @@ func dedup(findings []Finding) []Finding {
 	}
 	return out
 }
+
 func overlapsAny(kept []Finding, candidate Finding) bool {
 	for _, k := range kept {
 		if k.StartPos < candidate.EndPos && candidate.StartPos < k.EndPos {
@@ -43,13 +43,13 @@ func overlapsAny(kept []Finding, candidate Finding) bool {
 	}
 	return false
 }
-func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow, batchFindings [][]Finding) ([]repo.InsertRiskResultsParams, int) {
+
+func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, batchFindings [][]Finding) ([]repo.InsertRiskResultsParams, int) {
 	var rows []repo.InsertRiskResultsParams
 	findingsCount := 0
 
 	for i, msg := range messages {
 		findings := batchFindings[i]
-
 		realFindings := findings[:0:0]
 		for _, f := range findings {
 			if f.DeadLetterReason != "" {
@@ -110,15 +110,15 @@ func groupFindings(findings []Finding) []findingGroup {
 	uniq := 0
 	for _, f := range findings {
 		var key string
-		if f.toolCallID != "" {
-			key = f.Source + "\x00" + f.RuleID + "\x00" + f.toolCallID
+		if f.spanGroupKey != "" {
+			key = f.Source + "\x00" + f.RuleID + "\x00" + f.spanGroupKey
 		} else {
 			key = fmt.Sprintf("u%d", uniq)
 			uniq++
 		}
 		g := groups[key]
 		if g == nil {
-			g = &findingGroup{primary: f, spans: nil}
+			g = &findingGroup{primary: f, spans: []FindingSpan{}}
 			groups[key] = g
 			order = append(order, key)
 		}
@@ -136,6 +136,7 @@ func groupFindings(findings []Finding) []findingGroup {
 	}
 	return out
 }
+
 func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, rows []repo.InsertRiskResultsParams) error {
 	ctx, writeSpan := a.tracer.Start(ctx, "risk.writeResults")
 	defer writeSpan.End()
@@ -157,9 +158,7 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeSpan.SetAttributes(attribute.Bool("risk.policy_deleted", true))
-			a.logger.InfoContext(ctx, "risk policy deleted mid-analysis, dropping results",
-				attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
-			)
+			a.logger.InfoContext(ctx, "risk policy deleted mid-analysis, dropping results", attr.SlogRiskPolicyID(args.RiskPolicyID.String()))
 			return nil
 		}
 		writeSpan.SetStatus(codes.Error, err.Error())
@@ -182,7 +181,22 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 		}
 	}
 
-	now := time.Now()
+	payloads := findingCreatedPayloads(rows, time.Now())
+	if len(payloads) > 0 {
+		if _, err := outbox.AppendBatch(ctx, tx, args.OrganizationID, events.RiskFindingCreatedV1, payloads); err != nil {
+			writeSpan.SetStatus(codes.Error, err.Error())
+			return fmt.Errorf("append risk findings to outbox: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		writeSpan.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("commit results: %w", err)
+	}
+	return nil
+}
+
+func findingCreatedPayloads(rows []repo.InsertRiskResultsParams, now time.Time) []events.RiskFindingCreatedPayloadV1 {
 	var payloads []events.RiskFindingCreatedPayloadV1
 	for _, row := range rows {
 		if !row.Found || !row.RuleID.Valid {
@@ -202,18 +216,7 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 			CreatedAt:         now,
 		})
 	}
-	if len(payloads) > 0 {
-		if _, err := outbox.AppendBatch(ctx, tx, args.OrganizationID, events.RiskFindingCreatedV1, payloads); err != nil {
-			writeSpan.SetStatus(codes.Error, err.Error())
-			return fmt.Errorf("append risk findings to outbox: %w", err)
-		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		writeSpan.SetStatus(codes.Error, err.Error())
-		return fmt.Errorf("commit results: %w", err)
-	}
-	return nil
+	return payloads
 }
 
 func (a *AnalyzeBatch) guardRuleIDs(_ context.Context, rows []repo.InsertRiskResultsParams) []repo.InsertRiskResultsParams {
@@ -230,6 +233,7 @@ func (a *AnalyzeBatch) guardRuleIDs(_ context.Context, rows []repo.InsertRiskRes
 	}
 	return rows
 }
+
 func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) repo.InsertRiskResultsParams {
 	return repo.InsertRiskResultsParams{
 		ID:                id,
@@ -238,7 +242,7 @@ func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) re
 		RiskPolicyID:      args.RiskPolicyID,
 		RiskPolicyVersion: args.PolicyVersion,
 		ChatMessageID:     messageID,
-		Source:            "none",
+		Source:            SourceNone,
 		Found:             false,
 		RuleID:            pgtype.Text{String: "", Valid: false},
 		Description:       pgtype.Text{String: "", Valid: false},
@@ -246,7 +250,7 @@ func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID) re
 		StartPos:          pgtype.Int4{Int32: 0, Valid: false},
 		EndPos:            pgtype.Int4{Int32: 0, Valid: false},
 		Confidence:        pgtype.Float8{Float64: 0, Valid: false},
-		Tags:              nil,
+		Tags:              []string{},
 		Spans:             nil,
 		DeadLetterReason:  pgtype.Text{String: "", Valid: false},
 	}
@@ -268,7 +272,7 @@ func deadLetterRow(id uuid.UUID, args AnalyzeBatchArgs, messageID uuid.UUID, f F
 		StartPos:          pgtype.Int4{Int32: 0, Valid: false},
 		EndPos:            pgtype.Int4{Int32: 0, Valid: false},
 		Confidence:        pgtype.Float8{Float64: 0, Valid: false},
-		Tags:              nil,
+		Tags:              []string{},
 		Spans:             nil,
 		DeadLetterReason:  pgtype.Text{String: f.DeadLetterReason, Valid: true},
 	}
