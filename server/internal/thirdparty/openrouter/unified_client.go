@@ -234,6 +234,14 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 	if c.usageTrackingStrategy != nil {
 		modelUsage := response.Usage.ToModelUsage(response.Model)
 		go func() {
+			if modelUsage == nil && response.MessageID != "" {
+				var err error
+				modelUsage, err = c.provisioner.GetModelUsage(context.WithoutCancel(ctx), response.MessageID, req.OrgID)
+				if err != nil {
+					c.logger.WarnContext(ctx, "failed to fetch fallback openrouter usage", attr.SlogError(err))
+				}
+			}
+
 			if err := c.usageTrackingStrategy.TrackUsage(
 				context.WithoutCancel(ctx),
 				modelUsage,
@@ -370,7 +378,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 		PromptTokens:            0,
 		CompletionTokens:        0,
 		TotalTokens:             0,
-		Cost:                    0,
+		Cost:                    nil,
 		CostDetails:             nil,
 		PromptTokensDetails:     nil,
 		CompletionTokensDetails: nil,
@@ -464,7 +472,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 			PromptTokens:            0,
 			CompletionTokens:        0,
 			TotalTokens:             0,
-			Cost:                    0,
+			Cost:                    nil,
 			CostDetails:             nil,
 			PromptTokensDetails:     nil,
 			CompletionTokensDetails: nil,

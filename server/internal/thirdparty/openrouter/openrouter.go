@@ -12,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -150,6 +151,11 @@ type Provisioner interface {
 	// upstreamLimit (unlimited key) is treated as a no-op. Returns the
 	// effective limit the caller should use for the current tick.
 	ReconcileMonthlyCredits(ctx context.Context, orgID string, currentLimit int64, upstreamLimit *int64) (int64, error)
+
+	// GetModelUsage fetches generation usage by ID. Normal completion paths use
+	// inline usage; this is only a fallback for streams closed before the final
+	// usage chunk arrives.
+	GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error)
 }
 
 type KeyRefresher interface {
@@ -514,13 +520,105 @@ type ModelUsage struct {
 	NativeTokensReasoning int
 }
 
+type generationResponse struct {
+	Data struct {
+		TotalCost             float64 `json:"total_cost"`
+		CacheDiscount         float64 `json:"cache_discount"`
+		UpstreamInferenceCost float64 `json:"upstream_inference_cost"`
+		Model                 string  `json:"model"`
+		TokensPrompt          int     `json:"tokens_prompt"`
+		TokensCompletion      int     `json:"tokens_completion"`
+		NativeTokensCached    int     `json:"native_tokens_cached"`
+		NativeTokensReasoning int     `json:"native_tokens_reasoning"`
+	} `json:"data"`
+}
+
+func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID string, orgID string) (*generationResponse, int, error) {
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
+	if err != nil {
+		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to get openrouter API key").LogError(ctx, o.logger)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/generation", nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("create generation request: %w", err)
+	}
+
+	q := req.URL.Query()
+	q.Set("id", generationID)
+	req.URL.RawQuery = q.Encode()
+
+	req.Header.Set("Authorization", "Bearer "+key.Key)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := o.orClient.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("send generation request: %w", err)
+	}
+
+	defer o11y.NoLogDefer(func() error {
+		return resp.Body.Close()
+	})
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, resp.StatusCode, fmt.Errorf("fetch generation from OpenRouter: %s", resp.Status)
+	}
+
+	var genResp generationResponse
+	if err := json.NewDecoder(resp.Body).Decode(&genResp); err != nil {
+		return nil, resp.StatusCode, fmt.Errorf("decode generation response: %w", err)
+	}
+
+	return &genResp, resp.StatusCode, nil
+}
+
+// GetModelUsage fetches generation details from OpenRouter when inline usage is
+// unavailable, currently only for streams closed before the final usage chunk.
+func (o *OpenRouter) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
+	var genResp *generationResponse
+	var statusCode int
+	var err error
+
+	backoffs := []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second}
+	for attempt := range backoffs {
+		genResp, statusCode, err = o.getGenerationDetails(ctx, generationID, orgID)
+		if err == nil {
+			break
+		}
+		if statusCode != http.StatusNotFound || attempt == len(backoffs)-1 {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("context cancelled while fetching generation details: %w", ctx.Err())
+		case <-time.After(backoffs[attempt]):
+		}
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	cost := genResp.Data.TotalCost
+	return &ModelUsage{
+		TotalCost:             &cost,
+		CacheDiscount:         genResp.Data.CacheDiscount,
+		UpstreamInferenceCost: genResp.Data.UpstreamInferenceCost,
+		Model:                 genResp.Data.Model,
+		TokensPrompt:          genResp.Data.TokensPrompt,
+		TokensCompletion:      genResp.Data.TokensCompletion,
+		NativeTokensCached:    genResp.Data.NativeTokensCached,
+		NativeTokensReasoning: genResp.Data.NativeTokensReasoning,
+	}, nil
+}
+
 // ToModelUsage projects the inline OpenRouter usage payload into the
 // billing-facing ModelUsage shape. Returns nil when the payload has no
 // signal (no tokens and no cost) — e.g. an aborted stream that never
-// reached the final usage chunk. TotalCost is nil when OpenRouter reported
-// zero cost, preserving the legacy "unknown vs. actually free" distinction.
+// reached the final usage chunk.
 func (u Usage) ToModelUsage(model string) *ModelUsage {
-	if u.PromptTokens == 0 && u.CompletionTokens == 0 && u.Cost == 0 {
+	if u.PromptTokens == 0 && u.CompletionTokens == 0 && u.TotalTokens == 0 && u.Cost == nil && u.CostDetails == nil && u.PromptTokensDetails == nil && u.CompletionTokensDetails == nil {
 		return nil
 	}
 
@@ -535,8 +633,8 @@ func (u Usage) ToModelUsage(model string) *ModelUsage {
 		NativeTokensReasoning: 0,
 	}
 
-	if u.Cost > 0 {
-		cost := u.Cost
+	if u.Cost != nil {
+		cost := *u.Cost
 		out.TotalCost = &cost
 	}
 	if u.CostDetails != nil {

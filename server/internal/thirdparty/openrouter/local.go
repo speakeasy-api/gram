@@ -33,3 +33,17 @@ func (o *Development) GetKeyUsage(ctx context.Context, apiKey string) (float64, 
 func (o *Development) ReconcileMonthlyCredits(ctx context.Context, orgID string, currentLimit int64, upstreamLimit *int64) (int64, error) {
 	return currentLimit, nil
 }
+
+func (o *Development) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
+	totalCost := 12.5
+	return &ModelUsage{
+		TotalCost:             &totalCost,
+		CacheDiscount:         0,
+		UpstreamInferenceCost: 0,
+		Model:                 DefaultChatModel,
+		TokensPrompt:          0,
+		TokensCompletion:      0,
+		NativeTokensCached:    0,
+		NativeTokensReasoning: 0,
+	}, nil
+}

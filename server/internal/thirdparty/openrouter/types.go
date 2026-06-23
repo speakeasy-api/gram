@@ -267,7 +267,7 @@ type Usage struct {
 	PromptTokens            int                      `json:"prompt_tokens"`
 	CompletionTokens        int                      `json:"completion_tokens"`
 	TotalTokens             int                      `json:"total_tokens"`
-	Cost                    float64                  `json:"cost"`
+	Cost                    *float64                 `json:"cost,omitempty"`
 	CostDetails             *CostDetails             `json:"cost_details,omitempty"`
 	PromptTokensDetails     *PromptTokensDetails     `json:"prompt_tokens_details,omitempty"`
 	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details,omitempty"`

@@ -27,8 +27,13 @@ import (
 // Mock implementations for testing
 
 type mockProvisioner struct {
-	apiKey string
-	err    error
+	mu                  sync.Mutex
+	apiKey              string
+	err                 error
+	modelUsage          *ModelUsage
+	modelUsageErr       error
+	getModelUsageCalled bool
+	generationID        string
 }
 
 var _ Provisioner = (*mockProvisioner)(nil)
@@ -56,6 +61,14 @@ func (m *mockProvisioner) ReconcileMonthlyCredits(ctx context.Context, orgID str
 	return currentLimit, nil
 }
 
+func (m *mockProvisioner) GetModelUsage(ctx context.Context, generationID string, orgID string) (*ModelUsage, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.getModelUsageCalled = true
+	m.generationID = generationID
+	return m.modelUsage, m.modelUsageErr
+}
+
 type mockMessageCaptureStrategy struct {
 	mu                   sync.Mutex
 	startOrResumeCalled  bool
@@ -65,6 +78,10 @@ type mockMessageCaptureStrategy struct {
 	startRequest         *CompletionRequest
 	capturedRequest      *CompletionRequest
 	capturedResponse     *CompletionResponse
+}
+
+func floatPtr(v float64) *float64 {
+	return &v
 }
 
 func (m *mockMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request CompletionRequest) (CaptureSession, error) {
@@ -241,7 +258,8 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	assert.Equal(t, 10, resp.Usage.PromptTokens)
 	assert.Equal(t, 5, resp.Usage.CompletionTokens)
 	assert.Equal(t, 15, resp.Usage.TotalTokens)
-	assert.InDelta(t, 0.00125, resp.Usage.Cost, 1e-9)
+	require.NotNil(t, resp.Usage.Cost)
+	assert.InDelta(t, 0.00125, *resp.Usage.Cost, 1e-9)
 
 	// Give async operations time to complete
 	time.Sleep(100 * time.Millisecond)
@@ -392,6 +410,112 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 	assert.Equal(t, 10, captureStrategy.capturedResponse.Usage.PromptTokens)
 	assert.Equal(t, 5, captureStrategy.capturedResponse.Usage.CompletionTokens)
 	assert.Equal(t, 15, captureStrategy.capturedResponse.Usage.TotalTokens)
+}
+
+func TestChatClient_GetCompletionStream_FetchesFallbackUsageWhenFinalUsageChunkMissing(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "/api/v1/chat/completions", r.URL.Path)
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		flusher, ok := w.(http.Flusher)
+		if !assert.True(t, ok, "ResponseWriter should implement http.Flusher") {
+			return
+		}
+
+		_, _ = fmt.Fprintf(w, "data: {\"id\":\"msg_no_usage\",\"model\":\"openai/gpt-5.4\",\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n")
+		flusher.Flush()
+	}))
+	defer server.Close()
+
+	fallbackCost := 0.0025
+	provisioner := &mockProvisioner{
+		apiKey: "test-api-key",
+		modelUsage: &ModelUsage{
+			TotalCost:             &fallbackCost,
+			CacheDiscount:         0,
+			UpstreamInferenceCost: 0.0025,
+			Model:                 "openai/gpt-5.4",
+			TokensPrompt:          11,
+			TokensCompletion:      4,
+			NativeTokensCached:    0,
+			NativeTokensReasoning: 0,
+		},
+	}
+	trackingStrategy := &mockUsageTrackingStrategy{}
+
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	client := NewUnifiedClient(
+		testenv.NewLogger(t),
+		guardianPolicy,
+		provisioner,
+		&mockMessageCaptureStrategy{},
+		trackingStrategy,
+		&mockChatTitleGenerator{},
+		&mockTelemetryLogger{},
+	)
+	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
+
+	streamReader, err := client.GetCompletionStream(context.Background(), CompletionRequest{
+		OrgID:     "test-org",
+		ProjectID: uuid.New().String(),
+		Messages: []or.ChatMessages{
+			CreateMessageUser("Hello"),
+		},
+		Stream:      true,
+		ChatID:      uuid.New(),
+		UsageSource: billing.ModelUsageSourcePlayground,
+		APIKeyID:    "test-api-key-id",
+	})
+	require.NoError(t, err)
+
+	_, err = io.ReadAll(streamReader)
+	require.NoError(t, err)
+	require.NoError(t, streamReader.Close())
+
+	require.Eventually(t, func() bool {
+		trackingStrategy.mu.Lock()
+		defer trackingStrategy.mu.Unlock()
+		return trackingStrategy.trackUsageCalled
+	}, time.Second, 10*time.Millisecond)
+
+	provisioner.mu.Lock()
+	assert.True(t, provisioner.getModelUsageCalled)
+	assert.Equal(t, "msg_no_usage", provisioner.generationID)
+	provisioner.mu.Unlock()
+
+	trackingStrategy.mu.Lock()
+	require.NotNil(t, trackingStrategy.usage)
+	assert.Equal(t, 11, trackingStrategy.usage.TokensPrompt)
+	assert.Equal(t, 4, trackingStrategy.usage.TokensCompletion)
+	require.NotNil(t, trackingStrategy.usage.TotalCost)
+	assert.InDelta(t, fallbackCost, *trackingStrategy.usage.TotalCost, 1e-9)
+	trackingStrategy.mu.Unlock()
+}
+
+func TestUsageToModelUsagePreservesExplicitZeroCost(t *testing.T) {
+	t.Parallel()
+
+	modelUsage := Usage{
+		PromptTokens:            10,
+		CompletionTokens:        0,
+		TotalTokens:             10,
+		Cost:                    floatPtr(0),
+		CostDetails:             nil,
+		PromptTokensDetails:     nil,
+		CompletionTokensDetails: nil,
+	}.ToModelUsage("openai/gpt-5.4")
+
+	require.NotNil(t, modelUsage)
+	require.NotNil(t, modelUsage.TotalCost)
+	assert.Zero(t, *modelUsage.TotalCost)
 }
 
 func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
