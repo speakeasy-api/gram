@@ -1326,30 +1326,44 @@ fi
 # an absent file is a no-op and the server falls back to its cached snapshot.
 if command -v python3 >/dev/null 2>&1; then
   merged=$(printf '%%s' "$payload" | PAYLOAD_TMPDIR="${TMPDIR:-/tmp}" python3 -c '
-import json, os, re, sys
+import json, os, re, stat, sys
 raw = sys.stdin.read()
 try:
     data = json.loads(raw)
 except Exception:
     sys.stdout.write(raw)
     raise SystemExit
+def gram_trusted(path):
+    # Only trust a regular file we own with no group/world access, inside a
+    # directory we own with no group/world access. In a shared /tmp a planted
+    # file or symlink could otherwise inject a forged inventory into the guard;
+    # lstat rejects symlinks (no following) on both the file and its directory.
+    try:
+        dst = os.lstat(os.path.dirname(path))
+        fst = os.lstat(path)
+    except OSError:
+        return False
+    uid = os.geteuid()
+    return (stat.S_ISDIR(dst.st_mode) and dst.st_uid == uid and not (dst.st_mode & 0o077)
+            and stat.S_ISREG(fst.st_mode) and fst.st_uid == uid and not (fst.st_mode & 0o077))
 if data.get("hook_event_name") == "PreToolUse":
     sid = re.sub(r"[^A-Za-z0-9_-]", "", str(data.get("session_id") or ""))[:128]
     fp = os.path.join(os.environ.get("PAYLOAD_TMPDIR", "/tmp"), "gram-hooks", "mcp-" + sid + ".json") if sid else ""
-    if fp and os.path.isfile(fp):
+    frag = None
+    if fp and gram_trusted(fp):
         try:
             with open(fp, encoding="utf-8") as rf:
                 frag = json.load(rf)
         except Exception:
             frag = None
-        if isinstance(frag, dict):
-            ad = data.get("additional_data")
-            if not isinstance(ad, dict):
-                ad = {}
-            # Do not clobber an inventory the caller already supplied.
-            for k, v in frag.items():
-                ad.setdefault(k, v)
-            data["additional_data"] = ad
+    if isinstance(frag, dict):
+        ad = data.get("additional_data")
+        if not isinstance(ad, dict):
+            ad = {}
+        # Do not clobber an inventory the caller already supplied.
+        for k, v in frag.items():
+            ad.setdefault(k, v)
+        data["additional_data"] = ad
 sys.stdout.write(json.dumps(data))
 ') && [ -n "$merged" ] && payload="$merged"
 fi
@@ -1554,7 +1568,7 @@ enriched=$(MCP_CC="$mcp_inventory_claude_code" \
            PAYLOAD="$payload" \
            PAYLOAD_TMPDIR="${TMPDIR:-/tmp}" \
            python3 -c '
-import json, os, re, sys, time
+import json, os, re, stat, sys, tempfile, time
 try:
     p = json.loads(os.environ["PAYLOAD"])
 except Exception:
@@ -1577,30 +1591,53 @@ p["additional_data"] = ad
 # PreToolUse hook can replay it in its own payload, instead of depending on
 # the server having cached this async SessionStart snapshot in time (DNO-286).
 # The file holds exactly the additional_data keys the server already parses.
-sid = re.sub(r"[^A-Za-z0-9_-]", "", str(p.get("session_id") or ""))[:128]
-if sid and frag:
+def gram_safe_dir():
     base = os.path.join(os.environ.get("PAYLOAD_TMPDIR", "/tmp"), "gram-hooks")
     try:
         os.makedirs(base, mode=0o700, exist_ok=True)
-        # Prune snapshots older than 24h so session files do not accumulate.
-        now = time.time()
-        for fn in os.listdir(base):
-            if not fn.startswith("mcp-"):
-                continue
-            stale = os.path.join(base, fn)
+        st = os.lstat(base)
+    except OSError:
+        return None
+    # Refuse a directory we do not own or that is group/world writable. In a
+    # shared /tmp an attacker could pre-create gram-hooks and plant a forged
+    # inventory the PreToolUse guard would trust; makedirs(exist_ok=True) does
+    # not reapply the mode to a pre-existing dir, so verify ownership and
+    # permissions explicitly (lstat also rejects a symlink planted in its place).
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.geteuid() or (st.st_mode & 0o077):
+        return None
+    return base
+sid = re.sub(r"[^A-Za-z0-9_-]", "", str(p.get("session_id") or ""))[:128]
+base = gram_safe_dir()
+if sid and frag and base:
+    # Prune snapshots older than 24h so session files do not accumulate.
+    now = time.time()
+    for fn in os.listdir(base):
+        if not fn.startswith("mcp-"):
+            continue
+        stale = os.path.join(base, fn)
+        try:
+            if now - os.path.getmtime(stale) > 86400:
+                os.remove(stale)
+        except OSError:
+            pass
+    dest = os.path.join(base, "mcp-" + sid + ".json")
+    # Unique temp name per writer (mkstemp uses O_EXCL, mode 0600) so concurrent
+    # SessionStart/ConfigChange runs for the same session cannot truncate each
+    # other mid-write; os.replace is atomic so the last writer wins cleanly.
+    try:
+        fd, tmp = tempfile.mkstemp(dir=base, prefix="mcp-" + sid + ".", suffix=".tmp")
+    except OSError:
+        fd, tmp = -1, ""
+    if tmp:
+        try:
+            with os.fdopen(fd, "w") as wf:
+                json.dump(frag, wf)
+            os.replace(tmp, dest)
+        except OSError:
             try:
-                if now - os.path.getmtime(stale) > 86400:
-                    os.remove(stale)
+                os.remove(tmp)
             except OSError:
                 pass
-        dest = os.path.join(base, "mcp-" + sid + ".json")
-        tmp = dest + ".tmp"
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as wf:
-            json.dump(frag, wf)
-        os.replace(tmp, dest)
-    except OSError:
-        pass
 print(json.dumps(p))
 ') || enriched="$payload"
 
