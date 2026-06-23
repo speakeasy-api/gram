@@ -19,10 +19,17 @@ function getStatusConfig(
       label: "Disabled",
     };
   }
+  if (!mcpIsPublic) {
+    return {
+      color: "bg-blue-400",
+      pulseColor: "bg-blue-400",
+      label: "Private",
+    };
+  }
   return {
     color: "bg-green-500",
     pulseColor: "bg-green-400",
-    label: mcpIsPublic ? "Public" : "Private",
+    label: "Public",
   };
 }
 
