@@ -748,6 +748,9 @@ printf '{}\n200'
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GRAM_CAPTURE_PAYLOAD="+capturePath,
 		"GRAM_DEVICE_AGENT_COMMANDS=fake-agent",
+		// Pin a generous timeout so CI scheduling jitter can't trip the
+		// device-agent wall-clock timeout (default 1.5s) and flake the test.
+		"GRAM_DEVICE_AGENT_TIMEOUT_TENTHS=600",
 	)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
@@ -814,6 +817,9 @@ exit 1
 	cmd.Env = append(os.Environ(),
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GRAM_DEVICE_AGENT_COMMANDS=fake-agent",
+		// Pin a generous timeout so CI scheduling jitter can't trip the
+		// device-agent wall-clock timeout (default 1.5s) and flake the test.
+		"GRAM_DEVICE_AGENT_TIMEOUT_TENTHS=600",
 	)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderDeviceAgentIdentityScript(), 0o755))
 	output, err := cmd.CombinedOutput()
