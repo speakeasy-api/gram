@@ -75,7 +75,7 @@ export type ListChatsRequest = {
    */
   hasRisk?: HasRisk | undefined;
   /**
-   * Filter to chats whose risk score (count of active risk findings) is at least this value (inclusive). Omit for no risk-score threshold.
+   * Filter to chats with at least this many active risk findings (inclusive). Omit or pass 0 for no threshold.
    */
   minRiskScore?: number | undefined;
   /**
