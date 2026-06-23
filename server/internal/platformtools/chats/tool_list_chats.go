@@ -92,6 +92,7 @@ func (s *ListChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload 
 		ExternalUserID:    input.ExternalUserID,
 		AssistantID:       input.AssistantID,
 		HasRisk:           input.HasRisk,
+		MinRiskScore:      nil,
 		From:              input.From,
 		To:                input.To,
 		Limit:             input.Limit,

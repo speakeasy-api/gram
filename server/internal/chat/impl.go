@@ -253,6 +253,13 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	search := conv.PtrValOr(payload.Search, "")
 	assistantID := conv.PtrValOr(payload.AssistantID, "")
 	hasRiskFilter := conv.PtrValOr(payload.HasRisk, "")
+	// -1 is the "no threshold" sentinel: the queries short-circuit to "show all"
+	// on a negative bound. A real bound N keeps chats with at least N findings
+	// (inclusive), matching the "Min risk score" control.
+	minRiskScore := int32(-1)
+	if payload.MinRiskScore != nil {
+		minRiskScore = conv.SafeInt32(*payload.MinRiskScore)
+	}
 
 	// Payload filters only apply for org admins and the managed-assistant runtime.
 	var externalUserID, userID string
@@ -277,6 +284,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		Search:         search,
 		AssistantID:    assistantID,
 		HasRiskFilter:  hasRiskFilter,
+		MinRiskScore:   minRiskScore,
 	}
 
 	total, err := s.repo.CountChats(ctx, baseParams)
@@ -293,6 +301,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		Search:         baseParams.Search,
 		AssistantID:    baseParams.AssistantID,
 		HasRiskFilter:  baseParams.HasRiskFilter,
+		MinRiskScore:   baseParams.MinRiskScore,
 		SortBy:         payload.SortBy,
 		SortOrder:      payload.SortOrder,
 		PageLimit:      conv.SafeInt32(payload.Limit),

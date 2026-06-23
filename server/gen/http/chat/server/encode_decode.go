@@ -42,6 +42,7 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 			externalUserID    *string
 			assistantID       *string
 			hasRisk           *string
+			minRiskScore      *int
 			from              *string
 			to                *string
 			limit             int
@@ -76,6 +77,22 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if hasRisk != nil {
 			if !(*hasRisk == "" || *hasRisk == "true" || *hasRisk == "false") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("has_risk", *hasRisk, []any{"", "true", "false"}))
+			}
+		}
+		{
+			minRiskScoreRaw := qp.Get("min_risk_score")
+			if minRiskScoreRaw != "" {
+				v, err2 := strconv.ParseInt(minRiskScoreRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("min_risk_score", minRiskScoreRaw, "integer"))
+				}
+				pv := int(v)
+				minRiskScore = &pv
+			}
+		}
+		if minRiskScore != nil {
+			if *minRiskScore < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("min_risk_score", *minRiskScore, 0, true))
 			}
 		}
 		fromRaw := qp.Get("from")
@@ -156,7 +173,7 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListChatsPayload(search, externalUserID, assistantID, hasRisk, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewListChatsPayload(search, externalUserID, assistantID, hasRisk, minRiskScore, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

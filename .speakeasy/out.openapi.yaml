@@ -6148,6 +6148,15 @@ paths:
               - "false"
             type: string
         - allowEmptyValue: true
+          description: Filter to chats with at least this many active risk findings (inclusive). Omit or pass 0 for no threshold.
+          in: query
+          name: min_risk_score
+          schema:
+            description: Filter to chats with at least this many active risk findings (inclusive). Omit or pass 0 for no threshold.
+            format: int64
+            minimum: 0
+            type: integer
+        - allowEmptyValue: true
           description: Filter chats last active after this timestamp (ISO 8601)
           in: query
           name: from

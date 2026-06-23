@@ -216,9 +216,23 @@ ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
 DO NOTHING;
 
 -- name: CountChats :one
-WITH candidate_chats AS (
+-- risk_counts pre-aggregates active findings per chat once for the whole
+-- project (one pass over risk_results), so the risk presence + threshold
+-- filters become a cheap join instead of a correlated subquery per chat.
+WITH risk_counts AS (
+  SELECT cm.chat_id, COUNT(*)::integer AS cnt
+  FROM risk_results rr
+  JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  WHERE rr.project_id = @project_id
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+  GROUP BY cm.chat_id
+),
+candidate_chats AS (
   SELECT c.id, c.created_at
   FROM chats c
+  LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
@@ -240,28 +254,12 @@ WITH candidate_chats AS (
     )
     AND (
       @has_risk_filter::text = ''
-      OR (
-        @has_risk_filter::text = 'true' AND EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
-      OR (
-        @has_risk_filter::text = 'false' AND NOT EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
+      OR (@has_risk_filter::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR (@has_risk_filter::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+    )
+    AND (
+      @min_risk_score::int < 0
+      OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
     )
 ),
 chat_activity AS (
@@ -278,15 +276,31 @@ WHERE (@from_time::timestamptz IS NULL OR ca.last_message_timestamp >= @from_tim
   AND (@to_time::timestamptz IS NULL OR ca.last_message_timestamp <= @to_time);
 
 -- name: ListChats :many
-WITH candidate_chats AS (
+-- risk_counts pre-aggregates active findings per chat once for the whole
+-- project (one pass over risk_results). It feeds both the risk presence +
+-- threshold filters and the risk_findings_count column below, replacing what
+-- were two correlated subqueries per candidate chat.
+WITH risk_counts AS (
+  SELECT cm.chat_id, COUNT(*)::integer AS cnt
+  FROM risk_results rr
+  JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  WHERE rr.project_id = @project_id
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+  GROUP BY cm.chat_id
+),
+candidate_chats AS (
   SELECT
     c.id,
     c.title,
     c.user_id,
     c.external_user_id,
     c.created_at,
-    c.updated_at
+    c.updated_at,
+    COALESCE(rc.cnt, 0) AS risk_findings_count
   FROM chats c
+  LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
@@ -308,28 +322,12 @@ WITH candidate_chats AS (
     )
     AND (
       @has_risk_filter::text = ''
-      OR (
-        @has_risk_filter::text = 'true' AND EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
-      OR (
-        @has_risk_filter::text = 'false' AND NOT EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
+      OR (@has_risk_filter::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR (@has_risk_filter::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+    )
+    AND (
+      @min_risk_score::int < 0
+      OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
     )
 ),
 chat_stats AS (
@@ -351,16 +349,7 @@ filtered_chats AS (
     cc.updated_at,
     cs.num_messages,
     cs.last_message_timestamp,
-    (
-      SELECT COUNT(*)::integer
-      FROM risk_results rr
-      JOIN chat_messages cm ON cm.id = rr.chat_message_id
-      WHERE cm.chat_id = cc.id
-        AND rr.project_id = @project_id
-        AND rr.found IS TRUE
-        AND rr.excluded_at IS NULL
-        AND rr.false_positive_at IS NULL
-    ) AS risk_findings_count
+    cc.risk_findings_count
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
   WHERE (@from_time::timestamptz IS NULL OR cs.last_message_timestamp >= @from_time)

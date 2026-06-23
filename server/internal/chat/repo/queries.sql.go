@@ -49,9 +49,20 @@ func (q *Queries) CountChatMessages(ctx context.Context, arg CountChatMessagesPa
 }
 
 const countChats = `-- name: CountChats :one
-WITH candidate_chats AS (
+WITH risk_counts AS (
+  SELECT cm.chat_id, COUNT(*)::integer AS cnt
+  FROM risk_results rr
+  JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  WHERE rr.project_id = $3
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+  GROUP BY cm.chat_id
+),
+candidate_chats AS (
   SELECT c.id, c.created_at
   FROM chats c
+  LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   WHERE c.project_id = $3
     AND c.deleted IS FALSE
     AND ($4 = '' OR c.external_user_id = $4)
@@ -73,28 +84,12 @@ WITH candidate_chats AS (
     )
     AND (
       $8::text = ''
-      OR (
-        $8::text = 'true' AND EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = $3
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
-      OR (
-        $8::text = 'false' AND NOT EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = $3
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
+      OR ($8::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR ($8::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+    )
+    AND (
+      $9::int < 0
+      OR COALESCE(rc.cnt, 0) >= $9::int
     )
 ),
 chat_activity AS (
@@ -120,8 +115,12 @@ type CountChatsParams struct {
 	Search         interface{}
 	AssistantID    interface{}
 	HasRiskFilter  string
+	MinRiskScore   int32
 }
 
+// risk_counts pre-aggregates active findings per chat once for the whole
+// project (one pass over risk_results), so the risk presence + threshold
+// filters become a cheap join instead of a correlated subquery per chat.
 func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countChats,
 		arg.FromTime,
@@ -132,6 +131,7 @@ func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, 
 		arg.Search,
 		arg.AssistantID,
 		arg.HasRiskFilter,
+		arg.MinRiskScore,
 	)
 	var total int64
 	err := row.Scan(&total)
@@ -1390,15 +1390,27 @@ func (q *Queries) ListChatResolutions(ctx context.Context, chatID uuid.UUID) ([]
 }
 
 const listChats = `-- name: ListChats :many
-WITH candidate_chats AS (
+WITH risk_counts AS (
+  SELECT cm.chat_id, COUNT(*)::integer AS cnt
+  FROM risk_results rr
+  JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  WHERE rr.project_id = $1
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+  GROUP BY cm.chat_id
+),
+candidate_chats AS (
   SELECT
     c.id,
     c.title,
     c.user_id,
     c.external_user_id,
     c.created_at,
-    c.updated_at
+    c.updated_at,
+    COALESCE(rc.cnt, 0) AS risk_findings_count
   FROM chats c
+  LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   WHERE c.project_id = $1
     AND c.deleted IS FALSE
     AND ($2 = '' OR c.external_user_id = $2)
@@ -1420,28 +1432,12 @@ WITH candidate_chats AS (
     )
     AND (
       $6::text = ''
-      OR (
-        $6::text = 'true' AND EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = $1
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
-      OR (
-        $6::text = 'false' AND NOT EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = $1
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
+      OR ($6::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR ($6::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+    )
+    AND (
+      $7::int < 0
+      OR COALESCE(rc.cnt, 0) >= $7::int
     )
 ),
 chat_stats AS (
@@ -1463,20 +1459,11 @@ filtered_chats AS (
     cc.updated_at,
     cs.num_messages,
     cs.last_message_timestamp,
-    (
-      SELECT COUNT(*)::integer
-      FROM risk_results rr
-      JOIN chat_messages cm ON cm.id = rr.chat_message_id
-      WHERE cm.chat_id = cc.id
-        AND rr.project_id = $1
-        AND rr.found IS TRUE
-        AND rr.excluded_at IS NULL
-        AND rr.false_positive_at IS NULL
-    ) AS risk_findings_count
+    cc.risk_findings_count
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
-  WHERE ($7::timestamptz IS NULL OR cs.last_message_timestamp >= $7)
-    AND ($8::timestamptz IS NULL OR cs.last_message_timestamp <= $8)
+  WHERE ($8::timestamptz IS NULL OR cs.last_message_timestamp >= $8)
+    AND ($9::timestamptz IS NULL OR cs.last_message_timestamp <= $9)
 ),
 limited_chats AS (
   SELECT
@@ -1492,14 +1479,14 @@ limited_chats AS (
     fc.risk_findings_count
   FROM filtered_chats fc
   ORDER BY
-    CASE WHEN $9 = 'last_message_timestamp' AND $10 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-    CASE WHEN $9 = 'last_message_timestamp' AND $10 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
-    CASE WHEN $9 = 'num_messages' AND $10 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
-    CASE WHEN $9 = 'num_messages' AND $10 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
+    CASE WHEN $10 = 'last_message_timestamp' AND $11 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+    CASE WHEN $10 = 'last_message_timestamp' AND $11 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+    CASE WHEN $10 = 'num_messages' AND $11 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
+    CASE WHEN $10 = 'num_messages' AND $11 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
     fc.last_message_timestamp DESC,
     fc.id DESC
-  LIMIT $12
-  OFFSET $11
+  LIMIT $13
+  OFFSET $12
 )
 SELECT
   lc.id,
@@ -1522,6 +1509,7 @@ type ListChatsParams struct {
 	Search         interface{}
 	AssistantID    interface{}
 	HasRiskFilter  string
+	MinRiskScore   int32
 	FromTime       pgtype.Timestamptz
 	ToTime         pgtype.Timestamptz
 	SortBy         interface{}
@@ -1543,6 +1531,10 @@ type ListChatsRow struct {
 	RiskFindingsCount    int32
 }
 
+// risk_counts pre-aggregates active findings per chat once for the whole
+// project (one pass over risk_results). It feeds both the risk presence +
+// threshold filters and the risk_findings_count column below, replacing what
+// were two correlated subqueries per candidate chat.
 func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListChatsRow, error) {
 	rows, err := q.db.Query(ctx, listChats,
 		arg.ProjectID,
@@ -1551,6 +1543,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.Search,
 		arg.AssistantID,
 		arg.HasRiskFilter,
+		arg.MinRiskScore,
 		arg.FromTime,
 		arg.ToTime,
 		arg.SortBy,
