@@ -26,6 +26,12 @@ client/dashboard/src/pages/security/use-cel-engine.ts
   s_e5457925ae460d::t_78ee887909220c 1-32
 client/dashboard/src/pages/security/use-cel-status.ts
   s_e5457925ae460d::t_78ee887909220c 1-41
+client/dashboard/src/pages/chatLogs/chatRisk.tsx
+  s_e5457925ae460d::t_6d7d1a4c96b15d 150-154,156-159,162
+  s_e5457925ae460d::t_0654d2ddfac5e7 116-136
+  s_e5457925ae460d::t_78e1c5be8d447c 222-241
+  s_e5457925ae460d::t_a0102bc6af7e58 197
+  s_e5457925ae460d::t_6dacb112ea0cd6 184
 ---
 {
   "schema_version": "authorship/3.0.0",
