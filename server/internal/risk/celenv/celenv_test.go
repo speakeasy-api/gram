@@ -315,13 +315,13 @@ func TestConcurrentEval(t *testing.T) {
 	}
 }
 
-// --- Descriptor content ------------------------------------------------------
+// --- Editor reference --------------------------------------------------------
 
-func TestDescriptorContent(t *testing.T) {
+func TestReferenceContent(t *testing.T) {
 	t.Parallel()
-	d := celenv.Descriptor()
+	d := celenv.Describe()
 	require.NotEmpty(t, d.Variables)
-	require.NotEmpty(t, d.Functions)
+	require.NotEmpty(t, d.Matchers)
 
 	vars := make(map[string]bool)
 	for _, v := range d.Variables {
@@ -332,7 +332,7 @@ func TestDescriptorContent(t *testing.T) {
 	}
 
 	fns := make(map[string]bool)
-	for _, f := range d.Functions {
+	for _, f := range d.Matchers {
 		fns[f.Name] = true
 	}
 	require.True(t, fns["get"])
