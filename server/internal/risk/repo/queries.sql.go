@@ -558,6 +558,8 @@ INSERT INTO risk_policies (
   , disabled_rules
   , custom_rule_ids
   , message_types
+  , scope_include
+  , scope_exempt
   , enabled
   , action
   , audience_type
@@ -579,13 +581,15 @@ VALUES (
   , $9
   , COALESCE($10::text[], '{}'::text[])
   , $11::text[]
-  , $12
-  , $13
+  , $12::text
+  , $13::text
   , $14
   , $15
   , $16
-  , $17::text
-  , $18::jsonb
+  , $17
+  , $18
+  , $19::text
+  , $20::jsonb
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
@@ -603,6 +607,8 @@ type CreateRiskPolicyParams struct {
 	DisabledRules        []string
 	CustomRuleIds        []string
 	MessageTypes         []string
+	ScopeInclude         pgtype.Text
+	ScopeExempt          pgtype.Text
 	Enabled              bool
 	Action               string
 	AudienceType         string
@@ -625,6 +631,8 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.DisabledRules,
 		arg.CustomRuleIds,
 		arg.MessageTypes,
+		arg.ScopeInclude,
+		arg.ScopeExempt,
 		arg.Enabled,
 		arg.Action,
 		arg.AudienceType,
@@ -2872,13 +2880,15 @@ SET name = $1
   , disabled_rules = $5
   , custom_rule_ids = COALESCE($6::text[], '{}'::text[])
   , message_types = $7::text[]
-  , enabled = $8
-  , action = $9
-  , audience_type = $10
-  , auto_name = $11
-  , user_message = $12
-  , prompt = $13::text
-  , model_config = $14::jsonb
+  , scope_include = $8::text
+  , scope_exempt = $9::text
+  , enabled = $10
+  , action = $11
+  , audience_type = $12
+  , auto_name = $13
+  , user_message = $14
+  , prompt = $15::text
+  , model_config = $16::jsonb
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -2886,17 +2896,19 @@ SET name = $1
         OR disabled_rules IS DISTINCT FROM $5
         OR custom_rule_ids IS DISTINCT FROM COALESCE($6::text[], '{}'::text[])
         OR message_types IS DISTINCT FROM $7::text[]
-        OR enabled IS DISTINCT FROM $8
-        OR action IS DISTINCT FROM $9
-        OR prompt IS DISTINCT FROM $13::text
-        OR model_config IS DISTINCT FROM $14::jsonb
-        OR audience_type IS DISTINCT FROM $10
+        OR scope_include IS DISTINCT FROM $8::text
+        OR scope_exempt IS DISTINCT FROM $9::text
+        OR enabled IS DISTINCT FROM $10
+        OR action IS DISTINCT FROM $11
+        OR prompt IS DISTINCT FROM $15::text
+        OR model_config IS DISTINCT FROM $16::jsonb
+        OR audience_type IS DISTINCT FROM $12
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $15
-  AND project_id = $16
+WHERE id = $17
+  AND project_id = $18
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
 `
@@ -2909,6 +2921,8 @@ type UpdateRiskPolicyParams struct {
 	DisabledRules        []string
 	CustomRuleIds        []string
 	MessageTypes         []string
+	ScopeInclude         pgtype.Text
+	ScopeExempt          pgtype.Text
 	Enabled              bool
 	Action               string
 	AudienceType         string
@@ -2929,6 +2943,8 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.DisabledRules,
 		arg.CustomRuleIds,
 		arg.MessageTypes,
+		arg.ScopeInclude,
+		arg.ScopeExempt,
 		arg.Enabled,
 		arg.Action,
 		arg.AudienceType,

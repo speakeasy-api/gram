@@ -38,6 +38,13 @@ type CreateRiskPolicyRequestBody struct {
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Omit/empty means all
+	// messages are in scope.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Omit/empty means no inline exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -82,6 +89,12 @@ type UpdateRiskPolicyRequestBody struct {
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate (in addition to message_types). Omit to preserve the
+	// current value; send empty to clear.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate. Omit to preserve the current value; send empty to
+	// clear.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -159,6 +172,9 @@ type CreateCustomDetectionRuleRequestBody struct {
 	// CEL detection predicate: a boolean expression over message fields whose true
 	// verdict produces a finding.
 	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
+	// Deprecated legacy RE2 regex pattern; superseded by detection_expr. Accepted
+	// for backward compatibility.
+	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 }
@@ -175,6 +191,9 @@ type UpdateCustomDetectionRuleRequestBody struct {
 	// CEL detection predicate: a boolean expression over message fields whose true
 	// verdict produces a finding.
 	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
+	// Deprecated legacy RE2 regex pattern; superseded by detection_expr. Accepted
+	// for backward compatibility.
+	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 }
@@ -278,6 +297,13 @@ type CreateRiskPolicyResponseBody struct {
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -349,6 +375,13 @@ type GetRiskPolicyResponseBody struct {
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -413,6 +446,13 @@ type UpdateRiskPolicyResponseBody struct {
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -880,6 +920,9 @@ type SuggestCustomDetectionRuleResponseBody struct {
 	Description string `form:"description" json:"description" xml:"description"`
 	// Suggested CEL detection predicate.
 	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
+	// Deprecated legacy regex suggestion; superseded by detection_expr. Present
+	// for backward compatibility.
+	Regex string `form:"regex" json:"regex" xml:"regex"`
 	// Suggested severity level.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 }
@@ -6710,6 +6753,13 @@ type RiskPolicyResponseBody struct {
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Null/empty means all
+	// messages are in scope.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Null/empty means no inline exemption.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -7073,6 +7123,8 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
 		PolicyType:      res.PolicyType,
+		ScopeInclude:    res.ScopeInclude,
+		ScopeExempt:     res.ScopeExempt,
 		Enabled:         res.Enabled,
 		Action:          res.Action,
 		AudienceType:    res.AudienceType,
@@ -7164,6 +7216,8 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
 		PolicyType:      res.PolicyType,
+		ScopeInclude:    res.ScopeInclude,
+		ScopeExempt:     res.ScopeExempt,
 		Enabled:         res.Enabled,
 		Action:          res.Action,
 		AudienceType:    res.AudienceType,
@@ -7236,6 +7290,8 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
 		PolicyType:      res.PolicyType,
+		ScopeInclude:    res.ScopeInclude,
+		ScopeExempt:     res.ScopeExempt,
 		Enabled:         res.Enabled,
 		Action:          res.Action,
 		AudienceType:    res.AudienceType,
@@ -7837,6 +7893,7 @@ func NewSuggestCustomDetectionRuleResponseBody(res *risk.SuggestCustomDetectionR
 		Title:         res.Title,
 		Description:   res.Description,
 		DetectionExpr: res.DetectionExpr,
+		Regex:         res.Regex,
 		Severity:      res.Severity,
 	}
 	return body
@@ -12370,11 +12427,13 @@ func NewTestDetectionRuleGatewayErrorResponseBody(res *goa.ServiceError) *TestDe
 // payload.
 func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CreateRiskPolicyPayload {
 	v := &risk.CreateRiskPolicyPayload{
-		Name:        body.Name,
-		Enabled:     body.Enabled,
-		AutoName:    body.AutoName,
-		UserMessage: body.UserMessage,
-		Prompt:      body.Prompt,
+		Name:         body.Name,
+		ScopeInclude: body.ScopeInclude,
+		ScopeExempt:  body.ScopeExempt,
+		Enabled:      body.Enabled,
+		AutoName:     body.AutoName,
+		UserMessage:  body.UserMessage,
+		Prompt:       body.Prompt,
 	}
 	if body.PolicyType != nil {
 		v.PolicyType = *body.PolicyType
@@ -12474,6 +12533,8 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 	v := &risk.UpdateRiskPolicyPayload{
 		ID:           *body.ID,
 		Name:         *body.Name,
+		ScopeInclude: body.ScopeInclude,
+		ScopeExempt:  body.ScopeExempt,
 		Enabled:      body.Enabled,
 		Action:       body.Action,
 		AudienceType: body.AudienceType,
@@ -12771,6 +12832,7 @@ func NewCreateCustomDetectionRulePayload(body *CreateCustomDetectionRuleRequestB
 		Title:         *body.Title,
 		Description:   body.Description,
 		DetectionExpr: body.DetectionExpr,
+		Regex:         body.Regex,
 	}
 	if body.Severity != nil {
 		v.Severity = *body.Severity
@@ -12816,6 +12878,7 @@ func NewUpdateCustomDetectionRulePayload(body *UpdateCustomDetectionRuleRequestB
 		Title:         *body.Title,
 		Description:   body.Description,
 		DetectionExpr: body.DetectionExpr,
+		Regex:         body.Regex,
 		Severity:      *body.Severity,
 	}
 	v.ApikeyToken = apikeyToken

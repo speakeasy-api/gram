@@ -7407,6 +7407,8 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		ProjectID:       v.ProjectID,
 		Name:            v.Name,
 		PolicyType:      v.PolicyType,
+		ScopeInclude:    v.ScopeInclude,
+		ScopeExempt:     v.ScopeExempt,
 		Enabled:         v.Enabled,
 		Action:          v.Action,
 		AudienceType:    v.AudienceType,

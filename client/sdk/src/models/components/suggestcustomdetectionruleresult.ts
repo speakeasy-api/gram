@@ -36,6 +36,10 @@ export type SuggestCustomDetectionRuleResult = {
    */
   detectionExpr?: string | undefined;
   /**
+   * Deprecated legacy regex suggestion; superseded by detection_expr. Present for backward compatibility.
+   */
+  regex: string;
+  /**
    * Suggested stable identifier, prefixed with `custom.`.
    */
   ruleId: string;
@@ -63,6 +67,7 @@ export const SuggestCustomDetectionRuleResult$inboundSchema: z.ZodMiniType<
   z.object({
     description: z.string(),
     detection_expr: z.optional(z.string()),
+    regex: z.string(),
     rule_id: z.string(),
     severity: SuggestCustomDetectionRuleResultSeverity$inboundSchema,
     title: z.string(),

@@ -186,7 +186,8 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 	// so the lookup is never cancelled by a sibling match. Gated on the exact
 	// condition under which the fan-out would run the judge — a prompt_based
 	// policy whose message_types apply to this message — so the lookup is
-	// skipped entirely for scans that can never enforce one.
+	// skipped entirely for scans that can never enforce one. message_types gates
+	// candidacy; scope_include narrows further per-message in scanPolicy.
 	inMessageScope := func(p repo.RiskPolicy) bool {
 		return len(p.MessageTypes) == 0 ||
 			slices.Contains(p.MessageTypes, messageType)
@@ -231,7 +232,6 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 		if !policyApplication.Satisfied {
 			continue
 		}
-		// A defined include predicate supersedes message_types (see inMessageScope).
 		if !inMessageScope(p) {
 			continue
 		}
@@ -354,6 +354,17 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 		view.Tools = []ra.ToolView{ra.NewToolView(toolName, text)}
 	}
 
+	// Policy application gates detection: include narrows scope (alongside
+	// message_types); exempt takes the message out of the policy.
+	eng := s.celEng
+	app, err := ra.CompileScope(eng, policy.ScopeInclude.String, policy.ScopeExempt.String)
+	if err != nil {
+		return nil, fmt.Errorf("compile policy scope: %w", err)
+	}
+	if !app.Includes(view) || app.Exempts(view) {
+		return nil, nil
+	}
+
 	if policy.PolicyType == "prompt_based" {
 		return s.scanPromptPolicy(ctx, policy, text, messageType, toolName, promptPoliciesOn), nil
 	}
@@ -375,7 +386,8 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 	}
 
 	// Evaluate custom detection rules up front; their findings are held for the
-	// block check after the built-in sources.
+	// block check after the built-in sources. Message exemptions were already
+	// applied above via the policy's scope_exempt.
 	var customFindings []ra.Finding
 	if len(policy.CustomRuleIds) > 0 {
 		customFindings, err = s.scanCustomRules(ctx, policy, view)

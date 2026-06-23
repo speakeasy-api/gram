@@ -37,6 +37,10 @@ export type UpdateCustomDetectionRuleRequestBody = {
    */
   id: string;
   /**
+   * Deprecated legacy RE2 regex pattern; superseded by detection_expr. Accepted for backward compatibility.
+   */
+  regex?: string | undefined;
+  /**
    * Severity level for findings produced by this rule.
    */
   severity: UpdateCustomDetectionRuleRequestBodySeverity;
@@ -57,6 +61,7 @@ export type UpdateCustomDetectionRuleRequestBody$Outbound = {
   description?: string | undefined;
   detection_expr?: string | undefined;
   id: string;
+  regex?: string | undefined;
   severity: string;
   title: string;
 };
@@ -70,6 +75,7 @@ export const UpdateCustomDetectionRuleRequestBody$outboundSchema: z.ZodMiniType<
     description: z.optional(z.string()),
     detectionExpr: z.optional(z.string()),
     id: z.string(),
+    regex: z.optional(z.string()),
     severity: UpdateCustomDetectionRuleRequestBodySeverity$outboundSchema,
     title: z.string(),
   }),

@@ -333,6 +333,15 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "generate policy id").LogError(ctx, s.logger)
 	}
 
+	// Scope predicates (CEL) apply to both standard and prompt policies, so they
+	// are not gated by policyType like the detection fields.
+	if err := validateScopeExpr(s.celEng, payload.ScopeInclude); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid scope_include")
+	}
+	if err := validateScopeExpr(s.celEng, payload.ScopeExempt); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid scope_exempt")
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
@@ -351,6 +360,8 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		DisabledRules:        createPolicyDetectionField(policyType, payload.DisabledRules),
 		CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
 		MessageTypes:         payload.MessageTypes,
+		ScopeInclude:         conv.PtrToPGText(payload.ScopeInclude),
+		ScopeExempt:          conv.PtrToPGText(payload.ScopeExempt),
 		Enabled:              enabled,
 		Action:               action,
 		AudienceType:         audienceType,
@@ -525,6 +536,21 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		messageTypes = payload.MessageTypes
 	}
 
+	// Scope predicates (CEL): omit to preserve; send (possibly empty) to replace.
+	scopeInclude := current.ScopeInclude
+	if payload.ScopeInclude != nil {
+		if err := validateScopeExpr(s.celEng, payload.ScopeInclude); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid scope_include")
+		}
+		scopeInclude = conv.PtrToPGText(payload.ScopeInclude)
+	}
+	scopeExempt := current.ScopeExempt
+	if payload.ScopeExempt != nil {
+		if err := validateScopeExpr(s.celEng, payload.ScopeExempt); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid scope_exempt")
+		}
+		scopeExempt = conv.PtrToPGText(payload.ScopeExempt)
+	}
 
 	enabled := current.Enabled
 	if payload.Enabled != nil {
@@ -650,6 +676,8 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		DisabledRules:        disabledRules,
 		CustomRuleIds:        customRuleIds,
 		MessageTypes:         messageTypes,
+		ScopeInclude:         scopeInclude,
+		ScopeExempt:          scopeExempt,
 		Enabled:              enabled,
 		Action:               action,
 		AudienceType:         audienceType,
@@ -1844,6 +1872,7 @@ func heuristicCustomRuleSuggestion(prompt string, existingIDs []string) *gen.Sug
 		Title:         title,
 		Description:   strings.TrimSpace(prompt),
 		DetectionExpr: nil,
+		Regex:         "",
 		Severity:      "medium",
 	}
 }
@@ -1953,6 +1982,14 @@ func validateExpr(eng *celenv.Engine, expr string) error {
 		return fmt.Errorf("compile cel: %w", err)
 	}
 	return nil
+}
+
+// validateScopeExpr validates an optional CEL scope predicate from a payload.
+func validateScopeExpr(eng *celenv.Engine, expr *string) error {
+	if expr == nil {
+		return nil
+	}
+	return validateExpr(eng, *expr)
 }
 
 func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
@@ -2091,6 +2128,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		Title:         parsed.Title,
 		Description:   parsed.Description,
 		DetectionExpr: conv.PtrEmpty(parsed.DetectionExpr),
+		Regex:         "",
 		Severity:      parsed.Severity,
 	}, nil
 }
@@ -2305,6 +2343,8 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		DisabledRules:         row.DisabledRules,
 		CustomRuleIds:         row.CustomRuleIds,
 		MessageTypes:          row.MessageTypes,
+		ScopeInclude:          conv.FromPGText[string](row.ScopeInclude),
+		ScopeExempt:           conv.FromPGText[string](row.ScopeExempt),
 		Enabled:               row.Enabled,
 		Action:                row.Action,
 		AudienceType:          row.AudienceType,
@@ -2336,6 +2376,8 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		DisabledRules:         row.DisabledRules,
 		CustomRuleIds:         row.CustomRuleIds,
 		MessageTypes:          row.MessageTypes,
+		ScopeInclude:          conv.FromPGText[string](row.ScopeInclude),
+		ScopeExempt:           conv.FromPGText[string](row.ScopeExempt),
 		Enabled:               row.Enabled,
 		Action:                row.Action,
 		AudienceType:          row.AudienceType,
