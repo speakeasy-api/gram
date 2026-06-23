@@ -749,6 +749,38 @@ func (q *Queries) LinkRoleAssignmentsToUser(ctx context.Context, arg LinkRoleAss
 	return err
 }
 
+const listActiveOrganizationUserIDs = `-- name: ListActiveOrganizationUserIDs :many
+SELECT u.id
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL
+`
+
+// Returns the Gram user IDs of active members of the organization. Used to
+// suppress challenges raised by users outside the organization (e.g. Speakeasy
+// staff impersonating a customer org) from the Challenge UI.
+func (q *Queries) ListActiveOrganizationUserIDs(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listActiveOrganizationUserIDs, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveRoleAssignmentsByOrganization = `-- name: ListActiveRoleAssignmentsByOrganization :many
 SELECT
     ora.user_id,
