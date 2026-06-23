@@ -53,7 +53,7 @@ type CompiledCELRule struct {
 // custom-rule detection rather than panicking in the scan.
 func CompileCELRules(eng *celenv.Engine, rules []CustomDetectionRule) ([]CompiledCELRule, error) {
 	if eng == nil {
-		return nil, nil
+		return []CompiledCELRule{}, nil
 	}
 	out := make([]CompiledCELRule, 0, len(rules))
 	for _, rule := range rules {
@@ -76,29 +76,30 @@ func CompileCELRules(eng *celenv.Engine, rules []CustomDetectionRule) ([]Compile
 // handled by the policy's scope_exempt (CompiledScope.Exempts), not by rules.
 func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule) ([]Finding, error) {
 	msg := celMessage(view)
-	var findings []Finding
+	findings := []Finding{}
 	for _, r := range rules {
 		spans, matched, err := eng.EvalDetection(r.prg, msg)
 		if err != nil {
-			return nil, fmt.Errorf("custom rule %s: eval: %w", r.rule.RuleID, err)
+			return []Finding{}, fmt.Errorf("custom rule %s: eval: %w", r.rule.RuleID, err)
 		}
 		if !matched {
 			continue
 		}
 		for _, s := range spans {
 			findings = append(findings, Finding{
-				RuleID:           r.rule.RuleID,
-				Description:      celRuleDescription(r.rule),
-				Match:            s.Value,
-				StartPos:         s.Start,
-				EndPos:           s.End,
-				Tags:             nil,
-				Source:           SourceCustom,
-				Confidence:       1.0,
-				DeadLetterReason: "",
-				toolCallID:       s.ToolCallID,
-				field:            s.Target,
-				path:             s.Path,
+				RuleID:              r.rule.RuleID,
+				Description:         celRuleDescription(r.rule),
+				Match:               s.Value,
+				StartPos:            s.Start,
+				EndPos:              s.End,
+				Tags:                []string{},
+				Source:              SourceCustom,
+				Confidence:          1.0,
+				DeadLetterReason:    "",
+				mcpLookupToolCallID: "",
+				spanGroupKey:        s.ToolCallID,
+				field:               s.Target,
+				path:                s.Path,
 			})
 		}
 	}
@@ -125,7 +126,8 @@ type CompiledScope struct {
 
 // CompileScope compiles a policy's scope predicates (empty strings -> nil).
 func CompileScope(eng *celenv.Engine, includeCEL, exemptCEL string) (CompiledScope, error) {
-	s := CompiledScope{eng: eng, include: nil, exempt: nil}
+	var s CompiledScope
+	s.eng = eng
 	if expr := strings.TrimSpace(includeCEL); expr != "" {
 		prg, err := eng.Compile(expr)
 		if err != nil {
