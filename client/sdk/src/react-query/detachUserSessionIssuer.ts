@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { remoteSessionClientsUpdate } from "../funcs/remoteSessionClientsUpdate.js";
+import { remoteSessionClientsDetachUserSessionIssuer } from "../funcs/remoteSessionClientsDetachUserSessionIssuer.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -28,16 +28,16 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type UpdateRemoteSessionClientMutationVariables = {
-  request: operations.UpdateRemoteSessionClientRequest;
-  security?: operations.UpdateRemoteSessionClientSecurity | undefined;
+export type DetachUserSessionIssuerMutationVariables = {
+  request: operations.DetachUserSessionIssuerRequest;
+  security?: operations.DetachUserSessionIssuerSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UpdateRemoteSessionClientMutationData =
+export type DetachUserSessionIssuerMutationData =
   components.RemoteSessionClient;
 
-export type UpdateRemoteSessionClientMutationError =
+export type DetachUserSessionIssuerMutationError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -49,49 +49,49 @@ export type UpdateRemoteSessionClientMutationError =
   | SDKValidationError;
 
 /**
- * updateRemoteSessionClient remoteSessionClients
+ * detachUserSessionIssuer remoteSessionClients
  *
  * @remarks
- * Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.
+ * Detach a user_session_issuer from a remote_session_client by removing the binding from the join table. A no-op when the binding does not exist.
  */
-export function useUpdateRemoteSessionClientMutation(
+export function useDetachUserSessionIssuerMutation(
   options?: MutationHookOptions<
-    UpdateRemoteSessionClientMutationData,
-    UpdateRemoteSessionClientMutationError,
-    UpdateRemoteSessionClientMutationVariables
+    DetachUserSessionIssuerMutationData,
+    DetachUserSessionIssuerMutationError,
+    DetachUserSessionIssuerMutationVariables
   >,
 ): UseMutationResult<
-  UpdateRemoteSessionClientMutationData,
-  UpdateRemoteSessionClientMutationError,
-  UpdateRemoteSessionClientMutationVariables
+  DetachUserSessionIssuerMutationData,
+  DetachUserSessionIssuerMutationError,
+  DetachUserSessionIssuerMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildUpdateRemoteSessionClientMutation(client, options),
+    ...buildDetachUserSessionIssuerMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyUpdateRemoteSessionClient(): MutationKey {
-  return ["@gram/client", "remoteSessionClients", "update"];
+export function mutationKeyDetachUserSessionIssuer(): MutationKey {
+  return ["@gram/client", "remoteSessionClients", "detachUserSessionIssuer"];
 }
 
-export function buildUpdateRemoteSessionClientMutation(
+export function buildDetachUserSessionIssuerMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: UpdateRemoteSessionClientMutationVariables,
-  ) => Promise<UpdateRemoteSessionClientMutationData>;
+    variables: DetachUserSessionIssuerMutationVariables,
+  ) => Promise<DetachUserSessionIssuerMutationData>;
 } {
   return {
-    mutationKey: mutationKeyUpdateRemoteSessionClient(),
-    mutationFn: function updateRemoteSessionClientMutationFn({
+    mutationKey: mutationKeyDetachUserSessionIssuer(),
+    mutationFn: function detachUserSessionIssuerMutationFn({
       request,
       security,
       options,
-    }): Promise<UpdateRemoteSessionClientMutationData> {
+    }): Promise<DetachUserSessionIssuerMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -104,7 +104,7 @@ export function buildUpdateRemoteSessionClientMutation(
           ),
         },
       };
-      return unwrapAsync(remoteSessionClientsUpdate(
+      return unwrapAsync(remoteSessionClientsDetachUserSessionIssuer(
         client$,
         request,
         security,

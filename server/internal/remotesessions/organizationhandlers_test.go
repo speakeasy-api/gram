@@ -402,7 +402,6 @@ func TestUpdateClient(t *testing.T) {
 		ApikeyToken:             nil,
 		ID:                      clientID,
 		ClientSecret:            nil,
-		UserSessionIssuerID:     nil,
 		TokenEndpointAuthMethod: &authMethod,
 		Scope:                   []string{"openid", "profile"},
 		Audience:                &audience,
@@ -423,7 +422,6 @@ func TestUpdateClient(t *testing.T) {
 		ApikeyToken:             nil,
 		ID:                      clientID,
 		ClientSecret:            nil,
-		UserSessionIssuerID:     nil,
 		TokenEndpointAuthMethod: nil,
 		Scope:                   nil,
 		Audience:                &cleared,
@@ -475,7 +473,7 @@ func TestUpdateClient_RotatesSecret(t *testing.T) {
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 	})
 	require.NoError(t, err)
-	require.False(t, before.ClientSecretEncrypted.Valid)
+	require.False(t, before.RemoteSessionClient.ClientSecretEncrypted.Valid)
 
 	secret := "rotated-secret-value"
 	_, err = ti.service.UpdateClient(ctx, &orggen.UpdateClientPayload{
@@ -483,7 +481,6 @@ func TestUpdateClient_RotatesSecret(t *testing.T) {
 		ApikeyToken:             nil,
 		ID:                      clientID,
 		ClientSecret:            &secret,
-		UserSessionIssuerID:     nil,
 		TokenEndpointAuthMethod: nil,
 		Scope:                   nil,
 		Audience:                nil,
@@ -495,9 +492,9 @@ func TestUpdateClient_RotatesSecret(t *testing.T) {
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 	})
 	require.NoError(t, err)
-	require.True(t, after.ClientSecretEncrypted.Valid)
-	require.NotEmpty(t, after.ClientSecretEncrypted.String)
-	require.NotEqual(t, secret, after.ClientSecretEncrypted.String)
+	require.True(t, after.RemoteSessionClient.ClientSecretEncrypted.Valid)
+	require.NotEmpty(t, after.RemoteSessionClient.ClientSecretEncrypted.String)
+	require.NotEqual(t, secret, after.RemoteSessionClient.ClientSecretEncrypted.String)
 }
 
 // TestRemoveClientFromMcpServer_NotAttached returns NotFound when the

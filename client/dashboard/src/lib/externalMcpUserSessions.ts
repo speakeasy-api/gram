@@ -194,7 +194,7 @@ export async function onboardExternalMcpToUserSessions({
     {
       createRemoteSessionClientForm: {
         remoteSessionIssuerId: remoteSessionIssuer.id,
-        userSessionIssuerId: userSessionIssuer.id,
+        userSessionIssuerIds: [userSessionIssuer.id],
         clientId: proxyRegistered.clientId,
         clientSecret: proxyRegistered.clientSecret || undefined,
         tokenEndpointAuthMethod: narrowTokenEndpointAuthMethod(

@@ -264,7 +264,7 @@ export function AttachRemoteIdentityProviderSheet({
       await client.remoteSessionClients.create({
         createRemoteSessionClientForm: {
           remoteSessionIssuerId: remoteIssuerId,
-          userSessionIssuerId: issuerId,
+          userSessionIssuerIds: [issuerId],
           clientId: clientCredentials.clientId,
           clientSecret: clientCredentials.clientSecret,
           tokenEndpointAuthMethod: clientCredentials.tokenEndpointAuthMethod,

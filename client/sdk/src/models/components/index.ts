@@ -22,6 +22,7 @@ export * from "./assistant.js";
 export * from "./assistantmemory.js";
 export * from "./assistanttoolsetref.js";
 export * from "./attachserverrequestbody.js";
+export * from "./attachusersessionissuerform.js";
 export * from "./auditlog.js";
 export * from "./auditlogfacetoption.js";
 export * from "./authzchallenge.js";

@@ -29,6 +29,14 @@ type Client struct {
 	// the updateRemoteSessionClient endpoint.
 	UpdateRemoteSessionClientDoer goahttp.Doer
 
+	// AttachUserSessionIssuer Doer is the HTTP client used to make requests to the
+	// attachUserSessionIssuer endpoint.
+	AttachUserSessionIssuerDoer goahttp.Doer
+
+	// DetachUserSessionIssuer Doer is the HTTP client used to make requests to the
+	// detachUserSessionIssuer endpoint.
+	DetachUserSessionIssuerDoer goahttp.Doer
+
 	// ListRemoteSessionClients Doer is the HTTP client used to make requests to
 	// the listRemoteSessionClients endpoint.
 	ListRemoteSessionClientsDoer goahttp.Doer
@@ -65,6 +73,8 @@ func NewClient(
 		CreateRemoteSessionClientDoer:         doer,
 		CloneClientFromOAuthProxyProviderDoer: doer,
 		UpdateRemoteSessionClientDoer:         doer,
+		AttachUserSessionIssuerDoer:           doer,
+		DetachUserSessionIssuerDoer:           doer,
 		ListRemoteSessionClientsDoer:          doer,
 		GetRemoteSessionClientDoer:            doer,
 		DeleteRemoteSessionClientDoer:         doer,
@@ -144,6 +154,54 @@ func (c *Client) UpdateRemoteSessionClient() goa.Endpoint {
 		resp, err := c.UpdateRemoteSessionClientDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteSessionClients", "updateRemoteSessionClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// AttachUserSessionIssuer returns an endpoint that makes HTTP requests to the
+// remoteSessionClients service attachUserSessionIssuer server.
+func (c *Client) AttachUserSessionIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeAttachUserSessionIssuerRequest(c.encoder)
+		decodeResponse = DecodeAttachUserSessionIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildAttachUserSessionIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.AttachUserSessionIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessionClients", "attachUserSessionIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DetachUserSessionIssuer returns an endpoint that makes HTTP requests to the
+// remoteSessionClients service detachUserSessionIssuer server.
+func (c *Client) DetachUserSessionIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDetachUserSessionIssuerRequest(c.encoder)
+		decodeResponse = DecodeDetachUserSessionIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDetachUserSessionIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DetachUserSessionIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessionClients", "detachUserSessionIssuer", err)
 		}
 		return decodeResponse(resp)
 	}
