@@ -154,6 +154,37 @@ message Foo {
 	require.Contains(t, got, "string tags = 1;")
 }
 
+// TestScrubSchemaDefinition_SingleLineMessage confirms a single-line message
+// declaration is scrubbed correctly rather than mistaken for unterminated.
+func TestScrubSchemaDefinition_SingleLineMessage(t *testing.T) {
+	t.Parallel()
+
+	src := "edition = \"2024\";\nmessage Ping { string id = 1; option (gcp.pubsub.v1.topic) = {}; }\n"
+
+	got, err := scrubSchemaDefinition(src)
+	require.NoError(t, err)
+	require.Contains(t, got, "message Ping {")
+	require.Contains(t, got, "string id = 1;")
+	require.NotContains(t, got, "gcp.pubsub.v1.topic")
+}
+
+// TestTopLevelMessageBlock covers the brace-matching directly, including the
+// single-line form whose opening and closing braces sit on one line.
+func TestTopLevelMessageBlock(t *testing.T) {
+	t.Parallel()
+
+	singleLine, err := topLevelMessageBlock("edition = \"2024\";\nmessage Ping { string id = 1; }\n")
+	require.NoError(t, err)
+	require.Equal(t, "message Ping { string id = 1; }", singleLine)
+
+	multiLine, err := topLevelMessageBlock("edition = \"2024\";\nmessage Ping {\n  string id = 1;\n}\n")
+	require.NoError(t, err)
+	require.Equal(t, "message Ping {\n  string id = 1;\n}", multiLine)
+
+	_, err = topLevelMessageBlock("edition = \"2024\";\nmessage Ping {\n  string id = 1;\n")
+	require.Error(t, err)
+}
+
 // TestScrubSchemaDefinition_MissingOption fails when no topic option is present,
 // since every qualifying source must carry one.
 func TestScrubSchemaDefinition_MissingOption(t *testing.T) {

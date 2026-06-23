@@ -227,46 +227,28 @@ func editionDeclaration(src string) string {
 }
 
 // topLevelMessageBlock returns the source of the single top-level message, from
-// its `message X {` line through the matching closing brace. The caller has
+// its `message X` declaration through the matching closing brace. The caller has
 // already verified the file declares exactly one top-level message, so the first
 // `message ` line is it — a message's own nested messages are declared inside its
-// body, which is reached only after this line.
+// body, which is reached only after this declaration. Brace matching is
+// character-based and string-aware, so single-line, multi-line, and
+// brace-in-string forms are all handled the same way.
 func topLevelMessageBlock(src string) (string, error) {
-	lines := strings.Split(src, "\n")
-
-	start := -1
-	for i, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "message ") {
-			start = i
-			break
-		}
-	}
+	start := messageDeclStart(src)
 	if start < 0 {
 		return "", errors.New("no top-level message found in schema source")
 	}
 
-	depth := 0
-	opened := false
-	for i := start; i < len(lines); i++ {
-		depth += netBraceDelta(lines[i])
-		if depth > 0 {
-			opened = true
-		}
-		if opened && depth <= 0 {
-			return strings.Join(lines[start:i+1], "\n"), nil
-		}
+	open := strings.IndexByte(src[start:], '{')
+	if open < 0 {
+		return "", errors.New("top-level message has no body")
 	}
+	open += start
 
-	return "", errors.New("unterminated top-level message in schema source")
-}
-
-// netBraceDelta returns a line's `{` count minus its `}` count, ignoring braces
-// inside string literals. The input is expected to already be comment-stripped.
-func netBraceDelta(line string) int {
-	delta := 0
+	depth := 0
 	inString := false
-	for i := 0; i < len(line); i++ {
-		c := line[i]
+	for i := open; i < len(src); i++ {
+		c := src[i]
 		if inString {
 			switch c {
 			case '\\':
@@ -280,12 +262,30 @@ func netBraceDelta(line string) int {
 		case '"':
 			inString = true
 		case '{':
-			delta++
+			depth++
 		case '}':
-			delta--
+			depth--
+			if depth == 0 {
+				return src[start : i+1], nil
+			}
 		}
 	}
-	return delta
+
+	return "", errors.New("unterminated top-level message in schema source")
+}
+
+// messageDeclStart returns the byte offset of the first line whose first token is
+// `message` (a top-level message declaration), or -1 if none. The offset points
+// at the `message` keyword, dropping any leading indentation on that line.
+func messageDeclStart(src string) int {
+	offset := 0
+	for line := range strings.SplitSeq(src, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "message ") {
+			return offset + len(line) - len(strings.TrimLeft(line, " \t"))
+		}
+		offset += len(line) + 1 // +1 for the stripped newline
+	}
+	return -1
 }
 
 // stripProtoComments removes `//` line comments and `/* */` block comments while
