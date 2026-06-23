@@ -147,7 +147,13 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "HTTP request failed")
-		h.logger.ErrorContext(ctx, "HTTP roundtrip failed",
+		// Log at WARN, not ERROR: this fires once per attempt, below the gateway's
+		// retry layer, so a transport error here is frequently retried and recovered
+		// transparently (e.g. the Fly autostop EOF race). Logging ERROR per attempt
+		// floods error dashboards with failures that never reached the caller. The
+		// gateway bubbles up the final, unrecovered failure as an ERROR once retries
+		// are exhausted.
+		h.logger.WarnContext(ctx, "HTTP roundtrip failed",
 			attr.SlogError(err),
 			attr.SlogURLOriginal(req.URL.String()),
 			attr.SlogHTTPRequestMethod(req.Method),

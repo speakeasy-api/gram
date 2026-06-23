@@ -169,6 +169,7 @@ func (tp *ToolProxy) doFunctionResource(
 			}
 			return nil
 		},
+		RetryConfig:      functionRunnerRetryConfig(),
 		ID:               descriptor.ID,
 		Name:             descriptor.Name,
 		DeploymentID:     descriptor.DeploymentID,
