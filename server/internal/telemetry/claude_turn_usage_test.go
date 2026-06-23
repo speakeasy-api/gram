@@ -181,6 +181,112 @@ func TestGetClaudeToolUsageByChatIDs(t *testing.T) {
 	require.Equal(t, int64(4096), got[chatID][1].ResultSizeBytes)
 }
 
+func TestGetClaudeTurnAttributionByChatIDs_CacheCreationByAttribution(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	chatID := uuid.New().String()
+	now := time.Now().UTC()
+
+	insertClaudeOTELLog(t, ctx, claudeOTELLogParams{
+		projectID: projectID, deploymentID: deploymentID, chatID: chatID,
+		timestamp: now, promptID: "prompt-1", eventName: "api_request",
+		inputTokens: 100, outputTokens: 20, cacheReadTokens: 1000, cacheCreationTokens: 200,
+		costUSD: 0.01, costMicros: 10000, model: "claude-sonnet-4-6", querySource: "main",
+	})
+	insertClaudeOTELLog(t, ctx, claudeOTELLogParams{
+		projectID: projectID, deploymentID: deploymentID, chatID: chatID,
+		timestamp: now.Add(time.Second), promptID: "prompt-1", eventName: "api_request",
+		inputTokens: 50, outputTokens: 10, cacheReadTokens: 1200, cacheCreationTokens: 75,
+		costUSD: 0.005, costMicros: 5000, model: "claude-sonnet-4-6", querySource: "main",
+		mcpServerName: "github", mcpToolName: "search_repositories",
+	})
+	insertClaudeOTELLog(t, ctx, claudeOTELLogParams{
+		projectID: projectID, deploymentID: deploymentID, chatID: chatID,
+		timestamp: now.Add(2 * time.Second), promptID: "prompt-1", eventName: "api_request",
+		inputTokens: 40, outputTokens: 5, cacheReadTokens: 1300, cacheCreationTokens: 30,
+		costUSD: 0.002, costMicros: 2000, model: "claude-sonnet-4-6", querySource: "main",
+		skillName: "sdk", agentName: "code-reviewer",
+	})
+
+	got := requireClaudeTurnAttributionEventually(ctx, t, ti, repo.GetClaudeTurnAttributionByChatIDsParams{
+		GramProjectID: projectID,
+		ChatIDs:       []string{chatID},
+		TimeStart:     now.Add(-time.Minute).UnixNano(),
+		TimeEnd:       now.Add(time.Minute).UnixNano(),
+	}, chatID, 3)
+
+	byAttribution := make(map[string]repo.ClaudeTurnAttributionRow, len(got[chatID]))
+	for _, row := range got[chatID] {
+		byAttribution[row.SkillName+"|"+row.AgentName+"|"+row.MCPServerName+"|"+row.MCPToolName] = row
+	}
+
+	pure := byAttribution["|||"]
+	require.Equal(t, int64(200), pure.CacheCreationTokens)
+	require.Equal(t, int64(1320), pure.TotalTokens)
+	require.False(t, pure.IsRecache)
+
+	mcp := byAttribution["||github|search_repositories"]
+	require.Equal(t, int64(75), mcp.CacheCreationTokens)
+	require.InDelta(t, 0.005, mcp.CostUSD, 0.0000001)
+	require.Equal(t, uint64(1), mcp.RequestCount)
+
+	skillAgent := byAttribution["sdk|code-reviewer||"]
+	require.Equal(t, int64(30), skillAgent.CacheCreationTokens)
+	require.Equal(t, "main", skillAgent.QuerySource)
+}
+
+func TestGetClaudeTurnAttributionByChatIDs_FlagsAndExcludesRecache(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	chatID := uuid.New().String()
+	now := time.Now().UTC()
+
+	insertClaudeOTELLog(t, ctx, claudeOTELLogParams{
+		projectID: projectID, deploymentID: deploymentID, chatID: chatID,
+		timestamp: now, promptID: "prompt-1", eventName: "api_request",
+		inputTokens: 10, outputTokens: 5, cacheCreationTokens: 10,
+		costUSD: 0.001, costMicros: 1000, model: "claude-sonnet-4-6", querySource: "main",
+	})
+	insertClaudeOTELLog(t, ctx, claudeOTELLogParams{
+		projectID: projectID, deploymentID: deploymentID, chatID: chatID,
+		timestamp: now.Add(6 * time.Minute), promptID: "prompt-2", eventName: "api_request",
+		inputTokens: 1000, outputTokens: 5, cacheCreationTokens: 1000,
+		costUSD: 0.1, costMicros: 100000, model: "claude-sonnet-4-6", querySource: "main",
+		mcpServerName: "github", mcpToolName: "search_repositories",
+	})
+
+	got := requireClaudeTurnAttributionEventually(ctx, t, ti, repo.GetClaudeTurnAttributionByChatIDsParams{
+		GramProjectID:               projectID,
+		ChatIDs:                     []string{chatID},
+		TimeStart:                   now.Add(-time.Minute).UnixNano(),
+		TimeEnd:                     now.Add(10 * time.Minute).UnixNano(),
+		RecacheIdleThresholdSeconds: 300,
+	}, chatID, 2)
+
+	require.False(t, got[chatID][0].IsRecache)
+	require.Equal(t, int64(0), got[chatID][0].SecondsSincePrev)
+	require.True(t, got[chatID][1].IsRecache)
+	require.Equal(t, int64(360), got[chatID][1].SecondsSincePrev)
+
+	filtered := requireClaudeTurnAttributionEventually(ctx, t, ti, repo.GetClaudeTurnAttributionByChatIDsParams{
+		GramProjectID:               projectID,
+		ChatIDs:                     []string{chatID},
+		TimeStart:                   now.Add(-time.Minute).UnixNano(),
+		TimeEnd:                     now.Add(10 * time.Minute).UnixNano(),
+		RecacheIdleThresholdSeconds: 300,
+		ExcludeRecache:              true,
+	}, chatID, 1)
+	require.Equal(t, "prompt-1", filtered[chatID][0].PromptID)
+}
+
 func requireClaudeTurnUsageEventually(
 	ctx context.Context,
 	t *testing.T,
@@ -221,6 +327,26 @@ func requireClaudeToolUsageEventually(
 	return got
 }
 
+func requireClaudeTurnAttributionEventually(
+	ctx context.Context,
+	t *testing.T,
+	ti *testInstance,
+	params repo.GetClaudeTurnAttributionByChatIDsParams,
+	chatID string,
+	expectedRows int,
+) map[string][]repo.ClaudeTurnAttributionRow {
+	t.Helper()
+
+	var got map[string][]repo.ClaudeTurnAttributionRow
+	require.Eventually(t, func() bool {
+		var err error
+		got, err = ti.chClient.GetClaudeTurnAttributionByChatIDs(ctx, params)
+		return err == nil && len(got[chatID]) == expectedRows
+	}, 2*time.Second, 50*time.Millisecond)
+
+	return got
+}
+
 type claudeOTELLogParams struct {
 	projectID           string
 	deploymentID        string
@@ -236,6 +362,10 @@ type claudeOTELLogParams struct {
 	costMicros          int64
 	model               string
 	querySource         string
+	skillName           string
+	agentName           string
+	mcpServerName       string
+	mcpToolName         string
 	toolUseID           string
 	toolName            string
 	toolInputSizeBytes  int64
@@ -252,12 +382,21 @@ func insertClaudeOTELLog(t *testing.T, ctx context.Context, p claudeOTELLogParam
 	require.NoError(t, err)
 
 	attributes := map[string]any{
-		"event.name":      p.eventName,
-		"prompt.id":       p.promptID,
-		"session.id":      p.chatID,
-		"user.email":      "claude-user@example.com",
-		"user.id":         "claude-user",
-		"organization.id": uuid.New().String(),
+		"event.name":                       p.eventName,
+		"prompt.id":                        p.promptID,
+		"session.id":                       p.chatID,
+		"gen_ai.conversation.id":           p.chatID,
+		"user.email":                       "claude-user@example.com",
+		"user.id":                          "claude-user",
+		"user.attributes.department_name":  "engineering",
+		"user.attributes.job_title":        "software engineer",
+		"user.attributes.employee_type":    "full-time",
+		"user.attributes.division_name":    "product",
+		"user.attributes.cost_center_name": "eng-123",
+		"user.roles":                       []string{"engineer"},
+		"user.groups":                      []string{"platform"},
+		"gram.hook.source":                 "claude-code",
+		"organization.id":                  uuid.New().String(),
 	}
 	if p.inputTokens != 0 {
 		attributes["input_tokens"] = p.inputTokens
@@ -282,6 +421,18 @@ func insertClaudeOTELLog(t *testing.T, ctx context.Context, p claudeOTELLogParam
 	}
 	if p.querySource != "" {
 		attributes["query_source"] = p.querySource
+	}
+	if p.skillName != "" {
+		attributes["skill.name"] = p.skillName
+	}
+	if p.agentName != "" {
+		attributes["agent.name"] = p.agentName
+	}
+	if p.mcpServerName != "" {
+		attributes["mcp_server.name"] = p.mcpServerName
+	}
+	if p.mcpToolName != "" {
+		attributes["mcp_tool.name"] = p.mcpToolName
 	}
 	if p.toolUseID != "" {
 		attributes["tool_use_id"] = p.toolUseID
