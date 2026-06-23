@@ -107,6 +107,8 @@ import { useDetectionRulesStore } from "./detection-rules-data";
 import { CelExpressionField } from "./cel-field";
 import { useCelStatus } from "./use-cel-status";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useRoutes } from "@/routes";
+import { useNavigate } from "react-router";
 import { PROMPT_POLICY_TEMPLATES } from "./prompt-policy-templates";
 
 /** Presidio-backed categories */
@@ -890,6 +892,8 @@ export default function PolicyCenter(): JSX.Element {
 function PolicyCenterContent() {
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
+  const routes = useRoutes();
+  const navigate = useNavigate();
   const { data, isLoading } = useRiskListPolicies();
   const nlEnabled = telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
 
@@ -1532,6 +1536,18 @@ function PolicyCenterContent() {
               >
                 Edit
               </DropdownMenuItem>
+              {row.kind === "risk" && (
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onSelect={() => {
+                    // Opens the Policy Detail View on the Evals tab (AGE-2704).
+                    const href = `${routes.policyDetail.href(row.policy.id)}?tab=evals`;
+                    setTimeout(() => void navigate(href), 0);
+                  }}
+                >
+                  View Evals
+                </DropdownMenuItem>
+              )}
               {row.kind === "risk" && (
                 <DropdownMenuItem
                   className="cursor-pointer"

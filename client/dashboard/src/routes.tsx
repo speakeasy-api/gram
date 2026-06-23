@@ -84,6 +84,7 @@ import RiskOverviewRulesIndex from "./pages/security/RiskOverviewRulesIndex";
 import RiskOverviewUserDetail from "./pages/security/RiskOverviewUserDetail";
 import RiskOverviewUsersIndex from "./pages/security/RiskOverviewUsersIndex";
 import PolicyCenter from "./pages/security/PolicyCenter";
+import PolicyDetail from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
@@ -512,6 +513,15 @@ const ROUTE_STRUCTURE = {
     url: "risk-policies",
     icon: "shield-check",
     component: PolicyCenter,
+  },
+  // Policy Detail View (AGE-2704). A standalone top-level route so it does not
+  // require PolicyCenter to become an Outlet-rendering layout. It is
+  // intentionally NOT registered in `useProjectNavRoutes` (the sidebar/command
+  // palette allowlist) — you reach it by drilling in from the policies list.
+  policyDetail: {
+    title: "Policy",
+    url: "risk-policies/:policyId",
+    component: PolicyDetail,
   },
   riskEvents: {
     title: "Risk Events",
