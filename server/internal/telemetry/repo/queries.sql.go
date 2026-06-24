@@ -1405,6 +1405,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 
 	sb := sq.Select(
 		groupExpr+" AS user_id",
+		"anyIf(user_email, user_email != '') AS user_email",
 
 		// Activity timestamps
 		"min(time_unix_nano) AS first_seen_unix_nano",

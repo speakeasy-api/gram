@@ -4682,6 +4682,7 @@ func unmarshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(v *Search
 func marshalTelemetryUserSummaryToUserSummaryResponseBody(v *telemetry.UserSummary) *UserSummaryResponseBody {
 	res := &UserSummaryResponseBody{
 		UserID:                   v.UserID,
+		UserEmail:                v.UserEmail,
 		FirstSeenUnixNano:        v.FirstSeenUnixNano,
 		LastSeenUnixNano:         v.LastSeenUnixNano,
 		TotalChats:               v.TotalChats,

@@ -48784,12 +48784,16 @@ components:
           type: integer
           description: Total number of tool calls
           format: int64
+        user_email:
+          type: string
+          description: User email associated with this usage, when present
         user_id:
           type: string
           description: User identifier (user_id or external_user_id depending on group_by)
       description: Aggregated usage summary for a single user
       required:
         - user_id
+        - user_email
         - first_seen_unix_nano
         - last_seen_unix_nano
         - total_chats
