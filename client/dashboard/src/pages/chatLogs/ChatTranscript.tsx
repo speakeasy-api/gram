@@ -336,12 +336,12 @@ function TurnHeader({
         <div
           className={cn(
             "flex items-center gap-3 pt-7 pb-5",
-            flagged ? "text-red-700" : "text-muted-foreground",
+            flagged ? "text-red-800" : "text-muted-foreground",
           )}
         >
           <ZigZagRule
             bold={flagged}
-            className={flagged ? "bg-red-700" : undefined}
+            className={flagged ? "bg-red-800" : undefined}
           />
           {flagged ? (
             <RiskBadge
@@ -349,7 +349,7 @@ function TurnHeader({
               trigger={
                 <button
                   type="button"
-                  className="inline-flex cursor-pointer items-center gap-1 font-mono text-sm font-semibold whitespace-nowrap text-red-700 uppercase"
+                  className="inline-flex cursor-pointer items-center gap-1 font-mono text-sm font-medium whitespace-nowrap text-red-800 uppercase"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {riskCount} {riskCount === 1 ? "risk" : "risks"}
@@ -364,7 +364,7 @@ function TurnHeader({
           )}
           <ZigZagRule
             bold={flagged}
-            className={flagged ? "bg-red-700" : undefined}
+            className={flagged ? "bg-red-800" : undefined}
           />
         </div>
       )}
