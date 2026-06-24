@@ -962,8 +962,21 @@ func newStartCommand() *cli.Command {
 					h.ServeHTTP(w, r)
 				})
 			})
+			// Drop client-supplied baggage on public routes before otelhttp
+			// extracts inbound trace context, so untrusted baggage never enters
+			// the request context.
+			mux.Use(middleware.DropInboundOTelBaggage)
 			mux.Use(func(h http.Handler) http.Handler {
-				return otelhttp.NewHandler(h, "http", otelhttp.WithServerName("gram"))
+				return otelhttp.NewHandler(h, "http",
+					otelhttp.WithServerName("gram"),
+					// Public MCP/OAuth routes are reachable by any third party, so
+					// their inbound trace context is potentially untrusted input.
+					// Treat them as OTel public endpoints: start a fresh root span
+					// and record the inbound context as a span link rather than
+					// adopting it as the parent. Trusted first-party routes (/rpc,
+					// /admin) keep parent-child continuity.
+					otelhttp.WithPublicEndpointFn(middleware.IsOTelPublicEndpoint),
+				)
 			})
 			mux.Use(middleware.RouteLabelerMiddleware)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
