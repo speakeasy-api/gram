@@ -4148,6 +4148,8 @@ type ChatSummaryResponseBody struct {
 type UserSummaryResponseBody struct {
 	// User identifier (user_id or external_user_id depending on group_by)
 	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// User email associated with this usage, when present
+	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
 	// Earliest activity timestamp in Unix nanoseconds
 	FirstSeenUnixNano string `form:"first_seen_unix_nano" json:"first_seen_unix_nano" xml:"first_seen_unix_nano"`
 	// Latest activity timestamp in Unix nanoseconds

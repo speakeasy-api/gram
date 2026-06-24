@@ -35,9 +35,12 @@ export function buildEmployees(
     summaries.map((summary) => [summary.userId, summary]),
   );
   const summaryByEmail = new Map(
-    summaries
-      .filter((summary) => summary.userId.includes("@"))
-      .map((summary) => [summary.userId.toLowerCase(), summary]),
+    summaries.flatMap((summary) => {
+      const emails = [summary.userEmail, summary.userId].filter((value) =>
+        value.includes("@"),
+      );
+      return emails.map((email) => [email.toLowerCase(), summary] as const);
+    }),
   );
   const matchedSummaryIds = new Set<string>();
 
@@ -79,10 +82,13 @@ export function buildEmployees(
     .filter((summary) => !matchedSummaryIds.has(summary.userId))
     .map((summary) => {
       const tokenCount = summary.totalInputTokens + summary.totalOutputTokens;
+      const email =
+        summary.userEmail ||
+        (summary.userId.includes("@") ? summary.userId : "");
       return {
         id: `usage:${summary.userId}`,
-        name: summary.userId,
-        email: summary.userId.includes("@") ? summary.userId : "",
+        name: email || summary.userId,
+        email,
         role: "-",
         status: "not_enrolled" as const,
         tokenCount,

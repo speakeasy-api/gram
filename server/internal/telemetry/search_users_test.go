@@ -267,6 +267,44 @@ func TestSearchUsers_FallsBackToUserEmail(t *testing.T) {
 	require.Equal(t, email, filtered.Users[0].UserID)
 }
 
+func TestSearchUsers_IncludesUserEmailWhenGroupedByOpaqueUserID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	userID := "01924a0eb409b0ecf44e06d0ec03cbc4"
+	email := "smartnews-user@example.com"
+	insertHookLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, email)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From: from,
+				To:   to,
+			},
+			UserType: "internal",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 1) {
+			return
+		}
+		assert.Equal(c, userID, res.Users[0].UserID)
+		assert.Equal(c, email, res.Users[0].UserEmail)
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
 func TestSearchUsers_Pagination(t *testing.T) {
 	t.Parallel()
 
@@ -784,6 +822,38 @@ func insertHookLogWithUser(t *testing.T, ctx context.Context, projectID, deploym
 		attributes["gram.external_user.id"] = externalUserID
 	}
 
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_deployment_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "hook event",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, deploymentID, "hooks:Bash", "gram-hooks")
+	require.NoError(t, err)
+}
+
+func insertHookLogWithUserAndEmail(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, userID, email string) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gram.event.source":       "hook",
+		"gram.hook.source":        "claude-code",
+		"gram.tool.name":          "Bash",
+		"gen_ai.tool.call.result": "ok",
+		"user.id":                 userID,
+		"user.email":              email,
+	}
 	attrsJSON, err := json.Marshal(attributes)
 	require.NoError(t, err)
 

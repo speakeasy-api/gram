@@ -439,6 +439,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		//nolint:gosec // Values are bounded counts that won't overflow int64
 		users[i] = &telem_gen.UserSummary{
 			UserID:                   item.UserID,
+			UserEmail:                item.UserEmail,
 			FirstSeenUnixNano:        strconv.FormatInt(item.FirstSeenUnixNano, 10),
 			LastSeenUnixNano:         strconv.FormatInt(item.LastSeenUnixNano, 10),
 			TotalChats:               int64(item.TotalChats),
