@@ -281,11 +281,6 @@ function OverviewTab({
         addSuffix: true,
       })
     : "-";
-  const manifestAt = tunnelledMcpServer?.manifestAt
-    ? formatDistanceToNow(new Date(tunnelledMcpServer.manifestAt), {
-        addSuffix: true,
-      })
-    : "-";
   const showLinkedCount = tunnelledMcpServer != null && !isLoadingMcpServers;
 
   return (
@@ -331,9 +326,6 @@ function OverviewTab({
             <SourceInfoRow label="Last seen">
               <Type className="text-sm">{lastSeenAt}</Type>
             </SourceInfoRow>
-            <SourceInfoRow label="Manifest">
-              <Type className="text-sm">{manifestAt}</Type>
-            </SourceInfoRow>
             <SourceInfoRow label="Created">
               <Type className="text-sm">{createdAt}</Type>
             </SourceInfoRow>
@@ -358,7 +350,6 @@ function OverviewTab({
 
         <div className="grid grid-cols-1 gap-6">
           <ConnectionsPanel server={tunnelledMcpServer} />
-          <ManifestPanel server={tunnelledMcpServer} />
         </div>
       </div>
     </div>
@@ -479,102 +470,6 @@ function ConnectionCard({
               <InfoPair key={key} label={key} value={value} mono />
             ))}
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ManifestPanel({ server }: { server: TunnelledMcpServer | undefined }) {
-  const tools = server?.manifest.tools ?? [];
-  const resources = server?.manifest.resources ?? [];
-
-  return (
-    <section className="rounded-lg border p-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <Heading variant="h4">Manifest Snapshot</Heading>
-          <Type muted small>
-            Last-known tools and resources from the tunnelled MCP server
-          </Type>
-        </div>
-        <div className="flex gap-2">
-          <Badge variant="neutral">
-            <Badge.Text>{tools.length} tools</Badge.Text>
-          </Badge>
-          <Badge variant="neutral">
-            <Badge.Text>{resources.length} resources</Badge.Text>
-          </Badge>
-        </div>
-      </div>
-
-      {tools.length === 0 && resources.length === 0 ? (
-        <div className="rounded-md border border-dashed p-6 text-center">
-          <Type muted>No manifest captured yet.</Type>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <ManifestList
-            title="Tools"
-            empty="No tools advertised"
-            items={tools.map((tool) => ({
-              key: tool.name,
-              title: tool.name,
-              description: tool.description,
-            }))}
-          />
-          <ManifestList
-            title="Resources"
-            empty="No resources advertised"
-            items={resources.map((resource) => ({
-              key: resource.uri,
-              title: resource.name || resource.uri,
-              description: resource.uri,
-            }))}
-          />
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ManifestList({
-  title,
-  empty,
-  items,
-}: {
-  title: string;
-  empty: string;
-  items: Array<{ key: string; title: string; description?: string }>;
-}) {
-  return (
-    <div>
-      <Type variant="subheading" className="mb-2">
-        {title}
-      </Type>
-      {items.length === 0 ? (
-        <Type muted small>
-          {empty}
-        </Type>
-      ) : (
-        <div className="space-y-2">
-          {items.slice(0, 6).map((item) => (
-            <div key={item.key} className="rounded-md border px-3 py-2">
-              <Type small className="font-medium">
-                {item.title}
-              </Type>
-              {item.description && (
-                <Type muted small className="mt-1 line-clamp-2">
-                  {item.description}
-                </Type>
-              )}
-            </div>
-          ))}
-          {items.length > 6 && (
-            <Type muted small>
-              +{items.length - 6} more
-            </Type>
-          )}
         </div>
       )}
     </div>
@@ -906,7 +801,7 @@ metadata:
   name: gram-tunnel-key
 type: Opaque
 stringData:
-  GRAM_TUNNEL_KEY: ${yamlQuote(renderedKey)}
+  TUNNEL_KEY: ${yamlQuote(renderedKey)}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -939,20 +834,20 @@ spec:
         - name: tunnel-agent
           image: ghcr.io/speakeasy-api/gram-tunnel-agent:latest
           env:
-            - name: GRAM_TUNNEL_KEY
+            - name: TUNNEL_KEY
               valueFrom:
                 secretKeyRef:
                   name: gram-tunnel-key
-                  key: GRAM_TUNNEL_KEY
-            - name: GRAM_TUNNEL_UPSTREAM
+                  key: TUNNEL_KEY
+            - name: TUNNEL_LOCAL_MCP_URL
               value: ${yamlQuote(clusterUpstream)}
-            - name: GRAM_TUNNEL_ENDPOINT
+            - name: TUNNEL_GATEWAY_URL
               value: ${yamlQuote(gateway)}
-            - name: GRAM_MCP_SERVICE_ID
+            - name: TUNNEL_SERVICE_ID
               value: ${yamlQuote(serviceId)}
-            - name: GRAM_MCP_SERVICE_SLUG
+            - name: TUNNEL_SERVICE_SLUG
               value: ${yamlQuote(slug)}
-            - name: GRAM_MCP_SERVICE_VERSION
+            - name: TUNNEL_SERVICE_VERSION
               value: ${yamlQuote(serviceVersion)}
       volumes:
         - name: hello-world-mcp
@@ -985,19 +880,20 @@ docker run -d --rm --name hello-world-mcp-${slug} \\
 
 docker run --rm --name gram-tunnel-${slug} \\
   --network gram-tunnel-${slug} \\
-  -e GRAM_TUNNEL_KEY=${shellQuote(renderedKey)} \\
-  -e GRAM_TUNNEL_UPSTREAM=${shellQuote(dockerUpstream)} \\
-  -e GRAM_TUNNEL_ENDPOINT=${shellQuote(gateway)} \\
-  -e GRAM_MCP_SERVICE_ID=${shellQuote(serviceId)} \\
-  -e GRAM_MCP_SERVICE_SLUG=${shellQuote(slug)} \\
-  -e GRAM_MCP_SERVICE_VERSION=${shellQuote(serviceVersion)} \\
+  -e TUNNEL_KEY=${shellQuote(renderedKey)} \\
+  -e TUNNEL_LOCAL_MCP_URL=${shellQuote(dockerUpstream)} \\
+  -e TUNNEL_GATEWAY_URL=${shellQuote(gateway)} \\
+  -e TUNNEL_SERVICE_ID=${shellQuote(serviceId)} \\
+  -e TUNNEL_SERVICE_SLUG=${shellQuote(slug)} \\
+  -e TUNNEL_SERVICE_VERSION=${shellQuote(serviceVersion)} \\
   ghcr.io/speakeasy-api/gram-tunnel-agent:latest`;
-  const cli = `gram tunnel run \\
-  --key ${shellQuote(renderedKey)} \\
-  --upstream ${upstream} \\
-  --service-id ${shellQuote(serviceId)} \\
-  --service-slug ${shellQuote(slug)} \\
-  --service-version ${shellQuote(serviceVersion)}`;
+  const cli = `TUNNEL_GATEWAY_URL=${shellQuote(gateway)} \\
+TUNNEL_KEY=${shellQuote(renderedKey)} \\
+TUNNEL_LOCAL_MCP_URL=${shellQuote(upstream)} \\
+TUNNEL_SERVICE_ID=${shellQuote(serviceId)} \\
+TUNNEL_SERVICE_SLUG=${shellQuote(slug)} \\
+TUNNEL_SERVICE_VERSION=${shellQuote(serviceVersion)} \\
+gram tunnel run`;
 
   return (
     <div className="rounded-lg border p-6">
@@ -1068,22 +964,22 @@ function RequiredTunnelIdentity({
 }) {
   const fields = [
     {
-      key: "GRAM_MCP_SERVICE_ID",
+      key: "TUNNEL_SERVICE_ID",
       value: serviceId,
       description: "Stable ID for the MCP service behind this tunnel.",
     },
     {
-      key: "GRAM_MCP_SERVICE_SLUG",
+      key: "TUNNEL_SERVICE_SLUG",
       value: serviceSlug,
       description: "Readable slug reported by each tunnel connection.",
     },
     {
-      key: "GRAM_MCP_SERVICE_VERSION",
+      key: "TUNNEL_SERVICE_VERSION",
       value: serviceVersion,
-      description: "Version of the MCP service whose manifest is uploaded.",
+      description: "Version of the MCP service behind this tunnel.",
     },
     {
-      key: "GRAM_TUNNEL_UPSTREAM",
+      key: "TUNNEL_LOCAL_MCP_URL",
       value: upstream,
       description: "Local Streamable HTTP endpoint the agent proxies to.",
     },
@@ -1096,9 +992,8 @@ function RequiredTunnelIdentity({
       </Type>
       <Type muted small className="mb-3 max-w-3xl">
         Each tunnel connection declares the same MCP service identity before it
-        registers a manifest. Gram uses this to compare connected agents,
-        surface service versions, and preserve session affinity for MCP
-        consumers.
+        connects. Gram uses this to compare connected agents, surface service
+        versions, and preserve session affinity for MCP consumers.
       </Type>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {fields.map((field) => (
