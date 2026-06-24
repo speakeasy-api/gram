@@ -164,6 +164,55 @@ export function highlightMatches(
   return nodes;
 }
 
+/** Browser-find style yellow wash for a search-query hit. The active match (the
+ * row the user has navigated to) is bright; every other match is pale so the
+ * current one stands out. (Search and risk are mutually exclusive modes, so
+ * sharing the yellow family is unambiguous.) */
+const SEARCH_MARK_ACTIVE =
+  "rounded-sm bg-yellow-300/70 px-0.5 text-foreground ring-1 ring-yellow-500/40";
+const SEARCH_MARK_INACTIVE =
+  "rounded-sm bg-yellow-200/30 px-0.5 text-foreground ring-1 ring-yellow-400/20";
+
+/** Wrap every case-insensitive occurrence of `query` in `text` with the search
+ * highlight, preserving the text's original casing. Case-insensitive because the
+ * server matches with ILIKE, so a "foo" query must also highlight "Foo"/"FOO" —
+ * unlike the risk highlighter, which matches an exact flagged substring. */
+export function highlightQuery(
+  text: string,
+  query: string,
+  active = true,
+): ReactNode {
+  const q = query.trim();
+  if (!q) return text;
+  // Match case-insensitively over the ORIGINAL text so indices stay aligned —
+  // lowercasing the haystack can change its length (e.g. some Unicode folds), so
+  // slicing the original by lowered offsets would mis-highlight. Escape regex
+  // metacharacters since the query is arbitrary user text.
+  const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+  const markClass = active ? SEARCH_MARK_ACTIVE : SEARCH_MARK_INACTIVE;
+  const nodes: ReactNode[] = [];
+  let pos = 0;
+  let k = 0;
+  for (let m = re.exec(text); m !== null; m = re.exec(text)) {
+    const start = m.index;
+    const end = start + m[0].length;
+    if (m[0].length === 0) {
+      re.lastIndex++; // defensive: never loop on a zero-length match
+      continue;
+    }
+    if (start > pos) nodes.push(text.slice(pos, start));
+    nodes.push(
+      <mark key={k++} className={markClass}>
+        {text.slice(start, end)}
+      </mark>,
+    );
+    pos = end;
+  }
+  if (pos === 0) return text; // no occurrence
+  if (pos < text.length) nodes.push(text.slice(pos));
+  return nodes;
+}
+
 export function findingToExclusionState(
   result: RiskResult,
 ): ExclusionSheetState {

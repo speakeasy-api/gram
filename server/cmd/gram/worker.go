@@ -585,7 +585,9 @@ func newWorkerCommand() *cli.Command {
 				30*time.Second,
 				logger,
 			)
-			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
+			// riskSignaler.Shutdown is flushed synchronously after temporalWorker.Run
+			// returns (below), not via shutdownFuncs, to avoid racing the concurrent
+			// temporalClient.Close() over the same gRPC connection.
 			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger))
 
 			completionsClient := openrouter.NewUnifiedClient(
@@ -786,7 +788,22 @@ func newWorkerCommand() *cli.Command {
 				Publishers:                     publishers,
 			})
 
-			return temporalWorker.Run(worker.InterruptCh())
+			// Flush the throttle's queued trailing risk signals before this Action
+			// returns, while the Temporal client is still open. The cli After hook runs
+			// runShutdown, which closes the client concurrently across shutdownFuncs and
+			// would otherwise race the flush ("grpc: the client connection is closing").
+			// riskSignaler.Shutdown is deliberately not registered as a shutdownFunc.
+			defer func() {
+				if ferr := riskSignaler.Shutdown(ctx); ferr != nil {
+					logger.ErrorContext(ctx, "flush pending risk signals", attr.SlogError(ferr))
+				}
+			}()
+
+			if err := temporalWorker.Run(worker.InterruptCh()); err != nil {
+				return fmt.Errorf("run temporal worker: %w", err)
+			}
+
+			return nil
 		},
 		Before: func(ctx *cli.Context) error {
 			return loadConfigFromFile(ctx, flags)

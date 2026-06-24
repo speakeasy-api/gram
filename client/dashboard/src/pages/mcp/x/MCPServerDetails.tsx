@@ -51,6 +51,7 @@ import {
   isLegacyAuthenticationTabPath,
   type TabValue,
 } from "./MCPServerDetailsRouting";
+import { AnalyticsTab } from "./tabs/AnalyticsTab";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { ToolsTab } from "./tabs/ToolsTab";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
@@ -67,6 +68,8 @@ function mcpServerTabHref(
       return routes.mcp.x.overview.href(mcpServerSlug);
     case "tools":
       return routes.mcp.x.tools.href(mcpServerSlug);
+    case "analytics":
+      return routes.mcp.x.analytics.href(mcpServerSlug);
     case "team-access":
       return routes.mcp.x.teamAccess.href(mcpServerSlug);
     case "settings":
@@ -178,6 +181,11 @@ export default function MCPServerDetails(): JSX.Element {
                     Tools
                   </Link>
                 </PageTabsTrigger>
+                <PageTabsTrigger value="analytics" asChild>
+                  <Link to={mcpServerTabHref(routes, idOrSlug, "analytics")}>
+                    Analytics
+                  </Link>
+                </PageTabsTrigger>
                 {isRbacEnabled && (
                   <PageTabsTrigger value="team-access" asChild>
                     <Link
@@ -220,6 +228,13 @@ export default function MCPServerDetails(): JSX.Element {
                 isLoadingEndpoints={isLoadingEndpoints}
               />
             )}
+          </TabsContent>
+
+          <TabsContent
+            value="analytics"
+            className="mt-0 w-full data-[state=inactive]:hidden"
+          >
+            <AnalyticsTab mcpServer={mcpServer} />
           </TabsContent>
 
           {isRbacEnabled && mcpServer && (

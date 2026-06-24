@@ -253,6 +253,13 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	search := conv.PtrValOr(payload.Search, "")
 	assistantID := conv.PtrValOr(payload.AssistantID, "")
 	hasRiskFilter := conv.PtrValOr(payload.HasRisk, "")
+	// -1 is the "no threshold" sentinel: the queries short-circuit to "show all"
+	// on a negative bound. A real bound N keeps chats with at least N findings
+	// (inclusive), matching the "Min risk score" control.
+	minRiskScore := int32(-1)
+	if payload.MinRiskScore != nil {
+		minRiskScore = conv.SafeInt32(*payload.MinRiskScore)
+	}
 
 	// Payload filters only apply for org admins and the managed-assistant runtime.
 	var externalUserID, userID string
@@ -277,6 +284,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		Search:         search,
 		AssistantID:    assistantID,
 		HasRiskFilter:  hasRiskFilter,
+		MinRiskScore:   minRiskScore,
 	}
 
 	total, err := s.repo.CountChats(ctx, baseParams)
@@ -293,6 +301,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		Search:         baseParams.Search,
 		AssistantID:    baseParams.AssistantID,
 		HasRiskFilter:  baseParams.HasRiskFilter,
+		MinRiskScore:   baseParams.MinRiskScore,
 		SortBy:         payload.SortBy,
 		SortOrder:      payload.SortOrder,
 		PageLimit:      conv.SafeInt32(payload.Limit),
@@ -395,17 +404,30 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		hasMoreBefore  bool
 		hasMoreAfter   bool
 		riskSegments   []*gen.RiskSegment
+		matchSegments  []*gen.RiskSegment
+		matchSeqs      []int64
 		// latestPageRows holds the repo rows of the initial newest page so we can
 		// infer the chat source from them; only populated on that first request.
 		latestPageRows []repo.ChatMessage
 	)
 
-	// The initial request (latest generation, no cursors, not risk-only) is the
-	// only one that carries source inference and ClickHouse/Claude enrichment:
-	// the dashboard consumes those once from the first page, and they depend on
-	// the most recent messages which that page contains.
+	// query enables the search-windowed view; it's mutually exclusive with the
+	// risk-only view. Trim so a whitespace-only query is treated as no query.
+	queryStr := ""
+	if payload.Query != nil {
+		queryStr = strings.TrimSpace(*payload.Query)
+	}
+	if queryStr != "" && payload.RiskOnly {
+		return nil, oops.E(oops.CodeInvalid, nil, "query and risk_only are mutually exclusive")
+	}
+
+	// The initial request (latest generation, no cursors, not risk-only, not a
+	// search) is the only one that carries source inference and ClickHouse/Claude
+	// enrichment: the dashboard consumes those once from the first page, and they
+	// depend on the most recent messages which that page contains.
 	isInitialLatest := generation == maxGeneration &&
-		payload.BeforeSeq == nil && payload.AfterSeq == nil && !payload.RiskOnly
+		payload.BeforeSeq == nil && payload.AfterSeq == nil &&
+		!payload.RiskOnly && queryStr == ""
 
 	switch {
 	case payload.RiskOnly:
@@ -442,6 +464,53 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if len(riskSegments) > 0 {
 			hasMoreBefore = riskSegments[0].HasMoreBefore
 			hasMoreAfter = riskSegments[len(riskSegments)-1].HasMoreAfter
+		}
+
+	case queryStr != "":
+		// Search view: messages matching the query plus a fixed context window,
+		// grouped into contiguous segments — same windowing as risk-only. Cursors
+		// are ignored on this initial request; the dashboard expands segments with
+		// plain before_seq/after_seq follow-ups. Message construction mirrors the
+		// risk_only branch above.
+		rows, err := s.repo.ListSearchWindowedMessages(ctx, repo.ListSearchWindowedMessagesParams{
+			ContextSize: searchContextWindow,
+			ProjectID:   *authCtx.ProjectID,
+			ChatID:      chat.ID,
+			Generation:  generation,
+			Query:       queryStr,
+			MatchLimit:  searchMatchLimit,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load search-windowed messages").LogError(ctx, s.logger)
+		}
+		resultMessages = make([]*gen.ChatMessage, len(rows))
+		matchSeqs = make([]int64, 0, len(rows))
+		for i := range rows {
+			r := rows[i]
+			toolCalls := string(r.ToolCalls)
+			resultMessages[i] = &gen.ChatMessage{
+				ID:             r.ID.String(),
+				Seq:            r.Seq,
+				Role:           r.Role,
+				Model:          r.Model.String,
+				UserID:         &r.UserID.String,
+				ExternalUserID: &r.ExternalUserID.String,
+				Content:        s.loadMessageContentFields(ctx, r.ChatID, r.Content, r.ContentRaw, r.ContentAssetUrl),
+				ToolCalls:      &toolCalls,
+				ToolCallID:     &r.ToolCallID.String,
+				FinishReason:   &r.FinishReason.String,
+				PromptID:       conv.FromPGText[string](r.MessageID),
+				CreatedAt:      r.CreatedAt.Time.Format(time.RFC3339),
+				Generation:     int(r.Generation),
+			}
+			if r.IsMatch {
+				matchSeqs = append(matchSeqs, r.Seq)
+			}
+		}
+		matchSegments = buildSearchSegments(rows)
+		if len(matchSegments) > 0 {
+			hasMoreBefore = matchSegments[0].HasMoreBefore
+			hasMoreAfter = matchSegments[len(matchSegments)-1].HasMoreAfter
 		}
 
 	case payload.AfterSeq != nil:
@@ -580,6 +649,8 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		HasMoreBefore:        hasMoreBefore,
 		HasMoreAfter:         hasMoreAfter,
 		RiskSegments:         riskSegments,
+		MatchSegments:        matchSegments,
+		MatchSeqs:            matchSeqs,
 		Totals: &gen.ChatTotals{
 			Total:             totals.Total,
 			UserMessages:      totals.UserMessages,
@@ -1325,27 +1396,43 @@ func (s *Service) buildGenMessage(ctx context.Context, m repo.ChatMessage) *gen.
 // carrying its 1-based ordinal rn within the generation and the generation
 // total) into contiguous segments. A break in rn starts a new segment;
 // has_more_before/after mark whether earlier/later messages remain to expand.
-func buildRiskSegments(rows []repo.ListRiskWindowedMessagesRow) []*gen.RiskSegment {
+// foldWindowSegments folds windowed rows (ordinal rn ascending; contiguous rn
+// within a segment) into [first_seq,last_seq] segments carrying edge has_more
+// flags. Shared by the risk-only and query-search windowed views, which return
+// different row types but identical (rn, total, seq) windowing columns.
+func foldWindowSegments(n int, at func(i int) (rn, total, seq int64)) []*gen.RiskSegment {
 	var segments []*gen.RiskSegment
 	var cur *gen.RiskSegment
 	var prevRn int64
-	for i := range rows {
-		r := rows[i]
-		if cur == nil || r.Rn != prevRn+1 {
+	for i := range n {
+		rn, total, seq := at(i)
+		if cur == nil || rn != prevRn+1 {
 			cur = &gen.RiskSegment{
-				FirstSeq:      r.Seq,
-				LastSeq:       r.Seq,
-				HasMoreBefore: r.Rn > 1,
-				HasMoreAfter:  r.Rn < r.Total,
+				FirstSeq:      seq,
+				LastSeq:       seq,
+				HasMoreBefore: rn > 1,
+				HasMoreAfter:  rn < total,
 			}
 			segments = append(segments, cur)
 		} else {
-			cur.LastSeq = r.Seq
-			cur.HasMoreAfter = r.Rn < r.Total
+			cur.LastSeq = seq
+			cur.HasMoreAfter = rn < total
 		}
-		prevRn = r.Rn
+		prevRn = rn
 	}
 	return segments
+}
+
+func buildRiskSegments(rows []repo.ListRiskWindowedMessagesRow) []*gen.RiskSegment {
+	return foldWindowSegments(len(rows), func(i int) (int64, int64, int64) {
+		return rows[i].Rn, rows[i].Total, rows[i].Seq
+	})
+}
+
+func buildSearchSegments(rows []repo.ListSearchWindowedMessagesRow) []*gen.RiskSegment {
+	return foldWindowSegments(len(rows), func(i int) (int64, int64, int64) {
+		return rows[i].Rn, rows[i].Total, rows[i].Seq
+	})
 }
 
 type chatMessageRow struct {
@@ -1392,6 +1479,14 @@ const (
 	// riskContextWindow is how many surrounding messages (by ordinal position) to
 	// include on each side of a risk finding in the risk-only view.
 	riskContextWindow = 5
+
+	// searchContextWindow is how many surrounding messages (by ordinal position)
+	// to include on each side of a query match in the search-windowed view.
+	searchContextWindow = 5
+
+	// searchMatchLimit caps how many seed matches the search-windowed view returns
+	// (earliest first by ordinal), bounding the response on broad queries.
+	searchMatchLimit = 200
 
 	// maxConcurrentChatAssetWork bounds parallelism for the per-batch marshal
 	// and asset-upload phases in storeMessages, capping goroutines, memory,

@@ -203,7 +203,7 @@ export async function autoConfigureRemoteMcpAuth({
     await client.remoteSessionClients.create({
       createRemoteSessionClientForm: {
         remoteSessionIssuerId: remoteSessionIssuer.id,
-        userSessionIssuerId,
+        userSessionIssuerIds: [userSessionIssuerId],
         clientId: registered.clientId,
         clientSecret: registered.clientSecret || undefined,
         tokenEndpointAuthMethod:

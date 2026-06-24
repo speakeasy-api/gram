@@ -216,9 +216,23 @@ ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
 DO NOTHING;
 
 -- name: CountChats :one
-WITH candidate_chats AS (
+-- risk_counts pre-aggregates active findings per chat once for the whole
+-- project (one pass over risk_results), so the risk presence + threshold
+-- filters become a cheap join instead of a correlated subquery per chat.
+WITH risk_counts AS (
+  SELECT cm.chat_id, COUNT(*)::integer AS cnt
+  FROM risk_results rr
+  JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  WHERE rr.project_id = @project_id
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+  GROUP BY cm.chat_id
+),
+candidate_chats AS (
   SELECT c.id, c.created_at
   FROM chats c
+  LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
@@ -240,28 +254,12 @@ WITH candidate_chats AS (
     )
     AND (
       @has_risk_filter::text = ''
-      OR (
-        @has_risk_filter::text = 'true' AND EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
-      OR (
-        @has_risk_filter::text = 'false' AND NOT EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
+      OR (@has_risk_filter::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR (@has_risk_filter::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+    )
+    AND (
+      @min_risk_score::int < 0
+      OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
     )
 ),
 chat_activity AS (
@@ -278,15 +276,31 @@ WHERE (@from_time::timestamptz IS NULL OR ca.last_message_timestamp >= @from_tim
   AND (@to_time::timestamptz IS NULL OR ca.last_message_timestamp <= @to_time);
 
 -- name: ListChats :many
-WITH candidate_chats AS (
+-- risk_counts pre-aggregates active findings per chat once for the whole
+-- project (one pass over risk_results). It feeds both the risk presence +
+-- threshold filters and the risk_findings_count column below, replacing what
+-- were two correlated subqueries per candidate chat.
+WITH risk_counts AS (
+  SELECT cm.chat_id, COUNT(*)::integer AS cnt
+  FROM risk_results rr
+  JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  WHERE rr.project_id = @project_id
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+  GROUP BY cm.chat_id
+),
+candidate_chats AS (
   SELECT
     c.id,
     c.title,
     c.user_id,
     c.external_user_id,
     c.created_at,
-    c.updated_at
+    c.updated_at,
+    COALESCE(rc.cnt, 0) AS risk_findings_count
   FROM chats c
+  LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
@@ -308,28 +322,12 @@ WITH candidate_chats AS (
     )
     AND (
       @has_risk_filter::text = ''
-      OR (
-        @has_risk_filter::text = 'true' AND EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
-      OR (
-        @has_risk_filter::text = 'false' AND NOT EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
+      OR (@has_risk_filter::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR (@has_risk_filter::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+    )
+    AND (
+      @min_risk_score::int < 0
+      OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
     )
 ),
 chat_stats AS (
@@ -351,16 +349,7 @@ filtered_chats AS (
     cc.updated_at,
     cs.num_messages,
     cs.last_message_timestamp,
-    (
-      SELECT COUNT(*)::integer
-      FROM risk_results rr
-      JOIN chat_messages cm ON cm.id = rr.chat_message_id
-      WHERE cm.chat_id = cc.id
-        AND rr.project_id = @project_id
-        AND rr.found IS TRUE
-        AND rr.excluded_at IS NULL
-        AND rr.false_positive_at IS NULL
-    ) AS risk_findings_count
+    cc.risk_findings_count
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
   WHERE (@from_time::timestamptz IS NULL OR cs.last_message_timestamp >= @from_time)
@@ -557,6 +546,45 @@ FROM ordered o
 WHERE EXISTS (
   SELECT 1 FROM risk_rns r
   WHERE o.rn BETWEEN r.rn - @context_size::bigint AND r.rn + @context_size::bigint
+)
+ORDER BY o.seq ASC;
+
+-- name: ListSearchWindowedMessages :many
+-- Query-search view: same windowing as ListRiskWindowedMessages, but the seed
+-- rows are messages whose searchable text matches @query (case-insensitive
+-- substring over the narrative content, the tool-call name/arguments JSON, and
+-- any structured/multimodal content) instead of messages with a risk finding.
+-- Each match is padded with +/- @context_size ordinal positions. rn/total drive
+-- segment folding and the has_more flags; is_match flags the seed rows so the
+-- caller can return the explicit jump-to-match seq list (context rows are
+-- is_match = false). Seed matches are capped at @match_limit (earliest first by
+-- ordinal) to bound the response on broad queries. Asset-offloaded content (too
+-- large to store inline) is not searchable here.
+WITH ordered AS (
+  SELECT
+    cm.*,
+    row_number() OVER (ORDER BY cm.seq) AS rn,
+    count(*) OVER () AS total
+  FROM chat_messages cm
+  WHERE cm.chat_id = @chat_id
+    AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+    AND cm.generation = @generation::integer
+),
+match_rns AS (
+  SELECT o.rn FROM ordered o
+  WHERE o.content ILIKE '%' || @query::text || '%'
+     OR (o.tool_calls IS NOT NULL AND o.tool_calls::text ILIKE '%' || @query::text || '%')
+     OR (o.content_raw IS NOT NULL AND o.content_raw::text ILIKE '%' || @query::text || '%')
+  ORDER BY o.rn
+  LIMIT @match_limit::integer
+)
+SELECT
+  o.*,
+  EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn) AS is_match
+FROM ordered o
+WHERE EXISTS (
+  SELECT 1 FROM match_rns m
+  WHERE o.rn BETWEEN m.rn - @context_size::bigint AND m.rn + @context_size::bigint
 )
 ORDER BY o.seq ASC;
 
@@ -865,6 +893,13 @@ RETURNING id;
 -- instead of relying on wall-clock gaps between inserts.
 INSERT INTO chat_messages (chat_id, project_id, role, content, created_at)
 VALUES (@chat_id, @project_id, 'user', 'test message', COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
+RETURNING id;
+
+-- name: SeedChatMessageContent :one
+-- Test fixture: insert a user chat message with explicit content and return its
+-- id, for exercising the text-search windowed view.
+INSERT INTO chat_messages (chat_id, project_id, role, content)
+VALUES (@chat_id, @project_id, 'user', @content)
 RETURNING id;
 
 -- name: SeedRiskPolicy :one

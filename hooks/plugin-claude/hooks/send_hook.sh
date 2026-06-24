@@ -39,7 +39,12 @@ cleanup_auth_config() {
 }
 trap cleanup_auth_config EXIT
 if [ -n "${GRAM_HOOKS_API_KEY:-}" ] || [ -n "${GRAM_HOOKS_PROJECT_SLUG:-}" ]; then
-  auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX") || exit 2
+  if ! auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX"); then
+    # Fail closed (exit 2) like every other failure path, but say why —
+    # otherwise Claude shows a blocked tool call with an empty reason.
+    echo "Speakeasy hooks: could not create a temporary auth file on this machine, so the tool call was blocked. Check that ${TMPDIR:-/tmp} is writable." >&2
+    exit 2
+  fi
   chmod 600 "$auth_config" || true
   if [ -n "${GRAM_HOOKS_API_KEY:-}" ]; then
     printf 'header = "Gram-Key: %s"\n' "$GRAM_HOOKS_API_KEY" >>"$auth_config"
@@ -62,10 +67,13 @@ body="$GRAM_HTTP_BODY"
 # Forward the body to stdout so Claude can read PreToolUse decisions from it.
 echo "$body"
 
-# Only treat real 2xx/3xx as allow. curl returns 000 on connection failure,
-# DNS error, or timeout — that must NOT silently allow the call, otherwise
-# blocking policies are bypassed any time the Gram server is unreachable.
-if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 400 ] 2>/dev/null; then
+# Only treat a real 2xx as allow. curl returns 000 on connection failure, DNS
+# error, or timeout, and a 3xx (e.g. an http->https redirect, which curl does
+# not follow here) carries no decision body — neither must silently allow the
+# call, otherwise blocking policies are bypassed when the server is unreachable
+# or misconfigured. The 2>/dev/null guards keep a non-numeric code from leaking
+# a shell error before we fall through to the block path below.
+if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
   exit 0
 fi
 

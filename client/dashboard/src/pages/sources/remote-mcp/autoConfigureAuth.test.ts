@@ -55,7 +55,7 @@ describe("autoConfigureRemoteMcpAuth", () => {
     expect(client.remoteSessionClients.create).toHaveBeenCalledWith({
       createRemoteSessionClientForm: expect.objectContaining({
         remoteSessionIssuerId: "created-issuer",
-        userSessionIssuerId: "server-usi",
+        userSessionIssuerIds: ["server-usi"],
         clientId: "client-from-dcr",
         clientSecret: "secret-from-dcr",
         tokenEndpointAuthMethod: "client_secret_post",
@@ -103,7 +103,7 @@ describe("autoConfigureRemoteMcpAuth", () => {
     expect(client.remoteSessionClients.create).toHaveBeenCalledWith({
       createRemoteSessionClientForm: expect.objectContaining({
         remoteSessionIssuerId: "project-issuer",
-        userSessionIssuerId: "server-usi",
+        userSessionIssuerIds: ["server-usi"],
         clientId: "client-from-dcr",
         clientSecret: "secret-from-dcr",
         tokenEndpointAuthMethod: "client_secret_post",
@@ -142,7 +142,7 @@ describe("autoConfigureRemoteMcpAuth", () => {
     expect(client.remoteSessionClients.create).toHaveBeenCalledWith({
       createRemoteSessionClientForm: expect.objectContaining({
         remoteSessionIssuerId: "created-issuer",
-        userSessionIssuerId: "server-usi",
+        userSessionIssuerIds: ["server-usi"],
       }),
     });
   });

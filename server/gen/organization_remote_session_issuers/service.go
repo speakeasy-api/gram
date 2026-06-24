@@ -408,8 +408,6 @@ type UpdateClientPayload struct {
 	// Rotate the client secret. Gram re-encrypts before persisting; the plaintext
 	// is never returned.
 	ClientSecret *string
-	// Re-pair with a different user_session_issuer.
-	UserSessionIssuerID *string
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string
 	// Replace the explicit upstream OAuth scopes for this client.

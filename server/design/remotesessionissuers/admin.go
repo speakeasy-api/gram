@@ -146,9 +146,6 @@ var UpdateOrganizationRemoteSessionClientForm = Type("UpdateOrganizationRemoteSe
 		Format(FormatUUID)
 	})
 	Attribute("client_secret", String, "Rotate the client secret. Gram re-encrypts before persisting; the plaintext is never returned.")
-	Attribute("user_session_issuer_id", String, "Re-pair with a different user_session_issuer.", func() {
-		Format(FormatUUID)
-	})
 	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", func() {
 		Enum("client_secret_basic", "client_secret_post", "none")
 	})

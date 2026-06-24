@@ -265,6 +265,28 @@ func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallU
 	ctx, span := p.tracer.Start(ctx, "polar_client.track_tool_call_usage")
 	defer span.End()
 
+	metadata := toolCallUsageMetadata(event)
+
+	_, err := p.polar.Events.Ingest(ctx, polarComponents.EventsIngest{
+		Events: []polarComponents.Events{
+			{
+				Type: polarComponents.EventsTypeEventCreateExternalCustomer,
+				EventCreateExternalCustomer: &polarComponents.EventCreateExternalCustomer{
+					ExternalCustomerID: event.OrganizationID,
+					Name:               "tool-call",
+					Metadata:           metadata,
+				},
+			},
+		},
+	})
+
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		p.logger.ErrorContext(ctx, "failed to ingest usage event to Polar", attr.SlogError(err))
+	}
+}
+
+func toolCallUsageMetadata(event billing.ToolCallUsageEvent) map[string]polarComponents.EventMetadataInput {
 	totalBytes := event.RequestBytes + event.OutputBytes
 	typeStr := string(event.Type)
 
@@ -278,18 +300,24 @@ func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallU
 		"total_bytes": {
 			Integer: &totalBytes,
 		},
-		"tool_urn": {
-			Str: &event.ToolURN,
-		},
-		"tool_name": {
-			Str: &event.ToolName,
-		},
 		"project_id": {
 			Str: &event.ProjectID,
 		},
 		"type": {
 			Str: &typeStr,
 		},
+	}
+
+	if event.ToolURN != "" {
+		metadata["tool_urn"] = polarComponents.EventMetadataInput{
+			Str: &event.ToolURN,
+		}
+	}
+
+	if event.ToolName != "" {
+		metadata["tool_name"] = polarComponents.EventMetadataInput{
+			Str: &event.ToolName,
+		}
 	}
 
 	if event.ResourceURI != "" {
@@ -346,23 +374,7 @@ func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallU
 		}
 	}
 
-	_, err := p.polar.Events.Ingest(ctx, polarComponents.EventsIngest{
-		Events: []polarComponents.Events{
-			{
-				Type: polarComponents.EventsTypeEventCreateExternalCustomer,
-				EventCreateExternalCustomer: &polarComponents.EventCreateExternalCustomer{
-					ExternalCustomerID: event.OrganizationID,
-					Name:               "tool-call",
-					Metadata:           metadata,
-				},
-			},
-		},
-	})
-
-	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		p.logger.ErrorContext(ctx, "failed to ingest usage event to Polar", attr.SlogError(err))
-	}
+	return metadata
 }
 
 func (p *Client) TrackPromptCallUsage(ctx context.Context, event billing.PromptCallUsageEvent) {

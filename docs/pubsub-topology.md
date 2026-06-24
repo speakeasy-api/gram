@@ -32,9 +32,9 @@ flowchart LR
   p1 --> t_gram_risk_v1_finding
   p2[/"📤<br/>server/internal/gitleaks/handler.go"/]:::go
   p2 --> t_gram_risk_v1_finding
-  p3[/"📤<br/>server/internal/background/activities/risk_analysis/analyze_batch.go"/]:::go
+  p3[/"📤<br/>server/internal/background/activities/risk_analysis/scan_gitleaks.go"/]:::go
   p3 --> t_gram_risk_v1_gitleaks_analysis
-  p4[/"📤<br/>server/internal/background/activities/risk_analysis/analyze_batch.go"/]:::go
+  p4[/"📤<br/>server/internal/background/activities/risk_analysis/scan_presidio.go"/]:::go
   p4 --> t_gram_risk_v1_presidio_analysis
   t_gram_ping_v2_message --> s_gram_ping_v2_processor
   s_gram_ping_v2_processor -. dead-letter .-> t_gram_ping_v2_processor_dlq
@@ -60,8 +60,8 @@ flowchart LR
 | [`gram-ping-v2-processor-dlq`](../infra/proto/gram/ping/v2/processor.proto)             | DLQ   | —         | —                                                                                                                                                                           |
 | [`gram-ping-v2-py-processor-dlq`](../infra/proto/gram/ping/v2/processor.proto)          | DLQ   | —         | —                                                                                                                                                                           |
 | [`gram-risk-v1-finding`](../infra/proto/gram/risk/v1/finding.proto)                     | topic | 7d        | [`pystreams/src/pystreams/risk/handler.py`](../pystreams/src/pystreams/risk/handler.py)<br/>[`server/internal/gitleaks/handler.go`](../server/internal/gitleaks/handler.go) |
-| [`gram-risk-v1-gitleaks-analysis`](../infra/proto/gram/risk/v1/gitleaks_analysis.proto) | topic | 7d        | [`server/internal/background/activities/risk_analysis/analyze_batch.go`](../server/internal/background/activities/risk_analysis/analyze_batch.go)                           |
-| [`gram-risk-v1-presidio-analysis`](../infra/proto/gram/risk/v1/presidio_analysis.proto) | topic | 7d        | [`server/internal/background/activities/risk_analysis/analyze_batch.go`](../server/internal/background/activities/risk_analysis/analyze_batch.go)                           |
+| [`gram-risk-v1-gitleaks-analysis`](../infra/proto/gram/risk/v1/gitleaks_analysis.proto) | topic | 7d        | [`server/internal/background/activities/risk_analysis/scan_gitleaks.go`](../server/internal/background/activities/risk_analysis/scan_gitleaks.go)                           |
+| [`gram-risk-v1-presidio-analysis`](../infra/proto/gram/risk/v1/presidio_analysis.proto) | topic | 7d        | [`server/internal/background/activities/risk_analysis/scan_presidio.go`](../server/internal/background/activities/risk_analysis/scan_presidio.go)                           |
 
 ## Subscriptions
 

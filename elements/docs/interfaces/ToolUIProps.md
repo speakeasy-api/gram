@@ -80,6 +80,24 @@ Flag matches inside the output (risk review).
 
 ***
 
+### nameQuery?
+
+> `optional` **nameQuery**: `string`
+
+When set, highlight occurrences of this query (case-insensitive) in the
+tool name — e.g. a thread search for "customer" lights up `get_customer`.
+
+***
+
+### searchActive?
+
+> `optional` **searchActive**: `boolean`
+
+Whether this tool holds the active thread-search match: bright highlights
+(name + sections) when true, pale when false.
+
+***
+
 ### className?
 
 > `optional` **className**: `string`

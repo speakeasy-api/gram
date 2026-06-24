@@ -1676,6 +1676,51 @@ async function seedRiskFindings(init: {
     }
   }
 
+  // The spread insert above scatters findings one-per-message across every
+  // chat, so almost no session ends up with more than one finding. To exercise
+  // the "risk score > N" threshold filter we also concentrate a controlled
+  // number of findings onto a few specific chats, producing sessions that
+  // straddle the 0 / 2 / 5 thresholds the dashboard offers. Tuple: [chat index
+  // (matches generateChatUUID), number of findings to attach].
+  const HIGH_RISK_CHATS: [chatIndex: number, findings: number][] = [
+    [0, 1],
+    [1, 3],
+    [2, 4],
+    [3, 8],
+    [4, 12],
+  ];
+
+  // Attaches `count` findings to a single chat's messages (round-robin by
+  // creation order, so a short chat just stacks multiple findings per message —
+  // each still counts toward risk_findings_count). pol resolves the policy
+  // inserted earlier in this same transaction.
+  const highRiskInserts = HIGH_RISK_CHATS.map(([chatIndex, count]) => {
+    const chatId = generateChatUUID(chatIndex);
+    return `
+    INSERT INTO risk_results (
+      project_id, organization_id, risk_policy_id, risk_policy_version,
+      chat_message_id, source, found, rule_id, description, match, confidence, created_at
+    )
+    SELECT
+      '${projectId}', '${organizationId}', pol.id, 1,
+      m.id, 'gitleaks', TRUE, 'secret.aws_access_key', 'AWS access key',
+      '<redacted len=20 sha=8f3a2c1d>', 0.99,
+      now() - ((g.i % 6) || ' days')::interval
+    FROM (
+      SELECT id FROM risk_policies
+      WHERE project_id = '${projectId}' AND name = '${SEED_RISK_POLICY_NAME}'
+      LIMIT 1
+    ) pol
+    CROSS JOIN generate_series(0, ${count - 1}) AS g(i)
+    JOIN (
+      SELECT cm.id,
+             ROW_NUMBER() OVER (ORDER BY cm.created_at) AS rn,
+             COUNT(*) OVER () AS cnt
+      FROM chat_messages cm
+      WHERE cm.chat_id = '${chatId}'
+    ) m ON m.rn = (g.i % m.cnt) + 1;`;
+  }).join("\n");
+
   const pgSQL = `
     BEGIN;
     -- Idempotent reset: drop prior seeded findings + policy for this project.
@@ -1717,6 +1762,7 @@ async function seedRiskFindings(init: {
     CROSS JOIN mcount
     CROSS JOIN pol
     JOIN msgs m ON m.rn = (f.idx % mcount.n) + 1;
+    ${highRiskInserts}
     COMMIT;
   `;
 
@@ -1731,7 +1777,8 @@ async function seedRiskFindings(init: {
       await $`docker compose cp ${tmpFile} gram-db:/tmp/seed-risk.sql`.quiet();
       await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -f /tmp/seed-risk.sql`.quiet();
       log.info(
-        `Seeded ${findingRows.length} risk findings across ${RISK_FINDING_CATALOG.length} sources`,
+        `Seeded ${findingRows.length} risk findings across ${RISK_FINDING_CATALOG.length} sources, ` +
+          `plus ${HIGH_RISK_CHATS.length} high-risk chats (scores ${HIGH_RISK_CHATS.map(([, c]) => c).join(", ")}) for the threshold filter`,
       );
     } finally {
       await fs.unlink(tmpFile).catch(() => {});

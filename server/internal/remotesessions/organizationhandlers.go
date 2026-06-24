@@ -590,7 +590,7 @@ func (s *Service) ListClients(ctx context.Context, payload *orgissuersgen.ListCl
 
 	items := make([]*orgissuersgen.OrganizationRemoteSessionClient, 0, len(rows))
 	for _, row := range rows {
-		clientView, err := mv.BuildRemoteSessionClientView(row.RemoteSessionClient)
+		clientView, err := mv.BuildRemoteSessionClientView(row.RemoteSessionClient, row.UserSessionIssuerIds)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 		}
@@ -642,7 +642,7 @@ func (s *Service) GetClient(ctx context.Context, payload *orgissuersgen.GetClien
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	view, err := mv.BuildRemoteSessionClientView(client)
+	view, err := mv.BuildRemoteSessionClientView(client.RemoteSessionClient, client.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -820,11 +820,6 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgissuersgen.Updat
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
-	userSessionIssuerID, err := conv.PtrToNullUUID(payload.UserSessionIssuerID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, logger)
-	}
-
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
@@ -862,14 +857,15 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgissuersgen.Updat
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	beforeView, err := mv.BuildRemoteSessionClientView(existing)
+	// Issuer attachments are managed via the join table, so an org-admin update
+	// never changes them; the same set frames both the before and after views.
+	beforeView, err := mv.BuildRemoteSessionClientView(existing.RemoteSessionClient, existing.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 	}
 
 	updated, err := txRepo.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{
 		ClientSecretEncrypted:   clientSecretEncrypted,
-		UserSessionIssuerID:     userSessionIssuerID,
 		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		Scope:                   payload.Scope,
 		Audience:                conv.PtrToPGText(payload.Audience),
@@ -883,7 +879,7 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgissuersgen.Updat
 		return nil, oops.E(oops.CodeUnexpected, err, "update organization admin remote session client").LogError(ctx, logger)
 	}
 
-	afterView, err := mv.BuildRemoteSessionClientView(updated)
+	afterView, err := mv.BuildRemoteSessionClientView(updated, existing.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -1002,7 +998,7 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgiss
 	txRepo := repo.New(dbtx)
 
 	// Establish org ownership of the client before detaching the MCP server.
-	client, err := txRepo.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
+	clientRow, err := txRepo.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
 		ID:             clientID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 	})
@@ -1012,6 +1008,7 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgiss
 		}
 		return oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
+	client := clientRow.RemoteSessionClient
 
 	// Resolve the MCP server to find the user_session_issuer it uses (the binding
 	// to remove) and its name (for the audit event). Scoped to the caller's org
@@ -1224,7 +1221,7 @@ func (s *Service) RevokeAllClientSessions(ctx context.Context, payload *orgissue
 
 	txRepo := repo.New(dbtx)
 
-	client, err := txRepo.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
+	clientRow, err := txRepo.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
 		ID:             clientID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 	})
@@ -1234,6 +1231,7 @@ func (s *Service) RevokeAllClientSessions(ctx context.Context, payload *orgissue
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
+	client := clientRow.RemoteSessionClient
 
 	revokedCount, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, client.ID)
 	if err != nil {

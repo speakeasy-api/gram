@@ -15,7 +15,7 @@ import {
   resultsAreSensitive,
   shouldShowRiskRuleId,
   useRowReveal,
-} from "./chatRiskHelpers";
+} from "./chatHelpers";
 
 /** A short flagged message rendered inline with the matched span(s) marked in
  * yellow, plus a reveal toggle when the match is sensitive. */

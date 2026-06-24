@@ -3,6 +3,7 @@ package telemetry_test
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"testing"
 	"time"
 
@@ -263,6 +264,60 @@ func TestGetObservabilityOverview_RemoteMCPServerIDFilter(t *testing.T) {
 	require.Len(t, scoped.TopToolsByCount, 2)
 }
 
+func TestGetObservabilityOverview_MCPServerIDFilter(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	serverA := uuid.New().String()
+	serverB := uuid.New().String()
+
+	// Server A spans both backings under one fronting mcp_server_id: a
+	// remote-backed tool call (also carries remote_mcp_server.id) and a
+	// toolset-backed tool call (also carries toolset.slug). Server B is a
+	// separate fronting server. Filtering by mcp_server_id must capture both
+	// of server A's calls regardless of how each was backed.
+	insertMCPServerToolCallLog(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), "tools:externalmcp:"+serverA+":listIssues", serverA, map[string]any{"gram.remote_mcp_server.id": uuid.New().String()}, 200, 0.4)
+	insertMCPServerToolCallLog(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), "tools:petstore:createPet", serverA, map[string]any{"gram.toolset.slug": "petstore"}, 500, 1.2)
+	insertMCPServerToolCallLog(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:externalmcp:"+serverB+":listIssues", serverB, nil, 200, 0.3)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// Without filter: all three tool calls show up.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
+			From:              from,
+			To:                to,
+			IncludeTimeSeries: false,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Equal(c, int64(3), res.Summary.TotalToolCalls)
+	}, 10*time.Second, 200*time.Millisecond)
+
+	// Filter by server A: both its calls show up regardless of backing.
+	scoped, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
+		From:              from,
+		To:                to,
+		McpServerID:       &serverA,
+		IncludeTimeSeries: false,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), scoped.Summary.TotalToolCalls)
+	require.Equal(t, int64(1), scoped.Summary.FailedToolCalls)
+	require.Len(t, scoped.TopToolsByCount, 2)
+}
+
 func TestGetObservabilityOverview_LogsDisabled(t *testing.T) {
 	t.Parallel()
 
@@ -301,6 +356,43 @@ func insertRemoteMCPToolCallLog(t *testing.T, ctx context.Context, projectID, de
 		"http.server.request.duration": durationSec,
 		"http.response.status_code":    statusCode,
 	}
+
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_deployment_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "tool call",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, deploymentID, toolURN, "gram-tools")
+	require.NoError(t, err)
+}
+
+// insertMCPServerToolCallLog inserts a tool call log carrying a
+// gram.mcp_server.id attribute (the fronting MCP server id) so the
+// materialized mcp_server_id column is populated. extraAttrs lets a test also
+// stamp backing-specific attributes (e.g. gram.remote_mcp_server.id or
+// gram.toolset.slug) to prove one mcp_server_id spans both backings.
+func insertMCPServerToolCallLog(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, toolURN, mcpServerID string, extraAttrs map[string]any, statusCode int32, durationSec float64) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gram.tool.urn":                toolURN,
+		"gram.mcp_server.id":           mcpServerID,
+		"http.server.request.duration": durationSec,
+		"http.response.status_code":    statusCode,
+	}
+	maps.Copy(attributes, extraAttrs)
 
 	attrsJSON, err := json.Marshal(attributes)
 	require.NoError(t, err)
