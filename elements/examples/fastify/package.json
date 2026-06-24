@@ -10,7 +10,7 @@
     "build:example": "vite build && esbuild server.ts --bundle --platform=node --packages=external --format=esm --outfile=dist/server.mjs"
   },
   "dependencies": {
-    "@assistant-ui/react": "^0.11.58",
+    "@assistant-ui/react": "^0.14.22",
     "@assistant-ui/react-ai-sdk": "^1.1.21",
     "@assistant-ui/react-markdown": "^0.11.10",
     "@fastify/cors": "^11.0.0",
