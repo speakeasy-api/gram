@@ -1,4 +1,6 @@
 import pytest
+from gram.ping.v2 import ping_pb2, processor_pb2
+from gram_infra.pubsub.subscriber import MessageMetadata
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
@@ -7,8 +9,6 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
 )
 from opentelemetry.trace import StatusCode
 
-from gram.ping.v1 import ping_pb2, processor_pb2
-from gram_infra.pubsub.subscriber import MessageMetadata
 from pystreams import attr
 from pystreams.deps import tracing
 
@@ -117,7 +117,7 @@ async def test_traced_marks_error_and_reraises(exporter: InMemorySpanExporter):
         handler, topic_proto_name=TOPIC, subscription_proto_name=SUBSCRIPTION
     )
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="handler failed"):
         await wrapped(ping_pb2.Message(id="ping-1"), _meta())
 
     (span,) = exporter.get_finished_spans()

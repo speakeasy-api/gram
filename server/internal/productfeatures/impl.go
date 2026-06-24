@@ -182,6 +182,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		Webhooks:                     isEnabled(FeatureWebhooks),
 		SsoEnabled:                   isEnabled(FeatureSSO),
 		ScimEnabled:                  isEnabled(FeatureSCIM),
+		ObservabilityModeEnabled:     isEnabled(FeatureObservabilityMode),
 	}, nil
 }
 

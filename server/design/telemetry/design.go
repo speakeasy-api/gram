@@ -987,6 +987,7 @@ var UserSummaryType = Type("UserSummary", func() {
 	Description("Aggregated usage summary for a single user")
 
 	Attribute("user_id", String, "User identifier (user_id or external_user_id depending on group_by)")
+	Attribute("user_email", String, "User email associated with this usage, when present")
 
 	// Activity timestamps (string for JS int64 precision)
 	Attribute("first_seen_unix_nano", String, "Earliest activity timestamp in Unix nanoseconds")
@@ -1018,6 +1019,7 @@ var UserSummaryType = Type("UserSummary", func() {
 
 	Required(
 		"user_id",
+		"user_email",
 		"first_seen_unix_nano",
 		"last_seen_unix_nano",
 		"total_chats",
@@ -1440,6 +1442,9 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 	Attribute("remote_mcp_server_id", String, "Optional Remote MCP server ID filter", func() {
 		Format(FormatUUID)
 	})
+	Attribute("mcp_server_id", String, "Optional MCP server ID filter (fronting server; spans both remote-backed and toolset-backed activity)", func() {
+		Format(FormatUUID)
+	})
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook')")
 	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code')")
 	Attribute("include_time_series", Boolean, "Whether to include time series data (default: true)", func() {
@@ -1801,6 +1806,7 @@ var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
 	Attribute("hosted_toolset_slugs", ArrayOf(String), "Hosted MCP toolset slugs to include")
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
+	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
 
 	Required("from", "to")
 })

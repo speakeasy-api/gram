@@ -41,6 +41,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	chatID1 := uuid.NewString()
 	chatID2 := uuid.NewString()
 	chatID3 := uuid.NewString()
+	chatID4 := uuid.NewString()
 
 	insertListSessionCompletionLog(t, ctx, listSessionLogParams{
 		projectID:    projectID,
@@ -109,6 +110,16 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 		totalTokens:  600,
 		cost:         5.0,
 	})
+	insertListSessionRawChatCompletionLog(t, ctx, listSessionLogParams{
+		projectID:  projectID,
+		timestamp:  now.Add(-5 * time.Minute),
+		chatID:     chatID4,
+		email:      "raw@example.com",
+		department: "Engineering",
+		roles:      []string{"dev"},
+		hookSource: "claude-code",
+		model:      "opus",
+	})
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
@@ -168,6 +179,42 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	require.NotEmpty(t, session.StartTimeUnixNano)
 	require.NotEmpty(t, session.EndTimeUnixNano)
 	require.Greater(t, session.DurationSeconds, 0.0)
+
+	byToolCalls := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		From:   from,
+		To:     to,
+		SortBy: "tool_call_count",
+		Limit:  10,
+	}, func(res *gen.ListSessionsResult) bool {
+		return len(res.Sessions) == 3 &&
+			res.Sessions[0].GramChatID == chatID1 &&
+			res.Sessions[0].ToolCallCount == 1
+	})
+	require.Equal(t, chatID1, byToolCalls.Sessions[0].GramChatID)
+
+	byMessages := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		From:   from,
+		To:     to,
+		SortBy: "message_count",
+		Limit:  10,
+	}, func(res *gen.ListSessionsResult) bool {
+		return len(res.Sessions) == 3 &&
+			res.Sessions[0].GramChatID == chatID1 &&
+			res.Sessions[0].MessageCount == 2
+	})
+	require.Equal(t, chatID1, byMessages.Sessions[0].GramChatID)
+
+	byDuration := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		From:   from,
+		To:     to,
+		SortBy: "duration_seconds",
+		Limit:  10,
+	}, func(res *gen.ListSessionsResult) bool {
+		return len(res.Sessions) == 3 &&
+			res.Sessions[0].GramChatID == chatID1 &&
+			res.Sessions[0].DurationSeconds > 0
+	})
+	require.Equal(t, chatID1, byDuration.Sessions[0].GramChatID)
 }
 
 func TestListSessions_CursorPagination(t *testing.T) {
@@ -300,6 +347,7 @@ func insertListSessionCompletionLog(t *testing.T, ctx context.Context, p listSes
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
+	usageURN := p.hookSource + ":usage:metrics"
 	attributes := map[string]any{
 		"gen_ai.conversation.id":          p.chatID,
 		"gen_ai.response.id":              uuid.NewString(),
@@ -309,7 +357,7 @@ func insertListSessionCompletionLog(t *testing.T, ctx context.Context, p listSes
 		"gen_ai.usage.total_tokens":       p.totalTokens,
 		"gen_ai.usage.cost":               p.cost,
 		"gram.hook.source":                p.hookSource,
-		"gram.resource.urn":               "agents:chat:completion",
+		"gram.resource.urn":               usageURN,
 		"user.email":                      p.email,
 		"user.attributes.department_name": p.department,
 		"user.roles":                      p.roles,
@@ -325,7 +373,7 @@ func insertListSessionCompletionLog(t *testing.T, ctx context.Context, p listSes
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), p.timestamp.UnixNano(), p.timestamp.UnixNano(), "INFO", "chat completion",
 		nil, nil, string(attrsJSON), "{}",
-		p.projectID, "agents:chat:completion", "gram-agents", p.chatID)
+		p.projectID, usageURN, "gram-agents", p.chatID)
 	require.NoError(t, err)
 }
 
@@ -338,11 +386,21 @@ func insertListSessionToolLog(t *testing.T, ctx context.Context, p listSessionLo
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
 
+	hookEvent := "PostToolUse"
+	if p.statusCode >= 400 {
+		hookEvent = "PostToolUseFailure"
+	}
+	hookURN := p.hookSource + ":hook:" + hookEvent
+	toolName := p.toolURN
+	if toolName == "" {
+		toolName = "Bash"
+	}
 	attributes := map[string]any{
 		"gen_ai.conversation.id":          p.chatID,
 		"gram.hook.source":                p.hookSource,
-		"gram.resource.urn":               p.toolURN,
-		"gram.tool.urn":                   p.toolURN,
+		"gram.hook.event":                 hookEvent,
+		"gram.resource.urn":               hookURN,
+		"gram.tool.name":                  toolName,
 		"http.response.status_code":       p.statusCode,
 		"user.email":                      p.email,
 		"user.attributes.department_name": p.department,
@@ -359,6 +417,40 @@ func insertListSessionToolLog(t *testing.T, ctx context.Context, p listSessionLo
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), p.timestamp.UnixNano(), p.timestamp.UnixNano(), "INFO", "tool call",
 		nil, nil, string(attrsJSON), "{}",
-		p.projectID, p.toolURN, "gram-tools", p.chatID)
+		p.projectID, hookURN, "gram-agents", p.chatID)
+	require.NoError(t, err)
+}
+
+func insertListSessionRawChatCompletionLog(t *testing.T, ctx context.Context, p listSessionLogParams) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gen_ai.conversation.id":          p.chatID,
+		"gen_ai.response.id":              uuid.NewString(),
+		"gen_ai.response.model":           p.model,
+		"gram.hook.source":                p.hookSource,
+		"gram.resource.urn":               "agents:chat:completion",
+		"user.email":                      p.email,
+		"user.attributes.department_name": p.department,
+		"user.roles":                      p.roles,
+	}
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name, gram_chat_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), p.timestamp.UnixNano(), p.timestamp.UnixNano(), "INFO", "raw chat completion",
+		nil, nil, string(attrsJSON), "{}",
+		p.projectID, "agents:chat:completion", "gram-agents", p.chatID)
 	require.NoError(t, err)
 }

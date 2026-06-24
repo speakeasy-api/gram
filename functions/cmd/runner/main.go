@@ -136,6 +136,23 @@ func run(ctx context.Context, logger *slog.Logger, ident auth.RunnerIdentity) er
 		return fmt.Errorf("create encryption client: %w", err)
 	}
 
+	// GRAM_FUNCTION_MAX_CONCURRENCY caps the number of concurrent executions and
+	// is set by the server to match the Fly proxy hard concurrency limit. A
+	// missing or invalid value disables in-runner limiting (unbounded), which
+	// matches pre-limiter behavior.
+	maxConcurrency := 0
+	if raw := os.Getenv("GRAM_FUNCTION_MAX_CONCURRENCY"); raw != "" {
+		parsed, parseErr := strconv.Atoi(raw)
+		switch {
+		case parseErr != nil:
+			logger.ErrorContext(ctx, "invalid GRAM_FUNCTION_MAX_CONCURRENCY, disabling concurrency limit", attr.SlogError(parseErr))
+		case parsed < 0:
+			logger.ErrorContext(ctx, "negative GRAM_FUNCTION_MAX_CONCURRENCY, disabling concurrency limit", attr.SlogMaxConcurrency(parsed))
+		default:
+			maxConcurrency = parsed
+		}
+	}
+
 	mux := http.NewServeMux()
 
 	mux.Handle("GET /healthz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -143,7 +160,7 @@ func run(ctx context.Context, logger *slog.Logger, ident auth.RunnerIdentity) er
 		_, _ = w.Write([]byte("ok"))
 	}))
 
-	runner.NewService(logger, enc, args.workDir, cmd, cmdArgs).Attach(mux)
+	runner.NewService(logger, enc, args.workDir, cmd, cmdArgs, maxConcurrency).Attach(mux)
 
 	var handler http.Handler = mux
 	handler = middleware.NewVersion(handler)

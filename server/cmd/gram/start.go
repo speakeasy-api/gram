@@ -91,6 +91,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -722,14 +723,14 @@ func newStartCommand() *cli.Command {
 			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage)
 			shutdownFuncs = append(shutdownFuncs, chatWriterShutdown)
 
-			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, db, chatWriter)
+			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter)
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
 				openRouter,
 				captureStrategy,
-				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
+				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				telemLogger,
 			)
@@ -857,7 +858,7 @@ func newStartCommand() *cli.Command {
 			)
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
 			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo)
-			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver)
+			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
@@ -892,6 +893,27 @@ func newStartCommand() *cli.Command {
 				if err != nil {
 					return fmt.Errorf("create github app client: %w", err)
 				}
+			}
+
+			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
+			if err != nil {
+				shutdownFuncs = append(shutdownFuncs, pubsubShutdown)
+				return fmt.Errorf("failed to create pubsub client: %w", err)
+			}
+
+			publishers, shutdown, err := newPublishers(ctx, psbroker)
+			// Stop and flush the publishers before closing the Pub/Sub client
+			// they publish through. runShutdown executes shutdown funcs
+			// concurrently, so this ordering must be enforced inside a single
+			// func — appending the two separately would race the publisher
+			// flush against the client close and could drop in-flight messages.
+			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
+				stopErr := shutdown(ctx)
+				closeErr := pubsubShutdown(ctx)
+				return errors.Join(stopErr, closeErr)
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create publishers: %w", err)
 			}
 
 			// Marketplace proxy routes (URL-based marketplace.json + git Smart
@@ -965,7 +987,11 @@ func newStartCommand() *cli.Command {
 			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
 
 			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient)
-			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, meterProvider)
+			celEngine, err := celenv.New()
+			if err != nil {
+				return fmt.Errorf("create cel engine: %w", err)
+			}
+			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, meterProvider, celEngine)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -1085,7 +1111,11 @@ func newStartCommand() *cli.Command {
 				30*time.Second,
 				logger,
 			)
-			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
+			// riskSignaler.Shutdown is intentionally NOT registered as a shutdownFunc.
+			// runShutdown runs every func concurrently, which races temporalClient.Close()
+			// against the signaler's trailing-edge flush over the same gRPC connection
+			// ("grpc: the client connection is closing"). Instead it is flushed
+			// synchronously in the drain goroutine below, while Temporal is still open.
 			riskReconciler := &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger}
 			riskResultsCleaner := &background.TemporalRiskPolicyResultsCleaner{TemporalEnv: temporalEnv, Logger: logger}
 			riskService := risk.NewService(
@@ -1104,6 +1134,7 @@ func newStartCommand() *cli.Command {
 				hookPIIScanner,
 				hookPIScanner,
 				featureFlags,
+				celEngine,
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
@@ -1122,6 +1153,17 @@ func newStartCommand() *cli.Command {
 				Addr:              c.String("address"),
 				Handler:           mux,
 				ReadHeaderTimeout: 10 * time.Second,
+				// IdleTimeout must exceed the fronting GCLB's backend keepalive
+				// timeout so the backend retires an idle connection AFTER the LB
+				// would, never before. If the backend closes first the LB can
+				// still have an outstanding request on that connection and the
+				// client sees a TCP RST — the transient reset this change set is
+				// hardening against. GCLB's backend keepalive is a fixed 600s and
+				// not configurable, and Google explicitly requires the backend's
+				// value to be > 600s, so 620s. No WriteTimeout: it is an absolute
+				// deadline on the whole response and would sever the long-lived
+				// SSE/MCP streams this mux also serves.
+				IdleTimeout: 620 * time.Second,
 				BaseContext: func(net.Listener) context.Context {
 					return ctx
 				},
@@ -1182,6 +1224,7 @@ func newStartCommand() *cli.Command {
 						SvixClient:                     svixClient,
 						ProductFeatures:                productFeatures,
 						PluginPublisher:                pluginPublisher,
+						Publishers:                     publishers,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
@@ -1194,11 +1237,25 @@ func newStartCommand() *cli.Command {
 
 				logger.InfoContext(ctx, "shutting down server")
 
-				graceCtx, graceCancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownDrainTimeout)
+				graceCtx, graceCancel := context.WithTimeoutCause(
+					context.WithoutCancel(ctx),
+					shutdownDrainTimeout,
+					errors.New("graceful shutdown timed out"),
+				)
 				defer graceCancel()
 
 				if err := srv.Shutdown(graceCtx); err != nil {
-					logger.ErrorContext(ctx, "failed to shutdown development server", attr.SlogError(err))
+					if gerr := context.Cause(graceCtx); gerr != nil {
+						err = errors.Join(err, gerr)
+					}
+					logger.ErrorContext(ctx, "failed to shutdown server", attr.SlogError(err))
+				}
+
+				// The HTTP server is now fully drained, so no new risk signals are
+				// produced. Flush the throttle's queued trailing signals here while the
+				// Temporal client is still open — runShutdown closes it concurrently.
+				if err := riskSignaler.Shutdown(graceCtx); err != nil {
+					logger.ErrorContext(ctx, "flush pending risk signals", attr.SlogError(err))
 				}
 			})
 
@@ -1263,8 +1320,13 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
-			cancel()
+			// ListenAndServe returns ErrServerClosed the instant srv.Shutdown is
+			// called, not when the drain finishes. Wait for the drain goroutine to
+			// fully complete before cancelling ctx: ctx is the server's BaseContext,
+			// so cancelling it here would cancel every in-flight request mid-drain
+			// and they would abort with context.Canceled instead of completing.
 			group.Wait()
+			cancel()
 
 			return nil
 		},

@@ -555,6 +555,8 @@ defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 ## Testing
 
 - When writing assertions, use `github.com/stretchr/testify/require` exclusively.
+- Avoid using `time.Sleep` to wait for eventual consistency or async state in tests. It is reported by the `forbidigo` rule `GG013` (enforced repo-wide, with a small grandfathered allowlist in `server/.golangci.yaml`). Poll instead: `require.EventuallyWithT` to wait until assertions pass or `require.Never` to assert a condition never becomes true. Inside an `EventuallyWithT` closure, make assertions with `assert.*` against the supplied `*assert.CollectT` — the one sanctioned use of `assert` over `require`.
+- Prefer `testing/synctest` (`synctest.Test` + `synctest.Wait`) for testing purely in-process timer/debounce logic. This is one of the few allowed `time.Sleep` use cases in tests since it is required for advancing the fake clock inside a synctest bubble.
 - In tests, use `t.Context()` instead of `context.Background()`, except inside `t.Cleanup(func())` callbacks.
 - IMPORTANT: avoid using `t.Run` to create subtests. Prefer writing separate test functions instead.
 - All test setup which includes spinning up databases, caches and background workers must go in `setup_test.go` files. Look for these across the codebase for inspiration and guidance.

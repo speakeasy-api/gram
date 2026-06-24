@@ -10,6 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -87,64 +88,75 @@ func TestSearchUsers_GroupByInternalUser(t *testing.T) {
 	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-6*time.Minute), chatID2, 150, 75, 225, 1.8, "stop", "claude-3", "anthropic", user2, "")
 	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-5*time.Minute), "tools:http:petstore:getPet", 500, 1.0, user2, "")
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-		Filter: &gen.SearchUsersFilter{
-			From: from,
-			To:   to,
-		},
-		UserType: "internal",
-		Limit:    100,
-		Sort:     "desc",
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From: from,
+				To:   to,
+			},
+			UserType: "internal",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		if !assert.Len(c, res.Users, 2) {
+			return
+		}
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Len(t, result.Users, 2)
+		// Index by user ID
+		byUser := make(map[string]*gen.UserSummary)
+		for _, u := range res.Users {
+			byUser[u.UserID] = u
+		}
 
-	// Index by user ID
-	byUser := make(map[string]*gen.UserSummary)
-	for _, u := range result.Users {
-		byUser[u.UserID] = u
-	}
+		// User 1
+		u1 := byUser[user1]
+		if !assert.NotNil(c, u1) {
+			return
+		}
+		assert.Equal(c, int64(1), u1.TotalChats)
+		assert.Equal(c, int64(2), u1.TotalChatRequests)
+		assert.Equal(c, int64(300), u1.TotalInputTokens)  // 100 + 200
+		assert.Equal(c, int64(150), u1.TotalOutputTokens) // 50 + 100
+		assert.Equal(c, int64(450), u1.TotalTokens)       // 150 + 300
+		assert.Equal(c, int64(1), u1.TotalToolCalls)
+		assert.Equal(c, int64(1), u1.ToolCallSuccess)
+		assert.Equal(c, int64(0), u1.ToolCallFailure)
+		if assert.Len(c, u1.Tools, 1) {
+			assert.Equal(c, "tools:http:petstore:listPets", u1.Tools[0].Urn)
+			assert.Equal(c, int64(1), u1.Tools[0].Count)
+			assert.Equal(c, int64(1), u1.Tools[0].SuccessCount)
+			assert.Equal(c, int64(0), u1.Tools[0].FailureCount)
+		}
 
-	// User 1
-	u1 := byUser[user1]
-	require.NotNil(t, u1)
-	require.Equal(t, int64(1), u1.TotalChats)
-	require.Equal(t, int64(2), u1.TotalChatRequests)
-	require.Equal(t, int64(300), u1.TotalInputTokens)  // 100 + 200
-	require.Equal(t, int64(150), u1.TotalOutputTokens) // 50 + 100
-	require.Equal(t, int64(450), u1.TotalTokens)       // 150 + 300
-	require.Equal(t, int64(1), u1.TotalToolCalls)
-	require.Equal(t, int64(1), u1.ToolCallSuccess)
-	require.Equal(t, int64(0), u1.ToolCallFailure)
-	require.Len(t, u1.Tools, 1)
-	require.Equal(t, "tools:http:petstore:listPets", u1.Tools[0].Urn)
-	require.Equal(t, int64(1), u1.Tools[0].Count)
-	require.Equal(t, int64(1), u1.Tools[0].SuccessCount)
-	require.Equal(t, int64(0), u1.Tools[0].FailureCount)
-
-	// User 2
-	u2 := byUser[user2]
-	require.NotNil(t, u2)
-	require.Equal(t, int64(1), u2.TotalChats)
-	require.Equal(t, int64(1), u2.TotalChatRequests)
-	require.Equal(t, int64(150), u2.TotalInputTokens)
-	require.Equal(t, int64(75), u2.TotalOutputTokens)
-	require.Equal(t, int64(225), u2.TotalTokens)
-	require.Equal(t, int64(1), u2.TotalToolCalls)
-	require.Equal(t, int64(0), u2.ToolCallSuccess)
-	require.Equal(t, int64(1), u2.ToolCallFailure)
-	require.Len(t, u2.Tools, 1)
-	require.Equal(t, "tools:http:petstore:getPet", u2.Tools[0].Urn)
-	require.Equal(t, int64(1), u2.Tools[0].Count)
-	require.Equal(t, int64(0), u2.Tools[0].SuccessCount)
-	require.Equal(t, int64(1), u2.Tools[0].FailureCount)
+		// User 2
+		u2 := byUser[user2]
+		if !assert.NotNil(c, u2) {
+			return
+		}
+		assert.Equal(c, int64(1), u2.TotalChats)
+		assert.Equal(c, int64(1), u2.TotalChatRequests)
+		assert.Equal(c, int64(150), u2.TotalInputTokens)
+		assert.Equal(c, int64(75), u2.TotalOutputTokens)
+		assert.Equal(c, int64(225), u2.TotalTokens)
+		assert.Equal(c, int64(1), u2.TotalToolCalls)
+		assert.Equal(c, int64(0), u2.ToolCallSuccess)
+		assert.Equal(c, int64(1), u2.ToolCallFailure)
+		if assert.Len(c, u2.Tools, 1) {
+			assert.Equal(c, "tools:http:petstore:getPet", u2.Tools[0].Urn)
+			assert.Equal(c, int64(1), u2.Tools[0].Count)
+			assert.Equal(c, int64(0), u2.Tools[0].SuccessCount)
+			assert.Equal(c, int64(1), u2.Tools[0].FailureCount)
+		}
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestSearchUsers_GroupByExternalUser(t *testing.T) {
@@ -163,35 +175,40 @@ func TestSearchUsers_GroupByExternalUser(t *testing.T) {
 	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID, 100, 50, 150, 1.5, "stop", "gpt-4", "openai", "", extUser)
 	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), "tools:http:api:call", 200, 0.5, "", extUser)
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-		Filter: &gen.SearchUsersFilter{
-			From: from,
-			To:   to,
-		},
-		UserType: "external",
-		Limit:    100,
-		Sort:     "desc",
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From: from,
+				To:   to,
+			},
+			UserType: "external",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		if !assert.Len(c, res.Users, 1) {
+			return
+		}
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Len(t, result.Users, 1)
-
-	u := result.Users[0]
-	require.Equal(t, extUser, u.UserID)
-	require.Equal(t, int64(1), u.TotalChats)
-	require.Equal(t, int64(1), u.TotalChatRequests)
-	require.Equal(t, int64(100), u.TotalInputTokens)
-	require.Equal(t, int64(50), u.TotalOutputTokens)
-	require.Equal(t, int64(150), u.TotalTokens)
-	require.Equal(t, int64(1), u.TotalToolCalls)
-	require.Equal(t, int64(1), u.ToolCallSuccess)
-	require.Equal(t, int64(0), u.ToolCallFailure)
+		u := res.Users[0]
+		assert.Equal(c, extUser, u.UserID)
+		assert.Equal(c, int64(1), u.TotalChats)
+		assert.Equal(c, int64(1), u.TotalChatRequests)
+		assert.Equal(c, int64(100), u.TotalInputTokens)
+		assert.Equal(c, int64(50), u.TotalOutputTokens)
+		assert.Equal(c, int64(150), u.TotalTokens)
+		assert.Equal(c, int64(1), u.TotalToolCalls)
+		assert.Equal(c, int64(1), u.ToolCallSuccess)
+		assert.Equal(c, int64(0), u.ToolCallFailure)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestSearchUsers_FallsBackToUserEmail(t *testing.T) {
@@ -207,28 +224,33 @@ func TestSearchUsers_FallsBackToUserEmail(t *testing.T) {
 	email := "unmatched-user-" + uuid.New().String() + "@example.com"
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), email, 100, 50, 1.25)
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-		Filter: &gen.SearchUsersFilter{
-			From: from,
-			To:   to,
-		},
-		UserType: "internal",
-		Limit:    100,
-		Sort:     "desc",
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Len(t, result.Users, 1)
-	require.Equal(t, email, result.Users[0].UserID)
-	require.Equal(t, int64(100), result.Users[0].TotalInputTokens)
-	require.Equal(t, int64(50), result.Users[0].TotalOutputTokens)
-	require.InDelta(t, 1.25, result.Users[0].TotalCost, 0.000001)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From: from,
+				To:   to,
+			},
+			UserType: "internal",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		if !assert.Len(c, res.Users, 1) {
+			return
+		}
+		assert.Equal(c, email, res.Users[0].UserID)
+		assert.Equal(c, int64(100), res.Users[0].TotalInputTokens)
+		assert.Equal(c, int64(50), res.Users[0].TotalOutputTokens)
+		assert.InDelta(c, 1.25, res.Users[0].TotalCost, 0.000001)
+	}, 10*time.Second, 200*time.Millisecond)
 
 	filtered, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
 		Filter: &gen.SearchUsersFilter{
@@ -243,6 +265,44 @@ func TestSearchUsers_FallsBackToUserEmail(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, filtered.Users, 1)
 	require.Equal(t, email, filtered.Users[0].UserID)
+}
+
+func TestSearchUsers_IncludesUserEmailWhenGroupedByOpaqueUserID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	userID := "01924a0eb409b0ecf44e06d0ec03cbc4"
+	email := "smartnews-user@example.com"
+	insertHookLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), userID, email)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From: from,
+				To:   to,
+			},
+			UserType: "internal",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 1) {
+			return
+		}
+		assert.Equal(c, userID, res.Users[0].UserID)
+		assert.Equal(c, email, res.Users[0].UserEmail)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestSearchUsers_Pagination(t *testing.T) {
@@ -263,24 +323,31 @@ func TestSearchUsers_Pagination(t *testing.T) {
 		insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, ts, uuid.New().String(), 100, 50, 150, 1.0, "stop", "gpt-4", "openai", userID, "")
 	}
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
 	// Page 1: limit 2
-	page1, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-		Filter: &gen.SearchUsersFilter{
-			From: from,
-			To:   to,
-		},
-		UserType: "internal",
-		Limit:    2,
-		Sort:     "desc",
-	})
-	require.NoError(t, err)
-	require.Len(t, page1.Users, 2)
-	require.NotNil(t, page1.NextCursor)
+	var page1 *gen.SearchUsersResult
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From: from,
+				To:   to,
+			},
+			UserType: "internal",
+			Limit:    2,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Len(c, res.Users, 2)
+		assert.NotNil(c, res.NextCursor)
+		page1 = res
+	}, 10*time.Second, 200*time.Millisecond)
 
 	// Page 2
 	page2, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
@@ -339,24 +406,31 @@ func TestSearchUsers_PaginationAscOrder(t *testing.T) {
 		insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, ts, uuid.New().String(), 100, 50, 150, 1.0, "stop", "gpt-4", "openai", userID, "")
 	}
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
 	// Page 1
-	page1, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-		Filter: &gen.SearchUsersFilter{
-			From: from,
-			To:   to,
-		},
-		UserType: "internal",
-		Limit:    2,
-		Sort:     "asc",
-	})
-	require.NoError(t, err)
-	require.Len(t, page1.Users, 2)
-	require.NotNil(t, page1.NextCursor)
+	var page1 *gen.SearchUsersResult
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From: from,
+				To:   to,
+			},
+			UserType: "internal",
+			Limit:    2,
+			Sort:     "asc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		assert.Len(c, res.Users, 2)
+		assert.NotNil(c, res.NextCursor)
+		page1 = res
+	}, 10*time.Second, 200*time.Millisecond)
 
 	// Page 2
 	page2, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
@@ -417,25 +491,31 @@ func TestSearchUsers_FilterByDeploymentID(t *testing.T) {
 	// User 2 in deployment 2
 	insertChatCompletionLogWithUser(t, ctx, projectID, deployment2, now.Add(-9*time.Minute), uuid.New().String(), 100, 50, 150, 1.0, "stop", "gpt-4", "openai", user2, "")
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-		Filter: &gen.SearchUsersFilter{
-			From:         from,
-			To:           to,
-			DeploymentID: &deployment1,
-		},
-		UserType: "internal",
-		Limit:    100,
-		Sort:     "desc",
-	})
-
-	require.NoError(t, err)
-	require.Len(t, result.Users, 1)
-	require.Equal(t, user1, result.Users[0].UserID)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From:         from,
+				To:           to,
+				DeploymentID: &deployment1,
+			},
+			UserType: "internal",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		if !assert.Len(c, res.Users, 1) {
+			return
+		}
+		assert.Equal(c, user1, res.Users[0].UserID)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestSearchUsers_FilterByInternalUserIDs(t *testing.T) {
@@ -456,26 +536,32 @@ func TestSearchUsers_FilterByInternalUserIDs(t *testing.T) {
 	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), uuid.New().String(), 200, 100, 300, 1.0, "stop", "gpt-4", "openai", excludedUser, "")
 	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), uuid.New().String(), 300, 150, 450, 1.0, "stop", "gpt-4", "openai", userIDAsExternalID, includedUser)
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-		Filter: &gen.SearchUsersFilter{
-			From:    from,
-			To:      to,
-			UserIds: []string{includedUser},
-		},
-		UserType: "internal",
-		Limit:    100,
-		Sort:     "desc",
-	})
-
-	require.NoError(t, err)
-	require.Len(t, result.Users, 1)
-	require.Equal(t, includedUser, result.Users[0].UserID)
-	require.Equal(t, int64(150), result.Users[0].TotalTokens)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From:    from,
+				To:      to,
+				UserIds: []string{includedUser},
+			},
+			UserType: "internal",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		if !assert.Len(c, res.Users, 1) {
+			return
+		}
+		assert.Equal(c, includedUser, res.Users[0].UserID)
+		assert.Equal(c, int64(150), res.Users[0].TotalTokens)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestSearchUsers_FilterByExternalUserIDs(t *testing.T) {
@@ -495,26 +581,32 @@ func TestSearchUsers_FilterByExternalUserIDs(t *testing.T) {
 	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), uuid.New().String(), 200, 100, 300, 1.0, "stop", "gpt-4", "openai", "internal-b-"+uuid.New().String(), excludedExternalUser)
 	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), uuid.New().String(), 300, 150, 450, 1.0, "stop", "gpt-4", "openai", includedExternalUser, "external-c-"+uuid.New().String())
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-		Filter: &gen.SearchUsersFilter{
-			From:    from,
-			To:      to,
-			UserIds: []string{includedExternalUser},
-		},
-		UserType: "external",
-		Limit:    100,
-		Sort:     "desc",
-	})
-
-	require.NoError(t, err)
-	require.Len(t, result.Users, 1)
-	require.Equal(t, includedExternalUser, result.Users[0].UserID)
-	require.Equal(t, int64(150), result.Users[0].TotalTokens)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From:    from,
+				To:      to,
+				UserIds: []string{includedExternalUser},
+			},
+			UserType: "external",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		if !assert.Len(c, res.Users, 1) {
+			return
+		}
+		assert.Equal(c, includedExternalUser, res.Users[0].UserID)
+		assert.Equal(c, int64(150), res.Users[0].TotalTokens)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestSearchUsers_HookSourceBreakdown(t *testing.T) {
@@ -535,39 +627,49 @@ func TestSearchUsers_HookSourceBreakdown(t *testing.T) {
 	insertHookLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), userID, "", "claude-code", false)
 	insertHookLogWithUser(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), excludedUserID, "", "cursor", true)
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-		Filter: &gen.SearchUsersFilter{
-			From:    from,
-			To:      to,
-			UserIds: []string{userID},
-		},
-		UserType: "internal",
-		Limit:    100,
-		Sort:     "desc",
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From:    from,
+				To:      to,
+				UserIds: []string{userID},
+			},
+			UserType: "internal",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		if !assert.Len(c, res.Users, 1) {
+			return
+		}
+		assert.Equal(c, userID, res.Users[0].UserID)
+		if !assert.Len(c, res.Users[0].HookSources, 2) {
+			return
+		}
 
-	require.NoError(t, err)
-	require.Len(t, result.Users, 1)
-	require.Equal(t, userID, result.Users[0].UserID)
-	require.Len(t, result.Users[0].HookSources, 2)
+		byHookSource := make(map[string]*gen.HookSourceUsage)
+		for _, source := range res.Users[0].HookSources {
+			byHookSource[source.Source] = source
+		}
 
-	byHookSource := make(map[string]*gen.HookSourceUsage)
-	for _, source := range result.Users[0].HookSources {
-		byHookSource[source.Source] = source
-	}
+		cursor := byHookSource["cursor"]
+		if assert.NotNil(c, cursor) {
+			assert.Equal(c, int64(2), cursor.EventCount)
+		}
 
-	cursor := byHookSource["cursor"]
-	require.NotNil(t, cursor)
-	require.Equal(t, int64(2), cursor.EventCount)
-
-	claudeCode := byHookSource["claude-code"]
-	require.NotNil(t, claudeCode)
-	require.Equal(t, int64(1), claudeCode.EventCount)
+		claudeCode := byHookSource["claude-code"]
+		if assert.NotNil(c, claudeCode) {
+			assert.Equal(c, int64(1), claudeCode.EventCount)
+		}
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestSearchUsers_ToolsBreakdown(t *testing.T) {
@@ -589,48 +691,58 @@ func TestSearchUsers_ToolsBreakdown(t *testing.T) {
 	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), "tools:http:petstore:getPet", 200, 0.3, userID, "")
 	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-6*time.Minute), "tools:http:petstore:getPet", 200, 0.2, userID, "")
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-		Filter: &gen.SearchUsersFilter{
-			From: from,
-			To:   to,
-		},
-		UserType: "internal",
-		Limit:    100,
-		Sort:     "desc",
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From: from,
+				To:   to,
+			},
+			UserType: "internal",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		if !assert.Len(c, res.Users, 1) {
+			return
+		}
 
-	require.NoError(t, err)
-	require.Len(t, result.Users, 1)
+		u := res.Users[0]
+		assert.Equal(c, userID, u.UserID)
+		assert.Equal(c, int64(5), u.TotalToolCalls)
+		assert.Equal(c, int64(4), u.ToolCallSuccess) // 2+2
+		assert.Equal(c, int64(1), u.ToolCallFailure) // 1
 
-	u := result.Users[0]
-	require.Equal(t, userID, u.UserID)
-	require.Equal(t, int64(5), u.TotalToolCalls)
-	require.Equal(t, int64(4), u.ToolCallSuccess) // 2+2
-	require.Equal(t, int64(1), u.ToolCallFailure) // 1
+		// Per-tool breakdown
+		if !assert.Len(c, u.Tools, 2) {
+			return
+		}
+		toolStats := make(map[string]*gen.ToolUsage)
+		for _, tool := range u.Tools {
+			toolStats[tool.Urn] = tool
+		}
 
-	// Per-tool breakdown
-	require.Len(t, u.Tools, 2)
-	toolStats := make(map[string]*gen.ToolUsage)
-	for _, tool := range u.Tools {
-		toolStats[tool.Urn] = tool
-	}
+		listPets := toolStats["tools:http:petstore:listPets"]
+		if assert.NotNil(c, listPets) {
+			assert.Equal(c, int64(3), listPets.Count)
+			assert.Equal(c, int64(2), listPets.SuccessCount)
+			assert.Equal(c, int64(1), listPets.FailureCount)
+		}
 
-	listPets := toolStats["tools:http:petstore:listPets"]
-	require.NotNil(t, listPets)
-	require.Equal(t, int64(3), listPets.Count)
-	require.Equal(t, int64(2), listPets.SuccessCount)
-	require.Equal(t, int64(1), listPets.FailureCount)
-
-	getPet := toolStats["tools:http:petstore:getPet"]
-	require.NotNil(t, getPet)
-	require.Equal(t, int64(2), getPet.Count)
-	require.Equal(t, int64(2), getPet.SuccessCount)
-	require.Equal(t, int64(0), getPet.FailureCount)
+		getPet := toolStats["tools:http:petstore:getPet"]
+		if assert.NotNil(c, getPet) {
+			assert.Equal(c, int64(2), getPet.Count)
+			assert.Equal(c, int64(2), getPet.SuccessCount)
+			assert.Equal(c, int64(0), getPet.FailureCount)
+		}
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestSearchUsers_ScopedByProject(t *testing.T) {
@@ -654,28 +766,34 @@ func TestSearchUsers_ScopedByProject(t *testing.T) {
 	otherUser := "other-project-user-" + uuid.New().String()
 	insertChatCompletionLogWithUser(t, ctx, otherProjectID, deploymentID, now.Add(-8*time.Minute), uuid.New().String(), 200, 100, 300, 1.0, "stop", "gpt-4", "openai", otherUser, "")
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	result, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-		Filter: &gen.SearchUsersFilter{
-			From: from,
-			To:   to,
-		},
-		UserType: "internal",
-		Limit:    100,
-		Sort:     "desc",
-	})
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From: from,
+				To:   to,
+			},
+			UserType: "internal",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		if !assert.Len(c, res.Users, 1, "should only return users from the queried project") {
+			return
+		}
+		assert.Equal(c, sharedUserID, res.Users[0].UserID)
 
-	require.NoError(t, err)
-	require.Len(t, result.Users, 1, "should only return users from the queried project")
-	require.Equal(t, sharedUserID, result.Users[0].UserID)
-
-	// Metrics should only reflect the current project's data
-	require.Equal(t, int64(100), result.Users[0].TotalInputTokens, "should not include tokens from other project")
-	require.Equal(t, int64(150), result.Users[0].TotalTokens, "should not include tokens from other project")
+		// Metrics should only reflect the current project's data
+		assert.Equal(c, int64(100), res.Users[0].TotalInputTokens, "should not include tokens from other project")
+		assert.Equal(c, int64(150), res.Users[0].TotalTokens, "should not include tokens from other project")
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func insertHookLogWithUser(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, userID, externalUserID, hookSource string, success bool) {
@@ -704,6 +822,38 @@ func insertHookLogWithUser(t *testing.T, ctx context.Context, projectID, deploym
 		attributes["gram.external_user.id"] = externalUserID
 	}
 
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_deployment_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "hook event",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, deploymentID, "hooks:Bash", "gram-hooks")
+	require.NoError(t, err)
+}
+
+func insertHookLogWithUserAndEmail(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, userID, email string) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gram.event.source":       "hook",
+		"gram.hook.source":        "claude-code",
+		"gram.tool.name":          "Bash",
+		"gen_ai.tool.call.result": "ok",
+		"user.id":                 userID,
+		"user.email":              email,
+	}
 	attrsJSON, err := json.Marshal(attributes)
 	require.NoError(t, err)
 

@@ -275,6 +275,9 @@ type GetObservabilityOverviewPayload struct {
 	ToolsetSlug *string
 	// Optional Remote MCP server ID filter
 	RemoteMcpServerID *string
+	// Optional MCP server ID filter (fronting server; spans both remote-backed and
+	// toolset-backed activity)
+	McpServerID *string
 	// Optional event source filter (e.g. 'hook')
 	EventSource *string
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')
@@ -378,6 +381,9 @@ type GetToolUsageSummaryPayload struct {
 	ShadowServerNames []string
 	// Typed user identities to include
 	UserFilters []*ToolUsageUserFilter
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string
 }
 
 // GetToolUsageSummaryResult is the result type of the telemetry service
@@ -1576,6 +1582,8 @@ type TopUser struct {
 type UserSummary struct {
 	// User identifier (user_id or external_user_id depending on group_by)
 	UserID string
+	// User email associated with this usage, when present
+	UserEmail string
 	// Earliest activity timestamp in Unix nanoseconds
 	FirstSeenUnixNano string
 	// Latest activity timestamp in Unix nanoseconds

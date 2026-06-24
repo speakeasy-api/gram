@@ -31,3 +31,6 @@ EOF
 go fmt ./infra/gen/descriptors.go
 
 go run ./infra/main.go gen-cc
+
+# Regenerate the Pub/Sub topology diagram from the freshly built descriptors.
+mise run gen:infra-diagrams

@@ -1,7 +1,7 @@
 """End-to-end Pub/Sub demo, the Python counterpart of `infra demo` (demo.go).
 
-Publishes a `gram.ping.v1.Message` every ~200ms and consumes it through the
-`gram.ping.v1.Processor` subscription, printing each message received. Run it
+Publishes a `gram.ping.v2.Message` every ~200ms and consumes it through the
+`gram.ping.v2.Processor` subscription, printing each message received. Run it
 from the infra package against the local Pub/Sub emulator:
 
     uv run pubsub-demo
@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import anyio
 import structlog
+from gram.ping.v2 import ping_pb2, processor_pb2
 
-from gram.ping.v1 import ping_pb2, processor_pb2
 from gram_infra.pubsub import (
     pubsub_publisher_for_message,
     pubsub_subscriber_for_message,
@@ -49,7 +49,7 @@ async def _main(backend: str) -> None:
     logger.info("running", backend=backend)
 
     with make_emulator_broker(logger, script_name="pubsub-demo") as broker:
-        # Publisher for the topic declared by gram.ping.v1.Message.
+        # Publisher for the topic declared by gram.ping.v2.Message.
         publisher = pubsub_publisher_for_message(broker, ping_pb2.Message)
 
         # Subscriber for the Processor subscription, receiving Message payloads.

@@ -18,17 +18,19 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpname"
+	"github.com/speakeasy-api/gram/server/internal/hookevents"
+	cursorevents "github.com/speakeasy-api/gram/server/internal/hookevents/adapters/cursor"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 // Cursor is the endpoint for Cursor hook events
 func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.CursorHookResult, error) {
-	hookEvent, ok := parseCursorHookEvent(payload.HookEventName)
+	parsedEvent, parsedHookEvent := parseCursorHookEvent(payload.HookEventName)
 	logHookEventName := payload.HookEventName
-	if ok {
-		logHookEventName = string(hookEvent)
+	if parsedHookEvent {
+		logHookEventName = string(parsedEvent)
 	}
 
 	logger := s.logger.With(
@@ -39,8 +41,8 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		attr.SlogAuthUserEmail(conv.PtrValOr(payload.UserEmail, "")),
 	)
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+	authCtx, authOK := contextvalues.GetAuthContext(ctx)
+	if !authOK || authCtx == nil || authCtx.ProjectID == nil {
 		logger.WarnContext(ctx, "rejected unauthorized cursor hook request",
 			attr.SlogEvent("cursor_hook_unauthorized"),
 		)
@@ -68,6 +70,14 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		attr.SlogEvent("cursor_hook"),
 	)
 
+	// Claim the per-invocation idempotency token before persistence. A retry
+	// re-sends the same token: the decision still re-runs so the user stays
+	// blocked, but tagging the context as a duplicate suppresses the duplicate
+	// writes in recordCursorHook.
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+		ctx = withHookDuplicate(ctx)
+	}
+
 	result := &gen.CursorHookResult{
 		Permission:        nil,
 		UserMessage:       nil,
@@ -75,17 +85,36 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		AgentMessage:      nil,
 	}
 
+	hookEvent, err := cursorevents.Normalize(authCtx, payload, hookevents.EventContext{
+		OrganizationID: orgID,
+		ProjectID:      *authCtx.ProjectID,
+		User: hookevents.User{
+			ID:    actorUserID,
+			Email: userEmail,
+		},
+	}, time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("normalize cursor hook event: %w", err)
+	}
+	if hookEvent == nil {
+		logger.InfoContext(ctx, "cursor hook received illegal event type",
+			attr.SlogEvent("cursor_hook_illegal_event_type"),
+			attr.SlogHookEvent(payload.HookEventName),
+		)
+		return result, nil
+	}
+
 	// blockReason is empty unless this call is denied by the shadow-MCP guard.
 	// It propagates into the ClickHouse log entry as gram.hook.block_reason so
 	// the trace renders as "blocked" in dashboards.
 	var blockReason string
 
-	switch hookEvent {
-	case HookEventBeforeMCPExecution:
+	switch ev := hookEvent.(type) {
+	case *hookevents.BeforeMCPExecution:
 		// beforeMCPExecution fires for MCP-routed (non-local) tool calls. Run
 		// the risk scanner first (block-only today), then fall through to the
 		// shadow-MCP guard so unapproved toolsets are still blocked.
-		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID, actorUserID); scanResult != nil {
+		if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -98,9 +127,9 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			result.Permission = new("allow")
 			break
 		}
-		toolName := strings.TrimPrefix(conv.PtrValOr(payload.ToolName, ""), "MCP:")
+		toolName := strings.TrimPrefix(ev.ToolName, "MCP:")
 		evidence := cursorShadowMCPEvidence(payload)
-		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, actorUserID, policy.ID, payload.ToolInput, toolName, evidence); denied {
+		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, actorUserID, policy.ID, ev.ToolInput, toolName, evidence); denied {
 			logger.InfoContext(ctx, "denying cursor tool call: failed gram toolset validation",
 				attr.SlogEvent("cursor_hook_denied"),
 				attr.SlogHookBlockReason(detail),
@@ -116,7 +145,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 				AuditReason:     auditReason,
 				Evidence:        evidence,
 				ToolName:        toolName,
-				ToolInput:       payload.ToolInput,
+				ToolInput:       ev.ToolInput,
 				RiskPolicyID:    policy.ID,
 			})
 			blockReason = auditReason
@@ -126,19 +155,19 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		} else {
 			result.Permission = new("allow")
 		}
-	case HookEventPreToolUse:
+	case *hookevents.BeforeToolUse:
 		// preToolUse fires for ALL Cursor tool calls including MCP ones, while
 		// beforeMCPExecution also fires for MCP-routed calls and already runs
 		// the scan there. Skip the scan here for MCP tools to avoid scanning
 		// (and DB-querying) the same input twice on the hot path. Native tools
 		// (read_file, edit_file, ...) only have this single event and still
 		// get scanned.
-		toolName := conv.PtrValOr(payload.ToolName, "")
+		toolName := ev.ToolName
 		if strings.HasPrefix(toolName, "MCP:") {
 			result.Permission = new("allow")
 			break
 		}
-		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID, actorUserID); scanResult != nil {
+		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -147,8 +176,8 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		} else {
 			result.Permission = new("allow")
 		}
-	case HookEventBeforeSubmitPrompt:
-		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID, actorUserID); scanResult != nil {
+	case *hookevents.UserPromptSubmit:
+		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -170,6 +199,11 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string, blockReason string) {
 	if payload.ConversationID == nil || *payload.ConversationID == "" {
 		s.logger.WarnContext(ctx, "Cursor event called without conversation ID")
+		return
+	}
+
+	// Skip persistence for a redelivery (the token was claimed in Cursor()).
+	if s.isHookDuplicate(ctx) {
 		return
 	}
 
@@ -231,7 +265,7 @@ func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayl
 // persistCursorToolCallEvent writes tool call events to both ClickHouse and PostgreSQL
 func (s *Service) persistCursorToolCallEvent(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, blockReason string, hookEvent HookEvent) error {
 	// Write to ClickHouse for telemetry
-	s.writeCursorHookToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, blockReason)
+	s.writeCursorHookToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, metadata.UserEmail, blockReason)
 
 	// Write to PostgreSQL for chat history
 	switch hookEvent {
@@ -257,7 +291,7 @@ func isCursorConversationEvent(hookEvent HookEvent) bool {
 // writeCursorHookToClickHouse writes a Cursor hook event directly to ClickHouse
 // Unlike Claude hooks, Cursor payloads are already authenticated and include user_email,
 // so no Redis buffering is needed.
-func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string, blockReason string) {
+func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string, userEmail string, blockReason string) {
 	attrs := s.buildCursorTelemetryAttributes(ctx, payload, orgID, projectID)
 	if blockReason != "" {
 		attrs[attr.HookBlockReasonKey] = blockReason
@@ -284,7 +318,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
-			UserInfo:   telemetry.UserInfoByID(userID),
+			UserInfo:   telemetry.UserInfoByIDAndEmail(userID, userEmail),
 			Attributes: attrs,
 		})
 
@@ -414,7 +448,7 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 	// "MCP:" prefix (which AttributeTool also recognizes) is handled separately
 	// below, so guard on the mcp__ prefix to keep that split exclusive.
 	if strings.HasPrefix(toolName, "mcp__") {
-		if server, fn, ok := mcpname.AttributeTool(toolName); ok {
+		if server, fn, ok := toolref.AttributeTool(toolName); ok {
 			attrs[attr.ToolCallSourceKey] = server
 			attrs[attr.ToolNameKey] = fn
 		}

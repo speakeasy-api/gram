@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
 // otelOnlyCtx returns a context that simulates the OTEL flow: no auth
@@ -269,6 +270,52 @@ func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing
 	assert.NotContains(t, attrs, attr.UserEmailKey)
 	assert.NotContains(t, attrs, attr.UserIDKey)
 	assert.Equal(t, userID, metadata.UserID)
+}
+
+func TestPersistToolCallEvent_PreservesEmailWhenUserIDUnresolved(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	userEmail := "smartnews-user@example.com"
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		UserEmail: userEmail,
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+	start := time.Now().UTC()
+
+	err := ti.service.persistToolCallEvent(ctx, &hooks.ClaudePayload{
+		HookEventName: "ToolEvent",
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		SessionID:     &sessionID,
+	}, metadata)
+	require.NoError(t, err)
+	require.Empty(t, metadata.UserID, "test email should not resolve to a connected user")
+
+	var logs []telemetryrepo.TelemetryLog
+	require.Eventually(t, func() bool {
+		var err error
+		logs, err = chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     start.Add(-time.Minute).UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramChatID:    sessionID,
+			EventSource:   "hook",
+			SortOrder:     "desc",
+			Limit:         10,
+		})
+		return err == nil && len(logs) == 1
+	}, 2*time.Second, 50*time.Millisecond)
+
+	require.Len(t, logs, 1)
+	require.Contains(t, logs[0].Attributes, userEmail)
 }
 
 func TestBuildTelemetryAttributesWithMetadata_SetsHookHostname(t *testing.T) {

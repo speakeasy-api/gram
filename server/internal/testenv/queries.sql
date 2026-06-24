@@ -3,6 +3,14 @@ INSERT INTO chat_messages (chat_id, project_id, role, content)
 VALUES (@chat_id, @project_id, @role, @content)
 RETURNING id;
 
+-- name: ForceSoftDeleteChat :exec
+-- Bypasses the production SoftDeleteChat guard (which refuses to delete a chat
+-- backing a live assistant thread) so tests can wedge the database into the
+-- legacy/abnormal state that the runtime's self-heal exists to recover from.
+UPDATE chats
+SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
 -- name: UpdateChatMessageCreatedAt :exec
 UPDATE chat_messages
 SET created_at = @created_at
@@ -38,6 +46,12 @@ WHERE deployment_id = @deployment_id;
 -- name: ScrubDeploymentFunctionMachineSpecs :exec
 -- Simulates a legacy deployment by NULLing out memory_mib and scale, as if the row was inserted before these columns existed.
 UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deployment_id = @deployment_id;
+
+-- name: SetDeploymentFunctionInfraOverrides :exec
+UPDATE deployments_functions SET memory_mib_override = @memory_mib_override, scale_override = @scale_override WHERE deployment_id = @deployment_id;
+
+-- name: GetDeploymentFunctionInfraOverrides :many
+SELECT memory_mib_override, scale_override FROM deployments_functions WHERE deployment_id = @deployment_id;
 -- name: CountOutboxEntriesByEventType :one
 SELECT COUNT(*)
 FROM outbox

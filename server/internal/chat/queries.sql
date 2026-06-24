@@ -27,9 +27,26 @@ VALUES (
     NOW(),
     NOW()
 )
--- Use no-op update (id = EXCLUDED.id) to ensure RETURNING always returns a row,
--- whether the chat was newly inserted or already existed.
-ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
+-- On conflict, self-heal a soft-deleted chat that still backs a live assistant
+-- thread: the runtime keeps writing to it, so it must not stay marked deleted (a
+-- deleted chat wedges the thread — compaction-persist 404s on it). Scoped to
+-- thread-backed chats so a write does NOT resurrect a plain chat a user
+-- intentionally deleted. The first WHEN keeps the common (non-deleted) path a
+-- no-op without touching assistant_threads, so the EXISTS stays off the
+-- /chat/completions hot path and only runs for the rare already-deleted row. The
+-- assistant join means a deleted assistant's leftover thread can't heal the
+-- chat. The SET also guarantees RETURNING yields a row whether the chat was
+-- newly inserted or already existed.
+ON CONFLICT (id) DO UPDATE SET deleted_at = CASE
+    WHEN chats.deleted_at IS NULL THEN NULL
+    WHEN chats.project_id = EXCLUDED.project_id AND EXISTS (
+        SELECT 1 FROM assistant_threads t
+        JOIN assistants a ON a.id = t.assistant_id
+        WHERE t.chat_id = chats.id AND t.project_id = chats.project_id
+          AND t.deleted IS FALSE AND a.deleted IS FALSE
+    ) THEN NULL
+    ELSE chats.deleted_at
+END
 RETURNING id;
 
 -- name: UpsertExternalChat :one
@@ -199,9 +216,23 @@ ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
 DO NOTHING;
 
 -- name: CountChats :one
-WITH candidate_chats AS (
+-- risk_counts pre-aggregates active findings per chat once for the whole
+-- project (one pass over risk_results), so the risk presence + threshold
+-- filters become a cheap join instead of a correlated subquery per chat.
+WITH risk_counts AS (
+  SELECT cm.chat_id, COUNT(*)::integer AS cnt
+  FROM risk_results rr
+  JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  WHERE rr.project_id = @project_id
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+  GROUP BY cm.chat_id
+),
+candidate_chats AS (
   SELECT c.id, c.created_at
   FROM chats c
+  LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
@@ -223,28 +254,12 @@ WITH candidate_chats AS (
     )
     AND (
       @has_risk_filter::text = ''
-      OR (
-        @has_risk_filter::text = 'true' AND EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
-      OR (
-        @has_risk_filter::text = 'false' AND NOT EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
+      OR (@has_risk_filter::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR (@has_risk_filter::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+    )
+    AND (
+      @min_risk_score::int < 0
+      OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
     )
 ),
 chat_activity AS (
@@ -261,15 +276,31 @@ WHERE (@from_time::timestamptz IS NULL OR ca.last_message_timestamp >= @from_tim
   AND (@to_time::timestamptz IS NULL OR ca.last_message_timestamp <= @to_time);
 
 -- name: ListChats :many
-WITH candidate_chats AS (
+-- risk_counts pre-aggregates active findings per chat once for the whole
+-- project (one pass over risk_results). It feeds both the risk presence +
+-- threshold filters and the risk_findings_count column below, replacing what
+-- were two correlated subqueries per candidate chat.
+WITH risk_counts AS (
+  SELECT cm.chat_id, COUNT(*)::integer AS cnt
+  FROM risk_results rr
+  JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  WHERE rr.project_id = @project_id
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+  GROUP BY cm.chat_id
+),
+candidate_chats AS (
   SELECT
     c.id,
     c.title,
     c.user_id,
     c.external_user_id,
     c.created_at,
-    c.updated_at
+    c.updated_at,
+    COALESCE(rc.cnt, 0) AS risk_findings_count
   FROM chats c
+  LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   WHERE c.project_id = @project_id
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
@@ -291,28 +322,12 @@ WITH candidate_chats AS (
     )
     AND (
       @has_risk_filter::text = ''
-      OR (
-        @has_risk_filter::text = 'true' AND EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
-      OR (
-        @has_risk_filter::text = 'false' AND NOT EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = @project_id
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
+      OR (@has_risk_filter::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR (@has_risk_filter::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+    )
+    AND (
+      @min_risk_score::int < 0
+      OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
     )
 ),
 chat_stats AS (
@@ -334,16 +349,7 @@ filtered_chats AS (
     cc.updated_at,
     cs.num_messages,
     cs.last_message_timestamp,
-    (
-      SELECT COUNT(*)::integer
-      FROM risk_results rr
-      JOIN chat_messages cm ON cm.id = rr.chat_message_id
-      WHERE cm.chat_id = cc.id
-        AND rr.project_id = @project_id
-        AND rr.found IS TRUE
-        AND rr.excluded_at IS NULL
-        AND rr.false_positive_at IS NULL
-    ) AS risk_findings_count
+    cc.risk_findings_count
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
   WHERE (@from_time::timestamptz IS NULL OR cs.last_message_timestamp >= @from_time)
@@ -412,6 +418,52 @@ SELECT
 FROM chat_messages
 WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid);
 
+-- name: GetChatEntryTotals :one
+-- Per-generation trace-entry totals for the chat detail filter bar. The detail
+-- sheet paginates messages, so counts derived from the loaded page understate
+-- the chat; these totals describe the whole generation regardless of which page
+-- is in view. Each message maps to exactly one entry, mirroring the client's
+-- getTraceEntryType precedence: a message carrying a non-empty tool_calls array
+-- is a tool call regardless of role, otherwise the role decides. risk_findings
+-- counts messages with an active (found, non-suppressed) risk result.
+WITH ordered AS (
+  SELECT
+    cm.id,
+    cm.role,
+    CASE
+      WHEN cm.tool_calls IS NULL THEN false
+      WHEN jsonb_typeof(cm.tool_calls) = 'array'
+        THEN jsonb_array_length(cm.tool_calls) > 0
+      -- Some rows store tool_calls double-encoded (a JSON string holding the
+      -- array); treat any non-empty/non-"[]" string as carrying tool calls.
+      WHEN jsonb_typeof(cm.tool_calls) = 'string'
+        THEN btrim(cm.tool_calls #>> '{}') NOT IN ('', '[]', 'null')
+      ELSE false
+    END AS has_tool_calls
+  FROM chat_messages cm
+  WHERE cm.chat_id = @chat_id
+    AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+    AND cm.generation = @generation::integer
+)
+SELECT
+  COUNT(*) FILTER (WHERE has_tool_calls OR role IN ('user', 'assistant', 'tool'))::bigint AS total,
+  COUNT(*) FILTER (WHERE NOT has_tool_calls AND role = 'user')::bigint AS user_messages,
+  COUNT(*) FILTER (WHERE NOT has_tool_calls AND role = 'assistant')::bigint AS assistant_messages,
+  COUNT(*) FILTER (WHERE has_tool_calls)::bigint AS tool_calls,
+  COUNT(*) FILTER (WHERE NOT has_tool_calls AND role = 'tool')::bigint AS tool_results,
+  (
+    SELECT COUNT(*)::bigint FROM ordered o
+    WHERE EXISTS (
+      SELECT 1 FROM risk_results rr
+      WHERE rr.chat_message_id = o.id
+        AND rr.project_id = @project_id::uuid
+        AND rr.found IS TRUE
+        AND rr.excluded_at IS NULL
+        AND rr.false_positive_at IS NULL
+    )
+  )::bigint AS risk_findings
+FROM ordered;
+
 -- name: ListLatestGenerationChatMessages :many
 -- Returns only the latest-generation rows; older generations are audit-only.
 SELECT cm.* FROM chat_messages cm
@@ -432,6 +484,109 @@ ORDER BY cm.seq ASC;
 
 -- name: GetMaxGenerationForChat :one
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = @chat_id;
+
+-- name: ListChatMessagesBeforePage :many
+-- Keyset page within a generation, newest first. Returns messages with seq
+-- strictly less than @before_seq, or the newest page when @before_seq is NULL.
+-- Order DESC so LIMIT keeps the most recent rows; the caller reverses to
+-- ascending for display. Fetch @lim = pageSize+1 to detect whether more older
+-- rows remain.
+SELECT cm.* FROM chat_messages cm
+WHERE cm.chat_id = @chat_id
+  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.generation = @generation::integer
+  AND (sqlc.narg('before_seq')::bigint IS NULL OR cm.seq < sqlc.narg('before_seq')::bigint)
+ORDER BY cm.seq DESC
+LIMIT @lim::integer;
+
+-- name: ListChatMessagesAfterPage :many
+-- Keyset page within a generation, oldest first. Returns messages with seq
+-- strictly greater than @after_seq, or the oldest page (start of the thread)
+-- when @after_seq is NULL. Fetch @lim = pageSize+1 to detect whether more newer
+-- rows remain.
+SELECT cm.* FROM chat_messages cm
+WHERE cm.chat_id = @chat_id
+  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.generation = @generation::integer
+  AND (sqlc.narg('after_seq')::bigint IS NULL OR cm.seq > sqlc.narg('after_seq')::bigint)
+ORDER BY cm.seq ASC
+LIMIT @lim::integer;
+
+-- name: ListRiskWindowedMessages :many
+-- Risk-only view: returns every message within +/- @context_size ordinal
+-- positions of any active risk finding in the generation, ordered oldest to
+-- newest. rn is the message's 1-based ordinal within the generation and total
+-- is the generation's message count, so the caller can fold consecutive rn into
+-- contiguous segments and decide whether earlier (rn > 1) or later (rn < total)
+-- messages remain to be expanded. Overlapping windows merge naturally via set
+-- membership.
+WITH ordered AS (
+  SELECT
+    cm.*,
+    row_number() OVER (ORDER BY cm.seq) AS rn,
+    count(*) OVER () AS total
+  FROM chat_messages cm
+  WHERE cm.chat_id = @chat_id
+    AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+    AND cm.generation = @generation::integer
+),
+risk_rns AS (
+  SELECT o.rn FROM ordered o
+  WHERE EXISTS (
+    SELECT 1 FROM risk_results rr
+    WHERE rr.chat_message_id = o.id
+      AND rr.project_id = @project_id::uuid
+      AND rr.found IS TRUE
+      AND rr.excluded_at IS NULL
+      AND rr.false_positive_at IS NULL
+  )
+)
+SELECT o.*
+FROM ordered o
+WHERE EXISTS (
+  SELECT 1 FROM risk_rns r
+  WHERE o.rn BETWEEN r.rn - @context_size::bigint AND r.rn + @context_size::bigint
+)
+ORDER BY o.seq ASC;
+
+-- name: ListSearchWindowedMessages :many
+-- Query-search view: same windowing as ListRiskWindowedMessages, but the seed
+-- rows are messages whose searchable text matches @query (case-insensitive
+-- substring over the narrative content, the tool-call name/arguments JSON, and
+-- any structured/multimodal content) instead of messages with a risk finding.
+-- Each match is padded with +/- @context_size ordinal positions. rn/total drive
+-- segment folding and the has_more flags; is_match flags the seed rows so the
+-- caller can return the explicit jump-to-match seq list (context rows are
+-- is_match = false). Seed matches are capped at @match_limit (earliest first by
+-- ordinal) to bound the response on broad queries. Asset-offloaded content (too
+-- large to store inline) is not searchable here.
+WITH ordered AS (
+  SELECT
+    cm.*,
+    row_number() OVER (ORDER BY cm.seq) AS rn,
+    count(*) OVER () AS total
+  FROM chat_messages cm
+  WHERE cm.chat_id = @chat_id
+    AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+    AND cm.generation = @generation::integer
+),
+match_rns AS (
+  SELECT o.rn FROM ordered o
+  WHERE o.content ILIKE '%' || @query::text || '%'
+     OR (o.tool_calls IS NOT NULL AND o.tool_calls::text ILIKE '%' || @query::text || '%')
+     OR (o.content_raw IS NOT NULL AND o.content_raw::text ILIKE '%' || @query::text || '%')
+  ORDER BY o.rn
+  LIMIT @match_limit::integer
+)
+SELECT
+  o.*,
+  EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn) AS is_match
+FROM ordered o
+WHERE EXISTS (
+  SELECT 1 FROM match_rns m
+  WHERE o.rn BETWEEN m.rn - @context_size::bigint AND m.rn + @context_size::bigint
+)
+ORDER BY o.seq ASC;
 
 -- name: ListChatMessagesForMatch :many
 SELECT id, role, content, tool_call_id, tool_calls
@@ -600,12 +755,44 @@ UPDATE chat_user_feedback
 SET chat_resolution_id = @chat_resolution_id
 WHERE id = @id;
 
--- name: SoftDeleteChat :exec
-UPDATE chats
-SET deleted_at = clock_timestamp()
-WHERE id = @id
-  AND project_id = @project_id
-  AND deleted IS FALSE;
+-- name: SoftDeleteChat :one
+-- Soft-delete a chat unless it backs a live assistant thread, and report the
+-- disposition in a single statement so the caller never has to re-query (which
+-- would race with concurrent thread create/delete). `guard` snapshots whether
+-- the chat exists in-project, undeleted, and is thread-backed; `del` deletes it
+-- only when not thread-backed. Both CTEs share one statement snapshot, so the
+-- delete and the diagnosis are consistent: a live (existing, undeleted)
+-- thread-backed chat always yields backs_live_thread=true (caller returns 409)
+-- and is never silently reported as a successful no-op.
+WITH guard AS (
+  SELECT
+    c.id,
+    EXISTS (
+      SELECT 1
+      FROM assistant_threads t
+      JOIN assistants a ON a.id = t.assistant_id
+      WHERE t.chat_id = c.id
+        AND t.project_id = @project_id
+        AND t.deleted IS FALSE
+        AND a.deleted IS FALSE
+    ) AS backs_live_thread
+  FROM chats c
+  WHERE c.id = @id
+    AND c.project_id = @project_id
+    AND c.deleted IS FALSE
+),
+del AS (
+  UPDATE chats
+  SET deleted_at = clock_timestamp()
+  WHERE id = @id
+    AND project_id = @project_id
+    AND deleted IS FALSE
+    AND id IN (SELECT id FROM guard WHERE backs_live_thread IS FALSE)
+  RETURNING id
+)
+SELECT
+  EXISTS (SELECT 1 FROM del) AS deleted,
+  COALESCE((SELECT backs_live_thread FROM guard), FALSE)::boolean AS backs_live_thread;
 
 -- name: GetTopUsersByMessages :many
 SELECT
@@ -701,9 +888,18 @@ ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
 RETURNING id;
 
 -- name: SeedChatMessage :one
--- Test fixture: insert a minimal chat message and return its id.
+-- Test fixture: insert a minimal chat message and return its id. An optional
+-- created_at lets ordering tests assign distinct, deterministic timestamps
+-- instead of relying on wall-clock gaps between inserts.
+INSERT INTO chat_messages (chat_id, project_id, role, content, created_at)
+VALUES (@chat_id, @project_id, 'user', 'test message', COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
+RETURNING id;
+
+-- name: SeedChatMessageContent :one
+-- Test fixture: insert a user chat message with explicit content and return its
+-- id, for exercising the text-search windowed view.
 INSERT INTO chat_messages (chat_id, project_id, role, content)
-VALUES (@chat_id, @project_id, 'user', 'test message')
+VALUES (@chat_id, @project_id, 'user', @content)
 RETURNING id;
 
 -- name: SeedRiskPolicy :one
@@ -722,3 +918,19 @@ VALUES (
     @project_id, @organization_id, @risk_policy_id, 1,
     @chat_message_id, 'test', @found
 );
+
+-- name: SeedAssistant :one
+-- Test fixture: insert a minimal assistant and return its id.
+INSERT INTO assistants (project_id, organization_id, name, model, instructions)
+VALUES (@project_id, @organization_id, @name, 'anthropic/claude-opus-4.8', 'be helpful')
+RETURNING id;
+
+-- name: SeedAssistantThread :exec
+-- Test fixture: insert an active assistant thread backed by a chat.
+INSERT INTO assistant_threads (assistant_id, project_id, correlation_id, chat_id, source_kind)
+VALUES (@assistant_id, @project_id, @correlation_id, @chat_id, 'cron');
+
+-- name: SeedSoftDeleteAssistant :exec
+-- Test fixture: soft-delete an assistant (mirrors DeleteAssistant, which leaves
+-- its threads behind).
+UPDATE assistants SET deleted_at = clock_timestamp() WHERE id = @id;

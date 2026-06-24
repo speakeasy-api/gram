@@ -393,9 +393,6 @@ export const InitialChoiceStep = ({
   const navigate = useNavigate();
   const telemetry = useTelemetry();
 
-  const isRemoteMcpEnabled =
-    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
-
   const onChoiceSelected = (
     choice:
       | "connect_to_data"
@@ -453,17 +450,15 @@ export const InitialChoiceStep = ({
           title="Connect to Popular MCPs"
           description="Browse and connect to official and community-maintained MCP servers"
         />
-        {isRemoteMcpEnabled && (
-          <ChoiceCard
-            onClick={() => {
-              onChoiceSelected("connect_to_custom_remote_mcp");
-              routes.sources.addRemoteMcp.goTo();
-            }}
-            icon={Network}
-            title="Custom Remote MCP"
-            description="Connect to an existing MCP server by URL"
-          />
-        )}
+        <ChoiceCard
+          onClick={() => {
+            onChoiceSelected("connect_to_custom_remote_mcp");
+            routes.sources.addRemoteMcp.goTo();
+          }}
+          icon={Network}
+          title="Custom Remote MCP"
+          description="Connect to an existing MCP server by URL"
+        />
         <ChoiceCard
           onClick={handleConnectToData}
           icon={Database}

@@ -259,11 +259,31 @@ type StreamingChunk struct {
 	Usage             *Usage        `json:"usage"`
 }
 
-// Tokens used in the completion
+// Usage is OpenRouter's accounting payload on every chat completion response.
+// The `cost`, `cost_details`, and `*_tokens_details` subobjects carry the
+// fields previously fetched out-of-band from /v1/generation; consume them
+// inline instead of polling.
 type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens            int                      `json:"prompt_tokens"`
+	CompletionTokens        int                      `json:"completion_tokens"`
+	TotalTokens             int                      `json:"total_tokens"`
+	Cost                    *float64                 `json:"cost,omitempty"`
+	CostDetails             *CostDetails             `json:"cost_details,omitempty"`
+	PromptTokensDetails     *PromptTokensDetails     `json:"prompt_tokens_details,omitempty"`
+	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details,omitempty"`
+}
+
+type CostDetails struct {
+	UpstreamInferenceCost float64 `json:"upstream_inference_cost"`
+	CacheDiscount         float64 `json:"cache_discount"`
+}
+
+type PromptTokensDetails struct {
+	CachedTokens int `json:"cached_tokens"`
+}
+
+type CompletionTokensDetails struct {
+	ReasoningTokens int `json:"reasoning_tokens"`
 }
 
 // GramMetadata is a Gram-specific extension attached to chat completion

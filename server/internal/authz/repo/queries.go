@@ -139,6 +139,13 @@ type ChallengeListFilters struct {
 	Limit          uint64
 	Offset         uint64
 	SkipPagination bool // when true, omit LIMIT/OFFSET (used when resolved filter requires post-join pagination)
+
+	// MemberUserIDs, when non-nil, suppresses challenges raised by users outside
+	// the organization (e.g. Speakeasy staff impersonating a customer org). Rows
+	// are kept only when user_id is NULL (non-user principals such as api keys and
+	// assistants) or user_id is one of these active org-member IDs. An empty
+	// non-nil slice keeps only the NULL-user_id rows.
+	MemberUserIDs []string
 }
 
 // challengeWhere applies ChallengeListFilters to a squirrel SelectBuilder.
@@ -155,6 +162,19 @@ func challengeWhere(sb squirrel.SelectBuilder, f ChallengeListFilters) squirrel.
 	}
 	if f.Scope != nil {
 		sb = sb.Where("scope = ?", *f.Scope)
+	}
+	if f.MemberUserIDs != nil {
+		// Keep non-user principals (user_id IS NULL) plus active org members.
+		// squirrel.Eq with an empty slice renders as a false predicate, so an
+		// empty MemberUserIDs collapses this to "user_id IS NULL".
+		//
+		// The column is qualified with the table name because the bucket query
+		// aliases argMax(user_id, timestamp) AS user_id, and ClickHouse resolves
+		// a bare user_id in WHERE to that aggregate alias (illegal in WHERE).
+		sb = sb.Where(squirrel.Or{
+			squirrel.Expr("authz_challenges.user_id IS NULL"),
+			squirrel.Eq{"authz_challenges.user_id": f.MemberUserIDs},
+		})
 	}
 	return sb
 }

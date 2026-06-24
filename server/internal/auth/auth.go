@@ -104,10 +104,8 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 		}
 	}
 
-	logger = logger.With(attr.SlogProjectSlug(projectSlug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
-
 	if !hasProjectAccess {
-		return ctx, oops.C(oops.CodeForbidden).LogError(ctx, logger)
+		return ctx, oops.C(oops.CodeForbidden)
 	}
 
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
@@ -126,7 +124,7 @@ func (s *Auth) CheckProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return oops.C(oops.CodeForbidden).LogError(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return oops.C(oops.CodeForbidden).LogWarn(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "error checking project access").LogError(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
@@ -177,7 +175,7 @@ func (s *Auth) logAuthContext(ctx context.Context, err error, scheme string) {
 	}
 
 	if err != nil {
-		s.logger.ErrorContext(ctx, fmt.Sprintf("auth scheme check failed (%s)", scheme), attrs...)
+		s.logger.WarnContext(ctx, fmt.Sprintf("auth scheme check failed (%s)", scheme), attrs...)
 	} else {
 		s.logger.InfoContext(ctx, fmt.Sprintf("auth scheme check passed (%s)", scheme), attrs...)
 	}

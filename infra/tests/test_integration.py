@@ -13,9 +13,10 @@ import os
 import socket
 import uuid
 
-from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
 import pytest
-from gram.ping.v1 import ping_pb2, processor_pb2
+from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
+from gram.ping.v2 import ping_pb2, processor_pb2
+
 from gram_infra.pubsub import (
     EmulatedPubSubBroker,
     pubsub_publisher_for_message,
@@ -39,7 +40,7 @@ def _emulator_reachable() -> bool:
     try:
         with socket.create_connection((hostname or "localhost", int(port)), timeout=1):
             return True
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return False
 
 
@@ -50,10 +51,16 @@ pytestmark = pytest.mark.skipif(
 
 
 async def test_publish_subscribe_roundtrip() -> None:
+    # Constructing the gRPC clients eagerly opens a channel — blocking import +
+    # file IO that would stall the event loop (the suite's aiocop guard fails on
+    # it), so build them off-loop in a worker thread.
+    publisher_client, subscriber_client = await asyncio.to_thread(
+        lambda: (PublisherClient(), SubscriberClient())
+    )
     broker = EmulatedPubSubBroker(
         "gram-infra-it",
-        publisher_client=PublisherClient(),
-        subscriber_client=SubscriberClient(),
+        publisher_client=publisher_client,
+        subscriber_client=subscriber_client,
     )
 
     publisher = pubsub_publisher_for_message(broker, ping_pb2.Message)
@@ -80,7 +87,7 @@ async def test_publish_subscribe_roundtrip() -> None:
         await asyncio.wait_for(
             publisher.publish(
                 ping_pb2.Message(id=unique_id, type="it", payload=payload)
-            ),
+            ).get(),
             timeout=30,
         )
         await asyncio.wait_for(done.wait(), timeout=30)
@@ -94,4 +101,4 @@ async def test_publish_subscribe_roundtrip() -> None:
     message, meta = received[0]
     assert message.payload == payload
     assert meta.attributes.get("content-type") == "application/x-protobuf"
-    assert meta.attributes.get("schema") == "gram.ping.v1.Message"
+    assert meta.attributes.get("schema") == "gram.ping.v2.Message"

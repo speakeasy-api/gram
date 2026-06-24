@@ -1292,6 +1292,8 @@ type RiskCustomDetectionRule struct {
 	Title          string
 	Description    string
 	Regex          pgtype.Text
+	MatchConfig    []byte
+	DetectionExpr  pgtype.Text
 	Severity       string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
@@ -1328,6 +1330,8 @@ type RiskPolicy struct {
 	DisabledRules        []string
 	CustomRuleIds        []string
 	MessageTypes         []string
+	ScopeInclude         pgtype.Text
+	ScopeExempt          pgtype.Text
 	Action               string
 	AudienceType         string
 	AutoName             bool
@@ -1383,6 +1387,7 @@ type RiskResult struct {
 	EndPos              pgtype.Int4
 	Confidence          pgtype.Float8
 	Tags                []string
+	Spans               []byte
 	DeadLetterReason    pgtype.Text
 	ExcludedAt          pgtype.Timestamptz
 	ExcludedExclusionID uuid.NullUUID

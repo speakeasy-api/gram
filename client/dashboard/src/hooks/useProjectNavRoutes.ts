@@ -36,8 +36,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
   const isDeploymentsPageEnabled =
     telemetry.isFeatureEnabled("gram-deployments-page") ?? true;
-  const isTelemetryQueryDemoEnabled =
-    telemetry.isFeatureEnabled("gram-telemetry-query-demo-page") ?? false;
 
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
@@ -64,9 +62,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.employees, scope: read },
       { route: routes.costs, scope: read },
       { route: routes.insights, scope: read },
-      ...(isTelemetryQueryDemoEnabled
-        ? [{ route: routes.telemetryQueryDemo, scope: read }]
-        : []),
       { route: routes.agentSessions, scope: read },
       { route: routes.logs, scope: read },
       { route: routes.riskOverview, scope: read },
@@ -76,10 +71,5 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.detectionRules, scope: readWrite },
       { route: routes.settings, scope: ["project:write"] },
     ];
-  }, [
-    routes,
-    isAssistantsEnabled,
-    isDeploymentsPageEnabled,
-    isTelemetryQueryDemoEnabled,
-  ]);
+  }, [routes, isAssistantsEnabled, isDeploymentsPageEnabled]);
 }

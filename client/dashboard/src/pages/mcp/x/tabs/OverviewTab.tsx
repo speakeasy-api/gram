@@ -2,9 +2,8 @@ import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useMcpEndpointUrl } from "@/hooks/useToolsetUrl";
+import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { remoteMcpRouteParam } from "@/lib/sources";
-import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type {
   McpEndpoint,
@@ -19,7 +18,7 @@ import {
 } from "@gram/client/react-query/index.js";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { ArrowUpRight, Copy, ExternalLink } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
@@ -221,23 +220,18 @@ function useServerAddressOverview(
   endpoints: McpEndpoint[],
   isLoadingEndpoints: boolean,
 ): ServerAddressOverview {
-  const endpoint = useMemo(
-    () => endpoints.find((e) => e.customDomainId) ?? endpoints[0],
-    [endpoints],
+  const { mcpUrl, installPageUrl, loading } = useResolvedMcpServerUrl(
+    endpoints,
+    isLoadingEndpoints,
   );
-  const { mcpUrl: resolvedUrl } = useMcpEndpointUrl(endpoint);
-  const fallbackUrl = endpoint?.slug
-    ? `${getServerURL()}/mcp/${endpoint.slug}`
-    : undefined;
-  const mcpUrl = resolvedUrl ?? fallbackUrl;
-  const ready = !isLoadingEndpoints && !!mcpUrl;
+  const ready = !loading && !!mcpUrl;
 
   return {
     ready,
-    loading: isLoadingEndpoints,
+    loading,
     mcpUrl,
-    installPageUrl: mcpUrl ? `${mcpUrl}/install` : undefined,
-    status: readyStatus(isLoadingEndpoints, ready),
+    installPageUrl,
+    status: readyStatus(loading, ready),
   };
 }
 

@@ -104,6 +104,15 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
 			logger.InfoContext(ctx, "oauth flow failed at idp callback", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
 		}
+		// First-party challenges have no MCP client to bounce the error back to
+		// (no RedirectURI), so surface it directly. Declines are forbidden;
+		// anything else is config/IDP trouble.
+		if challengeState.FirstParty {
+			if idpErr == "access_denied" {
+				return oops.E(oops.CodeForbidden, nil, "login was declined").LogError(ctx, logger)
+			}
+			return oops.E(oops.CodeUnexpected, nil, "idp returned an error: %s", idpErr).LogError(ctx, logger)
+		}
 		clientRedirect := buildClientRedirect(challengeState.RedirectURI, "", challengeState.State, idpErr, errDescription)
 		http.Redirect(w, r, clientRedirect, http.StatusFound)
 		return nil

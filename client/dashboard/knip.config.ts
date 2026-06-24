@@ -6,6 +6,8 @@ const config: KnipConfig = {
   ignoreBinaries: [
     // Invoked from the lint:format script; not on the dep tree.
     "oxfmt",
+    // Invoked from the prebuild script to build cel.wasm; not on the dep tree.
+    "mise",
   ],
   ignore: [
     // Global ambient declarations (FIXME<M> escape-hatch + JSX namespace

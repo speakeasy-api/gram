@@ -17,6 +17,7 @@ export const FeatureName = {
   Webhooks: "webhooks",
   Sso: "sso",
   Scim: "scim",
+  ObservabilityMode: "observability_mode",
 } as const;
 /**
  * Name of the feature to update

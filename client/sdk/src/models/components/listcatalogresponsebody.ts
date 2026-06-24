@@ -8,9 +8,9 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  ExternalMCPServer,
-  ExternalMCPServer$inboundSchema,
-} from "./externalmcpserver.js";
+  ExternalMCPServerEntry,
+  ExternalMCPServerEntry$inboundSchema,
+} from "./externalmcpserverentry.js";
 
 export type ListCatalogResponseBody = {
   /**
@@ -20,7 +20,7 @@ export type ListCatalogResponseBody = {
   /**
    * List of available MCP servers
    */
-  servers: Array<ExternalMCPServer>;
+  servers: Array<ExternalMCPServerEntry>;
 };
 
 /** @internal */
@@ -30,7 +30,7 @@ export const ListCatalogResponseBody$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     next_cursor: z.optional(z.string()),
-    servers: z.array(ExternalMCPServer$inboundSchema),
+    servers: z.array(ExternalMCPServerEntry$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {

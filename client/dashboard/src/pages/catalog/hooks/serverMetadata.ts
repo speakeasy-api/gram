@@ -1,17 +1,27 @@
-import { ExternalMCPServer } from "@gram/client/models/components";
+import type {
+  ExternalMCPServer,
+  ExternalMCPTool,
+} from "@gram/client/models/components";
 import type { PulseMCPServer } from "../hooks";
 import type { FilterState } from "./useFilterState";
 
-interface ToolAnnotations {
-  title?: string;
-  readOnlyHint?: boolean;
-  destructiveHint?: boolean;
-}
-
-interface ToolInfo {
-  name: string;
-  description?: string;
-  annotations?: ToolAnnotations;
+/**
+ * Derive the catalog's tool_count / is_read_only scalars from a full tool list.
+ * The catalog list endpoint precomputes these server-side; callers that only
+ * have the full tools (e.g. collection-backed servers) use this to match the
+ * `PulseMCPServer` shape.
+ */
+export function toolStats(tools: ExternalMCPTool[] | undefined): {
+  toolCount: number;
+  isReadOnly: boolean;
+} {
+  const list = tools ?? [];
+  return {
+    toolCount: list.length,
+    isReadOnly:
+      list.length > 0 &&
+      list.every((tool) => tool.annotations?.readOnlyHint === true),
+  };
 }
 
 /**
@@ -94,27 +104,6 @@ function getAuthTypeDisplay(authType: string): string {
 }
 
 /**
- * Extract tool-related metadata.
- */
-function extractToolMetadata(server: PulseMCPServer): {
-  toolCount: number;
-  isReadOnly: boolean;
-} {
-  const versionMeta = server.meta?.["com.pulsemcp/server-version"];
-  const remote = versionMeta?.["remotes[0]"];
-  const metaTools = remote?.tools ?? [];
-  const serverTools: ToolInfo[] = (server.tools ?? []) as ToolInfo[];
-  const tools: ToolInfo[] = metaTools.length > 0 ? metaTools : serverTools;
-
-  const toolCount = tools.length;
-  const isReadOnly =
-    toolCount > 0 &&
-    tools.every((tool) => tool.annotations?.readOnlyHint === true);
-
-  return { toolCount, isReadOnly };
-}
-
-/**
  * Estimate weekly breakdown from monthly and weekly totals.
  * Returns 4 values representing the last 4 weeks (oldest to newest).
  */
@@ -156,7 +145,6 @@ export function parseServerMetadata(
   const visitorsTotal = serverMeta?.visitorsEstimateTotal ?? 0;
 
   const authType = extractAuthType(server);
-  const { toolCount, isReadOnly } = extractToolMetadata(server);
 
   return {
     visitorsWeek,
@@ -168,8 +156,8 @@ export function parseServerMetadata(
     status: versionMeta?.status,
     authType,
     authTypeDisplay: getAuthTypeDisplay(authType),
-    toolCount,
-    isReadOnly,
+    toolCount: server.toolCount,
+    isReadOnly: server.isReadOnly,
     publishedAt: versionMeta?.publishedAt
       ? new Date(versionMeta.publishedAt)
       : undefined,

@@ -1459,29 +1459,41 @@ SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.b
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
   AND (
-    r.deleted IS TRUE
-    OR r.ended IS TRUE
-    OR EXISTS (
-      SELECT 1
-      FROM assistants a
-      WHERE a.id = r.assistant_id
-        AND a.project_id = r.project_id
-        AND a.deleted IS TRUE
+    (
+      (
+        r.deleted IS TRUE
+        OR r.ended IS TRUE
+        OR EXISTS (
+          SELECT 1
+          FROM assistants a
+          WHERE a.id = r.assistant_id
+            AND a.project_id = r.project_id
+            AND a.deleted IS TRUE
+        )
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM assistant_runtimes r2
+        WHERE r2.assistant_id = r.assistant_id
+          AND r2.updated_at >= $1
+          AND r2.backend_metadata_json <> '{}'::jsonb
+      )
+    )
+    OR (
+      r.backend <> $2
+      AND r.deleted IS NOT TRUE
+      AND r.ended IS NOT TRUE
+      AND r.state = $3
     )
   )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM assistant_runtimes r2
-    WHERE r2.assistant_id = r.assistant_id
-      AND r2.updated_at >= $1
-      AND r2.backend_metadata_json <> '{}'::jsonb
-  )
 ORDER BY r.updated_at ASC
-LIMIT $2
+LIMIT $4
 `
 
 type ListInactiveAssistantRuntimesForReapParams struct {
 	InactiveBefore pgtype.Timestamptz
+	TargetBackend  string
+	StoppedState   string
 	LimitCount     int32
 }
 
@@ -1496,17 +1508,26 @@ type ListInactiveAssistantRuntimesForReapRow struct {
 	WarmUntil           pgtype.Timestamptz
 }
 
-// Returns runtime rows that still carry backend metadata, are no longer
-// supposed to have a backend app, and whose owning assistant has had no
-// runtime activity since @inactive_before — orphans whose Stop/Reap never
-// completed. A row qualifies when it is finalized (soft-deleted or ended;
-// the state value is intentionally ignored since a tombstone can carry any
-// state, e.g. one stamped by a racing turn) or when its owning assistant is
-// soft-deleted (delete paths reap best-effort and rely on this janitor as
-// the safety net). A live row under a live assistant is never a candidate:
-// an idle runtime keeps its VM until the assistant is deleted.
+// Returns runtime rows that still carry backend metadata and are safe to
+// collect, in two cases:
+//  1. Orphans: finalized (soft-deleted or ended; the state value is ignored
+//     since a tombstone can carry any state, e.g. one stamped by a racing
+//     turn) or under a soft-deleted assistant, whose owning assistant has had
+//     no runtime activity since @inactive_before — i.e. Stop/Reap never
+//     completed. A live row under a live assistant is never an orphan: an
+//     idle runtime keeps its VM until the assistant is deleted.
+//  2. Superseded backend: a row on a backend the process no longer targets
+//     (backend <> @target_backend), parked at @stopped_state after its warm
+//     window. Collecting it frees the deprecated backend's resources so the
+//     next admit lands on the target backend. Active/starting/expiring rows
+//     are left to finish, so a live assistant is never disrupted mid-turn.
 func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg ListInactiveAssistantRuntimesForReapParams) ([]ListInactiveAssistantRuntimesForReapRow, error) {
-	rows, err := q.db.Query(ctx, listInactiveAssistantRuntimesForReap, arg.InactiveBefore, arg.LimitCount)
+	rows, err := q.db.Query(ctx, listInactiveAssistantRuntimesForReap,
+		arg.InactiveBefore,
+		arg.TargetBackend,
+		arg.StoppedState,
+		arg.LimitCount,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1514,6 +1535,86 @@ func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg 
 	var items []ListInactiveAssistantRuntimesForReapRow
 	for rows.Next() {
 		var i ListInactiveAssistantRuntimesForReapRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssistantThreadID,
+			&i.AssistantID,
+			&i.ProjectID,
+			&i.Backend,
+			&i.BackendMetadataJson,
+			&i.State,
+			&i.WarmUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStoppedRuntimesForReap = `-- name: ListStoppedRuntimesForReap :many
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+FROM assistant_runtimes r
+WHERE r.backend_metadata_json <> '{}'::jsonb
+  AND r.state IN ($1, $2)
+  AND r.updated_at < $3
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_runtimes r2
+    WHERE r2.assistant_thread_id = r.assistant_thread_id
+      AND r2.project_id = r.project_id
+      AND r2.created_at > r.created_at
+      AND r2.state <> $4
+  )
+ORDER BY r.updated_at ASC
+LIMIT $5
+`
+
+type ListStoppedRuntimesForReapParams struct {
+	StoppedState  string
+	FailedState   string
+	StoppedBefore pgtype.Timestamptz
+	ReapedState   string
+	LimitCount    int32
+}
+
+type ListStoppedRuntimesForReapRow struct {
+	ID                  uuid.UUID
+	AssistantThreadID   uuid.UUID
+	AssistantID         uuid.UUID
+	ProjectID           uuid.UUID
+	Backend             string
+	BackendMetadataJson []byte
+	State               string
+	WarmUntil           pgtype.Timestamptz
+}
+
+// Per-thread reap candidates: rows in stopped or failed whose own updated_at
+// has aged past @stopped_before. No assistant-wide activity check so a single
+// still-active thread on an assistant cannot pin every dead sibling's machine
+// indefinitely. The NOT EXISTS guard restricts the candidate to the most
+// recent non-reaped row per thread: ReserveAssistantRuntime copies the latest
+// non-empty metadata into each new row, so a stale older sibling can share
+// `machine_id` with the current owner — destroying it would yank the live
+// machine out from under a fresher row that is still inside its own TTL.
+func (q *Queries) ListStoppedRuntimesForReap(ctx context.Context, arg ListStoppedRuntimesForReapParams) ([]ListStoppedRuntimesForReapRow, error) {
+	rows, err := q.db.Query(ctx, listStoppedRuntimesForReap,
+		arg.StoppedState,
+		arg.FailedState,
+		arg.StoppedBefore,
+		arg.ReapedState,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStoppedRuntimesForReapRow
+	for rows.Next() {
+		var i ListStoppedRuntimesForReapRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.AssistantThreadID,
@@ -2016,6 +2117,46 @@ func (q *Queries) LookupActiveAssistantRuntimeV2(ctx context.Context, arg Lookup
 	var i LookupActiveAssistantRuntimeV2Row
 	err := row.Scan(&i.ID, &i.State)
 	return i, err
+}
+
+const markAssistantRuntimeMachineReaped = `-- name: MarkAssistantRuntimeMachineReaped :execrows
+UPDATE assistant_runtimes
+SET state = $1,
+    backend_metadata_json = backend_metadata_json - 'machine_id' - 'last_boot_id',
+    updated_at = clock_timestamp(),
+    ended_at = COALESCE(ended_at, clock_timestamp()),
+    deleted_at = COALESCE(deleted_at, clock_timestamp())
+WHERE id = $2
+  AND project_id = $3
+  AND state IN ($4, $5)
+`
+
+type MarkAssistantRuntimeMachineReapedParams struct {
+	ReapedState  string
+	RuntimeID    uuid.UUID
+	ProjectID    uuid.UUID
+	StoppedState string
+	FailedState  string
+}
+
+// Per-thread reap: strips the machine slot from backend metadata while
+// preserving app-level fields (app_name, app_id, app_url, app_ip, region) so
+// the next admit for the same thread cold-launches into the same Fly app and
+// keeps its allocated IP and secrets. Filters by current state so a row that
+// raced into starting/active between selection and update is left alone — the
+// 0-rows return signals the caller to skip the destructive backend call.
+func (q *Queries) MarkAssistantRuntimeMachineReaped(ctx context.Context, arg MarkAssistantRuntimeMachineReapedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markAssistantRuntimeMachineReaped,
+		arg.ReapedState,
+		arg.RuntimeID,
+		arg.ProjectID,
+		arg.StoppedState,
+		arg.FailedState,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const markAssistantRuntimeReaped = `-- name: MarkAssistantRuntimeReaped :exec

@@ -439,6 +439,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		//nolint:gosec // Values are bounded counts that won't overflow int64
 		users[i] = &telem_gen.UserSummary{
 			UserID:                   item.UserID,
+			UserEmail:                item.UserEmail,
 			FirstSeenUnixNano:        strconv.FormatInt(item.FirstSeenUnixNano, 10),
 			LastSeenUnixNano:         strconv.FormatInt(item.LastSeenUnixNano, 10),
 			TotalChats:               int64(item.TotalChats),
@@ -1249,6 +1250,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	apiKeyID := conv.PtrValOr(payload.APIKeyID, "")
 	toolsetSlug := conv.PtrValOr(payload.ToolsetSlug, "")
 	remoteMCPServerID := conv.PtrValOr(payload.RemoteMcpServerID, "")
+	mcpServerID := conv.PtrValOr(payload.McpServerID, "")
 	eventSource := conv.PtrValOr(payload.EventSource, "")
 	hookSource := conv.PtrValOr(payload.HookSource, "")
 
@@ -1274,6 +1276,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
 		RemoteMCPServerID: remoteMCPServerID,
+		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
 	})
@@ -1290,6 +1293,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
 		RemoteMCPServerID: remoteMCPServerID,
+		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
 	})
@@ -1309,6 +1313,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			APIKeyID:          apiKeyID,
 			ToolsetSlug:       toolsetSlug,
 			RemoteMCPServerID: remoteMCPServerID,
+			MCPServerID:       mcpServerID,
 			EventSource:       eventSource,
 			HookSource:        hookSource,
 		})
@@ -1326,6 +1331,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
 		RemoteMCPServerID: remoteMCPServerID,
+		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
 		Limit:             10,
@@ -1344,6 +1350,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
 		RemoteMCPServerID: remoteMCPServerID,
+		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
 		Limit:             10,
@@ -1435,6 +1442,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		APIKeyID:          "",
 		ToolsetSlug:       "",
 		RemoteMCPServerID: "",
+		MCPServerID:       "",
 		EventSource:       "",
 		HookSource:        "",
 	})
@@ -1462,6 +1470,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		APIKeyID:          "",
 		ToolsetSlug:       "",
 		RemoteMCPServerID: "",
+		MCPServerID:       "",
 		EventSource:       "",
 		HookSource:        "",
 	})
@@ -2279,6 +2288,7 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
 		ShadowServerNames:  payload.ShadowServerNames,
 		UserFilters:        userFilters,
+		HookSources:        payload.HookSources,
 		TargetLimit:        25,
 		UserLimit:          25,
 		UsersByTargetLimit: 100,
@@ -2298,6 +2308,8 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
+	logger := s.logger
 
 	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
 	if err != nil {
@@ -2331,7 +2343,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 
 	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers").LogError(ctx, logger)
 	}
 
 	rows, err := s.chRepo.ListToolUsageTraces(ctx, repo.ListToolUsageTracesParams{
@@ -2352,7 +2364,7 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		Limit:              params.limit + 1,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage traces")
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage traces").LogError(ctx, logger)
 	}
 
 	nextCursor := ""

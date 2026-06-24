@@ -325,6 +325,12 @@ async function seed() {
       organizationId: activeOrgID,
       toolUrns,
     });
+    // Risk findings depend on the chats/messages seeded above (FK +
+    // attachment), so seed them after observability data.
+    await seedRiskFindings({
+      projectId: firstProject.id,
+      organizationId: activeOrgID,
+    });
   }
 
   // Set enterprise account type last so RBAC enforcement doesn't block seeding.
@@ -1501,6 +1507,288 @@ function generateChatUUID(chatNumber: number): string {
 
   const hex = hash.toString("hex").slice(0, 32);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+// Name used to find + reset the seeded detection policy on re-runs. The id is
+// DB-generated (not hardcoded) so re-seeding into a freshly recreated project
+// can't collide on a global primary key and silently skip policy creation.
+const SEED_RISK_POLICY_NAME = "Seeded Detection Policy";
+
+// Risk-finding catalog spanning every detection source the dashboard knows
+// about. The raw `source` (gitleaks/presidio/...) is what the insights
+// assistant groups by, while `rule_id` drives the customer-facing category
+// label (secret.* -> Secrets, pii.* -> PII/Financial/Government IDs, ...). The
+// bare ids ("generic-api-key", "email") deliberately omit a category prefix so
+// they exercise the source-based classification fallback. match values mimic
+// the redacted form the scanner stores. Tuple: [source, ruleId, description,
+// match, confidence].
+const RISK_FINDING_CATALOG: [string, string, string, string, number][] = [
+  // Secrets (gitleaks)
+  [
+    "gitleaks",
+    "secret.aws_access_key",
+    "AWS access key",
+    "<redacted len=20 sha=8f3a2c1d>",
+    0.99,
+  ],
+  [
+    "gitleaks",
+    "secret.github_pat",
+    "GitHub personal access token",
+    "<redacted len=40 sha=3b9e7a02>",
+    0.98,
+  ],
+  [
+    "gitleaks",
+    "secret.stripe_api_key",
+    "Stripe secret key",
+    "<redacted len=32 sha=c41d77ee>",
+    0.97,
+  ],
+  [
+    "gitleaks",
+    "generic-api-key",
+    "Generic API key",
+    "<redacted len=36 sha=a0f2bb19>",
+    0.85,
+  ],
+  // PII (presidio)
+  [
+    "presidio",
+    "pii.email_address",
+    "Email address",
+    "<redacted len=22 sha=5d2c9f81>",
+    0.95,
+  ],
+  [
+    "presidio",
+    "pii.phone_number",
+    "Phone number",
+    "<redacted len=12 sha=77ab10cc>",
+    0.9,
+  ],
+  [
+    "presidio",
+    "pii.ip_address",
+    "IP address",
+    "<redacted len=13 sha=12e4dd56>",
+    0.88,
+  ],
+  ["presidio", "email", "Email address", "<redacted len=24 sha=9c3a4b22>", 0.8],
+  // Financial (presidio)
+  [
+    "presidio",
+    "pii.credit_card",
+    "Credit card number",
+    "<redacted len=16 sha=ee0918fa>",
+    0.96,
+  ],
+  [
+    "presidio",
+    "pii.iban_code",
+    "IBAN code",
+    "<redacted len=22 sha=4471bc9d>",
+    0.93,
+  ],
+  // Government IDs (presidio)
+  [
+    "presidio",
+    "pii.us_ssn",
+    "US social security number",
+    "<redacted len=11 sha=2a6f0c34>",
+    0.94,
+  ],
+  [
+    "presidio",
+    "pii.us_passport",
+    "US passport number",
+    "<redacted len=9 sha=b8d3e012>",
+    0.9,
+  ],
+  // Healthcare (presidio)
+  [
+    "presidio",
+    "pii.medical_license",
+    "Medical license number",
+    "<redacted len=10 sha=6f1c8aa7>",
+    0.89,
+  ],
+  // Prompt injection
+  [
+    "prompt_injection",
+    "prompt_injection",
+    "Prompt injection attempt",
+    "<redacted len=64 sha=d90a17be>",
+    0.91,
+  ],
+  // Shadow MCP
+  [
+    "shadow_mcp",
+    "shadow_mcp",
+    "Tool call from a non-Speakeasy MCP server",
+    "get_customer_records",
+    1.0,
+  ],
+  // Destructive tool
+  [
+    "destructive_tool",
+    "destructive_tool",
+    "Destructive tool invocation",
+    "delete_all_records",
+    1.0,
+  ],
+  // Destructive CLI
+  [
+    "cli_destructive",
+    "cli_destructive",
+    "Destructive CLI command",
+    "rm -rf /var/data",
+    1.0,
+  ],
+];
+
+// Inserts a standard detection policy plus a spread of risk_results across the
+// already-seeded chat messages. Each catalog entry is replicated a few times
+// and attached to a different message and day so the Risk Overview, Risk
+// Events, and the "what's each source catching?" insights grouping all have
+// meaningful, recent (<7 day) data to render.
+async function seedRiskFindings(init: {
+  projectId: string;
+  organizationId: string;
+}): Promise<void> {
+  const { projectId, organizationId } = init;
+
+  const REPLICAS = 4;
+  const findingRows: string[] = [];
+  let idx = 0;
+  for (let r = 0; r < REPLICAS; r++) {
+    for (const [
+      source,
+      ruleId,
+      description,
+      match,
+      confidence,
+    ] of RISK_FINDING_CATALOG) {
+      findingRows.push(
+        `(${idx}, '${source}', '${ruleId}', '${description}', '${match}', ${confidence})`,
+      );
+      idx++;
+    }
+  }
+
+  // The spread insert above scatters findings one-per-message across every
+  // chat, so almost no session ends up with more than one finding. To exercise
+  // the "risk score > N" threshold filter we also concentrate a controlled
+  // number of findings onto a few specific chats, producing sessions that
+  // straddle the 0 / 2 / 5 thresholds the dashboard offers. Tuple: [chat index
+  // (matches generateChatUUID), number of findings to attach].
+  const HIGH_RISK_CHATS: [chatIndex: number, findings: number][] = [
+    [0, 1],
+    [1, 3],
+    [2, 4],
+    [3, 8],
+    [4, 12],
+  ];
+
+  // Attaches `count` findings to a single chat's messages (round-robin by
+  // creation order, so a short chat just stacks multiple findings per message —
+  // each still counts toward risk_findings_count). pol resolves the policy
+  // inserted earlier in this same transaction.
+  const highRiskInserts = HIGH_RISK_CHATS.map(([chatIndex, count]) => {
+    const chatId = generateChatUUID(chatIndex);
+    return `
+    INSERT INTO risk_results (
+      project_id, organization_id, risk_policy_id, risk_policy_version,
+      chat_message_id, source, found, rule_id, description, match, confidence, created_at
+    )
+    SELECT
+      '${projectId}', '${organizationId}', pol.id, 1,
+      m.id, 'gitleaks', TRUE, 'secret.aws_access_key', 'AWS access key',
+      '<redacted len=20 sha=8f3a2c1d>', 0.99,
+      now() - ((g.i % 6) || ' days')::interval
+    FROM (
+      SELECT id FROM risk_policies
+      WHERE project_id = '${projectId}' AND name = '${SEED_RISK_POLICY_NAME}'
+      LIMIT 1
+    ) pol
+    CROSS JOIN generate_series(0, ${count - 1}) AS g(i)
+    JOIN (
+      SELECT cm.id,
+             ROW_NUMBER() OVER (ORDER BY cm.created_at) AS rn,
+             COUNT(*) OVER () AS cnt
+      FROM chat_messages cm
+      WHERE cm.chat_id = '${chatId}'
+    ) m ON m.rn = (g.i % m.cnt) + 1;`;
+  }).join("\n");
+
+  const pgSQL = `
+    BEGIN;
+    -- Idempotent reset: drop prior seeded findings + policy for this project.
+    DELETE FROM risk_results WHERE project_id = '${projectId}';
+    DELETE FROM risk_policies WHERE project_id = '${projectId}' AND name = '${SEED_RISK_POLICY_NAME}';
+
+    -- pol (re)creates the policy with a DB-generated id and feeds that id
+    -- straight into the risk_results insert, so findings always attach to a
+    -- policy owned by THIS project.
+    WITH pol AS (
+      INSERT INTO risk_policies (
+        project_id, organization_id, name, policy_type, sources, enabled, action, version
+      ) VALUES (
+        '${projectId}', '${organizationId}', '${SEED_RISK_POLICY_NAME}', 'standard',
+        ARRAY['gitleaks','presidio','prompt_injection','shadow_mcp','destructive_tool','cli_destructive'],
+        TRUE, 'flag', 1
+      )
+      RETURNING id
+    ),
+    msgs AS (
+      SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn
+      FROM chat_messages
+      WHERE project_id = '${projectId}'
+    ),
+    mcount AS (SELECT GREATEST(COUNT(*), 1) AS n FROM msgs),
+    findings(idx, source, rule_id, description, match, confidence) AS (
+      VALUES
+        ${findingRows.join(",\n        ")}
+    )
+    INSERT INTO risk_results (
+      project_id, organization_id, risk_policy_id, risk_policy_version,
+      chat_message_id, source, found, rule_id, description, match, confidence, created_at
+    )
+    SELECT
+      '${projectId}', '${organizationId}', pol.id, 1,
+      m.id, f.source, TRUE, f.rule_id, f.description, f.match, f.confidence,
+      now() - ((f.idx % 6) || ' days')::interval
+    FROM findings f
+    CROSS JOIN mcount
+    CROSS JOIN pol
+    JOIN msgs m ON m.rn = (f.idx % mcount.n) + 1;
+    ${highRiskInserts}
+    COMMIT;
+  `;
+
+  try {
+    const dbUser = process.env.DB_USER || "gram";
+    const dbName = process.env.DB_NAME || "gram";
+
+    const tmpFile = path.join(process.cwd(), ".seed-risk.sql");
+    await fs.writeFile(tmpFile, pgSQL, "utf-8");
+
+    try {
+      await $`docker compose cp ${tmpFile} gram-db:/tmp/seed-risk.sql`.quiet();
+      await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -f /tmp/seed-risk.sql`.quiet();
+      log.info(
+        `Seeded ${findingRows.length} risk findings across ${RISK_FINDING_CATALOG.length} sources, ` +
+          `plus ${HIGH_RISK_CHATS.length} high-risk chats (scores ${HIGH_RISK_CHATS.map(([, c]) => c).join(", ")}) for the threshold filter`,
+      );
+    } finally {
+      await fs.unlink(tmpFile).catch(() => {});
+    }
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; stdout?: string; message?: string };
+    log.warn(
+      `Failed to seed risk findings: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+  }
 }
 
 async function seedObservabilityData(init: {

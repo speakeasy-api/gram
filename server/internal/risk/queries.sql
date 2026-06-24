@@ -11,6 +11,8 @@ INSERT INTO risk_policies (
   , disabled_rules
   , custom_rule_ids
   , message_types
+  , scope_include
+  , scope_exempt
   , enabled
   , action
   , audience_type
@@ -32,6 +34,8 @@ VALUES (
   , @disabled_rules
   , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
   , sqlc.arg(message_types)::text[]
+  , sqlc.narg(scope_include)::text
+  , sqlc.narg(scope_exempt)::text
   , @enabled
   , @action
   , @audience_type
@@ -87,6 +91,8 @@ SET name = @name
   , disabled_rules = @disabled_rules
   , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
   , message_types = sqlc.arg(message_types)::text[]
+  , scope_include = sqlc.narg(scope_include)::text
+  , scope_exempt = sqlc.narg(scope_exempt)::text
   , enabled = @enabled
   , action = @action
   , audience_type = @audience_type
@@ -101,6 +107,8 @@ SET name = @name
         OR disabled_rules IS DISTINCT FROM @disabled_rules
         OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
         OR message_types IS DISTINCT FROM sqlc.arg(message_types)::text[]
+        OR scope_include IS DISTINCT FROM sqlc.narg(scope_include)::text
+        OR scope_exempt IS DISTINCT FROM sqlc.narg(scope_exempt)::text
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
         OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text
@@ -252,7 +260,7 @@ INSERT INTO risk_custom_detection_rules (
   , rule_id
   , title
   , description
-  , regex
+  , detection_expr
   , severity
 )
 VALUES (
@@ -261,7 +269,7 @@ VALUES (
   , @rule_id
   , @title
   , @description
-  , @regex
+  , sqlc.narg(detection_expr)::text
   , @severity
 )
 RETURNING *;
@@ -284,7 +292,7 @@ WHERE id = @id
 UPDATE risk_custom_detection_rules
 SET title = @title
   , description = @description
-  , regex = @regex
+  , detection_expr = sqlc.narg(detection_expr)::text
   , severity = @severity
   , updated_at = clock_timestamp()
 WHERE id = @id
@@ -665,6 +673,7 @@ INSERT INTO risk_results (
   , end_pos
   , confidence
   , tags
+  , spans
   , dead_letter_reason
 )
 VALUES (
@@ -683,6 +692,7 @@ VALUES (
   , @end_pos
   , @confidence
   , @tags
+  , @spans
   , @dead_letter_reason
 );
 
@@ -711,14 +721,14 @@ SELECT
     sub.id, sub.project_id, sub.organization_id, sub.risk_policy_id,
     sub.risk_policy_version, sub.chat_message_id, sub.source, sub.found,
     sub.rule_id, sub.description, sub.match, sub.start_pos, sub.end_pos,
-    sub.confidence, sub.tags, sub.dead_letter_reason, sub.created_at,
+    sub.confidence, sub.tags, sub.spans, sub.dead_letter_reason, sub.created_at,
     sub.chat_id, sub.message_created_at, sub.chat_title, sub.chat_user_id
 FROM (
   SELECT
       rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id,
       rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found,
       rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos,
-      rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at,
+      rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.created_at,
       cm.chat_id, cm.created_at AS message_created_at,
       c.title AS chat_title, c.external_user_id AS chat_user_id,
       CASE

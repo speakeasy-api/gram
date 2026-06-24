@@ -2,7 +2,7 @@
 name = "gram-infra"
 version = "0.1.0"
 description = "Gram infra Python package: generated protobuf types and a Pub/Sub convenience layer"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
   # protobuf must satisfy the runtime-version guard emitted in the generated
   # gen_py/**/*_pb2.py (ValidateProtobufRuntimeVersion(PUBLIC, 7, 35, 0)). The
@@ -11,6 +11,7 @@ dependencies = [
   "protobuf>=7.35.0,<8",
   "google-cloud-pubsub>=2.31.0",
   "anyio>=4.13.0",
+  "asyncer>=0.0.17",
   "structlog>=26.1.0",
   "opentelemetry-api>=1.42.1",
 ]
@@ -25,6 +26,10 @@ pubsub-stream-demo = "gram_infra.demos.pubsub_stream:main"
 # work on a fresh checkout without an undocumented --extra flag.
 [dependency-groups]
 dev = [
+  # Runtime detection of code that blocks the asyncio event loop. Dev-only: the
+  # blocking guard is enforced across the test suite (see tests/conftest.py), but
+  # never shipped — runtime activation is the consuming app's job (e.g. pystreams).
+  "aiocop>=1.1.4",
   "pyrefly>=1.0.0",
   "pytest>=8.0.0",
   "pytest-asyncio>=0.24.0",
@@ -46,6 +51,19 @@ build-backend = "hatchling.build"
 # namespace packages, so the buf-generated tree is left untouched.
 [tool.hatch.build.targets.wheel]
 packages = ["gram_infra", "gen_py/gcp", "gen_py/gram"]
+
+[tool.ruff]
+# gen_py/{gcp,gram} are buf-generated protobuf modules; never lint them.
+extend-exclude = ["gen_py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "ASYNC", "RUF", "PT", "TID"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests synchronize on bounded poll loops (wait for acks / scheduler readiness),
+# which is idiomatic for test orchestration and not a service hot path. ASYNC110
+# stays enabled for library code under gram_infra.
+"tests/**" = ["ASYNC110"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

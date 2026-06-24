@@ -53,6 +53,7 @@ export interface FilterValueByKind {
   multiselect: string[];
   select: string | null;
   text: string;
+  number: number | null;
   boolean: boolean;
   daterange: DateRangeValue;
 }
@@ -93,6 +94,12 @@ interface TextDimension extends BaseDimension<"text"> {
   /** Operator applied server-side; defaults to `contains`. */
   operator?: Operator;
 }
+interface NumberDimension extends BaseDimension<"number"> {
+  /** Optional bounds / granularity forwarded to the numeric input. */
+  min?: number;
+  max?: number;
+  step?: number;
+}
 type BooleanDimension = BaseDimension<"boolean">;
 interface DateRangeDimension extends BaseDimension<"daterange"> {
   presets?: DateRangePreset[];
@@ -103,6 +110,7 @@ export type FilterDimension =
   | MultiselectDimension
   | SelectDimension
   | TextDimension
+  | NumberDimension
   | BooleanDimension
   | DateRangeDimension;
 
@@ -138,6 +146,8 @@ export function defaultValueForDimension(
       return null;
     case "text":
       return "";
+    case "number":
+      return null;
     case "boolean":
       return false;
     case "daterange":
@@ -161,6 +171,8 @@ export function isDimensionActive(
       return typeof value === "string" && value !== "";
     case "text":
       return typeof value === "string" && value.trim() !== "";
+    case "number":
+      return typeof value === "number";
     case "boolean":
       return value === true;
     case "daterange": {
@@ -168,6 +180,24 @@ export function isDimensionActive(
       return v.preset !== null || v.customRange !== null;
     }
   }
+}
+
+/**
+ * Whether a dimension's value equals its default ("empty") value. Drives whether
+ * a chip shows a clear (×) button: clearing an at-default chip is a no-op, so we
+ * hide the × for default pinned chips (e.g. "All servers" or a daterange already
+ * on its `defaultPreset`). Differs from `!isDimensionActive` only for daterange,
+ * whose default may be a non-null preset.
+ */
+export function isDimensionAtDefault(
+  dim: FilterDimension,
+  value: FilterValueByKind[FilterKind],
+): boolean {
+  if (dim.kind === "daterange") {
+    const v = value as DateRangeValue;
+    return v.customRange === null && v.preset === (dim.defaultPreset ?? null);
+  }
+  return !isDimensionActive(dim, value);
 }
 
 /** Resolve a raw value to its option label, falling back to the raw value. */
@@ -246,6 +276,10 @@ export function chipLabel(
     }
     case "text":
       return `${dim.label}: ${value as string}`;
+    case "number": {
+      const v = value as number | null;
+      return v === null ? dim.label : `${dim.label}: ${v}`;
+    }
     case "boolean":
       return dim.label;
   }

@@ -269,17 +269,24 @@ func TestEngineFilter_skipsLogWhenNoChecks(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, resourceIDs)
 
-	// Give async insert a moment, then verify nothing landed.
-	time.Sleep(500 * time.Millisecond)
-	rows, err := chConn.Query(t.Context(), `
-		SELECT count() FROM authz_challenges WHERE organization_id = ? AND operation = 'filter'
-	`, orgID)
-	require.NoError(t, err)
-	defer func() { _ = rows.Close() }()
-	require.True(t, rows.Next())
-	var count uint64
-	require.NoError(t, rows.Scan(&count))
-	require.Equal(t, uint64(0), count)
+	// Empty input must not emit a challenge log entry; confirm none ever lands.
+	require.Never(t, func() bool {
+		rows, err := chConn.Query(t.Context(), `
+			SELECT count() FROM authz_challenges WHERE organization_id = ? AND operation = 'filter'
+		`, orgID)
+		if err != nil {
+			return false
+		}
+		defer func() { _ = rows.Close() }()
+		if !rows.Next() {
+			return false
+		}
+		var count uint64
+		if err := rows.Scan(&count); err != nil {
+			return false
+		}
+		return count > 0
+	}, 500*time.Millisecond, 50*time.Millisecond, "no challenge log entry should be emitted for empty input")
 }
 
 // --- Engine deny-wins tests ---
@@ -383,6 +390,55 @@ func TestEngineFindMatched_denyReturnsFalse(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []bool{true, false, true}, matched)
+}
+
+func TestEngineRequire_projectWriteBlocklistBlocksAccess(t *testing.T) {
+	t.Parallel()
+
+	const projectID = "0196cbd1-9328-74e7-b7bb-6e5357565573"
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeProjectWrite, WildcardResource),
+		NewGrantWithSelector(ScopeProjectBlockedWrite, Selector{
+			SelectorKeyResourceKind: ResourceKindProject,
+			SelectorKeyResourceID:   projectID,
+		}),
+	})
+
+	err = engine.Require(ctx, Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "project_other", Dimensions: nil})
+	require.NoError(t, err)
+
+	err = engine.Require(ctx, Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: projectID, Dimensions: nil})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEngineFilter_mcpWriteBlocklistExcludesProjectScopedResources(t *testing.T) {
+	t.Parallel()
+
+	const projectID = "0196cbd1-9328-74e7-b7bb-6e5357565573"
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeMCPWrite, WildcardResource),
+		NewGrantWithSelector(ScopeMCPBlockedWrite, Selector{
+			SelectorKeyResourceKind: ResourceKindMCP,
+			SelectorKeyResourceID:   WildcardResource,
+			SelectorKeyProjectID:    projectID,
+		}),
+	})
+
+	resourceIDs, err := engine.Filter(ctx, []Check{
+		MCPCheck(ScopeMCPWrite, "server_in_project", projectID),
+		MCPCheck(ScopeMCPWrite, "server_other_project", "project_other"),
+		{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "dimensionless_probe", Dimensions: nil},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"server_other_project", "dimensionless_probe"}, resourceIDs)
 }
 
 func TestEngineFilter_withDimensions(t *testing.T) {
@@ -751,17 +807,24 @@ func TestEngineFindMatched_emptyInputReturnsEmptySlice(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, matched)
 
-	// Empty input must not emit a challenge log entry.
-	time.Sleep(500 * time.Millisecond)
-	rows, err := chConn.Query(t.Context(), `
-		SELECT count() FROM authz_challenges WHERE organization_id = ? AND operation = 'filter'
-	`, orgID)
-	require.NoError(t, err)
-	defer func() { _ = rows.Close() }()
-	require.True(t, rows.Next())
-	var count uint64
-	require.NoError(t, rows.Scan(&count))
-	require.Zero(t, count, "empty input must skip challenge logging")
+	// Empty input must not emit a challenge log entry; confirm none ever lands.
+	require.Never(t, func() bool {
+		rows, err := chConn.Query(t.Context(), `
+			SELECT count() FROM authz_challenges WHERE organization_id = ? AND operation = 'filter'
+		`, orgID)
+		if err != nil {
+			return false
+		}
+		defer func() { _ = rows.Close() }()
+		if !rows.Next() {
+			return false
+		}
+		var count uint64
+		if err := rows.Scan(&count); err != nil {
+			return false
+		}
+		return count > 0
+	}, 500*time.Millisecond, 50*time.Millisecond, "empty input must skip challenge logging")
 }
 
 func TestEngineFindMatched_missingGrantsReturnsError(t *testing.T) {

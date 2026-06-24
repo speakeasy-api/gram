@@ -24,6 +24,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hookevents"
+	claudeevents "github.com/speakeasy-api/gram/server/internal/hookevents/adapters/claude"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -36,7 +38,18 @@ import (
 // payload.
 const decodeBodySampleLimit = 1024
 
-const claudeShadowMCPMetadataUnavailableReason = "Speakeasy could not verify this MCP tool call because the Claude session metadata is not available yet. Try again after the session initializes."
+const claudeShadowMCPMetadataUnavailableReason = "Speakeasy could not verify this MCP tool call. Try restarting Claude, or running /reload-plugins."
+
+// Diagnostic codes appended to claudeShadowMCPMetadataUnavailableReason. The
+// three fail-closed branches that can't verify an MCP call all surface the
+// same generic copy, so the code is the only thing that tells a user (or
+// support) which branch denied the call from the message alone. They mirror
+// the slog event suffixes on each branch.
+const (
+	denyCodeNoSession   = "NO_SESSION"
+	denyCodeNoMetadata  = "NO_METADATA"
+	denyCodeNoUserEmail = "NO_USER_EMAIL"
+)
 
 // decoderFunc adapts a plain function to the goahttp.Decoder interface so we
 // can capture per-request context (logger, raw body, headers) in a closure
@@ -255,32 +268,49 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 		}
 	}
 
+	// Claim the per-invocation idempotency token once, before persistence and
+	// the block side-effects in the handlers below. A retry re-sends the same
+	// token: the decision (scan) still re-runs so the user stays blocked, but
+	// tagging the context as a duplicate suppresses the duplicate writes
+	// (persistence, block-reason telemetry, shadow-MCP findings).
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+		ctx = withHookDuplicate(ctx)
+	}
+
 	s.recordHook(ctx, payload)
+
+	hookEvent, err := s.normalizeClaudeHookEvent(ctx, payload, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	if hookEvent == nil {
+		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
+		return makeHookResult(payload.HookEventName), nil
+	}
 
 	// Route to appropriate handler based on hook type
 	var (
 		result *gen.ClaudeHookResult
-		err    error
 	)
-	switch payload.HookEventName {
-	case "SessionStart":
-		result, err = s.handleSessionStart(ctx, payload)
-	case "ConfigChange":
-		result, err = s.handleConfigChange(ctx, payload)
-	case "PreToolUse":
-		result, err = s.handlePreToolUse(ctx, payload)
-	case "PostToolUse":
-		result, err = s.handlePostToolUse(ctx, payload)
-	case "PostToolUseFailure":
-		result, err = s.handlePostToolUseFailure(ctx, payload)
-	case "UserPromptSubmit":
-		result, err = s.handleUserPromptSubmit(ctx, payload)
-	case "Stop":
-		result, err = s.handleStop(ctx, payload)
-	case "SessionEnd":
-		result, err = s.handleSessionEnd(ctx, payload)
-	case "Notification":
-		result, err = s.handleNotification(ctx, payload)
+	switch ev := hookEvent.(type) {
+	case *hookevents.SessionStart:
+		result, err = s.handleSessionStart(ctx, ev)
+	case *hookevents.ConfigChange:
+		result, err = s.handleConfigChange(ctx, ev)
+	case *hookevents.BeforeToolUse:
+		result, err = s.handlePreToolUse(ctx, ev)
+	case *hookevents.AfterToolUse:
+		result, err = s.handlePostToolUse(ctx, ev)
+	case *hookevents.AfterToolUseFailure:
+		result, err = s.handlePostToolUseFailure(ctx, ev)
+	case *hookevents.UserPromptSubmit:
+		result, err = s.handleUserPromptSubmit(ctx, ev)
+	case *hookevents.Stop:
+		result, err = s.handleStop(ctx, ev)
+	case *hookevents.SessionEnd:
+		result, err = s.handleSessionEnd(ctx, ev)
+	case *hookevents.Notification:
+		result, err = s.handleNotification(ctx, ev)
 	default:
 		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
 		result = makeHookResult(payload.HookEventName)
@@ -289,12 +319,72 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 	return result, err
 }
 
-func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.ClaudePayload, timestamp time.Time) (any, error) {
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	eventContext := hookevents.EventContext{
+		OrganizationID: "",
+		ProjectID:      uuid.Nil,
+		User: hookevents.User{
+			ID:    "",
+			Email: "",
+		},
+	}
+	if authCtx != nil && authCtx.ProjectID != nil {
+		eventContext.OrganizationID = authCtx.ActiveOrganizationID
+		eventContext.ProjectID = *authCtx.ProjectID
+		eventContext.User.ID = authCtx.UserID
+		if authCtx.Email != nil {
+			eventContext.User.Email = strings.TrimSpace(*authCtx.Email)
+		}
+	}
+
+	if payload == nil {
+		event, err := claudeevents.Normalize(authCtx, payload, eventContext, timestamp)
+		if err != nil {
+			return nil, fmt.Errorf("normalize claude hook event: %w", err)
+		}
+		return event, nil
+	}
+
+	sessionID := conv.PtrValOr(payload.SessionID, "")
+	if sessionID != "" {
+		metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")))
+		if err == nil {
+			if projectID, parseErr := uuid.Parse(metadata.ProjectID); parseErr == nil {
+				eventContext = hookevents.EventContext{
+					OrganizationID: metadata.GramOrgID,
+					ProjectID:      projectID,
+					User: hookevents.User{
+						ID:    metadata.UserID,
+						Email: strings.TrimSpace(metadata.UserEmail),
+					},
+				}
+			}
+		}
+	}
+
+	event, err := claudeevents.Normalize(authCtx, payload, eventContext, timestamp)
+	if err != nil {
+		return nil, fmt.Errorf("normalize claude hook event: %w", err)
+	}
+	return event, nil
+}
+
+func claudePayloadFromEvent(ev hookevents.Event) *gen.ClaudePayload {
+	payload, _ := ev.Raw.(*gen.ClaudePayload)
+	return payload
+}
+
+func (s *Service) handleSessionStart(ctx context.Context, ev *hookevents.SessionStart) (*gen.ClaudeHookResult, error) {
+	payload := claudePayloadFromEvent(ev.Event)
+	if payload == nil {
+		return makeHookResult(ev.RawEventType), nil
+	}
 	s.captureMCPListSnapshot(ctx, payload)
 
 	// Always allow sessions to start
 	continueVal := true
-	result := makeHookResult(payload.HookEventName)
+	result := makeHookResult(ev.RawEventType)
 	result.Continue = &continueVal
 	return result, nil
 }
@@ -305,9 +395,13 @@ func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePay
 // it does for SessionStart, so we reuse the same capture path. ConfigChange
 // carries no allow/deny decision and must not block, so we never set a
 // blocking result.
-func (s *Service) handleConfigChange(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handleConfigChange(ctx context.Context, ev *hookevents.ConfigChange) (*gen.ClaudeHookResult, error) {
+	payload := claudePayloadFromEvent(ev.Event)
+	if payload == nil {
+		return makeHookResult(ev.RawEventType), nil
+	}
 	s.captureMCPListSnapshot(ctx, payload)
-	return makeHookResult(payload.HookEventName), nil
+	return makeHookResult(ev.RawEventType), nil
 }
 
 // captureMCPListSnapshot parses the MCP inventory shipped by the
@@ -453,6 +547,11 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 		return
 	}
 
+	// Skip persistence for a redelivery (the token was claimed in Claude()).
+	if s.isHookDuplicate(ctx) {
+		return
+	}
+
 	// Persistence outlives the request: Claude Code may close the connection
 	// the instant the hook returns (Stop especially), which would otherwise
 	// cancel the in-flight INSERT and drop the chat message.
@@ -587,9 +686,13 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 	return metadata, nil
 }
 
-func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	if s.riskScanner != nil && payload.SessionID != nil {
-		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
+func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToolUse) (*gen.ClaudeHookResult, error) {
+	payload := claudePayloadFromEvent(ev.Event)
+	if payload == nil {
+		return makeHookResult(ev.RawEventType), nil
+	}
+	if s.riskScanner != nil && ev.ConversationID != "" {
+		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			// Surface the block reason on the trace summary so the dashboard
@@ -606,8 +709,8 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	deny := "deny"
 	result := makeHookResult(payload.HookEventName)
 	output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
-	denyUnverifiedMCP := func() (*gen.ClaudeHookResult, error) {
-		reason := claudeShadowMCPMetadataUnavailableReason
+	denyUnverifiedMCP := func(code string) (*gen.ClaudeHookResult, error) {
+		reason := fmt.Sprintf("%s (err code: %s)", claudeShadowMCPMetadataUnavailableReason, code)
 		result.SystemMessage = &reason
 		if output != nil {
 			output.PermissionDecision = &deny
@@ -644,7 +747,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		s.logger.WarnContext(ctx, "claude PreToolUse fired without session id; denying MCP tool call",
 			attr.SlogEvent("claude_hook_pretooluse_no_session"),
 		)
-		return denyUnverifiedMCP()
+		return denyUnverifiedMCP(denyCodeNoSession)
 	}
 	// Plugin path: when the request authenticated via Gram-Key + Gram-Project,
 	// org/project come from the auth context — same pattern as recordHook.
@@ -666,7 +769,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			attr.SlogToolName(rawToolName),
 			attr.SlogError(err),
 		)
-		return denyUnverifiedMCP()
+		return denyUnverifiedMCP(denyCodeNoMetadata)
 	}
 	if strings.TrimSpace(metadata.UserEmail) == "" {
 		s.logger.WarnContext(ctx, "claude PreToolUse metadata has no user email; denying MCP tool call",
@@ -676,7 +779,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			attr.SlogGenAIConversationID(sessionID),
 			attr.SlogToolName(rawToolName),
 		)
-		return denyUnverifiedMCP()
+		return denyUnverifiedMCP(denyCodeNoUserEmail)
 	}
 
 	policy := s.lookupShadowMCPBlockingPolicy(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID)
@@ -836,8 +939,8 @@ func (s *Service) mergeClaudeAuthContextMetadata(ctx context.Context, metadata S
 // claudeMCPToolName returns the bare tool name and true if rawName follows the
 // "mcp__<server>__<tool>" convention used by Claude Code for MCP-routed tools.
 // Returns ("", false) for native Claude Code tools (Read, Edit, Bash, etc.).
-func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	return makeHookResult(payload.HookEventName), nil
+func (s *Service) handlePostToolUse(ctx context.Context, ev *hookevents.AfterToolUse) (*gen.ClaudeHookResult, error) {
+	return makeHookResult(ev.RawEventType), nil
 }
 
 // recordShadowMCPBlockFinding writes a risk_results row so the Recent
@@ -855,7 +958,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 	serverPrefix string,
 	detail string,
 ) {
-	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil {
+	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) {
 		return
 	}
 
@@ -952,7 +1055,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 // gram.hook.block_reason. trace_summaries_mv aggregates with max(), so the
 // trace will surface as blocked regardless of which row arrives first.
 func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, reason string) {
-	if s.telemetryLogger == nil || reason == "" {
+	if s.telemetryLogger == nil || reason == "" || s.isHookDuplicate(ctx) {
 		return
 	}
 
@@ -977,11 +1080,11 @@ func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen
 			DeploymentID:   "",
 			FunctionID:     nil,
 		},
-		UserInfo:   telemetry.UserInfoByID(metadata.UserID),
+		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
 		Attributes: attrs,
 	})
 }
 
-func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
-	return makeHookResult(payload.HookEventName), nil
+func (s *Service) handlePostToolUseFailure(ctx context.Context, ev *hookevents.AfterToolUseFailure) (*gen.ClaudeHookResult, error) {
+	return makeHookResult(ev.RawEventType), nil
 }

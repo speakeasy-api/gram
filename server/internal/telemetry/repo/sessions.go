@@ -7,6 +7,23 @@ import (
 	"github.com/Masterminds/squirrel"
 )
 
+const (
+	sessionUsageRowPredicate = "(" +
+		"startsWith(gram_urn, 'claude-code:usage') OR " +
+		"startsWith(gram_urn, 'codex:usage') OR " +
+		"startsWith(gram_urn, 'cursor:usage')" +
+		")"
+	sessionHookToolRowPredicate = "(" +
+		"toString(attributes.gram.tool.name) != '' AND " +
+		"toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')" +
+		")"
+	sessionCountedToolCallPredicate = "(" +
+		sessionHookToolRowPredicate + " AND " +
+		"toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')" +
+		")"
+	sessionSourceRowPredicate = "(" + sessionUsageRowPredicate + " OR " + sessionHookToolRowPredicate + ")"
+)
+
 // #nosec G101 -- These are allowlisted SQL measure expressions, not credentials.
 var sessionMeasureSelects = map[string]string{
 	"total_cost":                  "sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '')",
@@ -15,8 +32,12 @@ var sessionMeasureSelects = map[string]string{
 	"total_tokens":                "sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '')",
 	"cache_read_input_tokens":     "sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '')",
 	"cache_creation_input_tokens": "sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '')",
-	"total_tool_calls":            "countIf(startsWith(gram_urn, 'tools:'))",
-	"total_chats":                 "uniqExactIf(gram_chat_id, gram_chat_id != '')",
+	"tool_call_count":             "countIf(" + sessionCountedToolCallPredicate + ")",
+	"message_count":               "uniqExactIf(toString(attributes.gen_ai.response.id), toString(attributes.gen_ai.response.id) != '')",
+	"duration_seconds":            "toFloat64(max(time_unix_nano) - min(time_unix_nano)) / 1000000000.0",
+	// Kept as a service-level compatibility alias; the public listSessions API
+	// uses tool_call_count.
+	"total_tool_calls": "countIf(" + sessionCountedToolCallPredicate + ")",
 }
 
 type ListSessionsParams struct {
@@ -60,7 +81,7 @@ func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFi
 		}
 		switch dim.kind {
 		case attributeDimArray:
-			sb = sb.Where(squirrel.Expr("hasAny("+dim.column+", ?)", f.Values))
+			sb = sb.Where(arrayDimFilter(dim.column, f.Values))
 		case attributeDimScalar, attributeDimProject:
 			sb = sb.Where(squirrel.Eq{dim.column: f.Values})
 		default:
@@ -70,9 +91,10 @@ func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFi
 	return sb, nil
 }
 
-// ListSessions retrieves org-scoped session summaries grouped by gram_chat_id
-// from raw telemetry logs. Pagination is based on the selected sort measure plus
-// gram_chat_id so ordering stays stable across pages.
+// ListSessions retrieves org-scoped session summaries grouped by chat_id from
+// the same source-event classes as attribute_metrics_summaries: usage rows for
+// tokens/cost and hook tool rows for tool counts. Pagination is based on the
+// selected sort measure plus chat_id so ordering stays stable across pages.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]SessionSummary, error) {
@@ -86,7 +108,7 @@ func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]S
 	}
 
 	sb := sq.Select(
-		"gram_chat_id",
+		"chat_id as gram_chat_id",
 		"any(toString(gram_project_id)) as project_id",
 		"anyIf(user_email, user_email != '') as session_user_email",
 		"anyIf(hook_source, hook_source != '') as session_hook_source",
@@ -95,30 +117,30 @@ func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]S
 		"max(time_unix_nano) as end_time_unix_nano",
 		"toFloat64(max(time_unix_nano) - min(time_unix_nano)) / 1000000000.0 as duration_seconds",
 		"toInt64(uniqExactIf(toString(attributes.gen_ai.response.id), toString(attributes.gen_ai.response.id) != '')) as message_count",
-		"toInt64(countIf(startsWith(gram_urn, 'tools:'))) as tool_call_count",
+		"toInt64(countIf("+sessionCountedToolCallPredicate+")) as tool_call_count",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') as total_output_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') as total_tokens",
 		"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') as total_cost",
-		"if(countIf(startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) > 0, 'error', 'success') as status",
+		"if(countIf("+sessionCountedToolCallPredicate+" AND (toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400)) > 0, 'error', 'success') as status",
 		"toFloat64("+sortExpr+") as sort_value",
 	).
 		From("telemetry_logs").
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("gram_chat_id IS NOT NULL").
-		Where("gram_chat_id != ''")
+		Where(sessionSourceRowPredicate).
+		Where("chat_id != ''")
 
 	sb, err := applySessionFilters(sb, arg.Filters)
 	if err != nil {
 		return nil, err
 	}
 
-	sb = sb.GroupBy("gram_chat_id")
+	sb = sb.GroupBy("chat_id")
 
 	if arg.CursorSortValue != nil && arg.CursorGramChatID != "" {
-		sb = sb.Having("(sort_value, gram_chat_id) < (?, ?)", *arg.CursorSortValue, arg.CursorGramChatID)
+		sb = sb.Having("(sort_value, chat_id) < (?, ?)", *arg.CursorSortValue, arg.CursorGramChatID)
 	}
 
 	sb = sb.OrderBy("sort_value DESC", "gram_chat_id DESC").

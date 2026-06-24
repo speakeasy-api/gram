@@ -447,7 +447,7 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
     <div
       ref={rootRef}
       className="pointer-events-auto fixed z-[99999] select-none"
-      style={pos ? { left: pos.x, top: pos.y } : { left: 16, bottom: 16 }}
+      style={pos ? { left: pos.x, top: pos.y } : { right: 16, bottom: 16 }}
     >
       <div className={`
           w-80 rounded-xl border shadow-2xl backdrop-blur-md transition-all

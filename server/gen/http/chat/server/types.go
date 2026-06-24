@@ -42,7 +42,8 @@ type ListChatsResponseBody struct {
 // LoadChatResponseBody is the type of the "chat" service "loadChat" endpoint
 // HTTP response body.
 type LoadChatResponseBody struct {
-	// The list of messages in the chat for the returned generation
+	// The list of messages in the chat for the returned generation, ordered oldest
+	// to newest by `seq`.
 	Messages []*ChatMessageResponseBody `form:"messages" json:"messages" xml:"messages"`
 	// The generation that this response's messages belong to. A generation is an
 	// immutable snapshot of the transcript; a new one is opened on compaction or
@@ -52,8 +53,30 @@ type LoadChatResponseBody struct {
 	// history, walk from `max_generation` down to 0, requesting each generation in
 	// turn.
 	MaxGeneration int `form:"max_generation" json:"max_generation" xml:"max_generation"`
+	// Whether older messages exist before the first message in this page (within
+	// the returned generation). Load them with a `before_seq` cursor.
+	HasMoreBefore bool `form:"has_more_before" json:"has_more_before" xml:"has_more_before"`
+	// Whether newer messages exist after the last message in this page (within the
+	// returned generation). Load them with an `after_seq` cursor.
+	HasMoreAfter bool `form:"has_more_after" json:"has_more_after" xml:"has_more_after"`
+	// Present only when `risk_only` was requested: contiguous runs of returned
+	// messages, each spanning a risk finding and its surrounding context. Use each
+	// segment's cursors to expand it.
+	RiskSegments []*RiskSegmentResponseBody `form:"risk_segments,omitempty" json:"risk_segments,omitempty" xml:"risk_segments,omitempty"`
+	// Present only when `query` was requested: contiguous runs of returned
+	// messages, each spanning one or more query matches and their surrounding
+	// context. Use each segment's cursors to expand it.
+	MatchSegments []*RiskSegmentResponseBody `form:"match_segments,omitempty" json:"match_segments,omitempty" xml:"match_segments,omitempty"`
+	// Present only when `query` was requested: the `seq` of every message whose
+	// text matched the query, ascending. These are the jump-to-match navigation
+	// targets; surrounding-context messages in `messages` are not listed here.
+	MatchSeqs []int64 `form:"match_seqs,omitempty" json:"match_seqs,omitempty" xml:"match_seqs,omitempty"`
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsageResponseBody `form:"agent_usage,omitempty" json:"agent_usage,omitempty" xml:"agent_usage,omitempty"`
+	// Whole-generation trace-entry totals for the returned generation. Because
+	// messages are paginated, callers must use these (not the length of
+	// `messages`) to render filter-bar counts.
+	Totals *ChatTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
 	// The ID of the chat
 	ID string `form:"id" json:"id" xml:"id"`
 	// The title of the chat
@@ -1234,6 +1257,11 @@ type ChatOverviewResponseBody struct {
 type ChatMessageResponseBody struct {
 	// The ID of the message
 	ID string `form:"id" json:"id" xml:"id"`
+	// Monotonic sequence number of the message. Strictly increasing within a chat;
+	// use it as the keyset cursor for `before_seq`/`after_seq` pagination. Not
+	// contiguous (the sequence is shared across chats), so do not infer gaps from
+	// arithmetic differences.
+	Seq int64 `form:"seq" json:"seq" xml:"seq"`
 	// The role of the message
 	Role string `form:"role" json:"role" xml:"role"`
 	// The content of the message — string for plain text, array for
@@ -1258,6 +1286,20 @@ type ChatMessageResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// Conversation generation — bumps on compaction or edit divergence
 	Generation int `form:"generation" json:"generation" xml:"generation"`
+}
+
+// RiskSegmentResponseBody is used to define fields on response body types.
+type RiskSegmentResponseBody struct {
+	// The `seq` of the first (oldest) message in this segment.
+	FirstSeq int64 `form:"first_seq" json:"first_seq" xml:"first_seq"`
+	// The `seq` of the last (newest) message in this segment.
+	LastSeq int64 `form:"last_seq" json:"last_seq" xml:"last_seq"`
+	// Whether messages exist before this segment within the generation. Expand
+	// with a `before_seq` request using `first_seq`.
+	HasMoreBefore bool `form:"has_more_before" json:"has_more_before" xml:"has_more_before"`
+	// Whether messages exist after this segment within the generation. Expand with
+	// an `after_seq` request using `last_seq`.
+	HasMoreAfter bool `form:"has_more_after" json:"has_more_after" xml:"has_more_after"`
 }
 
 // AgentUsageResponseBody is used to define fields on response body types.
@@ -1320,6 +1362,24 @@ type ClaudeToolUsageResponseBody struct {
 	ResultSizeBytes int64 `form:"result_size_bytes" json:"result_size_bytes" xml:"result_size_bytes"`
 }
 
+// ChatTotalsResponseBody is used to define fields on response body types.
+type ChatTotalsResponseBody struct {
+	// Total trace entries in the generation (sum of the four entry-type counts;
+	// the `of N entries` denominator).
+	Total int64 `form:"total" json:"total" xml:"total"`
+	// Number of user messages in the generation.
+	UserMessages int64 `form:"user_messages" json:"user_messages" xml:"user_messages"`
+	// Number of assistant messages (without tool calls) in the generation.
+	AssistantMessages int64 `form:"assistant_messages" json:"assistant_messages" xml:"assistant_messages"`
+	// Number of messages carrying tool calls in the generation.
+	ToolCalls int64 `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
+	// Number of tool-result messages in the generation.
+	ToolResults int64 `form:"tool_results" json:"tool_results" xml:"tool_results"`
+	// Number of messages with an active (found, non-suppressed) risk finding in
+	// the generation.
+	RiskOnly int64 `form:"risk_only" json:"risk_only" xml:"risk_only"`
+}
+
 // NewListChatsResponseBody builds the HTTP response body from the result of
 // the "listChats" endpoint of the "chat" service.
 func NewListChatsResponseBody(res *chat.ListChatsResult) *ListChatsResponseBody {
@@ -1347,6 +1407,8 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 	body := &LoadChatResponseBody{
 		Generation:           res.Generation,
 		MaxGeneration:        res.MaxGeneration,
+		HasMoreBefore:        res.HasMoreBefore,
+		HasMoreAfter:         res.HasMoreAfter,
 		ID:                   res.ID,
 		Title:                res.Title,
 		UserID:               res.UserID,
@@ -1374,8 +1436,37 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 	} else {
 		body.Messages = []*ChatMessageResponseBody{}
 	}
+	if res.RiskSegments != nil {
+		body.RiskSegments = make([]*RiskSegmentResponseBody, len(res.RiskSegments))
+		for i, val := range res.RiskSegments {
+			if val == nil {
+				body.RiskSegments[i] = nil
+				continue
+			}
+			body.RiskSegments[i] = marshalChatRiskSegmentToRiskSegmentResponseBody(val)
+		}
+	}
+	if res.MatchSegments != nil {
+		body.MatchSegments = make([]*RiskSegmentResponseBody, len(res.MatchSegments))
+		for i, val := range res.MatchSegments {
+			if val == nil {
+				body.MatchSegments[i] = nil
+				continue
+			}
+			body.MatchSegments[i] = marshalChatRiskSegmentToRiskSegmentResponseBody(val)
+		}
+	}
+	if res.MatchSeqs != nil {
+		body.MatchSeqs = make([]int64, len(res.MatchSeqs))
+		for i, val := range res.MatchSeqs {
+			body.MatchSeqs[i] = val
+		}
+	}
 	if res.AgentUsage != nil {
 		body.AgentUsage = marshalChatAgentUsageToAgentUsageResponseBody(res.AgentUsage)
+	}
+	if res.Totals != nil {
+		body.Totals = marshalChatChatTotalsToChatTotalsResponseBody(res.Totals)
 	}
 	return body
 }
@@ -2249,12 +2340,13 @@ func NewSubmitFeedbackGatewayErrorResponseBody(res *goa.ServiceError) *SubmitFee
 }
 
 // NewListChatsPayload builds a chat service listChats endpoint payload.
-func NewListChatsPayload(search *string, externalUserID *string, assistantID *string, hasRisk *string, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
+func NewListChatsPayload(search *string, externalUserID *string, assistantID *string, hasRisk *string, minRiskScore *int, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
 	v := &chat.ListChatsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
 	v.AssistantID = assistantID
 	v.HasRisk = hasRisk
+	v.MinRiskScore = minRiskScore
 	v.From = from
 	v.To = to
 	v.Limit = limit
@@ -2269,10 +2361,16 @@ func NewListChatsPayload(search *string, externalUserID *string, assistantID *st
 }
 
 // NewLoadChatPayload builds a chat service loadChat endpoint payload.
-func NewLoadChatPayload(id string, generation *int, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.LoadChatPayload {
+func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64, afterSeq *int64, fromStart bool, riskOnly bool, query *string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.LoadChatPayload {
 	v := &chat.LoadChatPayload{}
 	v.ID = id
 	v.Generation = generation
+	v.Limit = limit
+	v.BeforeSeq = beforeSeq
+	v.AfterSeq = afterSeq
+	v.FromStart = fromStart
+	v.RiskOnly = riskOnly
+	v.Query = query
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

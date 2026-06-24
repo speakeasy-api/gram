@@ -89,7 +89,7 @@ function getAllowLevel(
   return "server";
 }
 
-/** Map an allow level to the panels available for deny rules — all levels narrower. */
+/** Map an allow level to the panels available for exception rules. */
 function getDenyPanels(allowLevel: string | null): ActivePanel[] {
   switch (allowLevel) {
     case "all":
@@ -100,7 +100,7 @@ function getDenyPanels(allowLevel: string | null): ActivePanel[] {
       return ["tools"];
     case null:
     default:
-      return []; // tool/annotation — already most specific, no deny possible
+      return []; // tool/annotation: already most specific, no exception possible
   }
 }
 
@@ -153,6 +153,14 @@ export function CreateRoleDialog({
     a.name.localeCompare(b.name),
   );
   const { data: scopesData } = useListScopes();
+  const scopeDefinitions = scopesData?.scopes;
+  const userVisibleScopeDefinitions = useMemo(
+    () =>
+      (scopeDefinitions ?? []).filter(
+        (scope) => scope.visibility === "user_visible",
+      ),
+    [scopeDefinitions],
+  );
 
   const projectList = useMemo(
     () => organization.projects.map((p) => ({ id: p.id, name: p.name })),
@@ -160,7 +168,6 @@ export function CreateRoleDialog({
   );
 
   const scopeGroups = useMemo(() => {
-    const scopes = scopesData?.scopes ?? [];
     const groupOrder: { label: string; resourceType: string }[] = [
       { label: "Organization", resourceType: "org" },
       { label: "Build & Deploy", resourceType: "project" },
@@ -169,15 +176,17 @@ export function CreateRoleDialog({
     ];
     return groupOrder.map((g) => ({
       ...g,
-      scopes: scopes.filter((s) => s.resourceType === g.resourceType),
+      scopes: userVisibleScopeDefinitions.filter(
+        (s) => s.resourceType === g.resourceType,
+      ),
     }));
-  }, [scopesData]);
+  }, [userVisibleScopeDefinitions]);
 
   // ─── Initialize when editing ──────────────────────────────────
   if (editingRole && !initialized && scopesData && membersData) {
     setName(editingRole.name);
     setDescription(editingRole.description);
-    const roleGrants = grantsFromRole(editingRole);
+    const roleGrants = grantsFromRole(editingRole, scopesData.scopes);
     const grantedScopes = new Set(Object.keys(roleGrants));
     const autoExpanded = new Set(
       scopeGroups
@@ -241,21 +250,23 @@ export function CreateRoleDialog({
   );
   const grantCount = effectiveGrantCount(visibleGrants);
 
-  const saveDisabled = isSaveDisabled({
-    isMutating,
-    isEditing,
-    isSystemRole,
-    name,
-    description,
-    grants,
-    selectedMembers,
-    initial: {
-      name: initialName,
-      description: initialDescription,
-      grantKeys: initialGrantKeys,
-      members: initialMembers,
-    },
-  });
+  const saveDisabled =
+    !scopeDefinitions ||
+    isSaveDisabled({
+      isMutating,
+      isEditing,
+      isSystemRole,
+      name,
+      description,
+      grants,
+      selectedMembers,
+      initial: {
+        name: initialName,
+        description: initialDescription,
+        grantKeys: initialGrantKeys,
+        members: initialMembers,
+      },
+    });
 
   // ─── Scope / grant operations ─────────────────────────────────
 
@@ -285,12 +296,12 @@ export function CreateRoleDialog({
       // Edit existing rule — clone it as draft
       setDraftRule({ ...grant.rules[ruleIndex]! });
     } else {
-      // New deny rule — or edit existing deny if one already exists
+      // New exception rule, or edit the existing exception if one already exists.
       const existingDenyIdx = grant?.rules.findIndex(
         (r) => r.effect === "deny",
       );
       if (existingDenyIdx !== undefined && existingDenyIdx >= 0) {
-        // Edit the existing deny rule instead of creating a new one
+        // Edit the existing exception rule instead of creating a new one.
         setEditingRuleIndex(existingDenyIdx);
         setDraftRule({ ...grant!.rules[existingDenyIdx]! });
       } else {
@@ -319,7 +330,7 @@ export function CreateRoleDialog({
             // Editing existing rule — replace in place
             const originalRule = grant.rules[editingRuleIndex];
             rules[editingRuleIndex] = draftRule;
-            // Allow changed → clear deny exceptions (they were scoped to old allow)
+            // Allow changed: clear exceptions scoped to the old allow.
             const toSortedJSON = (s: Selector[] | null | undefined) =>
               JSON.stringify(
                 [...(s ?? [])].sort((a, b) =>
@@ -334,7 +345,7 @@ export function CreateRoleDialog({
               rules = rules.filter((r) => r.effect !== "deny");
             }
           } else if (draftRule.effect === "deny") {
-            // One deny per scope — replace any existing deny
+            // One exception per scope: replace any existing exception.
             rules = rules.filter((r) => r.effect !== "deny");
             rules.push(draftRule);
           } else {
@@ -434,10 +445,15 @@ export function CreateRoleDialog({
   // ─── Submit ───────────────────────────────────────────────────
 
   const handleSubmit = () => {
-    const sdkGrants = sdkGrantsFromForm(grants);
+    if (!scopeDefinitions) return;
+
+    const sdkGrants = sdkGrantsFromForm(grants, scopeDefinitions);
 
     if (isEditing) {
-      const initialGrants = sdkGrantsFromForm(grantsFromRole(editingRole));
+      const initialGrants = sdkGrantsFromForm(
+        grantsFromRole(editingRole, scopeDefinitions),
+        scopeDefinitions,
+      );
       const { addGrants, removeGrants } = diffGrants(initialGrants, sdkGrants);
 
       updateRole.mutate({
@@ -501,7 +517,7 @@ export function CreateRoleDialog({
         .find((s) => s.slug === editingScopeSlug)
     : null;
 
-  // Deny-level constraints: deny must be one level narrower than the broadest allow.
+  // Exception constraints: an exception must be narrower than the broadest allow.
   const editingGrantRules = editingScopeSlug
     ? (grants[editingScopeSlug]?.rules ?? [])
     : [];
@@ -533,7 +549,7 @@ export function CreateRoleDialog({
                 </button>
                 <span>
                   {editingRuleIndex >= 0 ? "Edit" : "Create"}{" "}
-                  {draftRule?.effect === "allow" ? "allow" : "deny"} rule
+                  {draftRule?.effect === "allow" ? "allow" : "exception"} rule
                 </span>
               </div>
             ) : isEditing ? (
@@ -546,7 +562,7 @@ export function CreateRoleDialog({
             <SheetDescription className="text-muted-foreground mr-5 ml-7 line-clamp-2 text-xs">
               {draftRule.effect === "allow"
                 ? "Choose which resources this role can access. Start broad — you can add exceptions later to restrict specific items."
-                : "Deny access to specific resources that the allow rule would otherwise permit. Use exceptions to carve out items that this role should not access."}
+                : "Exclude specific resources that the allow rule would otherwise permit."}
             </SheetDescription>
           )}
         </SheetHeader>

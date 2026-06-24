@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import pytest
 from gcp.pubsub.v1 import options_pb2
-from gram.ping.v1 import ping_pb2, processor_pb2
+from gram.ping.v2 import ping_pb2, processor_pb2
+
 from gram_infra.pubsub import (
     resolve_dead_letter_topic_name,
     resolve_subscription_name,
@@ -29,8 +30,8 @@ from gram_infra.pubsub import (
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
-        ("gram.ping.v1.Message", "gram-ping-v1-message"),
-        ("gram.ping.v1.Processor", "gram-ping-v1-processor"),
+        ("gram.ping.v2.Message", "gram-ping-v2-message"),
+        ("gram.ping.v2.Processor", "gram-ping-v2-processor"),
         ("gram.outbox.v1.Event", "gram-outbox-v1-event"),
         ("fooBar", "foo-bar"),
         ("HTTPServer", "http-server"),
@@ -86,22 +87,22 @@ def test_resolve_topic_name_from_descriptor() -> None:
     descriptor = ping_pb2.Message.DESCRIPTOR
     options = topic_options_from_message(descriptor)
     assert options is not None
-    assert resolve_topic_name(descriptor, options) == "gram-ping-v1-message"
+    assert resolve_topic_name(descriptor, options) == "gram-ping-v2-message"
 
 
 def test_resolve_subscription_name_from_descriptor() -> None:
     descriptor = processor_pb2.Processor.DESCRIPTOR
     options = subscription_options_from_message(descriptor)
     assert options is not None
-    assert resolve_subscription_name(descriptor, options) == "gram-ping-v1-processor"
+    assert resolve_subscription_name(descriptor, options) == "gram-ping-v2-processor"
 
 
 def test_dead_letter_name_defaults_to_suffix() -> None:
     options = subscription_options_from_message(processor_pb2.Processor.DESCRIPTOR)
     assert options is not None
     assert (
-        resolve_dead_letter_topic_name("gram-ping-v1-processor", options.dead_letter)
-        == "gram-ping-v1-processor-dlq"
+        resolve_dead_letter_topic_name("gram-ping-v2-processor", options.dead_letter)
+        == "gram-ping-v2-processor-dlq"
     )
 
 

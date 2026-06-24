@@ -23,6 +23,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { SessionRow } from "@/components/sessions/SessionRow";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -42,6 +43,7 @@ import {
   useGramContext,
   useListChats,
   useMembers,
+  useUserSessions,
 } from "@gram/client/react-query";
 import { useRiskOverview } from "@gram/client/react-query/index.js";
 import { unwrapAsync } from "@gram/client/types/fp";
@@ -536,6 +538,8 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                 />
               </section>
 
+              {member?.id && <EmployeeSessions userId={member.id} />}
+
               {dataFlowQuery.error ? (
                 <ErrorAlert
                   title="Unable to load employee data flow"
@@ -601,6 +605,50 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
         </div>
       </div>
     </>
+  );
+}
+
+function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
+  const { data, isPending, isError, refetch } = useUserSessions({
+    subjectUrn: `user:${userId}`,
+    status: "active",
+  });
+  const sessions = data?.result.items ?? [];
+
+  return (
+    <section className="bg-card border-border rounded-lg border p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-sm font-semibold">Active MCP Connections</span>
+        <div className="bg-muted/50 rounded-lg p-2">
+          <Icon name="key-round" className="text-muted-foreground size-4" />
+        </div>
+      </div>
+      {isPending ? (
+        <Skeleton className="h-12 w-full" />
+      ) : isError ? (
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="text-destructive text-sm underline-offset-2 hover:underline"
+        >
+          Couldn&apos;t load sessions — retry
+        </button>
+      ) : sessions.length === 0 ? (
+        <span className="text-muted-foreground text-sm">
+          No active sessions
+        </span>
+      ) : (
+        <ul className="divide-border divide-y rounded-md border">
+          {sessions.map((s) => (
+            <SessionRow
+              key={s.id}
+              session={s}
+              onRevoked={() => void refetch()}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

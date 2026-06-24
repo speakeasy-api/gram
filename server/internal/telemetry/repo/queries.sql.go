@@ -31,6 +31,17 @@ func userIdentifierExpr(col string) string {
 	return "if(telemetry_logs." + col + " != '', telemetry_logs." + col + ", telemetry_logs.user_email)"
 }
 
+// totalTokensExpr is a grouped-aggregate expression that yields a reliable total
+// token count. AI-coding providers like Claude Code report
+// gen_ai.usage.input_tokens and gen_ai.usage.output_tokens but never emit
+// gen_ai.usage.total_tokens, so rows that lack an explicit total fall back to
+// input + output. Rows that do carry an explicit total keep using it (our native
+// chat completions already set total = input + output), so the two row shapes
+// stay consistent. Without the fallback, Claude Code sessions surface "0 tokens"
+// in the costs/session views (DNO-323).
+const totalTokensExpr = "sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') + " +
+	"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.total_tokens) = '')"
+
 // AttributeFilter represents a filter on an arbitrary JSON attribute path.
 // Paths prefixed with @ target user-defined attributes (translated to app.<path> in ClickHouse).
 // Bare paths target system/OTel attributes directly.
@@ -608,6 +619,7 @@ type GetTimeSeriesMetricsParams struct {
 	APIKeyID          string // Optional filter
 	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
 	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
 }
@@ -668,6 +680,9 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
 	}
+	if arg.MCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
+	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
 	}
@@ -719,6 +734,7 @@ type GetToolMetricsBreakdownParams struct {
 	APIKeyID          string // Optional filter
 	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
 	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
 	Limit             int
@@ -758,6 +774,9 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	}
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
+	}
+	if arg.MCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
 	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
@@ -814,6 +833,7 @@ type GetOverviewSummaryParams struct {
 	APIKeyID          string // Optional filter
 	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
 	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
 }
@@ -824,7 +844,7 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.EventSource != "" || arg.HookSource != ""
+	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != ""
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -937,6 +957,9 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
 	}
+	if arg.MCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
+	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
 	}
@@ -987,7 +1010,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 		"anyIf(toString(attributes.gen_ai.response.model), toString(attributes.gen_ai.response.model) != '') as model",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') as total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') as total_tokens",
+		totalTokensExpr+" as total_tokens",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -1075,7 +1098,7 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 		"gram_chat_id",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') as total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') as total_tokens",
+		totalTokensExpr+" as total_tokens",
 		"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') as total_cost",
 	).
 		From("telemetry_logs").
@@ -1382,6 +1405,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 
 	sb := sq.Select(
 		groupExpr+" AS user_id",
+		"anyIf(user_email, user_email != '') AS user_email",
 
 		// Activity timestamps
 		"min(time_unix_nano) AS first_seen_unix_nano",
@@ -1394,7 +1418,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		// Token metrics (from any event with gen_ai usage data)
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens",
+		totalTokensExpr+" AS total_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
@@ -1501,7 +1525,7 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		// Token metrics (from any event with gen_ai usage data)
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens",
+		totalTokensExpr+" AS total_tokens",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
 
 		// Chat request metrics
@@ -1939,6 +1963,7 @@ type GetToolUsageSummaryParams struct {
 	HostedToolsetSlugs []string
 	ShadowServerNames  []string
 	UserFilters        []ToolUsageUserFilter
+	HookSources        []string
 	TargetLimit        uint64
 	UserLimit          uint64
 	UsersByTargetLimit uint64
@@ -2167,6 +2192,7 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		HostedToolsetSlugs: nil,
 		ShadowServerNames:  nil,
 		UserFilters:        nil,
+		HookSources:        nil,
 		TargetLimit:        0,
 		UserLimit:          0,
 		UsersByTargetLimit: 0,
@@ -2797,6 +2823,12 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 		sb = sb.Where(userFilters)
 	}
 
+	// Direct hosted MCP calls have no hook source (empty string), so requiring a
+	// specific hook source naturally excludes them — matching the Tool Logs page.
+	if len(arg.HookSources) > 0 {
+		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSources})
+	}
+
 	return sb, nil
 }
 
@@ -2825,7 +2857,185 @@ func toolUsageHostedMatchIndexExpr(matchExpr, serverURLExpr string) string {
 	)
 }
 
+// toolUsageTraceRowsFromSummariesCTE builds the normalized_traces CTE from the
+// trace_summaries materialized view (one row per trace) for the common case where no
+// free-text query or arbitrary attribute filters are active. It emits the same output
+// columns as the raw-log path so ListToolUsageTraces selects from it unchanged. Tool
+// calls carry a real trace_id (recorded by the gateway in ToolProxy.Do), so hosted
+// MCP, shadow MCP, skill, and local tool events are all present in the view; only
+// free-text/custom-attribute search and traceless trigger events need the raw scan.
+func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, []any, error) {
+	groupedSB := sq.Select(
+		"toString(trace_id) AS g_trace_id",
+		"min(start_time_unix_nano) AS event_time_ns",
+		"sum(log_count) AS g_log_count",
+		"any(gram_urn) AS g_gram_urn",
+		"any(tool_name) AS g_tool_name",
+		"any(tool_source) AS g_tool_source",
+		"max(toolset_slug) AS g_toolset_slug",
+		"any(skill_name) AS g_skill_name",
+		"any(user_email) AS g_user_email",
+		"max(external_user_id) AS g_external_user_id",
+		"max(user_id) AS g_user_id",
+		"any(hook_source) AS g_hook_source",
+		"any(event_source) AS g_event_source",
+		"max(mcp_match) AS g_mcp_match",
+		"max(mcp_server_url) AS g_mcp_server_url",
+		"anyIfMerge(http_status_code) AS g_http_status_code",
+		// Reconstruct the hook status deterministically from the highest-severity
+		// rank across the trace's summary rows (mirrors the raw-log path), rather
+		// than max()-ing each boolean independently.
+		"max(hook_status_rank) AS g_hook_status_rank",
+		"max(block_reason) AS g_block_reason",
+	).
+		From("(SELECT *, multiIf(has_block = 1, 3, has_error = 1, 2, has_result = 1, 1, 0) AS hook_status_rank FROM trace_summaries)").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		GroupBy("trace_id").
+		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
+		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
+		Having("((startsWith(g_gram_urn, 'tools:') AND g_toolset_slug != '') OR (g_event_source = 'hook' AND (g_tool_name != '' OR g_skill_name != '')))")
+
+	groupedSQL, groupedArgs, err := groupedSB.ToSql()
+	if err != nil {
+		return "", nil, fmt.Errorf("building tool usage trace summaries source: %w", err)
+	}
+
+	sourceSQL := groupedSQL
+	sourceArgs := groupedArgs
+	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
+	hasMatchers := len(hostedToolsetSlugs) > 0
+	if hasMatchers {
+		hostedIndex := toolUsageHostedMatchIndexExpr("g_mcp_match", "g_mcp_server_url")
+		sourceSQL = fmt.Sprintf("SELECT *, %s AS hosted_match_index FROM (%s)", hostedIndex, groupedSQL)
+		sourceArgs = []any{hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes}
+		sourceArgs = append(sourceArgs, groupedArgs...)
+	}
+
+	isSkillCall := "g_skill_name != ''"
+	skillLabel := "g_skill_name"
+	toolName := chMultiIf(isSkillCall, skillLabel, "g_tool_name")
+
+	var targetType, targetKind, targetID, targetLabel string
+	if hasMatchers {
+		hostedMatch := "hosted_match_index > 0"
+		targetType = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
+			hostedMatch, "'"+ToolUsageTargetTypeHostedMCP+"'",
+			isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
+			"g_tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
+			"'"+ToolUsageTargetTypeLocalTool+"'",
+		)
+		targetKind = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+toolUsageTargetKindServer+"'",
+			hostedMatch, "'"+toolUsageTargetKindServer+"'",
+			isSkillCall, "'"+toolUsageTargetKindSkill+"'",
+			"g_tool_source != ''", "'"+toolUsageTargetKindServer+"'",
+			"'"+toolUsageTargetKindLocalTools+"'",
+		)
+		targetID = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
+			hostedMatch, "arrayElement(?, hosted_match_index)",
+			isSkillCall, skillLabel,
+			"g_tool_source != ''", "g_tool_source",
+			"'local'",
+		)
+		targetLabel = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
+			hostedMatch, "arrayElement(?, hosted_match_index)",
+			isSkillCall, skillLabel,
+			"g_tool_source != ''", "g_tool_source",
+			"'Local Tools'",
+		)
+	} else {
+		targetType = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
+			isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
+			"g_tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
+			"'"+ToolUsageTargetTypeLocalTool+"'",
+		)
+		targetKind = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "'"+toolUsageTargetKindServer+"'",
+			isSkillCall, "'"+toolUsageTargetKindSkill+"'",
+			"g_tool_source != ''", "'"+toolUsageTargetKindServer+"'",
+			"'"+toolUsageTargetKindLocalTools+"'",
+		)
+		targetID = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
+			isSkillCall, skillLabel,
+			"g_tool_source != ''", "g_tool_source",
+			"'local'",
+		)
+		targetLabel = chMultiIf(
+			"g_event_source != 'hook' AND g_toolset_slug != ''", "g_toolset_slug",
+			isSkillCall, skillLabel,
+			"g_tool_source != ''", "g_tool_source",
+			"'Local Tools'",
+		)
+	}
+
+	userKey := chFirstNonEmpty("g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
+	userKind := chMultiIf(
+		"g_user_email != ''", "'"+toolUsageUserKindEmail+"'",
+		"g_external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
+		"g_user_id != ''", "'"+toolUsageUserKindUserID+"'",
+		"'"+toolUsageUserKindUnknown+"'",
+	)
+	hookStatus := "if(g_event_source = 'hook', multiIf(g_hook_status_rank = 3, CAST('blocked' AS Nullable(String)), g_hook_status_rank = 2, CAST('failure' AS Nullable(String)), g_hook_status_rank = 1, CAST('success' AS Nullable(String)), CAST('pending' AS Nullable(String))), CAST(NULL AS Nullable(String)))"
+
+	tracesSQL := fmt.Sprintf(`
+SELECT
+	g_trace_id AS id,
+	g_trace_id AS trace_id,
+	'trace_id' AS log_group_kind,
+	g_trace_id AS log_group_value,
+	event_time_ns AS start_time_unix_nano,
+	g_log_count AS log_count,
+	g_gram_urn AS gram_urn,
+	%s AS tool_name,
+	%s AS target_type,
+	%s AS target_kind,
+	%s AS target_id,
+	%s AS target_label,
+	%s AS user_key,
+	%s AS user_label,
+	%s AS user_kind,
+	nullIf(g_hook_source, '') AS hook_source,
+	g_event_source AS event_source,
+	g_http_status_code AS http_status_code,
+	%s AS hook_status,
+	nullIf(g_block_reason, '') AS block_reason
+FROM (%s)`,
+		toolName,
+		targetType,
+		targetKind,
+		targetID,
+		targetLabel,
+		userKey,
+		userKey,
+		userKind,
+		hookStatus,
+		sourceSQL,
+	)
+
+	finalArgs := make([]any, 0, 2+len(sourceArgs))
+	if hasMatchers {
+		// arrayElement(?, hosted_match_index) appears in target_id and target_label.
+		finalArgs = append(finalArgs, hostedToolsetSlugs, hostedToolsetSlugs)
+	}
+	finalArgs = append(finalArgs, sourceArgs...)
+
+	return "WITH normalized_traces AS (" + tracesSQL + ")", finalArgs, nil
+}
+
 func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error) {
+	// Fast path: when no free-text query or arbitrary attribute filters are active,
+	// serve the trace list from the trace_summaries materialized view. Free-text
+	// search, custom-attribute filters, and (traceless) trigger events fall through
+	// to the raw telemetry_logs scan below.
+	if arg.Query == "" && len(arg.Filters) == 0 {
+		return toolUsageTraceRowsFromSummariesCTE(arg)
+	}
+
 	conversationID := chFirstNonEmpty(chAttr("gen_ai.conversation.id"), "toString(attributes.`genai.conversation.id`)")
 	triggerInstanceID := chAttr("gram.trigger.instance_id")
 	toolCallArguments := chFirstNonEmpty(
@@ -3059,67 +3269,96 @@ normalized_traces AS (
 }
 
 func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any, error) {
-	httpStatus := "toInt32OrZero(" + chAttr("http.response.status_code") + ")"
-	toolCallArguments := chFirstNonEmpty(
-		chAttr("gen_ai.tool.call.arguments"),
-		"toString(attributes.`gen_ai.tool.call.arguments`)",
-		"JSONExtractString(toString(attributes), 'gen_ai.tool.call.arguments')",
-	)
-	eventSkillName := chFirstNonEmpty("skill_name", "JSONExtractString("+toolCallArguments+", 'skill')")
+	// Served from the trace_summaries materialized view (one row per trace) instead
+	// of scanning raw telemetry_logs. Tool calls carry a real trace_id (recorded by
+	// the gateway in ToolProxy.Do), so hosted MCP, shadow MCP, skill, and local tool
+	// events all land in trace_summaries and can be classified here without a full
+	// log scan. This path never carries free-text/arbitrary-attribute filters, so it
+	// always reads from the summary view.
+	// Each branch GROUPs BY trace_id over the AggregatingMergeTree, then a wrapping
+	// SELECT classifies the per-trace row. The grouped aggregate columns are aliased
+	// with a "g_" prefix that does NOT collide with the underlying trace_summaries
+	// column names. This matters: ClickHouse merges a subquery whose aggregate alias
+	// shadows a base column (e.g. `any(gram_urn) AS gram_urn`) back into the enclosing
+	// aggregate, which nests any()/sum() and fails with ILLEGAL_AGGREGATION once a
+	// caller (uniqExact(tool_name), sum(success), ...) aggregates over normalized_events.
 	userKind := chMultiIf(
-		"user_email != ''", "'"+toolUsageUserKindEmail+"'",
-		"external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
-		"user_id != ''", "'"+toolUsageUserKindUserID+"'",
+		"g_user_email != ''", "'"+toolUsageUserKindEmail+"'",
+		"g_external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
+		"g_user_id != ''", "'"+toolUsageUserKindUserID+"'",
 		"'"+toolUsageUserKindUnknown+"'",
 	)
-	userKey := chFirstNonEmpty("user_email", "external_user_id", "user_id", "'Unknown'")
+	userKey := chFirstNonEmpty("g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
 
-	hostedSB := sq.Select(
-		"time_unix_nano AS event_time_ns",
-		"'"+ToolUsageTargetTypeHostedMCP+"' AS target_type",
-		"'"+toolUsageTargetKindServer+"' AS target_kind",
-		"toolset_slug AS target_id",
-		"toolset_slug AS target_label",
-		chFirstNonEmpty("tool_name", "gram_urn")+" AS tool_name",
-		userKey+" AS user_key",
-		userKey+" AS user_label",
-		userKind+" AS user_kind",
-		"toUInt8("+httpStatus+" >= 200 AND "+httpStatus+" < 400) AS success",
-		"toUInt8("+httpStatus+" >= 400) AS failure",
+	hostedGroupedSB := sq.Select(
+		"min(start_time_unix_nano) AS event_time_ns",
+		"max(toolset_slug) AS g_toolset_slug",
+		"any(tool_name) AS g_tool_name",
+		"any(gram_urn) AS g_gram_urn",
+		"any(user_email) AS g_user_email",
+		"max(external_user_id) AS g_external_user_id",
+		"max(user_id) AS g_user_id",
+		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
 	).
-		From("telemetry_logs").
+		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("startsWith(gram_urn, 'tools:')").
-		Where("toolset_slug != ''")
+		GroupBy("trace_id").
+		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
+		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
+		Having("any(event_source) != 'hook'").
+		Having("startsWith(g_gram_urn, 'tools:')").
+		Having("g_toolset_slug != ''")
 
 	hookGroupedSB := sq.Select(
-		"min(time_unix_nano) AS event_time_ns",
-		"any(tool_name) AS tool_name",
-		"any(tool_source) AS tool_source",
-		"any(user_email) AS user_email",
-		"any(external_user_id) AS external_user_id",
-		"any(user_id) AS user_id",
-		"anyIf("+eventSkillName+", "+eventSkillName+" != '') AS skill_name",
-		"any("+chAttr("gram.mcp.match")+") AS mcp_match",
-		"any("+chAttr("gram.mcp.server_url")+") AS mcp_server_url",
-		"max(if("+chAttr("gen_ai.tool.call.result")+" != '', 1, 0)) AS has_result",
-		"max(if("+chAttr("gram.hook.error")+" != '', 1, 0)) AS has_error",
+		"min(start_time_unix_nano) AS event_time_ns",
+		"any(tool_name) AS g_tool_name",
+		"any(tool_source) AS g_tool_source",
+		"any(user_email) AS g_user_email",
+		"max(external_user_id) AS g_external_user_id",
+		"max(user_id) AS g_user_id",
+		"any(skill_name) AS g_skill_name",
+		"max(mcp_match) AS g_mcp_match",
+		"max(mcp_server_url) AS g_mcp_server_url",
+		"any(hook_source) AS g_hook_source",
+		"max(has_result) AS g_has_result",
+		"max(has_error) AS g_has_error",
 	).
-		From("telemetry_logs").
+		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("telemetry_logs.event_source = 'hook'").
-		Where("trace_id IS NOT NULL AND trace_id != ''").
-		Where("(telemetry_logs.tool_name != '' OR telemetry_logs.skill_name != '' OR JSONExtractString(" + toolCallArguments + ", 'skill') != '')").
-		GroupBy("trace_id")
+		GroupBy("trace_id").
+		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
+		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
+		Having("any(event_source) = 'hook'").
+		Having("(g_tool_name != '' OR g_skill_name != '')")
 
-	hostedSQL, hostedArgs, err := hostedSB.ToSql()
+	hostedGroupedSQL, hostedArgs, err := hostedGroupedSB.ToSql()
 	if err != nil {
 		return "", nil, fmt.Errorf("building hosted tool usage source: %w", err)
 	}
+	hostedSQL := fmt.Sprintf(`
+SELECT
+	event_time_ns,
+	'%s' AS target_type,
+	'%s' AS target_kind,
+	g_toolset_slug AS target_id,
+	g_toolset_slug AS target_label,
+	%s AS tool_name,
+	%s AS user_key,
+	%s AS user_label,
+	%s AS user_kind,
+	toUInt8(g_http_status_code >= 200 AND g_http_status_code < 400) AS success,
+	toUInt8(g_http_status_code >= 400) AS failure,
+	'' AS hook_source
+FROM (%s)`,
+		ToolUsageTargetTypeHostedMCP,
+		toolUsageTargetKindServer,
+		chFirstNonEmpty("g_tool_name", "g_gram_urn"),
+		userKey,
+		userKey,
+		userKind,
+		hostedGroupedSQL,
+	)
+
 	hookGroupedSQL, hookGroupedArgs, err := hookGroupedSB.ToSql()
 	if err != nil {
 		return "", nil, fmt.Errorf("building hook tool usage source: %w", err)
@@ -3129,60 +3368,60 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	hookSourceArgs := hookGroupedArgs
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
 	if len(hostedToolsetSlugs) > 0 {
-		hostedIndex := toolUsageHostedMatchIndexExpr("mcp_match", "mcp_server_url")
+		hostedIndex := toolUsageHostedMatchIndexExpr("g_mcp_match", "g_mcp_server_url")
 		hookSourceSQL = fmt.Sprintf("SELECT *, %s AS hosted_match_index FROM (%s)", hostedIndex, hookGroupedSQL)
 		hookSourceArgs = []any{hostedMCPSlugs, hostedMCPSlugs, hostedURLSuffixes, hostedURLSuffixes}
 		hookSourceArgs = append(hookSourceArgs, hookGroupedArgs...)
 	}
 
 	hookTargetType := chMultiIf(
-		"skill_name != ''", "'"+ToolUsageTargetTypeSkill+"'",
-		"tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
+		"g_skill_name != ''", "'"+ToolUsageTargetTypeSkill+"'",
+		"g_tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
 		"'"+ToolUsageTargetTypeLocalTool+"'",
 	)
 	hookTargetKind := chMultiIf(
-		"skill_name != ''", "'"+toolUsageTargetKindSkill+"'",
-		"tool_source != ''", "'"+toolUsageTargetKindServer+"'",
+		"g_skill_name != ''", "'"+toolUsageTargetKindSkill+"'",
+		"g_tool_source != ''", "'"+toolUsageTargetKindServer+"'",
 		"'"+toolUsageTargetKindLocalTools+"'",
 	)
 	hookTargetID := chMultiIf(
-		"skill_name != ''", "skill_name",
-		"tool_source != ''", "tool_source",
+		"g_skill_name != ''", "g_skill_name",
+		"g_tool_source != ''", "g_tool_source",
 		"'local'",
 	)
 	hookTargetLabel := chMultiIf(
-		"skill_name != ''", "skill_name",
-		"tool_source != ''", "tool_source",
+		"g_skill_name != ''", "g_skill_name",
+		"g_tool_source != ''", "g_tool_source",
 		"'Local Tools'",
 	)
 	if len(hostedToolsetSlugs) > 0 {
 		hostedMatchCondition := "hosted_match_index > 0"
 		hookTargetType = chMultiIf(
 			hostedMatchCondition, "'"+ToolUsageTargetTypeHostedMCP+"'",
-			"skill_name != ''", "'"+ToolUsageTargetTypeSkill+"'",
-			"tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
+			"g_skill_name != ''", "'"+ToolUsageTargetTypeSkill+"'",
+			"g_tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
 			"'"+ToolUsageTargetTypeLocalTool+"'",
 		)
 		hookTargetKind = chMultiIf(
 			hostedMatchCondition, "'"+toolUsageTargetKindServer+"'",
-			"skill_name != ''", "'"+toolUsageTargetKindSkill+"'",
-			"tool_source != ''", "'"+toolUsageTargetKindServer+"'",
+			"g_skill_name != ''", "'"+toolUsageTargetKindSkill+"'",
+			"g_tool_source != ''", "'"+toolUsageTargetKindServer+"'",
 			"'"+toolUsageTargetKindLocalTools+"'",
 		)
 		hookTargetID = chMultiIf(
 			hostedMatchCondition, "arrayElement(?, hosted_match_index)",
-			"skill_name != ''", "skill_name",
-			"tool_source != ''", "tool_source",
+			"g_skill_name != ''", "g_skill_name",
+			"g_tool_source != ''", "g_tool_source",
 			"'local'",
 		)
 		hookTargetLabel = chMultiIf(
 			hostedMatchCondition, "arrayElement(?, hosted_match_index)",
-			"skill_name != ''", "skill_name",
-			"tool_source != ''", "tool_source",
+			"g_skill_name != ''", "g_skill_name",
+			"g_tool_source != ''", "g_tool_source",
 			"'Local Tools'",
 		)
 	}
-	hookToolName := chMultiIf("skill_name != ''", "skill_name", "tool_name")
+	hookToolName := chMultiIf("g_skill_name != ''", "g_skill_name", "g_tool_name")
 
 	hookSQL := fmt.Sprintf(`
 SELECT
@@ -3195,8 +3434,9 @@ SELECT
 	%s AS user_key,
 	%s AS user_label,
 	%s AS user_kind,
-	toUInt8(has_result = 1 AND has_error = 0) AS success,
-	toUInt8(has_error = 1) AS failure
+	toUInt8(g_has_result = 1 AND g_has_error = 0) AS success,
+	toUInt8(g_has_error = 1) AS failure,
+	g_hook_source AS hook_source
 FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userKey, userKind, hookSourceSQL)
 
 	hookArgs := make([]any, 0, 2+len(hookSourceArgs))

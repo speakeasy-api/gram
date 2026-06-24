@@ -2,6 +2,8 @@ package triggers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -35,6 +38,8 @@ const (
 	StatusCancelled     = "cancelled"
 
 	DefinitionSlugSlack     = "slack"
+	DefinitionSlugLinear    = "linear"
+	DefinitionSlugGithub    = "github"
 	DefinitionSlugCron      = "cron"
 	DefinitionSlugWake      = "wake"
 	DefinitionSlugDashboard = "dashboard"
@@ -730,6 +735,16 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 	result.Event.TriggerInstanceID = instance.ID.String()
 	result.Event.DefinitionSlug = instance.DefinitionSlug
 
+	// Scope the dedup event id to this trigger instance now that it's known —
+	// vendor-supplied id or content-hash fallback alike. A delivery targets
+	// exactly one instance, so two instances must never dedupe each other's
+	// deliveries on the dispatch workflow id or the assistant enqueue key and
+	// silently drop one.
+	result.Event.EventID = scopeWebhookEventID(result.Event.TriggerInstanceID, result.Event.EventID, body)
+	if result.Event.CorrelationID == "" {
+		result.Event.CorrelationID = result.Event.EventID
+	}
+
 	task, err := a.ProcessEvent(ctx, instance, *result.Event)
 	if err != nil {
 		return nil, fmt.Errorf("process event: %w", err)
@@ -823,6 +838,29 @@ func (a *App) ProcessScheduled(ctx context.Context, input ProcessScheduledInput)
 	return task, nil
 }
 
+// maxAssistantKeyLen mirrors the assistant tables' CHECKs
+// (CHAR_LENGTH(correlation_id) <= 300 and CHAR_LENGTH(event_id) <= 300). A key
+// over the limit (e.g. a GitHub push to a repo + branch whose names are long)
+// would otherwise be accepted and dispatched but rejected at assistant enqueue,
+// never reaching the assistant.
+const maxAssistantKeyLen = 300
+
+// boundAssistantKey caps an assistant key (the event id or correlation id) at
+// maxAssistantKeyLen characters, keeping a readable prefix and replacing the
+// overflow with a short content hash so the result stays deterministic (the
+// same input always maps to the same dedup key / conversation) and
+// collision-free. Truncation is rune-aware so a multibyte character is never
+// split into invalid UTF-8 (which a UTF8 database would itself reject).
+func boundAssistantKey(id string) string {
+	if utf8.RuneCountInString(id) <= maxAssistantKeyLen {
+		return id
+	}
+	sum := sha256.Sum256([]byte(id))
+	suffix := ":" + hex.EncodeToString(sum[:8])
+	runes := []rune(id)
+	return string(runes[:maxAssistantKeyLen-utf8.RuneCountInString(suffix)]) + suffix
+}
+
 func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInstance, envelope EventEnvelope) (*Task, error) {
 	rawConfig, err := configJSONToMap(instance.ConfigJson)
 	if err != nil {
@@ -862,8 +900,8 @@ func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInst
 		TargetKind:        instance.TargetKind,
 		TargetRef:         instance.TargetRef,
 		TargetDisplay:     instance.TargetDisplay,
-		EventID:           envelope.EventID,
-		CorrelationID:     envelope.CorrelationID,
+		EventID:           boundAssistantKey(envelope.EventID),
+		CorrelationID:     boundAssistantKey(envelope.CorrelationID),
 		EventJSON:         nil,
 		RawPayload:        envelope.RawPayload,
 	}

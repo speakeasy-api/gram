@@ -15,7 +15,6 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -165,6 +164,14 @@ func (tp *ToolProxy) Do(
 		}
 		span.End()
 	}()
+
+	// Capture the trace/span context onto the shared log attributes now, while the
+	// gateway.toolCall span is active. The callers (mcp tool-call handler, instances
+	// direct path) only call RecordTraceContext from their deferred closures against
+	// the outer ctx, which has no active span — so without this, hosted/direct tool
+	// call logs land in ClickHouse with an empty trace_id and never make it into the
+	// trace_summaries materialized view that powers the tool-usage dashboards.
+	attrs.RecordTraceContext(ctx)
 
 	logger := tp.logger.With(
 		attr.SlogProjectID(plan.Descriptor.ProjectID),
@@ -459,6 +466,7 @@ func (tp *ToolProxy) doFunction(
 			}
 			return nil
 		},
+		RetryConfig:      functionRunnerRetryConfig(),
 		ID:               descriptor.ID,
 		Name:             descriptor.Name,
 		DeploymentID:     descriptor.DeploymentID,
@@ -727,6 +735,7 @@ func (tp *ToolProxy) doHTTP(
 		ResponseStatusCodeCapture: &responseStatusCode,
 		Attributes:                attrRecorder,
 		VerifyResponse:            func(resp *http.Response) error { return nil },
+		RetryConfig:               httpToolRetryConfig(),
 		ID:                        descriptor.ID,
 		Name:                      descriptor.Name,
 		DeploymentID:              descriptor.DeploymentID,
@@ -821,60 +830,6 @@ func (tp *ToolProxy) doExternalMCP(
 	return nil
 }
 
-type retryConfig struct {
-	initialInterval time.Duration
-	maxInterval     time.Duration
-	maxAttempts     int
-	backoffFactor   float64
-	statusCodes     []int
-	methods         []string
-}
-
-func retryWithBackoff(
-	ctx context.Context,
-	retryBackoff retryConfig,
-	doRequest func() (*http.Response, error),
-) (*http.Response, error) {
-	var resp *http.Response
-	var err error
-	delayInterval := retryBackoff.initialInterval
-	for attempt := 0; attempt < retryBackoff.maxAttempts; attempt++ {
-		if attempt > 0 {
-			select {
-			case <-time.After(delayInterval):
-			case <-ctx.Done():
-				return nil, fmt.Errorf("retry context done: %w", ctx.Err())
-			}
-
-			delayInterval = min(time.Duration(float64(delayInterval)*retryBackoff.backoffFactor), retryBackoff.maxInterval)
-		}
-		resp, err = doRequest()
-		// retry by default on gateway errors
-		if err != nil {
-			continue
-		}
-		if !slices.Contains(retryBackoff.methods, resp.Request.Method) || !slices.Contains(retryBackoff.statusCodes, resp.StatusCode) {
-			return resp, err
-		}
-
-		if retryAfter := resp.Header.Get("retry-after"); retryAfter != "" {
-			if parsedNumber, err := strconv.ParseInt(retryAfter, 10, 64); err == nil && parsedNumber > 0 {
-				retryAfterDuration := time.Duration(parsedNumber) * time.Second
-				delayInterval = min(retryAfterDuration, retryBackoff.maxInterval)
-				continue
-			}
-
-			if parsedDate, err := time.Parse(time.RFC1123, retryAfter); err == nil {
-				retryAfterDuration := time.Until(parsedDate)
-				if retryAfterDuration > 0 {
-					delayInterval = min(retryAfterDuration, retryBackoff.maxInterval)
-				}
-			}
-		}
-	}
-	return resp, err
-}
-
 type ReverseProxyOptions struct {
 	Logger                    *slog.Logger
 	Tracer                    trace.Tracer
@@ -887,6 +842,11 @@ type ReverseProxyOptions struct {
 	ResponseStatusCodeCapture *int
 	VerifyResponse            func(*http.Response) error
 	Attributes                tm.HTTPLogAttributes
+	// RetryConfig is the retry policy applied to the proxied request. Callers
+	// pass functionRunnerRetryConfig (POST retries on the pre-execution-safe
+	// 429/503 set) for function-runner calls and httpToolRetryConfig (GET-only
+	// broad preset) for outbound HTTP tool calls.
+	RetryConfig retryConfig
 	// Descriptor fields
 	ID               string
 	Name             string
@@ -959,28 +919,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 
 		return client.Do(retryReq)
 	}
-	resp, err := retryWithBackoff(ctx, retryConfig{
-		initialInterval: 500 * time.Millisecond,
-		maxInterval:     5 * time.Second,
-		maxAttempts:     3,
-		backoffFactor:   2,
-		statusCodes: []int{ // reasonable status code presets
-			408, // Request Timeout
-			429, // Rate Limit Exceeded
-			500, // Internal Server Error
-			502, // Bad Gateway
-			503, // Service Unavailable
-			504, // Gateway Timeout
-			509, // Bandwidth Limit Exceeded
-			521, // Web Server Is Down (Cloudflare)
-			522, // Connection Timed Out (Cloudflare)
-			523, // Origin Is Unreachable (Cloudflare)
-			524, // A Timeout Occurred (Cloudflare)
-		},
-		methods: []string{
-			http.MethodGet,
-		},
-	}, executeRequest)
+	resp, err := retryWithBackoff(ctx, opts.RetryConfig, executeRequest)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return oops.E(oops.CodeGatewayError, err, "failed to execute request").LogError(ctx, opts.Logger)

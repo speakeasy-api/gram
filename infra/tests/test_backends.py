@@ -12,25 +12,23 @@ from __future__ import annotations
 
 import concurrent.futures as cf
 import threading
+from datetime import timedelta
 from typing import Any, cast
 
 import anyio
+import anyio.lowlevel
 import pytest
 import structlog
-
-from datetime import timedelta
-
-from google.protobuf.duration_pb2 import Duration
-
 from conftest import FakeMessage, FakeSubscriberClient
 from gcp.pubsub.v1 import options_pb2
-from gram.ping.v1 import processor_pb2
-from gram.ping.v1 import ping_pb2
+from google.protobuf.duration_pb2 import Duration
+from gram.ping.v2 import ping_pb2, processor_pb2
+
 from gram_infra.pubsub import (
     EmulatedPubSubBroker,
-    PubSubBroker,
     Publisher,
     PublisherHandle,
+    PubSubBroker,
     Subscriber,
     SubscriberHandle,
 )
@@ -212,8 +210,8 @@ def test_emulated_reconcile_is_memoized() -> None:
 # Both anyio backends. trio is a dev dependency (anyio[trio]).
 BACKENDS = ["asyncio", "trio"]
 
-TOPIC_PROTO = "gram.ping.v1.Message"
-SUB_PROTO = "gram.ping.v1.Processor"
+TOPIC_PROTO = "gram.ping.v2.Message"
+SUB_PROTO = "gram.ping.v2.Processor"
 
 
 class FakePublisherClient:
@@ -240,7 +238,7 @@ def test_publish_awaits_future_on_backend(backend) -> None:
     )
 
     async def scenario() -> Any:
-        return await publisher.publish(ping_pb2.Message(id="x", type="t"))
+        return await publisher.publish(ping_pb2.Message(id="x", type="t")).get()
 
     result = anyio.run(scenario, backend=backend)
 
@@ -270,7 +268,7 @@ def test_publish_handles_already_resolved_future(backend) -> None:
     )
 
     async def scenario() -> Any:
-        return await publisher.publish(ping_pb2.Message(id="x", type="t"))
+        return await publisher.publish(ping_pb2.Message(id="x", type="t")).get()
 
     assert anyio.run(scenario, backend=backend) == "immediate-msg-id"
 
@@ -293,7 +291,7 @@ def test_publish_raises_publish_error(backend) -> None:
     )
 
     async def scenario() -> Any:
-        return await publisher.publish(ping_pb2.Message(id="x", type="t"))
+        return await publisher.publish(ping_pb2.Message(id="x", type="t")).get()
 
     with pytest.raises(RuntimeError, match="send failed"):
         anyio.run(scenario, backend=backend)
@@ -329,7 +327,7 @@ def test_receive_acks_messages_on_backend(backend) -> None:
                 await done.wait()
                 # Let the in-flight handlers ack before we tear down.
                 while not all(message.acked for message in messages):
-                    await anyio.sleep(0)
+                    await anyio.lowlevel.checkpoint()
             tg.cancel_scope.cancel()
 
         return seen
@@ -483,7 +481,7 @@ def test_publish_registers_future_with_broker_drain() -> None:
     publisher = Publisher(handle, TOPIC_PROTO)
 
     async def scenario() -> None:
-        await publisher.publish(ping_pb2.Message(id="x", type="t"))
+        await publisher.publish(ping_pb2.Message(id="x", type="t")).get()
 
     anyio.run(scenario)
 

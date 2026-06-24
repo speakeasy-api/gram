@@ -438,7 +438,8 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           const nonSystemMessages = cleanedMessages.filter(
             (m) => m.role !== "system",
           );
-          const rawModelMessages = convertToModelMessages(nonSystemMessages);
+          const rawModelMessages =
+            await convertToModelMessages(nonSystemMessages);
 
           // Auto-compact older turns if the estimated input is approaching
           // the model's context window. System prompt + last few turns are

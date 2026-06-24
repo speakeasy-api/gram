@@ -1698,6 +1698,7 @@ SELECT
   remote_session_client_id,
   (CASE
     WHEN access_expires_at > now()
+      OR (access_expires_at IS NULL AND refresh_token_encrypted IS NULL)
       OR (refresh_token_encrypted IS NOT NULL
           AND (refresh_expires_at IS NULL OR refresh_expires_at > now())) THEN 'active'
     ELSE 'expired'
@@ -1727,14 +1728,17 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 // DISTINCT. A soft-deleted row is absent here entirely (truly disconnected).
 //
 // The 'active' predicate mirrors validateAndRefresh in tokenservice.go: a
-// session is usable only when its access token is unexpired, or it carries a
-// refresh token that is not itself known-expired to renew with. A
-// refresh_expires_at of NULL means no known expiry (non-expiring refresh
-// token), so it still counts as usable. A present-but-unusable row is
-// 'expired' rather than dropped, so the consent UI can distinguish "reconnect
-// this expired link" from "never connected" — and so the runtime gate (which
-// rejects the same row as ErrNoValidToken) stops disagreeing with a green
-// "Connected" badge.
+// session is usable when its access token is unexpired, or it is a NULL-expiry
+// token with no refresh path (non-expiring, e.g. Slack non-rotating xoxp), or
+// it carries a refresh token that is not itself known-expired to renew with. A
+// NULL access_expires_at counts as usable on its own ONLY when there is no
+// refresh token: with a refresh token present the gate re-validates on an
+// hourly cadence, so usability defers to the refresh-token clause. A
+// refresh_expires_at of NULL is a non-expiring refresh token. A
+// present-but-unusable row is 'expired' rather than dropped, so the consent UI
+// can distinguish "reconnect this expired link" from "never connected" — and
+// so the runtime gate (which rejects the same row as ErrNoValidToken) stops
+// disagreeing with a green "Connected" badge.
 func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg ListRemoteSessionStatusesForSubjectParams) ([]ListRemoteSessionStatusesForSubjectRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionStatusesForSubject, arg.SubjectUrn, arg.UserSessionIssuerID)
 	if err != nil {
@@ -2065,6 +2069,31 @@ func (q *Queries) SetOrganizationRemoteSessionIssuerProject(ctx context.Context,
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const setRemoteSessionUpdatedAt = `-- name: SetRemoteSessionUpdatedAt :exec
+UPDATE remote_sessions s
+SET updated_at = $1
+FROM remote_session_clients c
+WHERE s.id = $2
+  AND s.remote_session_client_id = c.id
+  AND c.project_id = $3
+`
+
+type SetRemoteSessionUpdatedAtParams struct {
+	UpdatedAt pgtype.Timestamptz
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+// Sets updated_at on a remote session. Scoped through the owning
+// remote_session_client's project so the write cannot cross tenant boundaries.
+// Currently used by tests to backdate updated_at and exercise the
+// application-layer refresh cadence in validateAndRefresh (NULL
+// access_expires_at with a refresh token) without waiting wall-clock time.
+func (q *Queries) SetRemoteSessionUpdatedAt(ctx context.Context, arg SetRemoteSessionUpdatedAtParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionUpdatedAt, arg.UpdatedAt, arg.ID, arg.ProjectID)
+	return err
 }
 
 const softDeleteRemoteSessionsByClientID = `-- name: SoftDeleteRemoteSessionsByClientID :execrows

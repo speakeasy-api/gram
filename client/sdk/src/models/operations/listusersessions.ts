@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import * as components from "../components/index.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -24,6 +25,22 @@ export type ListUserSessionsSecurity = {
   option2?: ListUserSessionsSecurityOption2 | undefined;
 };
 
+/**
+ * Filter by session status.
+ */
+export const ListUserSessionsQueryParamStatus = {
+  Active: "active",
+  Expired: "expired",
+  Revoked: "revoked",
+  All: "all",
+} as const;
+/**
+ * Filter by session status.
+ */
+export type ListUserSessionsQueryParamStatus = ClosedEnum<
+  typeof ListUserSessionsQueryParamStatus
+>;
+
 export type ListUserSessionsRequest = {
   /**
    * Exact-match filter on subject URN.
@@ -33,6 +50,14 @@ export type ListUserSessionsRequest = {
    * Filter by user_session_issuer id.
    */
   userSessionIssuerId?: string | undefined;
+  /**
+   * Filter by session status.
+   */
+  status?: ListUserSessionsQueryParamStatus | undefined;
+  /**
+   * Filter by the connecting client id.
+   */
+  clientId?: string | undefined;
   /**
    * Pagination cursor: id of the last item from the previous page.
    */
@@ -161,9 +186,16 @@ export function listUserSessionsSecurityToJSON(
 }
 
 /** @internal */
+export const ListUserSessionsQueryParamStatus$outboundSchema: z.ZodMiniEnum<
+  typeof ListUserSessionsQueryParamStatus
+> = z.enum(ListUserSessionsQueryParamStatus);
+
+/** @internal */
 export type ListUserSessionsRequest$Outbound = {
   subject_urn?: string | undefined;
   user_session_issuer_id?: string | undefined;
+  status?: string | undefined;
+  client_id?: string | undefined;
   cursor?: string | undefined;
   limit?: number | undefined;
   "Gram-Session"?: string | undefined;
@@ -179,6 +211,8 @@ export const ListUserSessionsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     subjectUrn: z.optional(z.string()),
     userSessionIssuerId: z.optional(z.string()),
+    status: z.optional(ListUserSessionsQueryParamStatus$outboundSchema),
+    clientId: z.optional(z.string()),
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     gramSession: z.optional(z.string()),
@@ -189,6 +223,7 @@ export const ListUserSessionsRequest$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       subjectUrn: "subject_urn",
       userSessionIssuerId: "user_session_issuer_id",
+      clientId: "client_id",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

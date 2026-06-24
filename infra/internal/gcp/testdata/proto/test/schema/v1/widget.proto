@@ -1,0 +1,19 @@
+edition = "2024";
+
+package test.schema.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "example.com/gen/test/schema/v1;schemav1";
+
+// Widget is a self-contained test message used to exercise schema generation.
+message Widget {
+  string id = 1; // identifier
+  int64 size = 2;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 3600 /* one hour */
+    }
+  };
+}

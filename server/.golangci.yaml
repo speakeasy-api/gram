@@ -156,6 +156,12 @@ linters:
         linters:
           - forbidigo
         text: GG010
+      # GG013 (no time.Sleep) is enforced repo-wide EXCEPT the files below, which
+      # still hold legitimate or not-yet-reviewed time.Sleep calls.
+      - path: internal/background/activities/custom_domain_ingress\.go|internal/guardian/policy_test\.go|internal/hooks/pending_helpers_test\.go|internal/remotemcp/proxy/proxy_test\.go|internal/testenv/redis\.go|internal/testinfra/clickhouse\.go|internal/variations/listglobal_test\.go
+        linters:
+          - forbidigo
+        text: GG013
   settings:
     custom:
       glint:
@@ -246,6 +252,9 @@ linters:
         - pattern: ^os\.Stderr$
           pkg: ^os$
           msg: "GG012: Writing to os.Stderr bypasses structured logging. Use a *slog.Logger instead. The sanctioned slog handler setup in internal/o11y/slog.go is exempt."
+        - pattern: ^time\.Sleep$
+          pkg: ^time$
+          msg: "GG013: Avoid time.Sleep. In tests, poll with require.EventuallyWithT (wait until assertions pass) or require.Never (assert a condition never holds)."
     sloglint:
       no-mixed-args: true
       attr-only: true
@@ -306,6 +315,8 @@ linters:
         - '^k8s.io/apimachinery/pkg/apis/meta/v1\..+$'
         - '^k8s.io/api/networking/v1\..+$'
         - '^sigs.k8s.io/gateway-api/apis/v1\..+$'
+        - '^k8s.io/client-go/rest\.Config$'
+        - '^k8s.io/client-go/rest\.TLSClientConfig$'
         - '^github.com/posthog/posthog-go\..+$'
         - '^github\.com/speakeasy-api/openapi/.*'
         - '^github\.com/polarsource/polar-go/.*'

@@ -66,6 +66,13 @@ export function FilterControl({
           className={className}
           hideSelectAll
           singleLine
+          // This control only ever renders inside the FilterSheet, which is a
+          // non-modal Radix Dialog. A non-modal popover nested in a non-modal
+          // dialog doesn't reliably receive option clicks in the browser (the
+          // dialog's dismissable/focus layer swallows them), so the dropdown
+          // appears but selecting an option does nothing (AIS-168). Running the
+          // popover modal makes it the top interactive layer so clicks land.
+          modalPopover
         />
       );
     case "select":
@@ -99,6 +106,19 @@ export function FilterControl({
           placeholder={dim.placeholder ?? `${dim.label} contains...`}
           ariaLabel={`Filter by ${dim.label.toLowerCase()}`}
           suggestions={flattenOptions(options).map((o) => o.value)}
+          className={className}
+        />
+      );
+    case "number":
+      return (
+        <DebouncedNumberInput
+          value={value as number | null}
+          onChange={(v) => onChange(v)}
+          placeholder={dim.placeholder ?? `${dim.label}…`}
+          ariaLabel={`Filter by ${dim.label.toLowerCase()}`}
+          min={dim.min}
+          max={dim.max}
+          step={dim.step}
           className={className}
         />
       );
@@ -237,6 +257,79 @@ function DebouncedTextInput({
             // close/unmount can't drop it and leave a stale filter applied.
             setLocal("");
             onChange("");
+          }}
+          className="text-muted-foreground hover:text-foreground"
+          aria-label="Clear filter"
+        >
+          <Icon name="x" className="size-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// A debounced numeric input. Mirrors DebouncedTextInput but parses to a number
+// (empty / non-numeric → null) so number dimensions never round-trip through a
+// string at the page layer.
+function DebouncedNumberInput({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  min,
+  max,
+  step,
+  className,
+}: {
+  value: number | null;
+  onChange: (next: number | null) => void;
+  placeholder: string;
+  ariaLabel: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  className?: string;
+}): JSX.Element {
+  const [local, setLocal] = useState(value === null ? "" : String(value));
+
+  useEffect(() => {
+    setLocal(value === null ? "" : String(value));
+  }, [value]);
+
+  useEffect(() => {
+    const trimmed = local.trim();
+    const parsed = trimmed === "" ? NaN : Number(trimmed);
+    const next = Number.isFinite(parsed) ? parsed : null;
+    if (next === value) return;
+    const timer = setTimeout(() => onChange(next), 350);
+    return () => clearTimeout(timer);
+  }, [local, value, onChange]);
+
+  return (
+    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
+      <input
+        type="number"
+        inputMode="numeric"
+        value={local}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(e) => setLocal(e.target.value)}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        autoComplete="off"
+        className={
+          className ??
+          "placeholder:text-muted-foreground w-[200px] bg-transparent text-sm outline-none"
+        }
+      />
+      {local && (
+        <button
+          type="button"
+          onClick={() => {
+            // Bypass the debounce on clear so a quick unmount can't drop it.
+            setLocal("");
+            onChange(null);
           }}
           className="text-muted-foreground hover:text-foreground"
           aria-label="Clear filter"

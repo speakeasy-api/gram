@@ -29,23 +29,20 @@ from __future__ import annotations
 
 import queue as queue_module
 import threading
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from concurrent.futures import CancelledError as FutureCancelledError
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import (
     Any,
-    AsyncGenerator,
-    Awaitable,
-    Callable,
-    Generic,
     NoReturn,
-    Optional,
     TypeVar,
 )
 
 import anyio
 import anyio.from_thread
 import anyio.to_thread
+import asyncer
 import structlog
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from google.cloud.pubsub_v1.subscriber.scheduler import Scheduler
@@ -53,12 +50,11 @@ from google.protobuf.message import Message
 
 from .broker import SubscriberBroker, SubscriberHandle
 
-
 __all__ = [
+    "MessageCallback",
     "MessageMetadata",
     "ReceivedMessage",
     "Subscriber",
-    "MessageCallback",
     "pubsub_subscriber_for_message",
 ]
 
@@ -100,7 +96,7 @@ class MessageMetadata:
     attributes: dict[str, str] = field(default_factory=dict)
     # Number of delivery attempts. Set (starting at 1) only when dead-lettering
     # is enabled for the subscription; otherwise None.
-    delivery_attempt: Optional[int] = None
+    delivery_attempt: int | None = None
 
 
 # A callback returns None to ack; raising any exception nacks the message.
@@ -108,7 +104,7 @@ MessageCallback = Callable[[M, MessageMetadata], Awaitable[None]]
 
 
 @dataclass
-class ReceivedMessage(Generic[M]):
+class ReceivedMessage[M: Message]:
     """A message delivered by :meth:`Subscriber.stream`, with explicit disposition.
 
     The callback form (:meth:`Subscriber.receive`) ties ack/nack to the callback's
@@ -200,14 +196,15 @@ class _PortalScheduler(Scheduler):
         would serialize intake at one loop-latency apiece while the library holds
         its pause/resume lock). If the enqueue cannot run — the portal is gone or
         the task is cancelled during teardown — the message is nacked so the
-        broker redelivers it rather than dropping it.
+        broker redelivers it immediately rather than leaving it leased until its
+        ack deadline lapses.
         """
         message = args[0] if args else None
         if message is None:
             return
         try:
             future = self._portal.start_task_soon(self._enqueue, message)
-        except BaseException:  # noqa: BLE001 - never raise back into the library thread
+        except BaseException:
             # The portal is already stopped (RuntimeError) or going away. Nack so
             # the broker redelivers; raising here would only crash the library's
             # background dispatch thread.
@@ -215,9 +212,13 @@ class _PortalScheduler(Scheduler):
             return
 
         def _nack_on_failure(f) -> None:
+            # ``_enqueue`` nacks the cases it can reach (closed/broken stream); this
+            # covers the one it can't — the scheduled task being cancelled before it
+            # ever runs during a teardown race — so that message is redelivered
+            # immediately too rather than waiting out its ack deadline.
             try:
                 failed = f.cancelled() or f.exception() is not None
-            except BaseException:  # noqa: BLE001 - runs on arbitrary threads
+            except BaseException:
                 failed = True
             if failed:
                 message.nack()
@@ -234,7 +235,7 @@ class _PortalScheduler(Scheduler):
             return
         try:
             self._send.send_nowait(message)  # unbounded buffer: never blocks
-        except (anyio.ClosedResourceError, anyio.BrokenResourceError):
+        except anyio.ClosedResourceError, anyio.BrokenResourceError:
             message.nack()
 
     def track_handler(self) -> None:
@@ -265,7 +266,7 @@ class _PortalScheduler(Scheduler):
         while True:
             try:
                 message = self._receive.receive_nowait()
-            except (anyio.EndOfStream, anyio.WouldBlock, anyio.ClosedResourceError):
+            except anyio.EndOfStream, anyio.WouldBlock, anyio.ClosedResourceError:
                 break
             message.nack()
 
@@ -286,7 +287,7 @@ class _PortalScheduler(Scheduler):
         """
         try:
             self._portal.call(self.close)
-        except BaseException:  # noqa: BLE001 - never raise back into the library thread
+        except BaseException:
             # The portal (and with it the event loop side) is already gone: the
             # loop-side teardown in Subscriber._session closes and nacks on its
             # own task, so nothing is stranded. Report no dropped messages rather
@@ -297,7 +298,7 @@ class _PortalScheduler(Scheduler):
         return []
 
 
-class Subscriber(Generic[M]):
+class Subscriber[M: Message]:
     """Receives messages of a single proto type from a fixed subscription."""
 
     def __init__(
@@ -322,7 +323,7 @@ class Subscriber(Generic[M]):
     @asynccontextmanager
     async def _session(
         self,
-    ) -> AsyncGenerator[tuple[_PortalScheduler, Any, MemoryObjectReceiveStream], None]:
+    ) -> AsyncGenerator[tuple[_PortalScheduler, Any, MemoryObjectReceiveStream]]:
         """Portal + scheduler + streaming-pull plumbing shared by receive/stream.
 
         Teardown is fully synchronous (checkpoint-free), so it runs to completion
@@ -356,7 +357,10 @@ class Subscriber(Generic[M]):
         self,
         callback: MessageCallback[M],
         *,
-        timeout: float | None = None,
+        # A timeout is part of receive()'s public contract (bounded consumption
+        # for callers/tests); ASYNC109 prefers anyio.fail_after, but that would
+        # move the responsibility onto every caller and change the API.
+        timeout: float | None = None,  # noqa: ASYNC109
         max_concurrency: int | None = None,
     ) -> None:
         """Receive messages, blocking until cancelled or ``timeout`` elapses.
@@ -421,7 +425,7 @@ class Subscriber(Generic[M]):
             raise unwrapped from None
 
     @asynccontextmanager
-    async def stream(self) -> AsyncGenerator[_MessageIterator[M], None]:
+    async def stream(self) -> AsyncGenerator[_MessageIterator[M]]:
         """Receive messages as an async iterator instead of via a callback.
 
         Use as an async context manager wrapping an ``async for``::
@@ -490,7 +494,22 @@ class Subscriber(Generic[M]):
         finally:
             limiter.release()
 
-    def _parse(self, message) -> tuple[M, MessageMetadata] | None:
+    async def _log_off_loop(self, method, event, /, **fields) -> None:
+        """Emit a structlog record on a worker thread, off the event loop.
+
+        structlog renders synchronously, and on the dev ``ConsoleRenderer`` a
+        traceback render (rich) can stall the loop for tens of milliseconds —
+        enough to trip the blocking-IO guard the consuming services run. This
+        receive loop bridges blocking pubsub threads onto the loop, so it must
+        never block; offloading the render keeps it responsive. ``asyncer``
+        (anyio-based) is used rather than structlog's ``a*`` methods because
+        those are asyncio-only (``run_in_executor``) and would break the trio
+        backend. Pass the exception explicitly via ``exc_info`` — ``sys.exc_info``
+        is not visible from the worker thread.
+        """
+        await asyncer.asyncify(method)(event, **fields)
+
+    async def _parse(self, message) -> tuple[M, MessageMetadata] | None:
         """Unmarshal a raw message into its proto type + metadata.
 
         Returns ``None`` (after nacking) when the payload fails to decode, so a
@@ -499,23 +518,27 @@ class Subscriber(Generic[M]):
         pure-Python protobuf backend a malformed payload can surface as e.g.
         ``UnicodeDecodeError``, and letting it escape would tear down the whole
         receive loop over one poison message (the Go layer likewise nacks on any
-        unmarshal error). Only synchronous code runs in the ``try``, so no
-        cancellation exception can be swallowed here.
+        unmarshal error). Only synchronous code runs in the decode ``try``, so no
+        cancellation exception can be swallowed there.
         """
         delivery_attempt = getattr(message, "delivery_attempt", None)
 
         instance = self._message_type()
         try:
             instance.ParseFromString(message.data)
-        except Exception:
-            self._logger.warning(
+        except Exception as exc:
+            # Nack before logging: the log render is awaited (offloaded to a
+            # thread), so a cancellation there must not skip disposing of the
+            # message.
+            message.nack()
+            await self._log_off_loop(
+                self._logger.warning,
                 "failed to unmarshal pubsub message",
-                exc_info=True,
+                exc_info=exc,
                 topic_proto_name=self._topic_proto_name,
                 subscription_proto_name=self._subscription_proto_name,
                 message_id=message.message_id,
             )
-            message.nack()
             return None
 
         metadata = MessageMetadata(
@@ -526,14 +549,14 @@ class Subscriber(Generic[M]):
         return instance, metadata
 
     async def _dispatch(self, message, callback: MessageCallback[M]) -> None:
-        parsed = self._parse(message)
+        parsed = await self._parse(message)
         if parsed is None:
             return
         instance, metadata = parsed
 
         try:
             await callback(instance, metadata)
-        except BaseException as exc:  # noqa: BLE001 - isolate one bad message
+        except BaseException as exc:
             # Cooperative cancellation must propagate: a cancelled handler is
             # neither acked nor nacked here. The library was started with
             # await_callbacks_on_shutdown=True, so on a *graceful* stop in-flight
@@ -544,10 +567,12 @@ class Subscriber(Generic[M]):
             # The callback raised — either a deliberate nack signal or an
             # unexpected error. Catch BaseException (not just Exception) so that
             # even a SystemExit-style error from a single message can't tear down
-            # the receive loop. Log with full diagnostic context and nack so the
-            # message is redelivered, and eventually dead-lettered if it keeps
-            # failing.
-            self._logger.error(
+            # the receive loop. Nack so the message is redelivered (and
+            # eventually dead-lettered if it keeps failing) before the awaited
+            # log render, then record full diagnostic context off the loop.
+            message.nack()
+            await self._log_off_loop(
+                self._logger.error,
                 "error processing pubsub message",
                 exc_info=exc,
                 topic_proto_name=self._topic_proto_name,
@@ -557,12 +582,11 @@ class Subscriber(Generic[M]):
                 if metadata.delivery_attempt is not None
                 else 0,
             )
-            message.nack()
             return
         message.ack()
 
 
-class _MessageIterator(Generic[M]):
+class _MessageIterator[M: Message]:
     """Async iterator yielded by ``Subscriber.stream``.
 
     Holds no scope of its own — the portal and streaming pull live in the
@@ -589,7 +613,7 @@ class _MessageIterator(Generic[M]):
                 raw = await self._recv.receive()
             except anyio.EndOfStream:
                 await self._end_of_stream()
-            parsed = self._subscriber._parse(raw)
+            parsed = await self._subscriber._parse(raw)
             if parsed is None:
                 # Malformed payload: _parse already nacked it. Skip and pull next.
                 continue
@@ -621,14 +645,14 @@ class _MessageIterator(Generic[M]):
         raise StopAsyncIteration
 
 
-def pubsub_subscriber_for_message(
+def pubsub_subscriber_for_message[M: Message](
     broker: SubscriberBroker,
     message_type: type[M],
     subscription_type: type[Message],
     *,
     logger: structlog.stdlib.BoundLogger | None = None,
 ) -> Subscriber[M]:
-    """Return a subscriber for ``subscription_type`` delivering ``message_type`` messages.
+    """Return a subscriber that delivers ``message_type`` for ``subscription_type``.
 
     Raises ValueError if the message declares no topic or the subscription marker
     declares no subscription.
@@ -639,6 +663,33 @@ def pubsub_subscriber_for_message(
         raise ValueError("subscription marker message type must not be None")
 
     handle = broker.subscriber_for_message(message_type, subscription_type)
+    return Subscriber(
+        handle,
+        message_type,
+        logger=logger or structlog.get_logger(__name__),
+        topic_proto_name=message_type.DESCRIPTOR.full_name,
+        subscription_proto_name=subscription_type.DESCRIPTOR.full_name,
+    )
+
+
+async def pubsub_subscriber_for_message_async[M: Message](
+    broker: SubscriberBroker,
+    message_type: type[M],
+    subscription_type: type[Message],
+    *,
+    logger: structlog.stdlib.BoundLogger | None = None,
+) -> Subscriber[M]:
+    """Async :func:`pubsub_subscriber_for_message`.
+
+    Resolves the handle via the broker's async path so an emulator topic/
+    subscription reconcile runs off the event loop. Prefer this from async wiring.
+    """
+    if message_type is None:
+        raise ValueError("message type must not be None")
+    if subscription_type is None:
+        raise ValueError("subscription marker message type must not be None")
+
+    handle = await broker.subscriber_for_message_async(message_type, subscription_type)
     return Subscriber(
         handle,
         message_type,

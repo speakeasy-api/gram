@@ -23,13 +23,15 @@ type ConfigConnectorPubSub struct {
 	logger      *slog.Logger
 	outPath     string
 	descriptors []byte
+	protoRoot   string
 }
 
-func NewCCPubSub(logger *slog.Logger, outPath string, descriptors []byte) *ConfigConnectorPubSub {
+func NewCCPubSub(logger *slog.Logger, outPath string, descriptors []byte, protoRoot string) *ConfigConnectorPubSub {
 	return &ConfigConnectorPubSub{
 		logger:      logger,
 		outPath:     outPath,
 		descriptors: descriptors,
+		protoRoot:   protoRoot,
 	}
 }
 
@@ -44,12 +46,17 @@ func (c *ConfigConnectorPubSub) Generate(ctx context.Context) error {
 		return fmt.Errorf("descriptor set is empty: refusing to generate an empty pubsub topology")
 	}
 
-	desiredTopics, desiredSubs, err := discoverPubSubFromDescriptor(c.descriptors)
+	desiredTopics, desiredSubs, err := DiscoverPubSub(c.descriptors)
 	if err != nil {
 		return fmt.Errorf("discover pubsub topology: %w", err)
 	}
 
-	if err := c.writeValues(ctx, buildPubSubValues(desiredTopics, desiredSubs)); err != nil {
+	desiredSchemas, err := DiscoverSchemas(ctx, c.descriptors, c.protoRoot)
+	if err != nil {
+		return fmt.Errorf("discover pubsub schemas: %w", err)
+	}
+
+	if err := c.writeValues(ctx, buildPubSubValues(ctx, c.logger, desiredTopics, desiredSubs, desiredSchemas)); err != nil {
 		return fmt.Errorf("write pubsub values: %w", err)
 	}
 

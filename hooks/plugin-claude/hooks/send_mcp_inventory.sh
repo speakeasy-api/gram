@@ -64,6 +64,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$script_dir/identity.sh" ]; then
   . "$script_dir/identity.sh"
 fi
+. "$script_dir/http.sh"
 if type gram_enrich_identity_payload >/dev/null 2>&1; then
   payload=$(gram_enrich_identity_payload "$payload")
 fi
@@ -168,19 +169,16 @@ print(json.dumps(p))
   enriched="$payload"
 }
 
-# curl's -w '%{http_code}' prints 000 itself on connection failure/timeout, so
-# don't append another fallback (that doubles to "000000"). Guard only the case
-# where curl is missing entirely and the substitution comes back empty.
-http_code=$(printf '%s' "$enriched" | curl -s -o /dev/null -w '%{http_code}' -X POST \
-  -H "Content-Type: application/json" \
+# Fire-and-forget through the shared helper so a transient reset retries (see
+# http.sh) instead of dropping the inventory. The hook never blocks, but we
+# still log the delivery outcome under GRAM_HOOKS_DEBUG so support can tell
+# "never reached the server" from "server rejected it".
+gram_http_post "${server_url}/rpc/hooks.claude" "$enriched" 30 \
   ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
-  ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
-  --data-binary @- \
-  --max-time 30 \
-  "${server_url}/rpc/hooks.claude" 2>/dev/null)
-[ -z "$http_code" ] && http_code=000
+  ${auth_config_arg[@]+"${auth_config_arg[@]}"} >/dev/null 2>&1 || true
 
-if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+http_code="$GRAM_HTTP_CODE"
+if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
   debug "inventory delivered (HTTP ${http_code})"
 elif [ "$http_code" = "000" ]; then
   debug "inventory NOT delivered: could not reach ${server_url} (connection failure or timeout)"

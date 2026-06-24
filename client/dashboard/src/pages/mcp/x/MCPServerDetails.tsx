@@ -51,7 +51,9 @@ import {
   isLegacyAuthenticationTabPath,
   type TabValue,
 } from "./MCPServerDetailsRouting";
+import { AnalyticsTab } from "./tabs/AnalyticsTab";
 import { OverviewTab } from "./tabs/OverviewTab";
+import { ToolsTab } from "./tabs/ToolsTab";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
 import { MCP_SERVER_URL_SECTION_ID } from "./tabs/settings/sections/ServerUrlSection";
 import { SettingsTab } from "./tabs/settings/SettingsTab";
@@ -64,6 +66,10 @@ function mcpServerTabHref(
   switch (tab) {
     case "overview":
       return routes.mcp.x.overview.href(mcpServerSlug);
+    case "tools":
+      return routes.mcp.x.tools.href(mcpServerSlug);
+    case "analytics":
+      return routes.mcp.x.analytics.href(mcpServerSlug);
     case "team-access":
       return routes.mcp.x.teamAccess.href(mcpServerSlug);
     case "settings":
@@ -77,8 +83,6 @@ export default function MCPServerDetails(): JSX.Element {
   const navigate = useNavigate();
   const routes = useRoutes();
   const telemetry = useTelemetry();
-  const isRemoteMcpEnabled =
-    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
   const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
   const idOrSlug = mcpServerSlug ?? "";
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
@@ -104,20 +108,17 @@ export default function MCPServerDetails(): JSX.Element {
     isLoading,
     isError,
   } = useGetMcpServer(getMcpServerArgs(idOrSlug), undefined, {
-    enabled: isRemoteMcpEnabled && idOrSlug !== "",
+    enabled: idOrSlug !== "",
   });
 
   const mcpServerId = mcpServer?.id ?? "";
 
   const { data: endpointsResult, isLoading: isLoadingEndpoints } =
     useMcpEndpoints({ mcpServerId }, undefined, {
-      enabled: isRemoteMcpEnabled && mcpServerId !== "",
+      enabled: mcpServerId !== "",
     });
   const endpoints = endpointsResult?.mcpEndpoints ?? [];
 
-  if (!isRemoteMcpEnabled) {
-    return <Navigate to={routes.mcp.href()} replace />;
-  }
   if (!idOrSlug) {
     return <Navigate to={routes.mcp.href()} replace />;
   }
@@ -175,6 +176,16 @@ export default function MCPServerDetails(): JSX.Element {
                     Overview
                   </Link>
                 </PageTabsTrigger>
+                <PageTabsTrigger value="tools" asChild>
+                  <Link to={mcpServerTabHref(routes, idOrSlug, "tools")}>
+                    Tools
+                  </Link>
+                </PageTabsTrigger>
+                <PageTabsTrigger value="analytics" asChild>
+                  <Link to={mcpServerTabHref(routes, idOrSlug, "analytics")}>
+                    Analytics
+                  </Link>
+                </PageTabsTrigger>
                 {isRbacEnabled && (
                   <PageTabsTrigger value="team-access" asChild>
                     <Link
@@ -204,6 +215,26 @@ export default function MCPServerDetails(): JSX.Element {
               onShowEndpoints={handleShowServerUrlSettings}
               onShowAuthentication={handleShowAuthentication}
             />
+          </TabsContent>
+
+          <TabsContent
+            value="tools"
+            className="mt-0 w-full data-[state=inactive]:hidden"
+          >
+            {mcpServer && (
+              <ToolsTab
+                mcpServer={mcpServer}
+                endpoints={endpoints}
+                isLoadingEndpoints={isLoadingEndpoints}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent
+            value="analytics"
+            className="mt-0 w-full data-[state=inactive]:hidden"
+          >
+            <AnalyticsTab mcpServer={mcpServer} />
           </TabsContent>
 
           {isRbacEnabled && mcpServer && (
