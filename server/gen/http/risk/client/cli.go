@@ -1755,3 +1755,287 @@ func BuildTestDetectionRulePayload(riskTestDetectionRuleBody string, riskTestDet
 
 	return v, nil
 }
+
+// BuildCreatePolicyEvalRunPayload builds the payload for the risk
+// createPolicyEvalRun endpoint from CLI flags.
+func BuildCreatePolicyEvalRunPayload(riskCreatePolicyEvalRunBody string, riskCreatePolicyEvalRunApikeyToken string, riskCreatePolicyEvalRunSessionToken string, riskCreatePolicyEvalRunProjectSlugInput string) (*risk.CreatePolicyEvalRunPayload, error) {
+	var err error
+	var body CreatePolicyEvalRunRequestBody
+	{
+		err = json.Unmarshal([]byte(riskCreatePolicyEvalRunBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"candidate\": {\n         \"custom_rule_ids\": [\n            \"abc123\"\n         ],\n         \"disabled_rules\": [\n            \"abc123\"\n         ],\n         \"message_types\": [\n            \"abc123\"\n         ],\n         \"model_config\": {\n            \"fail_open\": false,\n            \"model\": \"abc123\",\n            \"temperature\": 1\n         },\n         \"policy_type\": \"prompt_based\",\n         \"presidio_entities\": [\n            \"abc123\"\n         ],\n         \"prompt\": \"abc123\",\n         \"scope_exempt\": \"abc123\",\n         \"scope_include\": \"abc123\",\n         \"sources\": [\n            \"abc123\"\n         ]\n      },\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"sample\": {\n         \"last_n_sessions\": 2,\n         \"lookback_days\": 2,\n         \"max_messages\": 2,\n         \"message_ids\": [\n            \"abc123\"\n         ],\n         \"mode\": \"manual\"\n      }\n   }'")
+		}
+		if body.Sample == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("sample", "body"))
+		}
+		if body.PolicyID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", *body.PolicyID, goa.FormatUUID))
+		}
+		if body.Candidate != nil {
+			if err2 := ValidatePolicyEvalCandidateConfigRequestBody(body.Candidate); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if body.Sample != nil {
+			if err2 := ValidatePolicyEvalSampleDefinitionRequestBody(body.Sample); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskCreatePolicyEvalRunApikeyToken != "" {
+			apikeyToken = &riskCreatePolicyEvalRunApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskCreatePolicyEvalRunSessionToken != "" {
+			sessionToken = &riskCreatePolicyEvalRunSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskCreatePolicyEvalRunProjectSlugInput != "" {
+			projectSlugInput = &riskCreatePolicyEvalRunProjectSlugInput
+		}
+	}
+	v := &risk.CreatePolicyEvalRunPayload{
+		PolicyID: body.PolicyID,
+	}
+	if body.Candidate != nil {
+		v.Candidate = marshalPolicyEvalCandidateConfigRequestBodyToRiskPolicyEvalCandidateConfig(body.Candidate)
+	}
+	if body.Sample != nil {
+		v.Sample = marshalPolicyEvalSampleDefinitionRequestBodyToRiskPolicyEvalSampleDefinition(body.Sample)
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListPolicyEvalRunsPayload builds the payload for the risk
+// listPolicyEvalRuns endpoint from CLI flags.
+func BuildListPolicyEvalRunsPayload(riskListPolicyEvalRunsPolicyID string, riskListPolicyEvalRunsCursor string, riskListPolicyEvalRunsLimit string, riskListPolicyEvalRunsApikeyToken string, riskListPolicyEvalRunsSessionToken string, riskListPolicyEvalRunsProjectSlugInput string) (*risk.ListPolicyEvalRunsPayload, error) {
+	var err error
+	var policyID *string
+	{
+		if riskListPolicyEvalRunsPolicyID != "" {
+			policyID = &riskListPolicyEvalRunsPolicyID
+			err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", *policyID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if riskListPolicyEvalRunsCursor != "" {
+			cursor = &riskListPolicyEvalRunsCursor
+		}
+	}
+	var limit *int
+	{
+		if riskListPolicyEvalRunsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(riskListPolicyEvalRunsLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+			if *limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskListPolicyEvalRunsApikeyToken != "" {
+			apikeyToken = &riskListPolicyEvalRunsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListPolicyEvalRunsSessionToken != "" {
+			sessionToken = &riskListPolicyEvalRunsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListPolicyEvalRunsProjectSlugInput != "" {
+			projectSlugInput = &riskListPolicyEvalRunsProjectSlugInput
+		}
+	}
+	v := &risk.ListPolicyEvalRunsPayload{}
+	v.PolicyID = policyID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetPolicyEvalRunPayload builds the payload for the risk
+// getPolicyEvalRun endpoint from CLI flags.
+func BuildGetPolicyEvalRunPayload(riskGetPolicyEvalRunID string, riskGetPolicyEvalRunApikeyToken string, riskGetPolicyEvalRunSessionToken string, riskGetPolicyEvalRunProjectSlugInput string) (*risk.GetPolicyEvalRunPayload, error) {
+	var err error
+	var id string
+	{
+		id = riskGetPolicyEvalRunID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskGetPolicyEvalRunApikeyToken != "" {
+			apikeyToken = &riskGetPolicyEvalRunApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetPolicyEvalRunSessionToken != "" {
+			sessionToken = &riskGetPolicyEvalRunSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskGetPolicyEvalRunProjectSlugInput != "" {
+			projectSlugInput = &riskGetPolicyEvalRunProjectSlugInput
+		}
+	}
+	v := &risk.GetPolicyEvalRunPayload{}
+	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListPolicyEvalFindingsPayload builds the payload for the risk
+// listPolicyEvalFindings endpoint from CLI flags.
+func BuildListPolicyEvalFindingsPayload(riskListPolicyEvalFindingsRunID string, riskListPolicyEvalFindingsCursor string, riskListPolicyEvalFindingsLimit string, riskListPolicyEvalFindingsApikeyToken string, riskListPolicyEvalFindingsSessionToken string, riskListPolicyEvalFindingsProjectSlugInput string) (*risk.ListPolicyEvalFindingsPayload, error) {
+	var err error
+	var runID string
+	{
+		runID = riskListPolicyEvalFindingsRunID
+		err = goa.MergeErrors(err, goa.ValidateFormat("run_id", runID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cursor *string
+	{
+		if riskListPolicyEvalFindingsCursor != "" {
+			cursor = &riskListPolicyEvalFindingsCursor
+		}
+	}
+	var limit *int
+	{
+		if riskListPolicyEvalFindingsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(riskListPolicyEvalFindingsLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+			if *limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskListPolicyEvalFindingsApikeyToken != "" {
+			apikeyToken = &riskListPolicyEvalFindingsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListPolicyEvalFindingsSessionToken != "" {
+			sessionToken = &riskListPolicyEvalFindingsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListPolicyEvalFindingsProjectSlugInput != "" {
+			projectSlugInput = &riskListPolicyEvalFindingsProjectSlugInput
+		}
+	}
+	v := &risk.ListPolicyEvalFindingsPayload{}
+	v.RunID = runID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCancelPolicyEvalRunPayload builds the payload for the risk
+// cancelPolicyEvalRun endpoint from CLI flags.
+func BuildCancelPolicyEvalRunPayload(riskCancelPolicyEvalRunBody string, riskCancelPolicyEvalRunApikeyToken string, riskCancelPolicyEvalRunSessionToken string, riskCancelPolicyEvalRunProjectSlugInput string) (*risk.CancelPolicyEvalRunPayload, error) {
+	var err error
+	var body CancelPolicyEvalRunRequestBody
+	{
+		err = json.Unmarshal([]byte(riskCancelPolicyEvalRunBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskCancelPolicyEvalRunApikeyToken != "" {
+			apikeyToken = &riskCancelPolicyEvalRunApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskCancelPolicyEvalRunSessionToken != "" {
+			sessionToken = &riskCancelPolicyEvalRunSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskCancelPolicyEvalRunProjectSlugInput != "" {
+			projectSlugInput = &riskCancelPolicyEvalRunProjectSlugInput
+		}
+	}
+	v := &risk.CancelPolicyEvalRunPayload{
+		ID: body.ID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

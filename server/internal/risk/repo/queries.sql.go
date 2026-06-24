@@ -298,6 +298,68 @@ func (q *Queries) BumpRiskPolicyVersion(ctx context.Context, arg BumpRiskPolicyV
 	return i, err
 }
 
+const cancelPolicyEvalRun = `-- name: CancelPolicyEvalRun :exec
+UPDATE policy_eval_runs
+SET status = 'cancelled'
+  , completed_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2 AND status IN ('pending', 'running')
+`
+
+type CancelPolicyEvalRunParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Operator-requested cancellation. Scoped to project_id; only cancels a run
+// that has not already reached a terminal state.
+func (q *Queries) CancelPolicyEvalRun(ctx context.Context, arg CancelPolicyEvalRunParams) error {
+	_, err := q.db.Exec(ctx, cancelPolicyEvalRun, arg.ID, arg.ProjectID)
+	return err
+}
+
+const completePolicyEvalRun = `-- name: CompletePolicyEvalRun :exec
+UPDATE policy_eval_runs
+SET status = 'completed'
+  , messages_scanned = $1
+  , findings_count = $2
+  , total_cost_usd = $3
+  , input_tokens = $4
+  , output_tokens = $5
+  , judge_latency_p50_ms = $6
+  , judge_latency_p95_ms = $7
+  , completed_at = clock_timestamp()
+WHERE id = $8 AND project_id = $9 AND status = 'running'
+`
+
+type CompletePolicyEvalRunParams struct {
+	MessagesScanned   int32
+	FindingsCount     int32
+	TotalCostUsd      float64
+	InputTokens       int64
+	OutputTokens      int64
+	JudgeLatencyP50Ms pgtype.Int4
+	JudgeLatencyP95Ms pgtype.Int4
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+}
+
+// Marks a run completed and writes its rolled-up statistics. Scoped to
+// project_id; only advances from 'running'.
+func (q *Queries) CompletePolicyEvalRun(ctx context.Context, arg CompletePolicyEvalRunParams) error {
+	_, err := q.db.Exec(ctx, completePolicyEvalRun,
+		arg.MessagesScanned,
+		arg.FindingsCount,
+		arg.TotalCostUsd,
+		arg.InputTokens,
+		arg.OutputTokens,
+		arg.JudgeLatencyP50Ms,
+		arg.JudgeLatencyP95Ms,
+		arg.ID,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const countAllFindings = `-- name: CountAllFindings :one
 SELECT COUNT(*)::BIGINT
 FROM risk_results rr
@@ -472,6 +534,88 @@ func (q *Queries) CreateCustomDetectionRule(ctx context.Context, arg CreateCusto
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const createPolicyEvalRun = `-- name: CreatePolicyEvalRun :one
+
+INSERT INTO policy_eval_runs (
+    id
+  , project_id
+  , organization_id
+  , risk_policy_id
+  , risk_policy_version
+  , config_snapshot
+  , sample_definition
+  , requested_by
+  , expires_at
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+)
+RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, config_snapshot, sample_definition, status, requested_by, messages_scanned, findings_count, total_cost_usd, input_tokens, output_tokens, judge_latency_p50_ms, judge_latency_p95_ms, error, created_at, started_at, completed_at, expires_at
+`
+
+type CreatePolicyEvalRunParams struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.NullUUID
+	RiskPolicyVersion pgtype.Int8
+	ConfigSnapshot    []byte
+	SampleDefinition  []byte
+	RequestedBy       pgtype.Text
+	ExpiresAt         pgtype.Timestamptz
+}
+
+// ============================================================================
+// Policy eval runs ("session replay"). All reads scoped to project_id (and
+// organization_id where the row carries it) to prevent cross-tenant access.
+// ============================================================================
+func (q *Queries) CreatePolicyEvalRun(ctx context.Context, arg CreatePolicyEvalRunParams) (PolicyEvalRun, error) {
+	row := q.db.QueryRow(ctx, createPolicyEvalRun,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RiskPolicyID,
+		arg.RiskPolicyVersion,
+		arg.ConfigSnapshot,
+		arg.SampleDefinition,
+		arg.RequestedBy,
+		arg.ExpiresAt,
+	)
+	var i PolicyEvalRun
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RiskPolicyID,
+		&i.RiskPolicyVersion,
+		&i.ConfigSnapshot,
+		&i.SampleDefinition,
+		&i.Status,
+		&i.RequestedBy,
+		&i.MessagesScanned,
+		&i.FindingsCount,
+		&i.TotalCostUsd,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.JudgeLatencyP50Ms,
+		&i.JudgeLatencyP95Ms,
+		&i.Error,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
@@ -691,6 +835,27 @@ func (q *Queries) DeleteCustomDetectionRule(ctx context.Context, arg DeleteCusto
 	return err
 }
 
+const deleteExpiredPolicyEvalRuns = `-- name: DeleteExpiredPolicyEvalRuns :execrows
+DELETE FROM policy_eval_runs
+WHERE id IN (
+  SELECT id FROM policy_eval_runs
+  WHERE expires_at IS NOT NULL AND expires_at < clock_timestamp()
+  ORDER BY expires_at
+  LIMIT $1
+)
+`
+
+// GC sweep: drop runs past their retention (cascades to findings, which carry
+// raw match text). Run id-batched by the eval GC schedule; returns the number
+// of runs deleted so the caller can loop until a batch comes back short.
+func (q *Queries) DeleteExpiredPolicyEvalRuns(ctx context.Context, batchLimit int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredPolicyEvalRuns, batchLimit)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteRiskExclusion = `-- name: DeleteRiskExclusion :exec
 UPDATE risk_exclusions
 SET deleted_at = clock_timestamp()
@@ -801,6 +966,25 @@ type DeleteRiskResultsForMessagesParams struct {
 
 func (q *Queries) DeleteRiskResultsForMessages(ctx context.Context, arg DeleteRiskResultsForMessagesParams) error {
 	_, err := q.db.Exec(ctx, deleteRiskResultsForMessages, arg.RiskPolicyID, arg.ProjectID, arg.MessageIds)
+	return err
+}
+
+const failPolicyEvalRun = `-- name: FailPolicyEvalRun :exec
+UPDATE policy_eval_runs
+SET status = 'failed'
+  , error = $1
+  , completed_at = clock_timestamp()
+WHERE id = $2 AND project_id = $3 AND status IN ('pending', 'running')
+`
+
+type FailPolicyEvalRunParams struct {
+	Error     pgtype.Text
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) FailPolicyEvalRun(ctx context.Context, arg FailPolicyEvalRunParams) error {
+	_, err := q.db.Exec(ctx, failPolicyEvalRun, arg.Error, arg.ID, arg.ProjectID)
 	return err
 }
 
@@ -922,6 +1106,45 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 		return nil, err
 	}
 	return items, nil
+}
+
+const getPolicyEvalRun = `-- name: GetPolicyEvalRun :one
+SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, config_snapshot, sample_definition, status, requested_by, messages_scanned, findings_count, total_cost_usd, input_tokens, output_tokens, judge_latency_p50_ms, judge_latency_p95_ms, error, created_at, started_at, completed_at, expires_at FROM policy_eval_runs
+WHERE id = $1 AND project_id = $2
+`
+
+type GetPolicyEvalRunParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetPolicyEvalRun(ctx context.Context, arg GetPolicyEvalRunParams) (PolicyEvalRun, error) {
+	row := q.db.QueryRow(ctx, getPolicyEvalRun, arg.ID, arg.ProjectID)
+	var i PolicyEvalRun
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RiskPolicyID,
+		&i.RiskPolicyVersion,
+		&i.ConfigSnapshot,
+		&i.SampleDefinition,
+		&i.Status,
+		&i.RequestedBy,
+		&i.MessagesScanned,
+		&i.FindingsCount,
+		&i.TotalCostUsd,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.JudgeLatencyP50Ms,
+		&i.JudgeLatencyP95Ms,
+		&i.Error,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
 }
 
 const getProjectFlagGroups = `-- name: GetProjectFlagGroups :one
@@ -1229,6 +1452,23 @@ DELETE FROM risk_policies WHERE project_id = $1
 func (q *Queries) HardDeleteRiskPoliciesByProject(ctx context.Context, projectID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, hardDeleteRiskPoliciesByProject, projectID)
 	return err
+}
+
+type InsertPolicyEvalFindingsParams struct {
+	ID              uuid.UUID
+	PolicyEvalRunID uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	ChatMessageID   uuid.UUID
+	Source          string
+	RuleID          pgtype.Text
+	Description     pgtype.Text
+	Match           pgtype.Text
+	StartPos        pgtype.Int4
+	EndPos          pgtype.Int4
+	Confidence      pgtype.Float8
+	Tags            []string
+	Spans           []byte
 }
 
 type InsertRiskResultsParams struct {
@@ -1558,6 +1798,176 @@ func (q *Queries) ListEnabledToolIdentityPoliciesByProject(ctx context.Context, 
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPolicyEvalFindings = `-- name: ListPolicyEvalFindings :many
+SELECT
+    pef.id, pef.policy_eval_run_id, pef.project_id, pef.organization_id,
+    pef.chat_message_id, pef.source, pef.rule_id, pef.description, pef.match,
+    pef.start_pos, pef.end_pos, pef.confidence, pef.tags, pef.spans,
+    pef.created_at,
+    cm.chat_id, cm.created_at AS message_created_at,
+    c.title AS chat_title, c.external_user_id AS chat_user_id
+FROM policy_eval_findings pef
+JOIN chat_messages cm ON cm.id = pef.chat_message_id
+LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+WHERE pef.project_id = $1
+  AND pef.policy_eval_run_id = $2
+  AND (
+    $3::timestamptz IS NULL
+    OR (pef.created_at, pef.id) < ($3::timestamptz, $4::uuid)
+  )
+ORDER BY pef.created_at DESC, pef.id DESC
+LIMIT $5
+`
+
+type ListPolicyEvalFindingsParams struct {
+	ProjectID       uuid.UUID
+	PolicyEvalRunID uuid.UUID
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        uuid.NullUUID
+	ResultLimit     int32
+}
+
+type ListPolicyEvalFindingsRow struct {
+	ID               uuid.UUID
+	PolicyEvalRunID  uuid.UUID
+	ProjectID        uuid.UUID
+	OrganizationID   string
+	ChatMessageID    uuid.UUID
+	Source           string
+	RuleID           pgtype.Text
+	Description      pgtype.Text
+	Match            pgtype.Text
+	StartPos         pgtype.Int4
+	EndPos           pgtype.Int4
+	Confidence       pgtype.Float8
+	Tags             []string
+	Spans            []byte
+	CreatedAt        pgtype.Timestamptz
+	ChatID           uuid.UUID
+	MessageCreatedAt pgtype.Timestamptz
+	ChatTitle        pgtype.Text
+	ChatUserID       pgtype.Text
+}
+
+// Findings for one run, joined to their chat message for display context.
+// Scoped to project_id AND the run id. Keyset pagination on (created_at, id).
+func (q *Queries) ListPolicyEvalFindings(ctx context.Context, arg ListPolicyEvalFindingsParams) ([]ListPolicyEvalFindingsRow, error) {
+	rows, err := q.db.Query(ctx, listPolicyEvalFindings,
+		arg.ProjectID,
+		arg.PolicyEvalRunID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPolicyEvalFindingsRow
+	for rows.Next() {
+		var i ListPolicyEvalFindingsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PolicyEvalRunID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.ChatMessageID,
+			&i.Source,
+			&i.RuleID,
+			&i.Description,
+			&i.Match,
+			&i.StartPos,
+			&i.EndPos,
+			&i.Confidence,
+			&i.Tags,
+			&i.Spans,
+			&i.CreatedAt,
+			&i.ChatID,
+			&i.MessageCreatedAt,
+			&i.ChatTitle,
+			&i.ChatUserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPolicyEvalRuns = `-- name: ListPolicyEvalRuns :many
+SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, config_snapshot, sample_definition, status, requested_by, messages_scanned, findings_count, total_cost_usd, input_tokens, output_tokens, judge_latency_p50_ms, judge_latency_p95_ms, error, created_at, started_at, completed_at, expires_at FROM policy_eval_runs
+WHERE project_id = $1
+  AND ($2::uuid IS NULL OR risk_policy_id = $2)
+  AND (
+    $3::timestamptz IS NULL
+    OR (created_at, id) < ($3::timestamptz, $4::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $5
+`
+
+type ListPolicyEvalRunsParams struct {
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.NullUUID
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        uuid.NullUUID
+	ResultLimit     int32
+}
+
+// Lists runs for a project, newest first, with keyset pagination on
+// (created_at, id). Optionally narrowed to a single policy. The NULL cursor
+// args select the first page.
+func (q *Queries) ListPolicyEvalRuns(ctx context.Context, arg ListPolicyEvalRunsParams) ([]PolicyEvalRun, error) {
+	rows, err := q.db.Query(ctx, listPolicyEvalRuns,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PolicyEvalRun
+	for rows.Next() {
+		var i PolicyEvalRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.RiskPolicyID,
+			&i.RiskPolicyVersion,
+			&i.ConfigSnapshot,
+			&i.SampleDefinition,
+			&i.Status,
+			&i.RequestedBy,
+			&i.MessagesScanned,
+			&i.FindingsCount,
+			&i.TotalCostUsd,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.JudgeLatencyP50Ms,
+			&i.JudgeLatencyP95Ms,
+			&i.Error,
+			&i.CreatedAt,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.ExpiresAt,
 		); err != nil {
 			return nil, err
 		}
@@ -2762,6 +3172,104 @@ func (q *Queries) ReverseExclusionFlagsBatch(ctx context.Context, arg ReverseExc
 		return nil, err
 	}
 	return items, nil
+}
+
+const selectPolicyEvalSampleMessages = `-- name: SelectPolicyEvalSampleMessages :many
+WITH selected_chats AS (
+  SELECT id
+  FROM chats
+  WHERE project_id = $1
+    AND deleted IS FALSE
+    AND ($2::timestamptz IS NULL OR created_at >= $2::timestamptz)
+  ORDER BY created_at DESC
+  LIMIT $3::bigint
+)
+SELECT cm.id
+FROM chat_messages cm
+WHERE cm.project_id = $1
+  AND ($2::timestamptz IS NULL OR cm.created_at >= $2::timestamptz)
+  AND (
+    $3::bigint IS NULL
+    OR cm.chat_id IN (SELECT id FROM selected_chats)
+  )
+ORDER BY cm.created_at DESC, cm.id DESC
+LIMIT $4
+`
+
+type SelectPolicyEvalSampleMessagesParams struct {
+	ProjectID    uuid.NullUUID
+	FromTime     pgtype.Timestamptz
+	SessionLimit pgtype.Int8
+	MaxMessages  int32
+}
+
+// Resolves an auto-mode eval sample: the most recent messages for a project,
+// optionally bounded to a created-at window (from_time) and to the most recent
+// N sessions (session_limit). Ordered newest-first so the max_messages cap
+// keeps the most recent messages. Unlike FetchUnanalyzedMessageIDs this ignores
+// risk_analyzed_at — an eval samples history regardless of enforcement state.
+func (q *Queries) SelectPolicyEvalSampleMessages(ctx context.Context, arg SelectPolicyEvalSampleMessagesParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, selectPolicyEvalSampleMessages,
+		arg.ProjectID,
+		arg.FromTime,
+		arg.SessionLimit,
+		arg.MaxMessages,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setPolicyEvalRunSample = `-- name: SetPolicyEvalRunSample :exec
+UPDATE policy_eval_runs
+SET sample_definition = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetPolicyEvalRunSampleParams struct {
+	SampleDefinition []byte
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+}
+
+// Persists the resolved/pinned sample definition (mode + params + the pinned
+// chat_message_ids) back onto a run after sample selection. Scoped to
+// project_id.
+func (q *Queries) SetPolicyEvalRunSample(ctx context.Context, arg SetPolicyEvalRunSampleParams) error {
+	_, err := q.db.Exec(ctx, setPolicyEvalRunSample, arg.SampleDefinition, arg.ID, arg.ProjectID)
+	return err
+}
+
+const startPolicyEvalRun = `-- name: StartPolicyEvalRun :exec
+UPDATE policy_eval_runs
+SET status = 'running'
+  , started_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2 AND status = 'pending'
+`
+
+type StartPolicyEvalRunParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Transitions a pending run to running. Scoped to project_id; only advances
+// from 'pending' so a re-delivered start is a no-op.
+func (q *Queries) StartPolicyEvalRun(ctx context.Context, arg StartPolicyEvalRunParams) error {
+	_, err := q.db.Exec(ctx, startPolicyEvalRun, arg.ID, arg.ProjectID)
+	return err
 }
 
 const updateCustomDetectionRule = `-- name: UpdateCustomDetectionRule :one

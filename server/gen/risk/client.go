@@ -47,10 +47,15 @@ type Client struct {
 	DeleteRiskExclusionEndpoint            goa.Endpoint
 	SuggestCustomDetectionRuleEndpoint     goa.Endpoint
 	TestDetectionRuleEndpoint              goa.Endpoint
+	CreatePolicyEvalRunEndpoint            goa.Endpoint
+	ListPolicyEvalRunsEndpoint             goa.Endpoint
+	GetPolicyEvalRunEndpoint               goa.Endpoint
+	ListPolicyEvalFindingsEndpoint         goa.Endpoint
+	CancelPolicyEvalRunEndpoint            goa.Endpoint
 }
 
 // NewClient initializes a "risk" service client given the endpoints.
-func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, getRiskOverview, listRiskCategories, compileExpr, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, createRiskPolicyBypassRequest, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, testDetectionRule goa.Endpoint) *Client {
+func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, getRiskOverview, listRiskCategories, compileExpr, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, createRiskPolicyBypassRequest, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, testDetectionRule, createPolicyEvalRun, listPolicyEvalRuns, getPolicyEvalRun, listPolicyEvalFindings, cancelPolicyEvalRun goa.Endpoint) *Client {
 	return &Client{
 		CreateRiskPolicyEndpoint:               createRiskPolicy,
 		ListRiskPoliciesEndpoint:               listRiskPolicies,
@@ -83,6 +88,11 @@ func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPoli
 		DeleteRiskExclusionEndpoint:            deleteRiskExclusion,
 		SuggestCustomDetectionRuleEndpoint:     suggestCustomDetectionRule,
 		TestDetectionRuleEndpoint:              testDetectionRule,
+		CreatePolicyEvalRunEndpoint:            createPolicyEvalRun,
+		ListPolicyEvalRunsEndpoint:             listPolicyEvalRuns,
+		GetPolicyEvalRunEndpoint:               getPolicyEvalRun,
+		ListPolicyEvalFindingsEndpoint:         listPolicyEvalFindings,
+		CancelPolicyEvalRunEndpoint:            cancelPolicyEvalRun,
 	}
 }
 
@@ -773,4 +783,118 @@ func (c *Client) TestDetectionRule(ctx context.Context, p *TestDetectionRulePayl
 		return
 	}
 	return ires.(*TestDetectionRuleResult), nil
+}
+
+// CreatePolicyEvalRun calls the "createPolicyEvalRun" endpoint of the "risk"
+// service.
+// CreatePolicyEvalRun may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreatePolicyEvalRun(ctx context.Context, p *CreatePolicyEvalRunPayload) (res *PolicyEvalRun, err error) {
+	var ires any
+	ires, err = c.CreatePolicyEvalRunEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*PolicyEvalRun), nil
+}
+
+// ListPolicyEvalRuns calls the "listPolicyEvalRuns" endpoint of the "risk"
+// service.
+// ListPolicyEvalRuns may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListPolicyEvalRuns(ctx context.Context, p *ListPolicyEvalRunsPayload) (res *ListPolicyEvalRunsResult, err error) {
+	var ires any
+	ires, err = c.ListPolicyEvalRunsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListPolicyEvalRunsResult), nil
+}
+
+// GetPolicyEvalRun calls the "getPolicyEvalRun" endpoint of the "risk" service.
+// GetPolicyEvalRun may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetPolicyEvalRun(ctx context.Context, p *GetPolicyEvalRunPayload) (res *PolicyEvalRun, err error) {
+	var ires any
+	ires, err = c.GetPolicyEvalRunEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*PolicyEvalRun), nil
+}
+
+// ListPolicyEvalFindings calls the "listPolicyEvalFindings" endpoint of the
+// "risk" service.
+// ListPolicyEvalFindings may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListPolicyEvalFindings(ctx context.Context, p *ListPolicyEvalFindingsPayload) (res *ListPolicyEvalFindingsResult, err error) {
+	var ires any
+	ires, err = c.ListPolicyEvalFindingsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListPolicyEvalFindingsResult), nil
+}
+
+// CancelPolicyEvalRun calls the "cancelPolicyEvalRun" endpoint of the "risk"
+// service.
+// CancelPolicyEvalRun may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CancelPolicyEvalRun(ctx context.Context, p *CancelPolicyEvalRunPayload) (res *PolicyEvalRun, err error) {
+	var ires any
+	ires, err = c.CancelPolicyEvalRunEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*PolicyEvalRun), nil
 }

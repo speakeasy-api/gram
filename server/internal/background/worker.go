@@ -334,6 +334,13 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ReconcileExclusion)
 	temporalWorker.RegisterActivity(activities.CleanRiskPolicyResults)
 	riskWorker.RegisterActivity(activities.AnalyzeBatch)
+	// Policy eval ("session replay") activities — the heavy scan runs on the
+	// dedicated risk-analysis queue; bookkeeping + GC on the main queue.
+	temporalWorker.RegisterActivity(activities.SelectPolicyEvalSample)
+	riskWorker.RegisterActivity(activities.RunPolicyEvalScan)
+	temporalWorker.RegisterActivity(activities.CompletePolicyEvalRun)
+	temporalWorker.RegisterActivity(activities.FailPolicyEvalRun)
+	temporalWorker.RegisterActivity(activities.GCExpiredPolicyEvalRuns)
 	// Assistant activities
 	temporalWorker.RegisterActivity(activities.AdmitAssistantThreads)
 	temporalWorker.RegisterActivity(activities.ProcessAssistantThread)
@@ -393,6 +400,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(RiskAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(RiskExclusionReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(RiskPolicyCleanupWorkflow)
+	// Policy eval ("session replay") run + GC workflows
+	temporalWorker.RegisterWorkflow(PolicyEvalRunWorkflow)
+	temporalWorker.RegisterWorkflow(PolicyEvalGCWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantReaperWorkflow)
@@ -470,6 +480,10 @@ func NewTemporalWorker(
 
 	if err := AddOutboxGCSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
+	}
+
+	if err := AddPolicyEvalGCSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add policy eval gc schedule", attr.SlogError(err))
 	}
 
 	if opts.PluginPublisher != nil {

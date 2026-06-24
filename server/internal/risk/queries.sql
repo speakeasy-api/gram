@@ -1143,6 +1143,14 @@ WHERE project_id = @project_id
 ORDER BY created_at DESC, id DESC
 LIMIT @result_limit;
 
+-- name: SetPolicyEvalRunSample :exec
+-- Persists the resolved/pinned sample definition (mode + params + the pinned
+-- chat_message_ids) back onto a run after sample selection. Scoped to
+-- project_id.
+UPDATE policy_eval_runs
+SET sample_definition = @sample_definition
+WHERE id = @id AND project_id = @project_id;
+
 -- name: StartPolicyEvalRun :exec
 -- Transitions a pending run to running. Scoped to project_id; only advances
 -- from 'pending' so a re-delivered start is a no-op.
@@ -1181,9 +1189,10 @@ SET status = 'cancelled'
   , completed_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND status IN ('pending', 'running');
 
--- name: DeleteExpiredPolicyEvalRuns :exec
+-- name: DeleteExpiredPolicyEvalRuns :execrows
 -- GC sweep: drop runs past their retention (cascades to findings, which carry
--- raw match text). Run id-batched by the eval GC schedule.
+-- raw match text). Run id-batched by the eval GC schedule; returns the number
+-- of runs deleted so the caller can loop until a batch comes back short.
 DELETE FROM policy_eval_runs
 WHERE id IN (
   SELECT id FROM policy_eval_runs
@@ -1191,6 +1200,32 @@ WHERE id IN (
   ORDER BY expires_at
   LIMIT @batch_limit
 );
+
+-- name: SelectPolicyEvalSampleMessages :many
+-- Resolves an auto-mode eval sample: the most recent messages for a project,
+-- optionally bounded to a created-at window (from_time) and to the most recent
+-- N sessions (session_limit). Ordered newest-first so the max_messages cap
+-- keeps the most recent messages. Unlike FetchUnanalyzedMessageIDs this ignores
+-- risk_analyzed_at — an eval samples history regardless of enforcement state.
+WITH selected_chats AS (
+  SELECT id
+  FROM chats
+  WHERE project_id = @project_id
+    AND deleted IS FALSE
+    AND (sqlc.narg(from_time)::timestamptz IS NULL OR created_at >= sqlc.narg(from_time)::timestamptz)
+  ORDER BY created_at DESC
+  LIMIT sqlc.narg(session_limit)::bigint
+)
+SELECT cm.id
+FROM chat_messages cm
+WHERE cm.project_id = @project_id
+  AND (sqlc.narg(from_time)::timestamptz IS NULL OR cm.created_at >= sqlc.narg(from_time)::timestamptz)
+  AND (
+    sqlc.narg(session_limit)::bigint IS NULL
+    OR cm.chat_id IN (SELECT id FROM selected_chats)
+  )
+ORDER BY cm.created_at DESC, cm.id DESC
+LIMIT @max_messages;
 
 -- name: InsertPolicyEvalFindings :copyfrom
 INSERT INTO policy_eval_findings (

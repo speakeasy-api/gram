@@ -83,6 +83,7 @@ type Service struct {
 	signaler         RiskAnalysisSignaler
 	reconciler       RiskExclusionReconciler
 	resultsCleaner   RiskPolicyResultsCleaner
+	evalRunner       PolicyEvalRunner
 	completionClient openrouter.CompletionClient
 	shadowMCPClient  *shadowmcp.Client
 	audit            *audit.Logger
@@ -124,6 +125,7 @@ func NewObserver(
 		signaler:         signaler,
 		reconciler:       nil,
 		resultsCleaner:   nil,
+		evalRunner:       nil,
 		completionClient: nil,
 		shadowMCPClient:  nil,
 		audit:            auditLogger,
@@ -144,6 +146,7 @@ func NewService(
 	signaler RiskAnalysisSignaler,
 	reconciler RiskExclusionReconciler,
 	resultsCleaner RiskPolicyResultsCleaner,
+	evalRunner PolicyEvalRunner,
 	completionClient openrouter.CompletionClient,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
@@ -165,6 +168,7 @@ func NewService(
 		signaler:         signaler,
 		reconciler:       reconciler,
 		resultsCleaner:   resultsCleaner,
+		evalRunner:       evalRunner,
 		completionClient: completionClient,
 		shadowMCPClient:  shadowMCPClient,
 		audit:            auditLogger,

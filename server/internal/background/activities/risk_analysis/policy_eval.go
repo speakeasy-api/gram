@@ -3,7 +3,8 @@ package risk_analysis
 import (
 	"context"
 	"encoding/json"
-	"sort"
+	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -80,7 +81,7 @@ func percentileMS(durations []time.Duration, p float64) int {
 	}
 	sorted := make([]time.Duration, len(durations))
 	copy(sorted, durations)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	slices.Sort(sorted)
 	rank := int(p * float64(len(sorted)))
 	if rank >= len(sorted) {
 		rank = len(sorted) - 1
@@ -95,20 +96,20 @@ func percentileMS(durations []time.Duration, p float64) int {
 // finding are grouped via the shared groupFindings so the stored shape matches
 // risk_results.
 func BuildPolicyEvalFindingRows(runID, projectID uuid.UUID, orgID string, messageID uuid.UUID, findings []Finding) ([]repo.InsertPolicyEvalFindingsParams, int) {
-	real := make([]Finding, 0, len(findings))
+	realFindings := make([]Finding, 0, len(findings))
 	for _, f := range findings {
 		if f.DeadLetterReason != "" {
 			continue
 		}
-		real = append(real, f)
+		realFindings = append(realFindings, f)
 	}
-	if len(real) == 0 {
+	if len(realFindings) == 0 {
 		return nil, 0
 	}
 
 	var rows []repo.InsertPolicyEvalFindingsParams
 	count := 0
-	for _, grp := range groupFindings(real) {
+	for _, grp := range groupFindings(realFindings) {
 		f := grp.primary
 		count++
 		id, _ := uuid.NewV7()
@@ -143,5 +144,9 @@ func WriteEvalFindings(ctx context.Context, q *repo.Queries, rows []repo.InsertP
 	if len(rows) == 0 {
 		return 0, nil
 	}
-	return q.InsertPolicyEvalFindings(ctx, rows)
+	n, err := q.InsertPolicyEvalFindings(ctx, rows)
+	if err != nil {
+		return 0, fmt.Errorf("insert policy eval findings: %w", err)
+	}
+	return n, nil
 }

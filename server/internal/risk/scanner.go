@@ -499,6 +499,8 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		// tool-output JSON for tool_response.
 		Message: ra.NewJudgeMessage(messageType, toolName, text),
 		Config:  cfg,
+		// Realtime playground path: no cost observer (eval-only seam).
+		Observe: nil,
 	})
 	if verdict == nil {
 		return nil

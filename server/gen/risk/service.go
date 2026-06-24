@@ -105,6 +105,18 @@ type Service interface {
 	// custom regex) that the analyzer runs in production so the playground match
 	// shape mirrors the chat-message path.
 	TestDetectionRule(context.Context, *TestDetectionRulePayload) (res *TestDetectionRuleResult, err error)
+	// Start a non-enforcing policy eval run over a sample of historical messages.
+	// Provide either an existing policy_id or a candidate config (for an unsaved
+	// draft).
+	CreatePolicyEvalRun(context.Context, *CreatePolicyEvalRunPayload) (res *PolicyEvalRun, err error)
+	// List policy eval runs for the current project, newest first.
+	ListPolicyEvalRuns(context.Context, *ListPolicyEvalRunsPayload) (res *ListPolicyEvalRunsResult, err error)
+	// Get a policy eval run by ID, including its rolled-up run statistics.
+	GetPolicyEvalRun(context.Context, *GetPolicyEvalRunPayload) (res *PolicyEvalRun, err error)
+	// List findings produced by a policy eval run, with sample message context.
+	ListPolicyEvalFindings(context.Context, *ListPolicyEvalFindingsPayload) (res *ListPolicyEvalFindingsResult, err error)
+	// Cancel an in-progress policy eval run.
+	CancelPolicyEvalRun(context.Context, *CancelPolicyEvalRunPayload) (res *PolicyEvalRun, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -127,7 +139,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [31]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [36]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule", "createPolicyEvalRun", "listPolicyEvalRuns", "getPolicyEvalRun", "listPolicyEvalFindings", "cancelPolicyEvalRun"}
 
 // ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
 // service approveRiskPolicyBypassRequest method.
@@ -140,6 +152,16 @@ type ApproveRiskPolicyBypassRequestPayload struct {
 	// Principal URNs to grant bypass access to. Defaults to the requester when
 	// omitted.
 	GrantedPrincipalUrns []string
+}
+
+// CancelPolicyEvalRunPayload is the payload type of the risk service
+// cancelPolicyEvalRun method.
+type CancelPolicyEvalRunPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The eval run ID to cancel.
+	ID string
 }
 
 // CompileExprPayload is the payload type of the risk service compileExpr
@@ -172,6 +194,22 @@ type CreateCustomDetectionRulePayload struct {
 	Regex *string
 	// Severity level for findings produced by this rule.
 	Severity string
+}
+
+// CreatePolicyEvalRunPayload is the payload type of the risk service
+// createPolicyEvalRun method.
+type CreatePolicyEvalRunPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The saved policy to evaluate. Omit when supplying a candidate config for a
+	// draft.
+	PolicyID *string
+	// An unsaved candidate policy config to evaluate. Provide instead of policy_id
+	// to dry-run a draft before saving.
+	Candidate *PolicyEvalCandidateConfig
+	// How to select the historical messages this run scans.
+	Sample *PolicyEvalSampleDefinition
 }
 
 // CreateRiskExclusionPayload is the payload type of the risk service
@@ -315,6 +353,16 @@ type GetCustomDetectionRulePayload struct {
 	ID string
 }
 
+// GetPolicyEvalRunPayload is the payload type of the risk service
+// getPolicyEvalRun method.
+type GetPolicyEvalRunPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The eval run ID.
+	ID string
+}
+
 // GetRiskOverviewPayload is the payload type of the risk service
 // getRiskOverview method.
 type GetRiskOverviewPayload struct {
@@ -391,6 +439,52 @@ type ListCustomDetectionRulesPayload struct {
 type ListCustomDetectionRulesResult struct {
 	// The list of custom detection rules.
 	Rules []*types.RiskCustomDetectionRule
+}
+
+// ListPolicyEvalFindingsPayload is the payload type of the risk service
+// listPolicyEvalFindings method.
+type ListPolicyEvalFindingsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The eval run ID whose findings to list.
+	RunID string
+	// Cursor to fetch the next page of findings.
+	Cursor *string
+	// Maximum number of findings to return per page.
+	Limit *int
+}
+
+// ListPolicyEvalFindingsResult is the result type of the risk service
+// listPolicyEvalFindings method.
+type ListPolicyEvalFindingsResult struct {
+	// The list of eval findings.
+	Findings []*PolicyEvalFinding
+	// Cursor for the next page of findings.
+	NextCursor *string
+}
+
+// ListPolicyEvalRunsPayload is the payload type of the risk service
+// listPolicyEvalRuns method.
+type ListPolicyEvalRunsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Optional policy ID to filter runs by.
+	PolicyID *string
+	// Cursor to fetch the next page of runs.
+	Cursor *string
+	// Maximum number of runs to return per page.
+	Limit *int
+}
+
+// ListPolicyEvalRunsResult is the result type of the risk service
+// listPolicyEvalRuns method.
+type ListPolicyEvalRunsResult struct {
+	// The list of eval runs.
+	Runs []*PolicyEvalRun
+	// Cursor for the next page of runs.
+	NextCursor *string
 }
 
 // ListRiskCategoriesPayload is the payload type of the risk service
@@ -558,6 +652,117 @@ type ListRiskResultsResult struct {
 	TotalCount int64
 	// Cursor for the next page of results.
 	NextCursor *string
+}
+
+type PolicyEvalCandidateConfig struct {
+	// standard or prompt_based.
+	PolicyType string
+	// Detection sources to enable.
+	Sources []string
+	// Presidio entity types to detect.
+	PresidioEntities []string
+	// Canonical rule_ids to drop.
+	DisabledRules []string
+	// Custom detection rule ids to attach.
+	CustomRuleIds []string
+	// Message types in scope; empty means all.
+	MessageTypes []string
+	// CEL scope predicate.
+	ScopeInclude *string
+	// CEL exemption predicate.
+	ScopeExempt *string
+	// prompt_based: the guardrail prompt the judge evaluates.
+	Prompt *string
+	// prompt_based: per-policy judge model configuration.
+	ModelConfig *types.RiskPolicyModelConfig
+}
+
+type PolicyEvalFinding struct {
+	// The finding ID.
+	ID string
+	// The eval run that produced this finding.
+	RunID string
+	// The scanned message.
+	ChatMessageID string
+	// Detection source (e.g. gitleaks, presidio, llm_judge, custom).
+	Source string
+	// Canonical rule id.
+	RuleID *string
+	// Why this was flagged.
+	Description *string
+	// Matched substring (sensitive; may be redacted).
+	Match *string
+	// Inclusive start offset of the match.
+	StartPos *int
+	// Exclusive end offset of the match.
+	EndPos *int
+	// Confidence in [0,1].
+	Confidence *float64
+	// Rule tags.
+	Tags []string
+	// When the finding was recorded.
+	CreatedAt string
+	// The session the message belongs to.
+	ChatID *string
+	// The session title, when available.
+	ChatTitle *string
+	// The session's external user id, when available.
+	ChatUserID *string
+}
+
+// PolicyEvalRun is the result type of the risk service createPolicyEvalRun
+// method.
+type PolicyEvalRun struct {
+	// The eval run ID.
+	ID string
+	// The evaluated saved policy, or null for a draft run.
+	RiskPolicyID *string
+	// Pinned policy version for saved runs.
+	RiskPolicyVersion *int64
+	// Run status.
+	Status string
+	// The resolved sample definition.
+	Sample *PolicyEvalSampleDefinition
+	// URN of the principal that started the run.
+	RequestedBy *string
+	// Number of messages scanned.
+	MessagesScanned int64
+	// Number of findings produced.
+	FindingsCount int64
+	// Total judge cost for the run, in USD (0 for deterministic-only policies).
+	TotalCostUsd float64
+	// Total judge input tokens.
+	InputTokens *int64
+	// Total judge output tokens.
+	OutputTokens *int64
+	// p50 judge call latency in milliseconds.
+	JudgeLatencyP50Ms *int
+	// p95 judge call latency in milliseconds.
+	JudgeLatencyP95Ms *int
+	// Failure reason when status is failed.
+	Error *string
+	// When the run was created.
+	CreatedAt string
+	// When the run started.
+	StartedAt *string
+	// When the run reached a terminal state.
+	CompletedAt *string
+	// When the run and its findings are eligible for GC.
+	ExpiresAt *string
+}
+
+type PolicyEvalSampleDefinition struct {
+	// Sampling mode: auto (window/last-N, stratified) or manual (explicit pinned
+	// message ids).
+	Mode string
+	// auto mode: only consider messages created within this many days.
+	LookbackDays *int
+	// auto mode: cap to the most recent N sessions.
+	LastNSessions *int
+	// Hard cap on the number of messages scanned (bounds run cost).
+	MaxMessages int
+	// manual mode: the explicit, pinned set of chat message ids to scan.
+	MessageIds []string
 }
 
 // RevokeRiskPolicyBypassRequestPayload is the payload type of the risk service

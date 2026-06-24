@@ -85,6 +85,7 @@ type Activities struct {
 	getUserFeedbackForChat          *resolution_activities.GetUserFeedbackForChat
 	fetchUnanalyzedMessages         *risk_analysis.FetchUnanalyzed
 	analyzeBatch                    *risk_analysis.AnalyzeBatch
+	policyEval                      *risk_analysis.PolicyEval
 	markMessagesAnalyzed            *risk_analysis.MarkMessagesAnalyzed
 	reconcileExclusion              *risk_exclusion.Reconcile
 	cleanRiskPolicyResults          *risk_policy.Cleanup
@@ -151,6 +152,10 @@ func NewActivities(
 	publishers *Publishers,
 	celEng *celenv.Engine,
 ) *Activities {
+	// Shared between the realtime AnalyzeBatch activity and the non-enforcing
+	// policy-eval scanner so eval findings match what enforcement would produce.
+	analyzeBatch := risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), riskjudge.New(logger, tracerProvider, meterProvider, chatClient), features, publishers.PresidioAnalysis, publishers.GitleaksAnalysis, celEng)
+
 	return &Activities{
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -181,7 +186,8 @@ func NewActivities(
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
-		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), riskjudge.New(logger, tracerProvider, meterProvider, chatClient), features, publishers.PresidioAnalysis, publishers.GitleaksAnalysis, celEng),
+		analyzeBatch:                    analyzeBatch,
+		policyEval:                      risk_analysis.NewPolicyEval(logger, db, analyzeBatch),
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
 		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),
@@ -382,6 +388,44 @@ func (a *Activities) MarkMessagesAnalyzed(ctx context.Context, input risk_analys
 		return fmt.Errorf("mark messages analyzed: %w", err)
 	}
 	return nil
+}
+
+func (a *Activities) SelectPolicyEvalSample(ctx context.Context, ref risk_analysis.PolicyEvalRunRef) (int, error) {
+	n, err := a.policyEval.SelectSample(ctx, ref)
+	if err != nil {
+		return 0, fmt.Errorf("select policy eval sample: %w", err)
+	}
+	return n, nil
+}
+
+func (a *Activities) RunPolicyEvalScan(ctx context.Context, ref risk_analysis.PolicyEvalRunRef) (*risk_analysis.PolicyEvalScanResult, error) {
+	res, err := a.policyEval.RunScan(ctx, ref)
+	if err != nil {
+		return nil, fmt.Errorf("run policy eval scan: %w", err)
+	}
+	return res, nil
+}
+
+func (a *Activities) CompletePolicyEvalRun(ctx context.Context, ref risk_analysis.PolicyEvalRunRef, res risk_analysis.PolicyEvalScanResult) error {
+	if err := a.policyEval.CompleteRun(ctx, ref, res); err != nil {
+		return fmt.Errorf("complete policy eval run: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) FailPolicyEvalRun(ctx context.Context, ref risk_analysis.PolicyEvalRunRef, reason string) error {
+	if err := a.policyEval.FailRun(ctx, ref, reason); err != nil {
+		return fmt.Errorf("fail policy eval run: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) GCExpiredPolicyEvalRuns(ctx context.Context, batchSize int32) (int64, error) {
+	n, err := a.policyEval.DeleteExpiredRuns(ctx, batchSize)
+	if err != nil {
+		return 0, fmt.Errorf("gc expired policy eval runs: %w", err)
+	}
+	return n, nil
 }
 
 func (a *Activities) ReconcileExclusion(ctx context.Context, input risk_exclusion.ReconcileArgs) error {

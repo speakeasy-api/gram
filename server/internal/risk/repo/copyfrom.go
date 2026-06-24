@@ -9,6 +9,51 @@ import (
 	"context"
 )
 
+// iteratorForInsertPolicyEvalFindings implements pgx.CopyFromSource.
+type iteratorForInsertPolicyEvalFindings struct {
+	rows                 []InsertPolicyEvalFindingsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertPolicyEvalFindings) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertPolicyEvalFindings) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].ID,
+		r.rows[0].PolicyEvalRunID,
+		r.rows[0].ProjectID,
+		r.rows[0].OrganizationID,
+		r.rows[0].ChatMessageID,
+		r.rows[0].Source,
+		r.rows[0].RuleID,
+		r.rows[0].Description,
+		r.rows[0].Match,
+		r.rows[0].StartPos,
+		r.rows[0].EndPos,
+		r.rows[0].Confidence,
+		r.rows[0].Tags,
+		r.rows[0].Spans,
+	}, nil
+}
+
+func (r iteratorForInsertPolicyEvalFindings) Err() error {
+	return nil
+}
+
+func (q *Queries) InsertPolicyEvalFindings(ctx context.Context, arg []InsertPolicyEvalFindingsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"policy_eval_findings"}, []string{"id", "policy_eval_run_id", "project_id", "organization_id", "chat_message_id", "source", "rule_id", "description", "match", "start_pos", "end_pos", "confidence", "tags", "spans"}, &iteratorForInsertPolicyEvalFindings{rows: arg})
+}
+
 // iteratorForInsertRiskResults implements pgx.CopyFromSource.
 type iteratorForInsertRiskResults struct {
 	rows                 []InsertRiskResultsParams

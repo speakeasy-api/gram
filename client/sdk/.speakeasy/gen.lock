@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 5dd2b64e7a00dc3718cc56e04467dcc5
+  docChecksum: d65462b69b64640129f24281e82d7d29
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -194,6 +194,8 @@ trackedFiles:
     last_write_checksum: sha1:a67889cdc8077efd3bfc09e9a66388b33bae98c5
   docs/models/components/createpluginform.md:
     last_write_checksum: sha1:74189ab8d14c5d77c9248a1f9746062e85f09427
+  docs/models/components/createpolicyevalrunrequestbody.md:
+    last_write_checksum: sha1:29bbaa457fab9702e15ea40a57ee2b2ee9192eaf
   docs/models/components/createportalsessionresult.md:
     last_write_checksum: sha1:9018bf1db6808bdae11ee4643f70342bb75cabbc
   docs/models/components/createprojectrequestbody.md:
@@ -225,7 +227,9 @@ trackedFiles:
   docs/models/components/createriskexclusionrequestbody.md:
     last_write_checksum: sha1:d8987530cafa6706a32d252da413c1d4448c935e
   docs/models/components/createriskpolicyrequestbody.md:
-    last_write_checksum: sha1:0ce0af62afa152db83a2749f9bed3465c58dd9dc
+    last_write_checksum: sha1:7b3e14aaf2f6ab16771d4300248b27c486894d03
+  docs/models/components/createriskpolicyrequestbodypolicytype.md:
+    last_write_checksum: sha1:14bc5d492700a5d58cbbee367640ea3b0f881d96
   docs/models/components/createroleform.md:
     last_write_checksum: sha1:8f830fa3a59663de3ec4640a0d7602e39ec1fc7e
   docs/models/components/createserverform.md:
@@ -522,6 +526,10 @@ trackedFiles:
     last_write_checksum: sha1:cb359e2921071954d7b35a3897ae94db823311c4
   docs/models/components/listpluginsresult.md:
     last_write_checksum: sha1:9eb26a5faaeabd5c09c2312c6e97a6634002809d
+  docs/models/components/listpolicyevalfindingsresult.md:
+    last_write_checksum: sha1:e3cfe056148476097085310e898870bcac6f63c2
+  docs/models/components/listpolicyevalrunsresult.md:
+    last_write_checksum: sha1:ac402439bdad22ab269f69aca4c6ba820a1d5661
   docs/models/components/listprojectsresult.md:
     last_write_checksum: sha1:07456e7081f9cded7df0c7c70e20985ba387b475
   docs/models/components/listprompttemplatesresult.md:
@@ -656,6 +664,8 @@ trackedFiles:
     last_write_checksum: sha1:bde62ea06d8080315af72ad971411d4d438b1758
   docs/models/components/mintusersessionresponsebody.md:
     last_write_checksum: sha1:0cd966a900108f284609c61746269479ee7c99f3
+  docs/models/components/mode.md:
+    last_write_checksum: sha1:f8ddfa8cdb351df971716d3f1450b16d1f614704
   docs/models/components/modelusage.md:
     last_write_checksum: sha1:09f2b180ebfd3f1440502f2113a1edba982e8e0a
   docs/models/components/moveissuerrequestbody.md:
@@ -764,8 +774,18 @@ trackedFiles:
     last_write_checksum: sha1:8a2bc1a476e55d66c0fa67b222371171ce935f53
   docs/models/components/policy.md:
     last_write_checksum: sha1:4f61847539866024b0d616f84b41de6dc9c64b2d
+  docs/models/components/policyevalcandidateconfig.md:
+    last_write_checksum: sha1:953231eb371f7f52b2e19adea68dc025beda2aa7
+  docs/models/components/policyevalfinding.md:
+    last_write_checksum: sha1:6d3d58a7aaf8a1ab74e21775d4b1b2434b9d95fe
+  docs/models/components/policyevalrun.md:
+    last_write_checksum: sha1:ce641ac9b8e160377c9b1fe5fb2598e1e9fbf0cc
+  docs/models/components/policyevalrunstatus.md:
+    last_write_checksum: sha1:e8df311433492a24abc3e3f7a881c0daddeb3183
+  docs/models/components/policyevalsampledefinition.md:
+    last_write_checksum: sha1:68c7ed83619ac7bfc861c6ad58a65b24b0249edb
   docs/models/components/policytype.md:
-    last_write_checksum: sha1:217542331ab5cd8b81e3f3e374f5a7a8f5b9c78f
+    last_write_checksum: sha1:e880ee2dd52d483017e76dbfc03715ed83b1db04
   docs/models/components/principaltype.md:
     last_write_checksum: sha1:0b369f84dc15c71aaa2b290aa3a7dcffa514dfd6
   docs/models/components/project.md:
@@ -1420,6 +1440,14 @@ trackedFiles:
     last_write_checksum: sha1:9988c3bc66399800141c9df1609b9ac260ba65c6
   docs/models/operations/authloginresponse.md:
     last_write_checksum: sha1:39bb7679163c52500155446ee13a94dfc86c6614
+  docs/models/operations/cancelpolicyevalrunrequest.md:
+    last_write_checksum: sha1:16af0a2d0c09dc4b96c6246e56818eb810812529
+  docs/models/operations/cancelpolicyevalrunsecurity.md:
+    last_write_checksum: sha1:2332667c15de73498bd2259fa58773459fe70203
+  docs/models/operations/cancelpolicyevalrunsecurityoption1.md:
+    last_write_checksum: sha1:625371548129a3452defe52c1a2c973c4b3db067
+  docs/models/operations/cancelpolicyevalrunsecurityoption2.md:
+    last_write_checksum: sha1:4535d49ec76605285439082f1408880b6cad5c5a
   docs/models/operations/captureeventrequest.md:
     last_write_checksum: sha1:ff99fba60ec713a7dd837d44aff24cc28239b3e7
   docs/models/operations/captureeventsecurity.md:
@@ -1570,6 +1598,14 @@ trackedFiles:
     last_write_checksum: sha1:fbf0f99c83f527a0e4396088a1cb70261c8ea142
   docs/models/operations/createpluginsecurity.md:
     last_write_checksum: sha1:43bff8e9a554c79486abf242c800c3443da24e04
+  docs/models/operations/createpolicyevalrunrequest.md:
+    last_write_checksum: sha1:48696512f15804765545d693c60e1c487979884d
+  docs/models/operations/createpolicyevalrunsecurity.md:
+    last_write_checksum: sha1:f9a3f38da63df19e248b9ec150553182d9e4a408
+  docs/models/operations/createpolicyevalrunsecurityoption1.md:
+    last_write_checksum: sha1:bd791bea96af5089bce94664969fcdaf64caab5f
+  docs/models/operations/createpolicyevalrunsecurityoption2.md:
+    last_write_checksum: sha1:b1ea1691e0acb26c443eba099b707482d23a94c7
   docs/models/operations/createportalsessionrequest.md:
     last_write_checksum: sha1:832a9d607f4dc3f2ddb8f90e84b51b9af8599d59
   docs/models/operations/createportalsessionsecurity.md:
@@ -2132,6 +2168,14 @@ trackedFiles:
     last_write_checksum: sha1:6306d00e8c4ee10d78926f43c6e82c5365532e64
   docs/models/operations/getpluginsecurity.md:
     last_write_checksum: sha1:33f0d6e5986f17bf55088f6b06400be9c3f50887
+  docs/models/operations/getpolicyevalrunrequest.md:
+    last_write_checksum: sha1:a1a5842afe32298765e25349954beb9b3ebc9973
+  docs/models/operations/getpolicyevalrunsecurity.md:
+    last_write_checksum: sha1:aa946f0fbf38f060d06933deda07fece65f7842e
+  docs/models/operations/getpolicyevalrunsecurityoption1.md:
+    last_write_checksum: sha1:27fb1b6bb86a1eed2aa51140eacc296106257047
+  docs/models/operations/getpolicyevalrunsecurityoption2.md:
+    last_write_checksum: sha1:bba1d2dcfc8d39561e699209bb9b6f1dc4f1359e
   docs/models/operations/getproductfeaturesrequest.md:
     last_write_checksum: sha1:17a0c2a2069d6be56484508e4a3ec4f9636dd6eb
   docs/models/operations/getproductfeaturessecurity.md:
@@ -2544,6 +2588,22 @@ trackedFiles:
     last_write_checksum: sha1:ead1ded5203a41432dd76c88257cc8a1488497f8
   docs/models/operations/listpluginssecurity.md:
     last_write_checksum: sha1:b1aff4a49c538a48256ad12d7dba5a8aa4f487ff
+  docs/models/operations/listpolicyevalfindingsrequest.md:
+    last_write_checksum: sha1:37ab8306ff7b3badd8ed1862e7169ad0ac15b1f6
+  docs/models/operations/listpolicyevalfindingssecurity.md:
+    last_write_checksum: sha1:e9fd522f10617cee5a99d82e8cf757f66880812e
+  docs/models/operations/listpolicyevalfindingssecurityoption1.md:
+    last_write_checksum: sha1:a0308961e0610708b9b683ac76a963fb5d20321c
+  docs/models/operations/listpolicyevalfindingssecurityoption2.md:
+    last_write_checksum: sha1:39eabc4020ef47ec78ce2008a7fefdc99857d4a2
+  docs/models/operations/listpolicyevalrunsrequest.md:
+    last_write_checksum: sha1:80eb98f34c666a8a240e8c845695e1d583775519
+  docs/models/operations/listpolicyevalrunssecurity.md:
+    last_write_checksum: sha1:53e3137e66fc57abb066d94249abe2bcd29cc398
+  docs/models/operations/listpolicyevalrunssecurityoption1.md:
+    last_write_checksum: sha1:6e536642875317efabbf1c10d795a23dcd47b191
+  docs/models/operations/listpolicyevalrunssecurityoption2.md:
+    last_write_checksum: sha1:f785f50424d5d6baf6db5d7aa16bad3025442f10
   docs/models/operations/listprojectsrequest.md:
     last_write_checksum: sha1:ebf622cf6d5952288e92cad4de8830afbdeb5e8c
   docs/models/operations/listprojectssecurity.md:
@@ -3440,6 +3500,8 @@ trackedFiles:
     last_write_checksum: sha1:3353bdcad0ce9696b90ea70f68e5c1c31d5df6d0
   docs/sdks/environments/README.md:
     last_write_checksum: sha1:6e3cf385846dc2b2da70e4bb9101ef11e01126a9
+  docs/sdks/evals/README.md:
+    last_write_checksum: sha1:38567b26b720e5e9997cc20d01933aab41718cda
   docs/sdks/exclusions/README.md:
     last_write_checksum: sha1:eb72f4e952a67504b17b06a2b6b9d0eca34926f5
   docs/sdks/expr/README.md:
@@ -3992,6 +4054,16 @@ trackedFiles:
     last_write_checksum: sha1:2fb2f79eb6f6c452106eeb558951518cf32d4b59
   src/funcs/riskCustomRulesUpdate.ts:
     last_write_checksum: sha1:64fdad46266de792afd338bd3f8690cd66982ea6
+  src/funcs/riskEvalsCancel.ts:
+    last_write_checksum: sha1:18535e5fc02f5b855a68558d55154f9b6ec17f94
+  src/funcs/riskEvalsCreate.ts:
+    last_write_checksum: sha1:5b78b17c8d08b7718b6774f9751fa2a9980a7866
+  src/funcs/riskEvalsGet.ts:
+    last_write_checksum: sha1:021a1140eea874c7ae5ba0aed3437ab98166ffbe
+  src/funcs/riskEvalsList.ts:
+    last_write_checksum: sha1:39f93852035abc497d77a550dbf2ec30afa03091
+  src/funcs/riskEvalsListFindings.ts:
+    last_write_checksum: sha1:c2972031760a93fcc7548c1b470b31c623a0314f
   src/funcs/riskExclusionsCreate.ts:
     last_write_checksum: sha1:cf5dad9b5c1de70878f36835fa86b8cddb7fc8f2
   src/funcs/riskExclusionsDelete.ts:
@@ -4344,6 +4416,8 @@ trackedFiles:
     last_write_checksum: sha1:95ed9b95d79679b72575d18336fd00528adf8208
   src/models/components/createpluginform.ts:
     last_write_checksum: sha1:ecfe1f04d97dfb8569beee623897b7bbf14a5474
+  src/models/components/createpolicyevalrunrequestbody.ts:
+    last_write_checksum: sha1:757c9e6c6aea161372da130a55129cf61a96890a
   src/models/components/createportalsessionresult.ts:
     last_write_checksum: sha1:dbde55f4c7177572207e2451278ce4c7ebd7a3c8
   src/models/components/createprojectrequestbody.ts:
@@ -4367,7 +4441,7 @@ trackedFiles:
   src/models/components/createriskexclusionrequestbody.ts:
     last_write_checksum: sha1:6dafc15fd69b59c7aeb7dedc1060612c7882efcc
   src/models/components/createriskpolicyrequestbody.ts:
-    last_write_checksum: sha1:cdea350b6764568e0c9e61ff3e5b9f8a41f71010
+    last_write_checksum: sha1:761b6874a7746db6aee71501a827c34bab2a9c50
   src/models/components/createroleform.ts:
     last_write_checksum: sha1:85aeb0cf9b2bcc28284e482e51fc8b2d97ca4a1e
   src/models/components/createserverform.ts:
@@ -4549,7 +4623,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:fc4cad3f7c60bd58cd2e2509c155b119947b6fe6
+    last_write_checksum: sha1:3c5b5fd1eda36bc232e8d3e17394d3747523d777
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4625,6 +4699,10 @@ trackedFiles:
     last_write_checksum: sha1:8a57c7fdc51768c6ebe0c4d1dc0ba5c58efd27d6
   src/models/components/listpluginsresult.ts:
     last_write_checksum: sha1:d17c0b8d640b99480d6a1bf5fb0ed89f9452cd57
+  src/models/components/listpolicyevalfindingsresult.ts:
+    last_write_checksum: sha1:cf2ac32249765359d2d609dd22b605c23dd80503
+  src/models/components/listpolicyevalrunsresult.ts:
+    last_write_checksum: sha1:beaec98b9d17dcd04a1642be35376117eaacb88f
   src/models/components/listprojectsresult.ts:
     last_write_checksum: sha1:f2df45628001a9b9effec0e7b560c76cc4ad979a
   src/models/components/listprompttemplatesresult.ts:
@@ -4837,6 +4915,14 @@ trackedFiles:
     last_write_checksum: sha1:b311ed29fb32f79675d5605f8d38a894f11cda61
   src/models/components/pluginserver.ts:
     last_write_checksum: sha1:52621591b88d890dc8df3bc731309b0ddab3d07b
+  src/models/components/policyevalcandidateconfig.ts:
+    last_write_checksum: sha1:3705836852364f48f768ae78564e6e0cebb60ea7
+  src/models/components/policyevalfinding.ts:
+    last_write_checksum: sha1:1e6bbd863896354b91f26fb9ed2f7e65db218e4c
+  src/models/components/policyevalrun.ts:
+    last_write_checksum: sha1:34de85ba07ecb3c84b8aaf6bd32c35742523cc79
+  src/models/components/policyevalsampledefinition.ts:
+    last_write_checksum: sha1:ff13af45c17f58d2f6cc11c46a0cf9a919a66b80
   src/models/components/project.ts:
     last_write_checksum: sha1:84b9576251265d0f29eaee2be9af497e70a5d262
   src/models/components/projectentry.ts:
@@ -5294,6 +5380,8 @@ trackedFiles:
     last_write_checksum: sha1:3f9214e3b02dd14d190532bd6ad034df14a002c2
   src/models/operations/authlogin.ts:
     last_write_checksum: sha1:04c62cf739ad73d2b20c5441ccf9d2c02e3d1566
+  src/models/operations/cancelpolicyevalrun.ts:
+    last_write_checksum: sha1:1fb2f24800e8b0d071ff7418688267a0f50c59fd
   src/models/operations/captureevent.ts:
     last_write_checksum: sha1:096fb272d1c3a2f3ff0b0be74610ac6244fb264e
   src/models/operations/checkmcpendpointslugavailability.ts:
@@ -5340,6 +5428,8 @@ trackedFiles:
     last_write_checksum: sha1:6fd87c5390211f5d8051c5b148944dcd6650d4ad
   src/models/operations/createplugin.ts:
     last_write_checksum: sha1:f614c9a8165fc50aed153190d9e1e6e154d3dafe
+  src/models/operations/createpolicyevalrun.ts:
+    last_write_checksum: sha1:85297c9104a312fa6d414db7d12b1cd81c3caf0d
   src/models/operations/createportalsession.ts:
     last_write_checksum: sha1:6c520e4bc6a5501628c799c7459def093dd38b8b
   src/models/operations/createproject.ts:
@@ -5530,6 +5620,8 @@ trackedFiles:
     last_write_checksum: sha1:46510bbd27108ee1607f58ab7583d7dbd36494cb
   src/models/operations/getplugin.ts:
     last_write_checksum: sha1:7b2604c8ee3b5122e5ef9ddc4595183e70710a79
+  src/models/operations/getpolicyevalrun.ts:
+    last_write_checksum: sha1:1826318089290cb908d910802f5d2e4eadc84781
   src/models/operations/getproductfeatures.ts:
     last_write_checksum: sha1:81244d1e94decda47179cb8b9e32bf6bc3400882
   src/models/operations/getproject.ts:
@@ -5594,7 +5686,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:e47a3715f6c93e28701c9b2c718045a25cbbf1cf
+    last_write_checksum: sha1:ffd77a0b9f236eddac5e40cb9b155639a0b15f9f
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -5670,6 +5762,10 @@ trackedFiles:
     last_write_checksum: sha1:2b0dea4c7f15d2696461616e714e7979d88c1168
   src/models/operations/listplugins.ts:
     last_write_checksum: sha1:0b65f11c1d583cdb4a8bfd0a205da8b0212e139f
+  src/models/operations/listpolicyevalfindings.ts:
+    last_write_checksum: sha1:1291c08e906c947ad872fd9a2978686da53089a5
+  src/models/operations/listpolicyevalruns.ts:
+    last_write_checksum: sha1:0398c2acf0406e21c61c43c4376efbd6faa639e6
   src/models/operations/listprojects.ts:
     last_write_checksum: sha1:5a1a505804c151f0d4b28fbbc21417418ab5f1a7
   src/models/operations/listremotemcpservers.ts:
@@ -6274,7 +6370,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:c1beb04686d3cb3dd24af85812d9ff6c6293fba7
+    last_write_checksum: sha1:ceb183bda49ecb9d07f2c8e5421aad8ca06613f7
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -6594,6 +6690,8 @@ trackedFiles:
     last_write_checksum: sha1:cb138c999321ee925b80237b8bca8dccad5c4efc
   src/react-query/riskApprovePolicyBypassRequest.ts:
     last_write_checksum: sha1:cfc1ab2d7540ef6f140d7f56a3012844630c2b38
+  src/react-query/riskCancelPolicyEvalRun.ts:
+    last_write_checksum: sha1:ac03f17d2e4882e76e74cf4a242dd939ba377cda
   src/react-query/riskCategories.core.ts:
     last_write_checksum: sha1:c281a1bfc255deb6ef673431898f64ba44e6e152
   src/react-query/riskCategories.ts:
@@ -6610,6 +6708,8 @@ trackedFiles:
     last_write_checksum: sha1:2d83fedbc097151e6ddbf9b7f80182ee63ae458a
   src/react-query/riskCreatePolicyBypassRequest.ts:
     last_write_checksum: sha1:b61d78a2616ae906ca9a6705eb5118e9223f5cab
+  src/react-query/riskCreatePolicyEvalRun.ts:
+    last_write_checksum: sha1:9200ed146d6799acfb68d89fbf91021ce205ea08
   src/react-query/riskDeleteCustomDetectionRule.ts:
     last_write_checksum: sha1:8dcd06194b990aecdfcd6d5fd377c22e172e5aad
   src/react-query/riskDeleteExclusion.ts:
@@ -6620,6 +6720,10 @@ trackedFiles:
     last_write_checksum: sha1:73e03bc4843dea65139efab5f8dac55d657f8d56
   src/react-query/riskGetCustomDetectionRule.ts:
     last_write_checksum: sha1:05af52680a5bc0a23f236fd83db9b9286895f949
+  src/react-query/riskGetPolicyEvalRun.core.ts:
+    last_write_checksum: sha1:6fb7fb2083a41d028dd0dd92b23061f31287fbce
+  src/react-query/riskGetPolicyEvalRun.ts:
+    last_write_checksum: sha1:c9ec7e8405f97745aee9f38485e31d0ac78241a5
   src/react-query/riskListCustomDetectionRules.core.ts:
     last_write_checksum: sha1:beab2fabf712e1cb25a1c761ca9cddf68ddfae80
   src/react-query/riskListCustomDetectionRules.ts:
@@ -6636,6 +6740,14 @@ trackedFiles:
     last_write_checksum: sha1:7a86ea19c05e21ed2c72b675428465861f51cc93
   src/react-query/riskListPolicyBypassRequests.ts:
     last_write_checksum: sha1:eb0574f22b1b9905bc4e8f1220ef992829512da9
+  src/react-query/riskListPolicyEvalFindings.core.ts:
+    last_write_checksum: sha1:e0df51628f5d7a522da22ed1f0d741c826f7b0f4
+  src/react-query/riskListPolicyEvalFindings.ts:
+    last_write_checksum: sha1:24c21f04aab6cc2dfe56dcd4abedc381d62681da
+  src/react-query/riskListPolicyEvalRuns.core.ts:
+    last_write_checksum: sha1:13c5e225ec2982a6b3fe5bee2e687f0e6a5f46d4
+  src/react-query/riskListPolicyEvalRuns.ts:
+    last_write_checksum: sha1:8201fe621d2bd25713cb3f9a43d8b4f8ff0c63a8
   src/react-query/riskListResults.core.ts:
     last_write_checksum: sha1:105d5f954ebbce73d67721f84587936cbb682ca3
   src/react-query/riskListResults.ts:
@@ -6922,6 +7034,8 @@ trackedFiles:
     last_write_checksum: sha1:387025fbf83d2fb51edfa083331b5a41c8dee45c
   src/sdk/environments.ts:
     last_write_checksum: sha1:32ad1a2228a56ab7f4de58aa38785085e0f3a1c3
+  src/sdk/evals.ts:
+    last_write_checksum: sha1:ebea63b18b55e25ba44920f53df3b507fb55c122
   src/sdk/exclusions.ts:
     last_write_checksum: sha1:d9f2c5b173f9bb3b9b5da6475ee9fffb7ebb66c0
   src/sdk/expr.ts:
@@ -6981,7 +7095,7 @@ trackedFiles:
   src/sdk/results.ts:
     last_write_checksum: sha1:220552d21499d1871f15ca050009d2ec7646bbad
   src/sdk/risk.ts:
-    last_write_checksum: sha1:43f1504b499d387a728605cb268121ac548798dd
+    last_write_checksum: sha1:f451f6a116c0360e4a23485576e92fa7d62a0549
   src/sdk/rules.ts:
     last_write_checksum: sha1:c09a7e791d89ef5b985c765b533bf61c1b6b0e9d
   src/sdk/sdk.ts:
@@ -10594,5 +10708,60 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  cancelPolicyEvalRun:
+    speakeasy-default-cancel-policy-eval-run:
+      requestBody:
+        application/json: {"id": "936f7ff2-9d67-4e2d-80a5-93275c84654e"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-08-06T05:40:48.746Z", "findings_count": 542634, "id": "756eda41-3049-412e-86d7-ddc7c4b2016f", "messages_scanned": 135238, "status": "pending", "total_cost_usd": 2267.82}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createPolicyEvalRun:
+    speakeasy-default-create-policy-eval-run:
+      requestBody:
+        application/json: {"sample": {"max_messages": 875158, "mode": "auto"}}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-05-10T23:45:24.962Z", "findings_count": 673566, "id": "ff575045-72ab-420e-8dfc-acc1976d8fda", "messages_scanned": 430901, "status": "failed", "total_cost_usd": 7072.5}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listPolicyEvalFindings:
+    speakeasy-default-list-policy-eval-findings:
+      parameters:
+        query:
+          run_id: "0d38dedf-da9a-4980-98e8-7e787a475d81"
+      responses:
+        "200":
+          application/json: {"findings": [{"chat_message_id": "cff88080-68a9-45de-9403-ed1da3fbb638", "created_at": "2025-02-20T04:43:59.914Z", "id": "f434d911-2182-4a1c-8292-892b3d922fa7", "run_id": "9467b395-b12e-4200-bfdd-a2ca4c922582", "source": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getPolicyEvalRun:
+    speakeasy-default-get-policy-eval-run:
+      parameters:
+        query:
+          id: "d58fc66c-5e63-45a3-8050-a97449eb1ee3"
+      responses:
+        "200":
+          application/json: {"created_at": "2024-07-25T03:17:04.945Z", "findings_count": 949570, "id": "a33f854e-4f88-453e-b11b-7d734af5b443", "messages_scanned": 185956, "status": "pending", "total_cost_usd": 8412.48}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listPolicyEvalRuns:
+    speakeasy-default-list-policy-eval-runs:
+      responses:
+        "200":
+          application/json: {"runs": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

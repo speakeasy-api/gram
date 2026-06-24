@@ -38,14 +38,16 @@ export type AudienceType = ClosedEnum<typeof AudienceType>;
 /**
  * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.
  */
-export const PolicyType = {
+export const CreateRiskPolicyRequestBodyPolicyType = {
   Standard: "standard",
   PromptBased: "prompt_based",
 } as const;
 /**
  * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.
  */
-export type PolicyType = ClosedEnum<typeof PolicyType>;
+export type CreateRiskPolicyRequestBodyPolicyType = ClosedEnum<
+  typeof CreateRiskPolicyRequestBodyPolicyType
+>;
 
 export type CreateRiskPolicyRequestBody = {
   /**
@@ -88,7 +90,7 @@ export type CreateRiskPolicyRequestBody = {
   /**
    * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.
    */
-  policyType?: PolicyType | undefined;
+  policyType?: CreateRiskPolicyRequestBodyPolicyType | undefined;
   /**
    * Presidio entity types to detect.
    */
@@ -129,8 +131,10 @@ export const AudienceType$outboundSchema: z.ZodMiniEnum<typeof AudienceType> = z
   .enum(AudienceType);
 
 /** @internal */
-export const PolicyType$outboundSchema: z.ZodMiniEnum<typeof PolicyType> = z
-  .enum(PolicyType);
+export const CreateRiskPolicyRequestBodyPolicyType$outboundSchema:
+  z.ZodMiniEnum<typeof CreateRiskPolicyRequestBodyPolicyType> = z.enum(
+    CreateRiskPolicyRequestBodyPolicyType,
+  );
 
 /** @internal */
 export type CreateRiskPolicyRequestBody$Outbound = {
@@ -170,7 +174,10 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     messageTypes: z.optional(z.array(z.string())),
     modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     name: z.optional(z.string()),
-    policyType: z._default(PolicyType$outboundSchema, "standard"),
+    policyType: z._default(
+      CreateRiskPolicyRequestBodyPolicyType$outboundSchema,
+      "standard",
+    ),
     presidioEntities: z.optional(z.array(z.string())),
     prompt: z.optional(z.string()),
     promptInjectionRules: z.optional(z.array(z.string())),

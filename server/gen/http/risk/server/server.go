@@ -50,6 +50,11 @@ type Server struct {
 	DeleteRiskExclusion            http.Handler
 	SuggestCustomDetectionRule     http.Handler
 	TestDetectionRule              http.Handler
+	CreatePolicyEvalRun            http.Handler
+	ListPolicyEvalRuns             http.Handler
+	GetPolicyEvalRun               http.Handler
+	ListPolicyEvalFindings         http.Handler
+	CancelPolicyEvalRun            http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -110,6 +115,11 @@ func New(
 			{"DeleteRiskExclusion", "DELETE", "/rpc/risk.deleteExclusions"},
 			{"SuggestCustomDetectionRule", "POST", "/rpc/risk.customRules.suggest"},
 			{"TestDetectionRule", "POST", "/rpc/risk.rules.test"},
+			{"CreatePolicyEvalRun", "POST", "/rpc/risk.evals.create"},
+			{"ListPolicyEvalRuns", "GET", "/rpc/risk.evals.list"},
+			{"GetPolicyEvalRun", "GET", "/rpc/risk.evals.get"},
+			{"ListPolicyEvalFindings", "GET", "/rpc/risk.evals.findings.list"},
+			{"CancelPolicyEvalRun", "POST", "/rpc/risk.evals.cancel"},
 		},
 		CreateRiskPolicy:               NewCreateRiskPolicyHandler(e.CreateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
 		ListRiskPolicies:               NewListRiskPoliciesHandler(e.ListRiskPolicies, mux, decoder, encoder, errhandler, formatter),
@@ -142,6 +152,11 @@ func New(
 		DeleteRiskExclusion:            NewDeleteRiskExclusionHandler(e.DeleteRiskExclusion, mux, decoder, encoder, errhandler, formatter),
 		SuggestCustomDetectionRule:     NewSuggestCustomDetectionRuleHandler(e.SuggestCustomDetectionRule, mux, decoder, encoder, errhandler, formatter),
 		TestDetectionRule:              NewTestDetectionRuleHandler(e.TestDetectionRule, mux, decoder, encoder, errhandler, formatter),
+		CreatePolicyEvalRun:            NewCreatePolicyEvalRunHandler(e.CreatePolicyEvalRun, mux, decoder, encoder, errhandler, formatter),
+		ListPolicyEvalRuns:             NewListPolicyEvalRunsHandler(e.ListPolicyEvalRuns, mux, decoder, encoder, errhandler, formatter),
+		GetPolicyEvalRun:               NewGetPolicyEvalRunHandler(e.GetPolicyEvalRun, mux, decoder, encoder, errhandler, formatter),
+		ListPolicyEvalFindings:         NewListPolicyEvalFindingsHandler(e.ListPolicyEvalFindings, mux, decoder, encoder, errhandler, formatter),
+		CancelPolicyEvalRun:            NewCancelPolicyEvalRunHandler(e.CancelPolicyEvalRun, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -181,6 +196,11 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DeleteRiskExclusion = m(s.DeleteRiskExclusion)
 	s.SuggestCustomDetectionRule = m(s.SuggestCustomDetectionRule)
 	s.TestDetectionRule = m(s.TestDetectionRule)
+	s.CreatePolicyEvalRun = m(s.CreatePolicyEvalRun)
+	s.ListPolicyEvalRuns = m(s.ListPolicyEvalRuns)
+	s.GetPolicyEvalRun = m(s.GetPolicyEvalRun)
+	s.ListPolicyEvalFindings = m(s.ListPolicyEvalFindings)
+	s.CancelPolicyEvalRun = m(s.CancelPolicyEvalRun)
 }
 
 // MethodNames returns the methods served.
@@ -219,6 +239,11 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDeleteRiskExclusionHandler(mux, h.DeleteRiskExclusion)
 	MountSuggestCustomDetectionRuleHandler(mux, h.SuggestCustomDetectionRule)
 	MountTestDetectionRuleHandler(mux, h.TestDetectionRule)
+	MountCreatePolicyEvalRunHandler(mux, h.CreatePolicyEvalRun)
+	MountListPolicyEvalRunsHandler(mux, h.ListPolicyEvalRuns)
+	MountGetPolicyEvalRunHandler(mux, h.GetPolicyEvalRun)
+	MountListPolicyEvalFindingsHandler(mux, h.ListPolicyEvalFindings)
+	MountCancelPolicyEvalRunHandler(mux, h.CancelPolicyEvalRun)
 }
 
 // Mount configures the mux to serve the risk endpoints.
@@ -1856,6 +1881,271 @@ func NewTestDetectionRuleHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "testDetectionRule")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreatePolicyEvalRunHandler configures the mux to serve the "risk"
+// service "createPolicyEvalRun" endpoint.
+func MountCreatePolicyEvalRunHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.evals.create", f)
+}
+
+// NewCreatePolicyEvalRunHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "createPolicyEvalRun" endpoint.
+func NewCreatePolicyEvalRunHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreatePolicyEvalRunRequest(mux, decoder)
+		encodeResponse = EncodeCreatePolicyEvalRunResponse(encoder)
+		encodeError    = EncodeCreatePolicyEvalRunError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createPolicyEvalRun")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListPolicyEvalRunsHandler configures the mux to serve the "risk"
+// service "listPolicyEvalRuns" endpoint.
+func MountListPolicyEvalRunsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.evals.list", f)
+}
+
+// NewListPolicyEvalRunsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "listPolicyEvalRuns" endpoint.
+func NewListPolicyEvalRunsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListPolicyEvalRunsRequest(mux, decoder)
+		encodeResponse = EncodeListPolicyEvalRunsResponse(encoder)
+		encodeError    = EncodeListPolicyEvalRunsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listPolicyEvalRuns")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetPolicyEvalRunHandler configures the mux to serve the "risk" service
+// "getPolicyEvalRun" endpoint.
+func MountGetPolicyEvalRunHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.evals.get", f)
+}
+
+// NewGetPolicyEvalRunHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "getPolicyEvalRun" endpoint.
+func NewGetPolicyEvalRunHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetPolicyEvalRunRequest(mux, decoder)
+		encodeResponse = EncodeGetPolicyEvalRunResponse(encoder)
+		encodeError    = EncodeGetPolicyEvalRunError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getPolicyEvalRun")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListPolicyEvalFindingsHandler configures the mux to serve the "risk"
+// service "listPolicyEvalFindings" endpoint.
+func MountListPolicyEvalFindingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.evals.findings.list", f)
+}
+
+// NewListPolicyEvalFindingsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "listPolicyEvalFindings" endpoint.
+func NewListPolicyEvalFindingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListPolicyEvalFindingsRequest(mux, decoder)
+		encodeResponse = EncodeListPolicyEvalFindingsResponse(encoder)
+		encodeError    = EncodeListPolicyEvalFindingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listPolicyEvalFindings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCancelPolicyEvalRunHandler configures the mux to serve the "risk"
+// service "cancelPolicyEvalRun" endpoint.
+func MountCancelPolicyEvalRunHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.evals.cancel", f)
+}
+
+// NewCancelPolicyEvalRunHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "cancelPolicyEvalRun" endpoint.
+func NewCancelPolicyEvalRunHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCancelPolicyEvalRunRequest(mux, decoder)
+		encodeResponse = EncodeCancelPolicyEvalRunResponse(encoder)
+		encodeError    = EncodeCancelPolicyEvalRunError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "cancelPolicyEvalRun")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

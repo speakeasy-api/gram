@@ -112,7 +112,7 @@ func UsageCommands() []string {
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer|list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|list-client-sessions|update-client|delete-client|remove-client-from-mcp-server|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|test-detection-rule)",
+		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|test-detection-rule|create-policy-eval-run|list-policy-eval-runs|get-policy-eval-run|list-policy-eval-findings|cancel-policy-eval-run)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|list-tool-usage-traces|get-tool-usage-filter-options|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
@@ -1662,6 +1662,40 @@ func ParseEndpoint(
 		riskTestDetectionRuleSessionTokenFlag     = riskTestDetectionRuleFlags.String("session-token", "", "")
 		riskTestDetectionRuleProjectSlugInputFlag = riskTestDetectionRuleFlags.String("project-slug-input", "", "")
 
+		riskCreatePolicyEvalRunFlags                = flag.NewFlagSet("create-policy-eval-run", flag.ExitOnError)
+		riskCreatePolicyEvalRunBodyFlag             = riskCreatePolicyEvalRunFlags.String("body", "REQUIRED", "")
+		riskCreatePolicyEvalRunApikeyTokenFlag      = riskCreatePolicyEvalRunFlags.String("apikey-token", "", "")
+		riskCreatePolicyEvalRunSessionTokenFlag     = riskCreatePolicyEvalRunFlags.String("session-token", "", "")
+		riskCreatePolicyEvalRunProjectSlugInputFlag = riskCreatePolicyEvalRunFlags.String("project-slug-input", "", "")
+
+		riskListPolicyEvalRunsFlags                = flag.NewFlagSet("list-policy-eval-runs", flag.ExitOnError)
+		riskListPolicyEvalRunsPolicyIDFlag         = riskListPolicyEvalRunsFlags.String("policy-id", "", "")
+		riskListPolicyEvalRunsCursorFlag           = riskListPolicyEvalRunsFlags.String("cursor", "", "")
+		riskListPolicyEvalRunsLimitFlag            = riskListPolicyEvalRunsFlags.String("limit", "", "")
+		riskListPolicyEvalRunsApikeyTokenFlag      = riskListPolicyEvalRunsFlags.String("apikey-token", "", "")
+		riskListPolicyEvalRunsSessionTokenFlag     = riskListPolicyEvalRunsFlags.String("session-token", "", "")
+		riskListPolicyEvalRunsProjectSlugInputFlag = riskListPolicyEvalRunsFlags.String("project-slug-input", "", "")
+
+		riskGetPolicyEvalRunFlags                = flag.NewFlagSet("get-policy-eval-run", flag.ExitOnError)
+		riskGetPolicyEvalRunIDFlag               = riskGetPolicyEvalRunFlags.String("id", "REQUIRED", "")
+		riskGetPolicyEvalRunApikeyTokenFlag      = riskGetPolicyEvalRunFlags.String("apikey-token", "", "")
+		riskGetPolicyEvalRunSessionTokenFlag     = riskGetPolicyEvalRunFlags.String("session-token", "", "")
+		riskGetPolicyEvalRunProjectSlugInputFlag = riskGetPolicyEvalRunFlags.String("project-slug-input", "", "")
+
+		riskListPolicyEvalFindingsFlags                = flag.NewFlagSet("list-policy-eval-findings", flag.ExitOnError)
+		riskListPolicyEvalFindingsRunIDFlag            = riskListPolicyEvalFindingsFlags.String("run-id", "REQUIRED", "")
+		riskListPolicyEvalFindingsCursorFlag           = riskListPolicyEvalFindingsFlags.String("cursor", "", "")
+		riskListPolicyEvalFindingsLimitFlag            = riskListPolicyEvalFindingsFlags.String("limit", "", "")
+		riskListPolicyEvalFindingsApikeyTokenFlag      = riskListPolicyEvalFindingsFlags.String("apikey-token", "", "")
+		riskListPolicyEvalFindingsSessionTokenFlag     = riskListPolicyEvalFindingsFlags.String("session-token", "", "")
+		riskListPolicyEvalFindingsProjectSlugInputFlag = riskListPolicyEvalFindingsFlags.String("project-slug-input", "", "")
+
+		riskCancelPolicyEvalRunFlags                = flag.NewFlagSet("cancel-policy-eval-run", flag.ExitOnError)
+		riskCancelPolicyEvalRunBodyFlag             = riskCancelPolicyEvalRunFlags.String("body", "REQUIRED", "")
+		riskCancelPolicyEvalRunApikeyTokenFlag      = riskCancelPolicyEvalRunFlags.String("apikey-token", "", "")
+		riskCancelPolicyEvalRunSessionTokenFlag     = riskCancelPolicyEvalRunFlags.String("session-token", "", "")
+		riskCancelPolicyEvalRunProjectSlugInputFlag = riskCancelPolicyEvalRunFlags.String("project-slug-input", "", "")
+
 		telemetryFlags = flag.NewFlagSet("telemetry", flag.ContinueOnError)
 
 		telemetrySearchLogsFlags                = flag.NewFlagSet("search-logs", flag.ExitOnError)
@@ -2469,6 +2503,11 @@ func ParseEndpoint(
 	riskDeleteRiskExclusionFlags.Usage = riskDeleteRiskExclusionUsage
 	riskSuggestCustomDetectionRuleFlags.Usage = riskSuggestCustomDetectionRuleUsage
 	riskTestDetectionRuleFlags.Usage = riskTestDetectionRuleUsage
+	riskCreatePolicyEvalRunFlags.Usage = riskCreatePolicyEvalRunUsage
+	riskListPolicyEvalRunsFlags.Usage = riskListPolicyEvalRunsUsage
+	riskGetPolicyEvalRunFlags.Usage = riskGetPolicyEvalRunUsage
+	riskListPolicyEvalFindingsFlags.Usage = riskListPolicyEvalFindingsUsage
+	riskCancelPolicyEvalRunFlags.Usage = riskCancelPolicyEvalRunUsage
 
 	telemetryFlags.Usage = telemetryUsage
 	telemetrySearchLogsFlags.Usage = telemetrySearchLogsUsage
@@ -3644,6 +3683,21 @@ func ParseEndpoint(
 
 			case "test-detection-rule":
 				epf = riskTestDetectionRuleFlags
+
+			case "create-policy-eval-run":
+				epf = riskCreatePolicyEvalRunFlags
+
+			case "list-policy-eval-runs":
+				epf = riskListPolicyEvalRunsFlags
+
+			case "get-policy-eval-run":
+				epf = riskGetPolicyEvalRunFlags
+
+			case "list-policy-eval-findings":
+				epf = riskListPolicyEvalFindingsFlags
+
+			case "cancel-policy-eval-run":
+				epf = riskCancelPolicyEvalRunFlags
 
 			}
 
@@ -4901,6 +4955,21 @@ func ParseEndpoint(
 			case "test-detection-rule":
 				endpoint = c.TestDetectionRule()
 				data, err = riskc.BuildTestDetectionRulePayload(*riskTestDetectionRuleBodyFlag, *riskTestDetectionRuleApikeyTokenFlag, *riskTestDetectionRuleSessionTokenFlag, *riskTestDetectionRuleProjectSlugInputFlag)
+			case "create-policy-eval-run":
+				endpoint = c.CreatePolicyEvalRun()
+				data, err = riskc.BuildCreatePolicyEvalRunPayload(*riskCreatePolicyEvalRunBodyFlag, *riskCreatePolicyEvalRunApikeyTokenFlag, *riskCreatePolicyEvalRunSessionTokenFlag, *riskCreatePolicyEvalRunProjectSlugInputFlag)
+			case "list-policy-eval-runs":
+				endpoint = c.ListPolicyEvalRuns()
+				data, err = riskc.BuildListPolicyEvalRunsPayload(*riskListPolicyEvalRunsPolicyIDFlag, *riskListPolicyEvalRunsCursorFlag, *riskListPolicyEvalRunsLimitFlag, *riskListPolicyEvalRunsApikeyTokenFlag, *riskListPolicyEvalRunsSessionTokenFlag, *riskListPolicyEvalRunsProjectSlugInputFlag)
+			case "get-policy-eval-run":
+				endpoint = c.GetPolicyEvalRun()
+				data, err = riskc.BuildGetPolicyEvalRunPayload(*riskGetPolicyEvalRunIDFlag, *riskGetPolicyEvalRunApikeyTokenFlag, *riskGetPolicyEvalRunSessionTokenFlag, *riskGetPolicyEvalRunProjectSlugInputFlag)
+			case "list-policy-eval-findings":
+				endpoint = c.ListPolicyEvalFindings()
+				data, err = riskc.BuildListPolicyEvalFindingsPayload(*riskListPolicyEvalFindingsRunIDFlag, *riskListPolicyEvalFindingsCursorFlag, *riskListPolicyEvalFindingsLimitFlag, *riskListPolicyEvalFindingsApikeyTokenFlag, *riskListPolicyEvalFindingsSessionTokenFlag, *riskListPolicyEvalFindingsProjectSlugInputFlag)
+			case "cancel-policy-eval-run":
+				endpoint = c.CancelPolicyEvalRun()
+				data, err = riskc.BuildCancelPolicyEvalRunPayload(*riskCancelPolicyEvalRunBodyFlag, *riskCancelPolicyEvalRunApikeyTokenFlag, *riskCancelPolicyEvalRunSessionTokenFlag, *riskCancelPolicyEvalRunProjectSlugInputFlag)
 			}
 		case "telemetry":
 			c := telemetryc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -11057,6 +11126,11 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    delete-risk-exclusion: Delete a risk exclusion. Previously suppressed findings are restored.`)
 	fmt.Fprintln(os.Stderr, `    suggest-custom-detection-rule: Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.`)
 	fmt.Fprintln(os.Stderr, `    test-detection-rule: Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.`)
+	fmt.Fprintln(os.Stderr, `    create-policy-eval-run: Start a non-enforcing policy eval run over a sample of historical messages. Provide either an existing policy_id or a candidate config (for an unsaved draft).`)
+	fmt.Fprintln(os.Stderr, `    list-policy-eval-runs: List policy eval runs for the current project, newest first.`)
+	fmt.Fprintln(os.Stderr, `    get-policy-eval-run: Get a policy eval run by ID, including its rolled-up run statistics.`)
+	fmt.Fprintln(os.Stderr, `    list-policy-eval-findings: List findings produced by a policy eval run, with sample message context.`)
+	fmt.Fprintln(os.Stderr, `    cancel-policy-eval-run: Cancel an in-progress policy eval run.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s risk COMMAND --help\n", os.Args[0])
@@ -11843,6 +11917,134 @@ func riskTestDetectionRuleUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk test-detection-rule --body '{\n      \"detection_expr\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskCreatePolicyEvalRunUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk create-policy-eval-run", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Start a non-enforcing policy eval run over a sample of historical messages. Provide either an existing policy_id or a candidate config (for an unsaved draft).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-policy-eval-run --body '{\n      \"candidate\": {\n         \"custom_rule_ids\": [\n            \"abc123\"\n         ],\n         \"disabled_rules\": [\n            \"abc123\"\n         ],\n         \"message_types\": [\n            \"abc123\"\n         ],\n         \"model_config\": {\n            \"fail_open\": false,\n            \"model\": \"abc123\",\n            \"temperature\": 1\n         },\n         \"policy_type\": \"prompt_based\",\n         \"presidio_entities\": [\n            \"abc123\"\n         ],\n         \"prompt\": \"abc123\",\n         \"scope_exempt\": \"abc123\",\n         \"scope_include\": \"abc123\",\n         \"sources\": [\n            \"abc123\"\n         ]\n      },\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"sample\": {\n         \"last_n_sessions\": 2,\n         \"lookback_days\": 2,\n         \"max_messages\": 2,\n         \"message_ids\": [\n            \"abc123\"\n         ],\n         \"mode\": \"manual\"\n      }\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskListPolicyEvalRunsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-policy-eval-runs", os.Args[0])
+	fmt.Fprint(os.Stderr, " -policy-id STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List policy eval runs for the current project, newest first.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-policy-eval-runs --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskGetPolicyEvalRunUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk get-policy-eval-run", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a policy eval run by ID, including its rolled-up run statistics.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-policy-eval-run --id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskListPolicyEvalFindingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-policy-eval-findings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -run-id STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List findings produced by a policy eval run, with sample message context.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -run-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-policy-eval-findings --run-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskCancelPolicyEvalRunUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk cancel-policy-eval-run", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Cancel an in-progress policy eval run.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk cancel-policy-eval-run --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // telemetryUsage displays the usage of the telemetry command and its

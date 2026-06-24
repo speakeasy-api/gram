@@ -98,6 +98,8 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					MessageTypes:     policy.MessageTypes,
 					PresidioEntities: policy.PresidioEntities,
 					CustomRuleIds:    policy.CustomRuleIds,
+					// Realtime enforcement path: no judge cost observer (eval-only seam).
+					JudgeObserve: nil,
 				})
 				futures = append(futures, f)
 			}

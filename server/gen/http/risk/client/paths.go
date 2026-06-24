@@ -161,3 +161,28 @@ func SuggestCustomDetectionRuleRiskPath() string {
 func TestDetectionRuleRiskPath() string {
 	return "/rpc/risk.rules.test"
 }
+
+// CreatePolicyEvalRunRiskPath returns the URL path to the risk service createPolicyEvalRun HTTP endpoint.
+func CreatePolicyEvalRunRiskPath() string {
+	return "/rpc/risk.evals.create"
+}
+
+// ListPolicyEvalRunsRiskPath returns the URL path to the risk service listPolicyEvalRuns HTTP endpoint.
+func ListPolicyEvalRunsRiskPath() string {
+	return "/rpc/risk.evals.list"
+}
+
+// GetPolicyEvalRunRiskPath returns the URL path to the risk service getPolicyEvalRun HTTP endpoint.
+func GetPolicyEvalRunRiskPath() string {
+	return "/rpc/risk.evals.get"
+}
+
+// ListPolicyEvalFindingsRiskPath returns the URL path to the risk service listPolicyEvalFindings HTTP endpoint.
+func ListPolicyEvalFindingsRiskPath() string {
+	return "/rpc/risk.evals.findings.list"
+}
+
+// CancelPolicyEvalRunRiskPath returns the URL path to the risk service cancelPolicyEvalRun HTTP endpoint.
+func CancelPolicyEvalRunRiskPath() string {
+	return "/rpc/risk.evals.cancel"
+}

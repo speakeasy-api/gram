@@ -1106,6 +1106,48 @@ type PluginServer struct {
 	Deleted     bool
 }
 
+type PolicyEvalFinding struct {
+	ID              uuid.UUID
+	PolicyEvalRunID uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	ChatMessageID   uuid.UUID
+	Source          string
+	RuleID          pgtype.Text
+	Description     pgtype.Text
+	Match           pgtype.Text
+	StartPos        pgtype.Int4
+	EndPos          pgtype.Int4
+	Confidence      pgtype.Float8
+	Tags            []string
+	Spans           []byte
+	CreatedAt       pgtype.Timestamptz
+}
+
+type PolicyEvalRun struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.NullUUID
+	RiskPolicyVersion pgtype.Int8
+	ConfigSnapshot    []byte
+	SampleDefinition  []byte
+	Status            string
+	RequestedBy       pgtype.Text
+	MessagesScanned   int32
+	FindingsCount     int32
+	TotalCostUsd      float64
+	InputTokens       int64
+	OutputTokens      int64
+	JudgeLatencyP50Ms pgtype.Int4
+	JudgeLatencyP95Ms pgtype.Int4
+	Error             pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	StartedAt         pgtype.Timestamptz
+	CompletedAt       pgtype.Timestamptz
+	ExpiresAt         pgtype.Timestamptz
+}
+
 // RBAC grants. Normalized: one row per (org, principal, scope). Selectors can further constrain applicability.
 type PrincipalGrant struct {
 	ID uuid.UUID

@@ -23904,6 +23904,578 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskDenyPolicyBypassRequest
                 type: mutation
+    /rpc/risk.evals.cancel:
+        post:
+            description: Cancel an in-progress policy eval run.
+            operationId: cancelPolicyEvalRun
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PolicyEvalRun'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: cancelPolicyEvalRun risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.evals
+            x-speakeasy-name-override: cancel
+            x-speakeasy-react-hook:
+                name: RiskCancelPolicyEvalRun
+                type: mutation
+    /rpc/risk.evals.create:
+        post:
+            description: Start a non-enforcing policy eval run over a sample of historical messages. Provide either an existing policy_id or a candidate config (for an unsaved draft).
+            operationId: createPolicyEvalRun
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreatePolicyEvalRunRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PolicyEvalRun'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createPolicyEvalRun risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.evals
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: RiskCreatePolicyEvalRun
+                type: mutation
+    /rpc/risk.evals.findings.list:
+        get:
+            description: List findings produced by a policy eval run, with sample message context.
+            operationId: listPolicyEvalFindings
+            parameters:
+                - allowEmptyValue: true
+                  description: The eval run ID whose findings to list.
+                  in: query
+                  name: run_id
+                  required: true
+                  schema:
+                    description: The eval run ID whose findings to list.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Cursor to fetch the next page of findings.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor to fetch the next page of findings.
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum number of findings to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum number of findings to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListPolicyEvalFindingsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listPolicyEvalFindings risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.evals
+            x-speakeasy-name-override: listFindings
+            x-speakeasy-react-hook:
+                name: RiskListPolicyEvalFindings
+                type: query
+    /rpc/risk.evals.get:
+        get:
+            description: Get a policy eval run by ID, including its rolled-up run statistics.
+            operationId: getPolicyEvalRun
+            parameters:
+                - allowEmptyValue: true
+                  description: The eval run ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The eval run ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PolicyEvalRun'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getPolicyEvalRun risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.evals
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: RiskGetPolicyEvalRun
+                type: query
+    /rpc/risk.evals.list:
+        get:
+            description: List policy eval runs for the current project, newest first.
+            operationId: listPolicyEvalRuns
+            parameters:
+                - allowEmptyValue: true
+                  description: Optional policy ID to filter runs by.
+                  in: query
+                  name: policy_id
+                  schema:
+                    description: Optional policy ID to filter runs by.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Cursor to fetch the next page of runs.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor to fetch the next page of runs.
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum number of runs to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum number of runs to return per page.
+                    format: int64
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListPolicyEvalRunsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listPolicyEvalRuns risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.evals
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: RiskListPolicyEvalRuns
+                type: query
     /rpc/risk.listExclusions:
         get:
             description: List risk exclusions for the current project. Optionally filter to a single policy.
@@ -36312,6 +36884,19 @@ components:
                     description: Optional URL-safe identifier. Auto-generated from name if omitted.
             required:
                 - name
+        CreatePolicyEvalRunRequestBody:
+            type: object
+            properties:
+                candidate:
+                    $ref: '#/components/schemas/PolicyEvalCandidateConfig'
+                policy_id:
+                    type: string
+                    description: The saved policy to evaluate. Omit when supplying a candidate config for a draft.
+                    format: uuid
+                sample:
+                    $ref: '#/components/schemas/PolicyEvalSampleDefinition'
+            required:
+                - sample
         CreatePortalSessionResult:
             type: object
             properties:
@@ -40195,6 +40780,32 @@ components:
                     description: The plugins in the organization.
             required:
                 - plugins
+        ListPolicyEvalFindingsResult:
+            type: object
+            properties:
+                findings:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PolicyEvalFinding'
+                    description: The list of eval findings.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of findings.
+            required:
+                - findings
+        ListPolicyEvalRunsResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of runs.
+                runs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PolicyEvalRun'
+                    description: The list of eval runs.
+            required:
+                - runs
         ListProjectsPayload:
             type: object
             properties:
@@ -42490,6 +43101,234 @@ components:
                 - policy
                 - sort_order
                 - created_at
+        PolicyEvalCandidateConfig:
+            type: object
+            properties:
+                custom_rule_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Custom detection rule ids to attach.
+                disabled_rules:
+                    type: array
+                    items:
+                        type: string
+                    description: Canonical rule_ids to drop.
+                message_types:
+                    type: array
+                    items:
+                        type: string
+                    description: Message types in scope; empty means all.
+                model_config:
+                    $ref: '#/components/schemas/RiskPolicyModelConfig'
+                policy_type:
+                    type: string
+                    description: standard or prompt_based.
+                    enum:
+                        - standard
+                        - prompt_based
+                presidio_entities:
+                    type: array
+                    items:
+                        type: string
+                    description: Presidio entity types to detect.
+                prompt:
+                    type: string
+                    description: 'prompt_based: the guardrail prompt the judge evaluates.'
+                scope_exempt:
+                    type: string
+                    description: CEL exemption predicate.
+                scope_include:
+                    type: string
+                    description: CEL scope predicate.
+                sources:
+                    type: array
+                    items:
+                        type: string
+                    description: Detection sources to enable.
+            required:
+                - policy_type
+        PolicyEvalFinding:
+            type: object
+            properties:
+                chat_id:
+                    type: string
+                    description: The session the message belongs to.
+                    format: uuid
+                chat_message_id:
+                    type: string
+                    description: The scanned message.
+                    format: uuid
+                chat_title:
+                    type: string
+                    description: The session title, when available.
+                chat_user_id:
+                    type: string
+                    description: The session's external user id, when available.
+                confidence:
+                    type: number
+                    description: Confidence in [0,1].
+                    format: double
+                created_at:
+                    type: string
+                    description: When the finding was recorded.
+                    format: date-time
+                description:
+                    type: string
+                    description: Why this was flagged.
+                end_pos:
+                    type: integer
+                    description: Exclusive end offset of the match.
+                    format: int64
+                id:
+                    type: string
+                    description: The finding ID.
+                    format: uuid
+                match:
+                    type: string
+                    description: Matched substring (sensitive; may be redacted).
+                rule_id:
+                    type: string
+                    description: Canonical rule id.
+                run_id:
+                    type: string
+                    description: The eval run that produced this finding.
+                    format: uuid
+                source:
+                    type: string
+                    description: Detection source (e.g. gitleaks, presidio, llm_judge, custom).
+                start_pos:
+                    type: integer
+                    description: Inclusive start offset of the match.
+                    format: int64
+                tags:
+                    type: array
+                    items:
+                        type: string
+                    description: Rule tags.
+            required:
+                - id
+                - run_id
+                - chat_message_id
+                - source
+                - created_at
+        PolicyEvalRun:
+            type: object
+            properties:
+                completed_at:
+                    type: string
+                    description: When the run reached a terminal state.
+                    format: date-time
+                created_at:
+                    type: string
+                    description: When the run was created.
+                    format: date-time
+                error:
+                    type: string
+                    description: Failure reason when status is failed.
+                expires_at:
+                    type: string
+                    description: When the run and its findings are eligible for GC.
+                    format: date-time
+                findings_count:
+                    type: integer
+                    description: Number of findings produced.
+                    format: int64
+                id:
+                    type: string
+                    description: The eval run ID.
+                    format: uuid
+                input_tokens:
+                    type: integer
+                    description: Total judge input tokens.
+                    format: int64
+                judge_latency_p50_ms:
+                    type: integer
+                    description: p50 judge call latency in milliseconds.
+                    format: int64
+                judge_latency_p95_ms:
+                    type: integer
+                    description: p95 judge call latency in milliseconds.
+                    format: int64
+                messages_scanned:
+                    type: integer
+                    description: Number of messages scanned.
+                    format: int64
+                output_tokens:
+                    type: integer
+                    description: Total judge output tokens.
+                    format: int64
+                requested_by:
+                    type: string
+                    description: URN of the principal that started the run.
+                risk_policy_id:
+                    type: string
+                    description: The evaluated saved policy, or null for a draft run.
+                    format: uuid
+                risk_policy_version:
+                    type: integer
+                    description: Pinned policy version for saved runs.
+                    format: int64
+                sample:
+                    $ref: '#/components/schemas/PolicyEvalSampleDefinition'
+                started_at:
+                    type: string
+                    description: When the run started.
+                    format: date-time
+                status:
+                    type: string
+                    description: Run status.
+                    enum:
+                        - pending
+                        - running
+                        - completed
+                        - cancelled
+                        - failed
+                total_cost_usd:
+                    type: number
+                    description: Total judge cost for the run, in USD (0 for deterministic-only policies).
+                    format: double
+            required:
+                - id
+                - status
+                - messages_scanned
+                - findings_count
+                - total_cost_usd
+                - created_at
+        PolicyEvalSampleDefinition:
+            type: object
+            properties:
+                last_n_sessions:
+                    type: integer
+                    description: 'auto mode: cap to the most recent N sessions.'
+                    format: int64
+                    minimum: 1
+                lookback_days:
+                    type: integer
+                    description: 'auto mode: only consider messages created within this many days.'
+                    format: int64
+                    minimum: 1
+                    maximum: 365
+                max_messages:
+                    type: integer
+                    description: Hard cap on the number of messages scanned (bounds run cost).
+                    format: int64
+                    minimum: 1
+                    maximum: 10000
+                message_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: 'manual mode: the explicit, pinned set of chat message ids to scan.'
+                mode:
+                    type: string
+                    description: 'Sampling mode: auto (window/last-N, stratified) or manual (explicit pinned message ids).'
+                    enum:
+                        - auto
+                        - manual
+            required:
+                - mode
+                - max_messages
         Project:
             type: object
             properties:

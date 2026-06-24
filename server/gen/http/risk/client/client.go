@@ -141,6 +141,26 @@ type Client struct {
 	// testDetectionRule endpoint.
 	TestDetectionRuleDoer goahttp.Doer
 
+	// CreatePolicyEvalRun Doer is the HTTP client used to make requests to the
+	// createPolicyEvalRun endpoint.
+	CreatePolicyEvalRunDoer goahttp.Doer
+
+	// ListPolicyEvalRuns Doer is the HTTP client used to make requests to the
+	// listPolicyEvalRuns endpoint.
+	ListPolicyEvalRunsDoer goahttp.Doer
+
+	// GetPolicyEvalRun Doer is the HTTP client used to make requests to the
+	// getPolicyEvalRun endpoint.
+	GetPolicyEvalRunDoer goahttp.Doer
+
+	// ListPolicyEvalFindings Doer is the HTTP client used to make requests to the
+	// listPolicyEvalFindings endpoint.
+	ListPolicyEvalFindingsDoer goahttp.Doer
+
+	// CancelPolicyEvalRun Doer is the HTTP client used to make requests to the
+	// cancelPolicyEvalRun endpoint.
+	CancelPolicyEvalRunDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -192,6 +212,11 @@ func NewClient(
 		DeleteRiskExclusionDoer:            doer,
 		SuggestCustomDetectionRuleDoer:     doer,
 		TestDetectionRuleDoer:              doer,
+		CreatePolicyEvalRunDoer:            doer,
+		ListPolicyEvalRunsDoer:             doer,
+		GetPolicyEvalRunDoer:               doer,
+		ListPolicyEvalFindingsDoer:         doer,
+		CancelPolicyEvalRunDoer:            doer,
 		RestoreResponseBody:                restoreBody,
 		scheme:                             scheme,
 		host:                               host,
@@ -939,6 +964,126 @@ func (c *Client) TestDetectionRule() goa.Endpoint {
 		resp, err := c.TestDetectionRuleDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "testDetectionRule", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreatePolicyEvalRun returns an endpoint that makes HTTP requests to the risk
+// service createPolicyEvalRun server.
+func (c *Client) CreatePolicyEvalRun() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreatePolicyEvalRunRequest(c.encoder)
+		decodeResponse = DecodeCreatePolicyEvalRunResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreatePolicyEvalRunRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreatePolicyEvalRunDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "createPolicyEvalRun", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListPolicyEvalRuns returns an endpoint that makes HTTP requests to the risk
+// service listPolicyEvalRuns server.
+func (c *Client) ListPolicyEvalRuns() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPolicyEvalRunsRequest(c.encoder)
+		decodeResponse = DecodeListPolicyEvalRunsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPolicyEvalRunsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPolicyEvalRunsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listPolicyEvalRuns", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetPolicyEvalRun returns an endpoint that makes HTTP requests to the risk
+// service getPolicyEvalRun server.
+func (c *Client) GetPolicyEvalRun() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetPolicyEvalRunRequest(c.encoder)
+		decodeResponse = DecodeGetPolicyEvalRunResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetPolicyEvalRunRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetPolicyEvalRunDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "getPolicyEvalRun", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListPolicyEvalFindings returns an endpoint that makes HTTP requests to the
+// risk service listPolicyEvalFindings server.
+func (c *Client) ListPolicyEvalFindings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPolicyEvalFindingsRequest(c.encoder)
+		decodeResponse = DecodeListPolicyEvalFindingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPolicyEvalFindingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPolicyEvalFindingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listPolicyEvalFindings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CancelPolicyEvalRun returns an endpoint that makes HTTP requests to the risk
+// service cancelPolicyEvalRun server.
+func (c *Client) CancelPolicyEvalRun() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCancelPolicyEvalRunRequest(c.encoder)
+		decodeResponse = DecodeCancelPolicyEvalRunResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCancelPolicyEvalRunRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CancelPolicyEvalRunDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "cancelPolicyEvalRun", err)
 		}
 		return decodeResponse(resp)
 	}

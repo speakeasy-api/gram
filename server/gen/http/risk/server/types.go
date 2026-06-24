@@ -266,6 +266,26 @@ type TestDetectionRuleRequestBody struct {
 	DetectionExpr *string `form:"detection_expr,omitempty" json:"detection_expr,omitempty" xml:"detection_expr,omitempty"`
 }
 
+// CreatePolicyEvalRunRequestBody is the type of the "risk" service
+// "createPolicyEvalRun" endpoint HTTP request body.
+type CreatePolicyEvalRunRequestBody struct {
+	// The saved policy to evaluate. Omit when supplying a candidate config for a
+	// draft.
+	PolicyID *string `form:"policy_id,omitempty" json:"policy_id,omitempty" xml:"policy_id,omitempty"`
+	// An unsaved candidate policy config to evaluate. Provide instead of policy_id
+	// to dry-run a draft before saving.
+	Candidate *PolicyEvalCandidateConfigRequestBody `form:"candidate,omitempty" json:"candidate,omitempty" xml:"candidate,omitempty"`
+	// How to select the historical messages this run scans.
+	Sample *PolicyEvalSampleDefinitionRequestBody `form:"sample,omitempty" json:"sample,omitempty" xml:"sample,omitempty"`
+}
+
+// CancelPolicyEvalRunRequestBody is the type of the "risk" service
+// "cancelPolicyEvalRun" endpoint HTTP request body.
+type CancelPolicyEvalRunRequestBody struct {
+	// The eval run ID to cancel.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
 // CreateRiskPolicyResponseBody is the type of the "risk" service
 // "createRiskPolicy" endpoint HTTP response body.
 type CreateRiskPolicyResponseBody struct {
@@ -937,6 +957,147 @@ type TestDetectionRuleResponseBody struct {
 	Supported bool `form:"supported" json:"supported" xml:"supported"`
 	// Why the rule isn't supported when `supported` is false.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
+// CreatePolicyEvalRunResponseBody is the type of the "risk" service
+// "createPolicyEvalRun" endpoint HTTP response body.
+type CreatePolicyEvalRunResponseBody struct {
+	// The eval run ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The evaluated saved policy, or null for a draft run.
+	RiskPolicyID *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	// Pinned policy version for saved runs.
+	RiskPolicyVersion *int64 `form:"risk_policy_version,omitempty" json:"risk_policy_version,omitempty" xml:"risk_policy_version,omitempty"`
+	// Run status.
+	Status string `form:"status" json:"status" xml:"status"`
+	// The resolved sample definition.
+	Sample *PolicyEvalSampleDefinitionResponseBody `form:"sample,omitempty" json:"sample,omitempty" xml:"sample,omitempty"`
+	// URN of the principal that started the run.
+	RequestedBy *string `form:"requested_by,omitempty" json:"requested_by,omitempty" xml:"requested_by,omitempty"`
+	// Number of messages scanned.
+	MessagesScanned int64 `form:"messages_scanned" json:"messages_scanned" xml:"messages_scanned"`
+	// Number of findings produced.
+	FindingsCount int64 `form:"findings_count" json:"findings_count" xml:"findings_count"`
+	// Total judge cost for the run, in USD (0 for deterministic-only policies).
+	TotalCostUsd float64 `form:"total_cost_usd" json:"total_cost_usd" xml:"total_cost_usd"`
+	// Total judge input tokens.
+	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
+	// Total judge output tokens.
+	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
+	// p50 judge call latency in milliseconds.
+	JudgeLatencyP50Ms *int `form:"judge_latency_p50_ms,omitempty" json:"judge_latency_p50_ms,omitempty" xml:"judge_latency_p50_ms,omitempty"`
+	// p95 judge call latency in milliseconds.
+	JudgeLatencyP95Ms *int `form:"judge_latency_p95_ms,omitempty" json:"judge_latency_p95_ms,omitempty" xml:"judge_latency_p95_ms,omitempty"`
+	// Failure reason when status is failed.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// When the run was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the run started.
+	StartedAt *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+	// When the run reached a terminal state.
+	CompletedAt *string `form:"completed_at,omitempty" json:"completed_at,omitempty" xml:"completed_at,omitempty"`
+	// When the run and its findings are eligible for GC.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+}
+
+// ListPolicyEvalRunsResponseBody is the type of the "risk" service
+// "listPolicyEvalRuns" endpoint HTTP response body.
+type ListPolicyEvalRunsResponseBody struct {
+	// The list of eval runs.
+	Runs []*PolicyEvalRunResponseBody `form:"runs" json:"runs" xml:"runs"`
+	// Cursor for the next page of runs.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetPolicyEvalRunResponseBody is the type of the "risk" service
+// "getPolicyEvalRun" endpoint HTTP response body.
+type GetPolicyEvalRunResponseBody struct {
+	// The eval run ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The evaluated saved policy, or null for a draft run.
+	RiskPolicyID *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	// Pinned policy version for saved runs.
+	RiskPolicyVersion *int64 `form:"risk_policy_version,omitempty" json:"risk_policy_version,omitempty" xml:"risk_policy_version,omitempty"`
+	// Run status.
+	Status string `form:"status" json:"status" xml:"status"`
+	// The resolved sample definition.
+	Sample *PolicyEvalSampleDefinitionResponseBody `form:"sample,omitempty" json:"sample,omitempty" xml:"sample,omitempty"`
+	// URN of the principal that started the run.
+	RequestedBy *string `form:"requested_by,omitempty" json:"requested_by,omitempty" xml:"requested_by,omitempty"`
+	// Number of messages scanned.
+	MessagesScanned int64 `form:"messages_scanned" json:"messages_scanned" xml:"messages_scanned"`
+	// Number of findings produced.
+	FindingsCount int64 `form:"findings_count" json:"findings_count" xml:"findings_count"`
+	// Total judge cost for the run, in USD (0 for deterministic-only policies).
+	TotalCostUsd float64 `form:"total_cost_usd" json:"total_cost_usd" xml:"total_cost_usd"`
+	// Total judge input tokens.
+	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
+	// Total judge output tokens.
+	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
+	// p50 judge call latency in milliseconds.
+	JudgeLatencyP50Ms *int `form:"judge_latency_p50_ms,omitempty" json:"judge_latency_p50_ms,omitempty" xml:"judge_latency_p50_ms,omitempty"`
+	// p95 judge call latency in milliseconds.
+	JudgeLatencyP95Ms *int `form:"judge_latency_p95_ms,omitempty" json:"judge_latency_p95_ms,omitempty" xml:"judge_latency_p95_ms,omitempty"`
+	// Failure reason when status is failed.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// When the run was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the run started.
+	StartedAt *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+	// When the run reached a terminal state.
+	CompletedAt *string `form:"completed_at,omitempty" json:"completed_at,omitempty" xml:"completed_at,omitempty"`
+	// When the run and its findings are eligible for GC.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+}
+
+// ListPolicyEvalFindingsResponseBody is the type of the "risk" service
+// "listPolicyEvalFindings" endpoint HTTP response body.
+type ListPolicyEvalFindingsResponseBody struct {
+	// The list of eval findings.
+	Findings []*PolicyEvalFindingResponseBody `form:"findings" json:"findings" xml:"findings"`
+	// Cursor for the next page of findings.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// CancelPolicyEvalRunResponseBody is the type of the "risk" service
+// "cancelPolicyEvalRun" endpoint HTTP response body.
+type CancelPolicyEvalRunResponseBody struct {
+	// The eval run ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The evaluated saved policy, or null for a draft run.
+	RiskPolicyID *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	// Pinned policy version for saved runs.
+	RiskPolicyVersion *int64 `form:"risk_policy_version,omitempty" json:"risk_policy_version,omitempty" xml:"risk_policy_version,omitempty"`
+	// Run status.
+	Status string `form:"status" json:"status" xml:"status"`
+	// The resolved sample definition.
+	Sample *PolicyEvalSampleDefinitionResponseBody `form:"sample,omitempty" json:"sample,omitempty" xml:"sample,omitempty"`
+	// URN of the principal that started the run.
+	RequestedBy *string `form:"requested_by,omitempty" json:"requested_by,omitempty" xml:"requested_by,omitempty"`
+	// Number of messages scanned.
+	MessagesScanned int64 `form:"messages_scanned" json:"messages_scanned" xml:"messages_scanned"`
+	// Number of findings produced.
+	FindingsCount int64 `form:"findings_count" json:"findings_count" xml:"findings_count"`
+	// Total judge cost for the run, in USD (0 for deterministic-only policies).
+	TotalCostUsd float64 `form:"total_cost_usd" json:"total_cost_usd" xml:"total_cost_usd"`
+	// Total judge input tokens.
+	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
+	// Total judge output tokens.
+	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
+	// p50 judge call latency in milliseconds.
+	JudgeLatencyP50Ms *int `form:"judge_latency_p50_ms,omitempty" json:"judge_latency_p50_ms,omitempty" xml:"judge_latency_p50_ms,omitempty"`
+	// p95 judge call latency in milliseconds.
+	JudgeLatencyP95Ms *int `form:"judge_latency_p95_ms,omitempty" json:"judge_latency_p95_ms,omitempty" xml:"judge_latency_p95_ms,omitempty"`
+	// Failure reason when status is failed.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// When the run was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the run started.
+	StartedAt *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+	// When the run reached a terminal state.
+	CompletedAt *string `form:"completed_at,omitempty" json:"completed_at,omitempty" xml:"completed_at,omitempty"`
+	// When the run and its findings are eligible for GC.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
 // CreateRiskPolicyUnauthorizedResponseBody is the type of the "risk" service
@@ -6709,6 +6870,931 @@ type TestDetectionRuleGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreatePolicyEvalRunUnauthorizedResponseBody is the type of the "risk"
+// service "createPolicyEvalRun" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreatePolicyEvalRunUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePolicyEvalRunForbiddenResponseBody is the type of the "risk" service
+// "createPolicyEvalRun" endpoint HTTP response body for the "forbidden" error.
+type CreatePolicyEvalRunForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePolicyEvalRunBadRequestResponseBody is the type of the "risk" service
+// "createPolicyEvalRun" endpoint HTTP response body for the "bad_request"
+// error.
+type CreatePolicyEvalRunBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePolicyEvalRunNotFoundResponseBody is the type of the "risk" service
+// "createPolicyEvalRun" endpoint HTTP response body for the "not_found" error.
+type CreatePolicyEvalRunNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePolicyEvalRunConflictResponseBody is the type of the "risk" service
+// "createPolicyEvalRun" endpoint HTTP response body for the "conflict" error.
+type CreatePolicyEvalRunConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePolicyEvalRunUnsupportedMediaResponseBody is the type of the "risk"
+// service "createPolicyEvalRun" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreatePolicyEvalRunUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePolicyEvalRunInvalidResponseBody is the type of the "risk" service
+// "createPolicyEvalRun" endpoint HTTP response body for the "invalid" error.
+type CreatePolicyEvalRunInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePolicyEvalRunInvariantViolationResponseBody is the type of the "risk"
+// service "createPolicyEvalRun" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreatePolicyEvalRunInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePolicyEvalRunUnexpectedResponseBody is the type of the "risk" service
+// "createPolicyEvalRun" endpoint HTTP response body for the "unexpected" error.
+type CreatePolicyEvalRunUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreatePolicyEvalRunGatewayErrorResponseBody is the type of the "risk"
+// service "createPolicyEvalRun" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreatePolicyEvalRunGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalRunsUnauthorizedResponseBody is the type of the "risk" service
+// "listPolicyEvalRuns" endpoint HTTP response body for the "unauthorized"
+// error.
+type ListPolicyEvalRunsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalRunsForbiddenResponseBody is the type of the "risk" service
+// "listPolicyEvalRuns" endpoint HTTP response body for the "forbidden" error.
+type ListPolicyEvalRunsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalRunsBadRequestResponseBody is the type of the "risk" service
+// "listPolicyEvalRuns" endpoint HTTP response body for the "bad_request" error.
+type ListPolicyEvalRunsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalRunsNotFoundResponseBody is the type of the "risk" service
+// "listPolicyEvalRuns" endpoint HTTP response body for the "not_found" error.
+type ListPolicyEvalRunsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalRunsConflictResponseBody is the type of the "risk" service
+// "listPolicyEvalRuns" endpoint HTTP response body for the "conflict" error.
+type ListPolicyEvalRunsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalRunsUnsupportedMediaResponseBody is the type of the "risk"
+// service "listPolicyEvalRuns" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListPolicyEvalRunsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalRunsInvalidResponseBody is the type of the "risk" service
+// "listPolicyEvalRuns" endpoint HTTP response body for the "invalid" error.
+type ListPolicyEvalRunsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalRunsInvariantViolationResponseBody is the type of the "risk"
+// service "listPolicyEvalRuns" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListPolicyEvalRunsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalRunsUnexpectedResponseBody is the type of the "risk" service
+// "listPolicyEvalRuns" endpoint HTTP response body for the "unexpected" error.
+type ListPolicyEvalRunsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalRunsGatewayErrorResponseBody is the type of the "risk" service
+// "listPolicyEvalRuns" endpoint HTTP response body for the "gateway_error"
+// error.
+type ListPolicyEvalRunsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPolicyEvalRunUnauthorizedResponseBody is the type of the "risk" service
+// "getPolicyEvalRun" endpoint HTTP response body for the "unauthorized" error.
+type GetPolicyEvalRunUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPolicyEvalRunForbiddenResponseBody is the type of the "risk" service
+// "getPolicyEvalRun" endpoint HTTP response body for the "forbidden" error.
+type GetPolicyEvalRunForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPolicyEvalRunBadRequestResponseBody is the type of the "risk" service
+// "getPolicyEvalRun" endpoint HTTP response body for the "bad_request" error.
+type GetPolicyEvalRunBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPolicyEvalRunNotFoundResponseBody is the type of the "risk" service
+// "getPolicyEvalRun" endpoint HTTP response body for the "not_found" error.
+type GetPolicyEvalRunNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPolicyEvalRunConflictResponseBody is the type of the "risk" service
+// "getPolicyEvalRun" endpoint HTTP response body for the "conflict" error.
+type GetPolicyEvalRunConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPolicyEvalRunUnsupportedMediaResponseBody is the type of the "risk"
+// service "getPolicyEvalRun" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetPolicyEvalRunUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPolicyEvalRunInvalidResponseBody is the type of the "risk" service
+// "getPolicyEvalRun" endpoint HTTP response body for the "invalid" error.
+type GetPolicyEvalRunInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPolicyEvalRunInvariantViolationResponseBody is the type of the "risk"
+// service "getPolicyEvalRun" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetPolicyEvalRunInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPolicyEvalRunUnexpectedResponseBody is the type of the "risk" service
+// "getPolicyEvalRun" endpoint HTTP response body for the "unexpected" error.
+type GetPolicyEvalRunUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetPolicyEvalRunGatewayErrorResponseBody is the type of the "risk" service
+// "getPolicyEvalRun" endpoint HTTP response body for the "gateway_error" error.
+type GetPolicyEvalRunGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalFindingsUnauthorizedResponseBody is the type of the "risk"
+// service "listPolicyEvalFindings" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListPolicyEvalFindingsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalFindingsForbiddenResponseBody is the type of the "risk"
+// service "listPolicyEvalFindings" endpoint HTTP response body for the
+// "forbidden" error.
+type ListPolicyEvalFindingsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalFindingsBadRequestResponseBody is the type of the "risk"
+// service "listPolicyEvalFindings" endpoint HTTP response body for the
+// "bad_request" error.
+type ListPolicyEvalFindingsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalFindingsNotFoundResponseBody is the type of the "risk" service
+// "listPolicyEvalFindings" endpoint HTTP response body for the "not_found"
+// error.
+type ListPolicyEvalFindingsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalFindingsConflictResponseBody is the type of the "risk" service
+// "listPolicyEvalFindings" endpoint HTTP response body for the "conflict"
+// error.
+type ListPolicyEvalFindingsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalFindingsUnsupportedMediaResponseBody is the type of the "risk"
+// service "listPolicyEvalFindings" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListPolicyEvalFindingsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalFindingsInvalidResponseBody is the type of the "risk" service
+// "listPolicyEvalFindings" endpoint HTTP response body for the "invalid" error.
+type ListPolicyEvalFindingsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalFindingsInvariantViolationResponseBody is the type of the
+// "risk" service "listPolicyEvalFindings" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListPolicyEvalFindingsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalFindingsUnexpectedResponseBody is the type of the "risk"
+// service "listPolicyEvalFindings" endpoint HTTP response body for the
+// "unexpected" error.
+type ListPolicyEvalFindingsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPolicyEvalFindingsGatewayErrorResponseBody is the type of the "risk"
+// service "listPolicyEvalFindings" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListPolicyEvalFindingsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelPolicyEvalRunUnauthorizedResponseBody is the type of the "risk"
+// service "cancelPolicyEvalRun" endpoint HTTP response body for the
+// "unauthorized" error.
+type CancelPolicyEvalRunUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelPolicyEvalRunForbiddenResponseBody is the type of the "risk" service
+// "cancelPolicyEvalRun" endpoint HTTP response body for the "forbidden" error.
+type CancelPolicyEvalRunForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelPolicyEvalRunBadRequestResponseBody is the type of the "risk" service
+// "cancelPolicyEvalRun" endpoint HTTP response body for the "bad_request"
+// error.
+type CancelPolicyEvalRunBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelPolicyEvalRunNotFoundResponseBody is the type of the "risk" service
+// "cancelPolicyEvalRun" endpoint HTTP response body for the "not_found" error.
+type CancelPolicyEvalRunNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelPolicyEvalRunConflictResponseBody is the type of the "risk" service
+// "cancelPolicyEvalRun" endpoint HTTP response body for the "conflict" error.
+type CancelPolicyEvalRunConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelPolicyEvalRunUnsupportedMediaResponseBody is the type of the "risk"
+// service "cancelPolicyEvalRun" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CancelPolicyEvalRunUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelPolicyEvalRunInvalidResponseBody is the type of the "risk" service
+// "cancelPolicyEvalRun" endpoint HTTP response body for the "invalid" error.
+type CancelPolicyEvalRunInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelPolicyEvalRunInvariantViolationResponseBody is the type of the "risk"
+// service "cancelPolicyEvalRun" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CancelPolicyEvalRunInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelPolicyEvalRunUnexpectedResponseBody is the type of the "risk" service
+// "cancelPolicyEvalRun" endpoint HTTP response body for the "unexpected" error.
+type CancelPolicyEvalRunUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelPolicyEvalRunGatewayErrorResponseBody is the type of the "risk"
+// service "cancelPolicyEvalRun" endpoint HTTP response body for the
+// "gateway_error" error.
+type CancelPolicyEvalRunGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RiskPolicyModelConfigResponseBody is used to define fields on response body
 // types.
 type RiskPolicyModelConfigResponseBody struct {
@@ -7101,6 +8187,97 @@ type TestDetectionRuleMatchResponseBody struct {
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 }
 
+// PolicyEvalSampleDefinitionResponseBody is used to define fields on response
+// body types.
+type PolicyEvalSampleDefinitionResponseBody struct {
+	// Sampling mode: auto (window/last-N, stratified) or manual (explicit pinned
+	// message ids).
+	Mode string `form:"mode" json:"mode" xml:"mode"`
+	// auto mode: only consider messages created within this many days.
+	LookbackDays *int `form:"lookback_days,omitempty" json:"lookback_days,omitempty" xml:"lookback_days,omitempty"`
+	// auto mode: cap to the most recent N sessions.
+	LastNSessions *int `form:"last_n_sessions,omitempty" json:"last_n_sessions,omitempty" xml:"last_n_sessions,omitempty"`
+	// Hard cap on the number of messages scanned (bounds run cost).
+	MaxMessages int `form:"max_messages" json:"max_messages" xml:"max_messages"`
+	// manual mode: the explicit, pinned set of chat message ids to scan.
+	MessageIds []string `form:"message_ids,omitempty" json:"message_ids,omitempty" xml:"message_ids,omitempty"`
+}
+
+// PolicyEvalRunResponseBody is used to define fields on response body types.
+type PolicyEvalRunResponseBody struct {
+	// The eval run ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The evaluated saved policy, or null for a draft run.
+	RiskPolicyID *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	// Pinned policy version for saved runs.
+	RiskPolicyVersion *int64 `form:"risk_policy_version,omitempty" json:"risk_policy_version,omitempty" xml:"risk_policy_version,omitempty"`
+	// Run status.
+	Status string `form:"status" json:"status" xml:"status"`
+	// The resolved sample definition.
+	Sample *PolicyEvalSampleDefinitionResponseBody `form:"sample,omitempty" json:"sample,omitempty" xml:"sample,omitempty"`
+	// URN of the principal that started the run.
+	RequestedBy *string `form:"requested_by,omitempty" json:"requested_by,omitempty" xml:"requested_by,omitempty"`
+	// Number of messages scanned.
+	MessagesScanned int64 `form:"messages_scanned" json:"messages_scanned" xml:"messages_scanned"`
+	// Number of findings produced.
+	FindingsCount int64 `form:"findings_count" json:"findings_count" xml:"findings_count"`
+	// Total judge cost for the run, in USD (0 for deterministic-only policies).
+	TotalCostUsd float64 `form:"total_cost_usd" json:"total_cost_usd" xml:"total_cost_usd"`
+	// Total judge input tokens.
+	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
+	// Total judge output tokens.
+	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
+	// p50 judge call latency in milliseconds.
+	JudgeLatencyP50Ms *int `form:"judge_latency_p50_ms,omitempty" json:"judge_latency_p50_ms,omitempty" xml:"judge_latency_p50_ms,omitempty"`
+	// p95 judge call latency in milliseconds.
+	JudgeLatencyP95Ms *int `form:"judge_latency_p95_ms,omitempty" json:"judge_latency_p95_ms,omitempty" xml:"judge_latency_p95_ms,omitempty"`
+	// Failure reason when status is failed.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// When the run was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the run started.
+	StartedAt *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+	// When the run reached a terminal state.
+	CompletedAt *string `form:"completed_at,omitempty" json:"completed_at,omitempty" xml:"completed_at,omitempty"`
+	// When the run and its findings are eligible for GC.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+}
+
+// PolicyEvalFindingResponseBody is used to define fields on response body
+// types.
+type PolicyEvalFindingResponseBody struct {
+	// The finding ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The eval run that produced this finding.
+	RunID string `form:"run_id" json:"run_id" xml:"run_id"`
+	// The scanned message.
+	ChatMessageID string `form:"chat_message_id" json:"chat_message_id" xml:"chat_message_id"`
+	// Detection source (e.g. gitleaks, presidio, llm_judge, custom).
+	Source string `form:"source" json:"source" xml:"source"`
+	// Canonical rule id.
+	RuleID *string `form:"rule_id,omitempty" json:"rule_id,omitempty" xml:"rule_id,omitempty"`
+	// Why this was flagged.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Matched substring (sensitive; may be redacted).
+	Match *string `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`
+	// Inclusive start offset of the match.
+	StartPos *int `form:"start_pos,omitempty" json:"start_pos,omitempty" xml:"start_pos,omitempty"`
+	// Exclusive end offset of the match.
+	EndPos *int `form:"end_pos,omitempty" json:"end_pos,omitempty" xml:"end_pos,omitempty"`
+	// Confidence in [0,1].
+	Confidence *float64 `form:"confidence,omitempty" json:"confidence,omitempty" xml:"confidence,omitempty"`
+	// Rule tags.
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	// When the finding was recorded.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The session the message belongs to.
+	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
+	// The session title, when available.
+	ChatTitle *string `form:"chat_title,omitempty" json:"chat_title,omitempty" xml:"chat_title,omitempty"`
+	// The session's external user id, when available.
+	ChatUserID *string `form:"chat_user_id,omitempty" json:"chat_user_id,omitempty" xml:"chat_user_id,omitempty"`
+}
+
 // RiskPolicyModelConfigRequestBody is used to define fields on request body
 // types.
 type RiskPolicyModelConfigRequestBody struct {
@@ -7113,6 +8290,47 @@ type RiskPolicyModelConfigRequestBody struct {
 	// When the judge errors or times out: true allows the message (fail-open),
 	// false blocks it (fail-closed). Defaults to fail-open.
 	FailOpen *bool `form:"fail_open,omitempty" json:"fail_open,omitempty" xml:"fail_open,omitempty"`
+}
+
+// PolicyEvalCandidateConfigRequestBody is used to define fields on request
+// body types.
+type PolicyEvalCandidateConfigRequestBody struct {
+	// standard or prompt_based.
+	PolicyType *string `form:"policy_type,omitempty" json:"policy_type,omitempty" xml:"policy_type,omitempty"`
+	// Detection sources to enable.
+	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
+	// Presidio entity types to detect.
+	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Canonical rule_ids to drop.
+	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
+	// Custom detection rule ids to attach.
+	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
+	// Message types in scope; empty means all.
+	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// CEL scope predicate.
+	ScopeInclude *string `form:"scope_include,omitempty" json:"scope_include,omitempty" xml:"scope_include,omitempty"`
+	// CEL exemption predicate.
+	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
+	// prompt_based: the guardrail prompt the judge evaluates.
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// prompt_based: per-policy judge model configuration.
+	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
+}
+
+// PolicyEvalSampleDefinitionRequestBody is used to define fields on request
+// body types.
+type PolicyEvalSampleDefinitionRequestBody struct {
+	// Sampling mode: auto (window/last-N, stratified) or manual (explicit pinned
+	// message ids).
+	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
+	// auto mode: only consider messages created within this many days.
+	LookbackDays *int `form:"lookback_days,omitempty" json:"lookback_days,omitempty" xml:"lookback_days,omitempty"`
+	// auto mode: cap to the most recent N sessions.
+	LastNSessions *int `form:"last_n_sessions,omitempty" json:"last_n_sessions,omitempty" xml:"last_n_sessions,omitempty"`
+	// Hard cap on the number of messages scanned (bounds run cost).
+	MaxMessages *int `form:"max_messages,omitempty" json:"max_messages,omitempty" xml:"max_messages,omitempty"`
+	// manual mode: the explicit, pinned set of chat message ids to scan.
+	MessageIds []string `form:"message_ids,omitempty" json:"message_ids,omitempty" xml:"message_ids,omitempty"`
 }
 
 // NewCreateRiskPolicyResponseBody builds the HTTP response body from the
@@ -7917,6 +9135,132 @@ func NewTestDetectionRuleResponseBody(res *risk.TestDetectionRuleResult) *TestDe
 		}
 	} else {
 		body.Matches = []*TestDetectionRuleMatchResponseBody{}
+	}
+	return body
+}
+
+// NewCreatePolicyEvalRunResponseBody builds the HTTP response body from the
+// result of the "createPolicyEvalRun" endpoint of the "risk" service.
+func NewCreatePolicyEvalRunResponseBody(res *risk.PolicyEvalRun) *CreatePolicyEvalRunResponseBody {
+	body := &CreatePolicyEvalRunResponseBody{
+		ID:                res.ID,
+		RiskPolicyID:      res.RiskPolicyID,
+		RiskPolicyVersion: res.RiskPolicyVersion,
+		Status:            res.Status,
+		RequestedBy:       res.RequestedBy,
+		MessagesScanned:   res.MessagesScanned,
+		FindingsCount:     res.FindingsCount,
+		TotalCostUsd:      res.TotalCostUsd,
+		InputTokens:       res.InputTokens,
+		OutputTokens:      res.OutputTokens,
+		JudgeLatencyP50Ms: res.JudgeLatencyP50Ms,
+		JudgeLatencyP95Ms: res.JudgeLatencyP95Ms,
+		Error:             res.Error,
+		CreatedAt:         res.CreatedAt,
+		StartedAt:         res.StartedAt,
+		CompletedAt:       res.CompletedAt,
+		ExpiresAt:         res.ExpiresAt,
+	}
+	if res.Sample != nil {
+		body.Sample = marshalRiskPolicyEvalSampleDefinitionToPolicyEvalSampleDefinitionResponseBody(res.Sample)
+	}
+	return body
+}
+
+// NewListPolicyEvalRunsResponseBody builds the HTTP response body from the
+// result of the "listPolicyEvalRuns" endpoint of the "risk" service.
+func NewListPolicyEvalRunsResponseBody(res *risk.ListPolicyEvalRunsResult) *ListPolicyEvalRunsResponseBody {
+	body := &ListPolicyEvalRunsResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Runs != nil {
+		body.Runs = make([]*PolicyEvalRunResponseBody, len(res.Runs))
+		for i, val := range res.Runs {
+			if val == nil {
+				body.Runs[i] = nil
+				continue
+			}
+			body.Runs[i] = marshalRiskPolicyEvalRunToPolicyEvalRunResponseBody(val)
+		}
+	} else {
+		body.Runs = []*PolicyEvalRunResponseBody{}
+	}
+	return body
+}
+
+// NewGetPolicyEvalRunResponseBody builds the HTTP response body from the
+// result of the "getPolicyEvalRun" endpoint of the "risk" service.
+func NewGetPolicyEvalRunResponseBody(res *risk.PolicyEvalRun) *GetPolicyEvalRunResponseBody {
+	body := &GetPolicyEvalRunResponseBody{
+		ID:                res.ID,
+		RiskPolicyID:      res.RiskPolicyID,
+		RiskPolicyVersion: res.RiskPolicyVersion,
+		Status:            res.Status,
+		RequestedBy:       res.RequestedBy,
+		MessagesScanned:   res.MessagesScanned,
+		FindingsCount:     res.FindingsCount,
+		TotalCostUsd:      res.TotalCostUsd,
+		InputTokens:       res.InputTokens,
+		OutputTokens:      res.OutputTokens,
+		JudgeLatencyP50Ms: res.JudgeLatencyP50Ms,
+		JudgeLatencyP95Ms: res.JudgeLatencyP95Ms,
+		Error:             res.Error,
+		CreatedAt:         res.CreatedAt,
+		StartedAt:         res.StartedAt,
+		CompletedAt:       res.CompletedAt,
+		ExpiresAt:         res.ExpiresAt,
+	}
+	if res.Sample != nil {
+		body.Sample = marshalRiskPolicyEvalSampleDefinitionToPolicyEvalSampleDefinitionResponseBody(res.Sample)
+	}
+	return body
+}
+
+// NewListPolicyEvalFindingsResponseBody builds the HTTP response body from the
+// result of the "listPolicyEvalFindings" endpoint of the "risk" service.
+func NewListPolicyEvalFindingsResponseBody(res *risk.ListPolicyEvalFindingsResult) *ListPolicyEvalFindingsResponseBody {
+	body := &ListPolicyEvalFindingsResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Findings != nil {
+		body.Findings = make([]*PolicyEvalFindingResponseBody, len(res.Findings))
+		for i, val := range res.Findings {
+			if val == nil {
+				body.Findings[i] = nil
+				continue
+			}
+			body.Findings[i] = marshalRiskPolicyEvalFindingToPolicyEvalFindingResponseBody(val)
+		}
+	} else {
+		body.Findings = []*PolicyEvalFindingResponseBody{}
+	}
+	return body
+}
+
+// NewCancelPolicyEvalRunResponseBody builds the HTTP response body from the
+// result of the "cancelPolicyEvalRun" endpoint of the "risk" service.
+func NewCancelPolicyEvalRunResponseBody(res *risk.PolicyEvalRun) *CancelPolicyEvalRunResponseBody {
+	body := &CancelPolicyEvalRunResponseBody{
+		ID:                res.ID,
+		RiskPolicyID:      res.RiskPolicyID,
+		RiskPolicyVersion: res.RiskPolicyVersion,
+		Status:            res.Status,
+		RequestedBy:       res.RequestedBy,
+		MessagesScanned:   res.MessagesScanned,
+		FindingsCount:     res.FindingsCount,
+		TotalCostUsd:      res.TotalCostUsd,
+		InputTokens:       res.InputTokens,
+		OutputTokens:      res.OutputTokens,
+		JudgeLatencyP50Ms: res.JudgeLatencyP50Ms,
+		JudgeLatencyP95Ms: res.JudgeLatencyP95Ms,
+		Error:             res.Error,
+		CreatedAt:         res.CreatedAt,
+		StartedAt:         res.StartedAt,
+		CompletedAt:       res.CompletedAt,
+		ExpiresAt:         res.ExpiresAt,
+	}
+	if res.Sample != nil {
+		body.Sample = marshalRiskPolicyEvalSampleDefinitionToPolicyEvalSampleDefinitionResponseBody(res.Sample)
 	}
 	return body
 }
@@ -12423,6 +13767,724 @@ func NewTestDetectionRuleGatewayErrorResponseBody(res *goa.ServiceError) *TestDe
 	return body
 }
 
+// NewCreatePolicyEvalRunUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createPolicyEvalRun" endpoint of the "risk" service.
+func NewCreatePolicyEvalRunUnauthorizedResponseBody(res *goa.ServiceError) *CreatePolicyEvalRunUnauthorizedResponseBody {
+	body := &CreatePolicyEvalRunUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePolicyEvalRunForbiddenResponseBody builds the HTTP response body
+// from the result of the "createPolicyEvalRun" endpoint of the "risk" service.
+func NewCreatePolicyEvalRunForbiddenResponseBody(res *goa.ServiceError) *CreatePolicyEvalRunForbiddenResponseBody {
+	body := &CreatePolicyEvalRunForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePolicyEvalRunBadRequestResponseBody builds the HTTP response body
+// from the result of the "createPolicyEvalRun" endpoint of the "risk" service.
+func NewCreatePolicyEvalRunBadRequestResponseBody(res *goa.ServiceError) *CreatePolicyEvalRunBadRequestResponseBody {
+	body := &CreatePolicyEvalRunBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePolicyEvalRunNotFoundResponseBody builds the HTTP response body
+// from the result of the "createPolicyEvalRun" endpoint of the "risk" service.
+func NewCreatePolicyEvalRunNotFoundResponseBody(res *goa.ServiceError) *CreatePolicyEvalRunNotFoundResponseBody {
+	body := &CreatePolicyEvalRunNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePolicyEvalRunConflictResponseBody builds the HTTP response body
+// from the result of the "createPolicyEvalRun" endpoint of the "risk" service.
+func NewCreatePolicyEvalRunConflictResponseBody(res *goa.ServiceError) *CreatePolicyEvalRunConflictResponseBody {
+	body := &CreatePolicyEvalRunConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePolicyEvalRunUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createPolicyEvalRun" endpoint of the "risk"
+// service.
+func NewCreatePolicyEvalRunUnsupportedMediaResponseBody(res *goa.ServiceError) *CreatePolicyEvalRunUnsupportedMediaResponseBody {
+	body := &CreatePolicyEvalRunUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePolicyEvalRunInvalidResponseBody builds the HTTP response body from
+// the result of the "createPolicyEvalRun" endpoint of the "risk" service.
+func NewCreatePolicyEvalRunInvalidResponseBody(res *goa.ServiceError) *CreatePolicyEvalRunInvalidResponseBody {
+	body := &CreatePolicyEvalRunInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePolicyEvalRunInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createPolicyEvalRun" endpoint of the
+// "risk" service.
+func NewCreatePolicyEvalRunInvariantViolationResponseBody(res *goa.ServiceError) *CreatePolicyEvalRunInvariantViolationResponseBody {
+	body := &CreatePolicyEvalRunInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePolicyEvalRunUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createPolicyEvalRun" endpoint of the "risk" service.
+func NewCreatePolicyEvalRunUnexpectedResponseBody(res *goa.ServiceError) *CreatePolicyEvalRunUnexpectedResponseBody {
+	body := &CreatePolicyEvalRunUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreatePolicyEvalRunGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createPolicyEvalRun" endpoint of the "risk" service.
+func NewCreatePolicyEvalRunGatewayErrorResponseBody(res *goa.ServiceError) *CreatePolicyEvalRunGatewayErrorResponseBody {
+	body := &CreatePolicyEvalRunGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalRunsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listPolicyEvalRuns" endpoint of the "risk" service.
+func NewListPolicyEvalRunsUnauthorizedResponseBody(res *goa.ServiceError) *ListPolicyEvalRunsUnauthorizedResponseBody {
+	body := &ListPolicyEvalRunsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalRunsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listPolicyEvalRuns" endpoint of the "risk" service.
+func NewListPolicyEvalRunsForbiddenResponseBody(res *goa.ServiceError) *ListPolicyEvalRunsForbiddenResponseBody {
+	body := &ListPolicyEvalRunsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalRunsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listPolicyEvalRuns" endpoint of the "risk" service.
+func NewListPolicyEvalRunsBadRequestResponseBody(res *goa.ServiceError) *ListPolicyEvalRunsBadRequestResponseBody {
+	body := &ListPolicyEvalRunsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalRunsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listPolicyEvalRuns" endpoint of the "risk" service.
+func NewListPolicyEvalRunsNotFoundResponseBody(res *goa.ServiceError) *ListPolicyEvalRunsNotFoundResponseBody {
+	body := &ListPolicyEvalRunsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalRunsConflictResponseBody builds the HTTP response body from
+// the result of the "listPolicyEvalRuns" endpoint of the "risk" service.
+func NewListPolicyEvalRunsConflictResponseBody(res *goa.ServiceError) *ListPolicyEvalRunsConflictResponseBody {
+	body := &ListPolicyEvalRunsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalRunsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listPolicyEvalRuns" endpoint of the "risk"
+// service.
+func NewListPolicyEvalRunsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListPolicyEvalRunsUnsupportedMediaResponseBody {
+	body := &ListPolicyEvalRunsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalRunsInvalidResponseBody builds the HTTP response body from
+// the result of the "listPolicyEvalRuns" endpoint of the "risk" service.
+func NewListPolicyEvalRunsInvalidResponseBody(res *goa.ServiceError) *ListPolicyEvalRunsInvalidResponseBody {
+	body := &ListPolicyEvalRunsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalRunsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listPolicyEvalRuns" endpoint of the "risk"
+// service.
+func NewListPolicyEvalRunsInvariantViolationResponseBody(res *goa.ServiceError) *ListPolicyEvalRunsInvariantViolationResponseBody {
+	body := &ListPolicyEvalRunsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalRunsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listPolicyEvalRuns" endpoint of the "risk" service.
+func NewListPolicyEvalRunsUnexpectedResponseBody(res *goa.ServiceError) *ListPolicyEvalRunsUnexpectedResponseBody {
+	body := &ListPolicyEvalRunsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalRunsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listPolicyEvalRuns" endpoint of the "risk" service.
+func NewListPolicyEvalRunsGatewayErrorResponseBody(res *goa.ServiceError) *ListPolicyEvalRunsGatewayErrorResponseBody {
+	body := &ListPolicyEvalRunsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPolicyEvalRunUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getPolicyEvalRun" endpoint of the "risk" service.
+func NewGetPolicyEvalRunUnauthorizedResponseBody(res *goa.ServiceError) *GetPolicyEvalRunUnauthorizedResponseBody {
+	body := &GetPolicyEvalRunUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPolicyEvalRunForbiddenResponseBody builds the HTTP response body from
+// the result of the "getPolicyEvalRun" endpoint of the "risk" service.
+func NewGetPolicyEvalRunForbiddenResponseBody(res *goa.ServiceError) *GetPolicyEvalRunForbiddenResponseBody {
+	body := &GetPolicyEvalRunForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPolicyEvalRunBadRequestResponseBody builds the HTTP response body from
+// the result of the "getPolicyEvalRun" endpoint of the "risk" service.
+func NewGetPolicyEvalRunBadRequestResponseBody(res *goa.ServiceError) *GetPolicyEvalRunBadRequestResponseBody {
+	body := &GetPolicyEvalRunBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPolicyEvalRunNotFoundResponseBody builds the HTTP response body from
+// the result of the "getPolicyEvalRun" endpoint of the "risk" service.
+func NewGetPolicyEvalRunNotFoundResponseBody(res *goa.ServiceError) *GetPolicyEvalRunNotFoundResponseBody {
+	body := &GetPolicyEvalRunNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPolicyEvalRunConflictResponseBody builds the HTTP response body from
+// the result of the "getPolicyEvalRun" endpoint of the "risk" service.
+func NewGetPolicyEvalRunConflictResponseBody(res *goa.ServiceError) *GetPolicyEvalRunConflictResponseBody {
+	body := &GetPolicyEvalRunConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPolicyEvalRunUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getPolicyEvalRun" endpoint of the "risk"
+// service.
+func NewGetPolicyEvalRunUnsupportedMediaResponseBody(res *goa.ServiceError) *GetPolicyEvalRunUnsupportedMediaResponseBody {
+	body := &GetPolicyEvalRunUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPolicyEvalRunInvalidResponseBody builds the HTTP response body from
+// the result of the "getPolicyEvalRun" endpoint of the "risk" service.
+func NewGetPolicyEvalRunInvalidResponseBody(res *goa.ServiceError) *GetPolicyEvalRunInvalidResponseBody {
+	body := &GetPolicyEvalRunInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPolicyEvalRunInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getPolicyEvalRun" endpoint of the "risk"
+// service.
+func NewGetPolicyEvalRunInvariantViolationResponseBody(res *goa.ServiceError) *GetPolicyEvalRunInvariantViolationResponseBody {
+	body := &GetPolicyEvalRunInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPolicyEvalRunUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getPolicyEvalRun" endpoint of the "risk" service.
+func NewGetPolicyEvalRunUnexpectedResponseBody(res *goa.ServiceError) *GetPolicyEvalRunUnexpectedResponseBody {
+	body := &GetPolicyEvalRunUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetPolicyEvalRunGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getPolicyEvalRun" endpoint of the "risk" service.
+func NewGetPolicyEvalRunGatewayErrorResponseBody(res *goa.ServiceError) *GetPolicyEvalRunGatewayErrorResponseBody {
+	body := &GetPolicyEvalRunGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalFindingsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listPolicyEvalFindings" endpoint of the "risk"
+// service.
+func NewListPolicyEvalFindingsUnauthorizedResponseBody(res *goa.ServiceError) *ListPolicyEvalFindingsUnauthorizedResponseBody {
+	body := &ListPolicyEvalFindingsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalFindingsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listPolicyEvalFindings" endpoint of the "risk"
+// service.
+func NewListPolicyEvalFindingsForbiddenResponseBody(res *goa.ServiceError) *ListPolicyEvalFindingsForbiddenResponseBody {
+	body := &ListPolicyEvalFindingsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalFindingsBadRequestResponseBody builds the HTTP response
+// body from the result of the "listPolicyEvalFindings" endpoint of the "risk"
+// service.
+func NewListPolicyEvalFindingsBadRequestResponseBody(res *goa.ServiceError) *ListPolicyEvalFindingsBadRequestResponseBody {
+	body := &ListPolicyEvalFindingsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalFindingsNotFoundResponseBody builds the HTTP response body
+// from the result of the "listPolicyEvalFindings" endpoint of the "risk"
+// service.
+func NewListPolicyEvalFindingsNotFoundResponseBody(res *goa.ServiceError) *ListPolicyEvalFindingsNotFoundResponseBody {
+	body := &ListPolicyEvalFindingsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalFindingsConflictResponseBody builds the HTTP response body
+// from the result of the "listPolicyEvalFindings" endpoint of the "risk"
+// service.
+func NewListPolicyEvalFindingsConflictResponseBody(res *goa.ServiceError) *ListPolicyEvalFindingsConflictResponseBody {
+	body := &ListPolicyEvalFindingsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalFindingsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listPolicyEvalFindings" endpoint of
+// the "risk" service.
+func NewListPolicyEvalFindingsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListPolicyEvalFindingsUnsupportedMediaResponseBody {
+	body := &ListPolicyEvalFindingsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalFindingsInvalidResponseBody builds the HTTP response body
+// from the result of the "listPolicyEvalFindings" endpoint of the "risk"
+// service.
+func NewListPolicyEvalFindingsInvalidResponseBody(res *goa.ServiceError) *ListPolicyEvalFindingsInvalidResponseBody {
+	body := &ListPolicyEvalFindingsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalFindingsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listPolicyEvalFindings" endpoint of
+// the "risk" service.
+func NewListPolicyEvalFindingsInvariantViolationResponseBody(res *goa.ServiceError) *ListPolicyEvalFindingsInvariantViolationResponseBody {
+	body := &ListPolicyEvalFindingsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalFindingsUnexpectedResponseBody builds the HTTP response
+// body from the result of the "listPolicyEvalFindings" endpoint of the "risk"
+// service.
+func NewListPolicyEvalFindingsUnexpectedResponseBody(res *goa.ServiceError) *ListPolicyEvalFindingsUnexpectedResponseBody {
+	body := &ListPolicyEvalFindingsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPolicyEvalFindingsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listPolicyEvalFindings" endpoint of the "risk"
+// service.
+func NewListPolicyEvalFindingsGatewayErrorResponseBody(res *goa.ServiceError) *ListPolicyEvalFindingsGatewayErrorResponseBody {
+	body := &ListPolicyEvalFindingsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelPolicyEvalRunUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "cancelPolicyEvalRun" endpoint of the "risk" service.
+func NewCancelPolicyEvalRunUnauthorizedResponseBody(res *goa.ServiceError) *CancelPolicyEvalRunUnauthorizedResponseBody {
+	body := &CancelPolicyEvalRunUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelPolicyEvalRunForbiddenResponseBody builds the HTTP response body
+// from the result of the "cancelPolicyEvalRun" endpoint of the "risk" service.
+func NewCancelPolicyEvalRunForbiddenResponseBody(res *goa.ServiceError) *CancelPolicyEvalRunForbiddenResponseBody {
+	body := &CancelPolicyEvalRunForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelPolicyEvalRunBadRequestResponseBody builds the HTTP response body
+// from the result of the "cancelPolicyEvalRun" endpoint of the "risk" service.
+func NewCancelPolicyEvalRunBadRequestResponseBody(res *goa.ServiceError) *CancelPolicyEvalRunBadRequestResponseBody {
+	body := &CancelPolicyEvalRunBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelPolicyEvalRunNotFoundResponseBody builds the HTTP response body
+// from the result of the "cancelPolicyEvalRun" endpoint of the "risk" service.
+func NewCancelPolicyEvalRunNotFoundResponseBody(res *goa.ServiceError) *CancelPolicyEvalRunNotFoundResponseBody {
+	body := &CancelPolicyEvalRunNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelPolicyEvalRunConflictResponseBody builds the HTTP response body
+// from the result of the "cancelPolicyEvalRun" endpoint of the "risk" service.
+func NewCancelPolicyEvalRunConflictResponseBody(res *goa.ServiceError) *CancelPolicyEvalRunConflictResponseBody {
+	body := &CancelPolicyEvalRunConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelPolicyEvalRunUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "cancelPolicyEvalRun" endpoint of the "risk"
+// service.
+func NewCancelPolicyEvalRunUnsupportedMediaResponseBody(res *goa.ServiceError) *CancelPolicyEvalRunUnsupportedMediaResponseBody {
+	body := &CancelPolicyEvalRunUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelPolicyEvalRunInvalidResponseBody builds the HTTP response body from
+// the result of the "cancelPolicyEvalRun" endpoint of the "risk" service.
+func NewCancelPolicyEvalRunInvalidResponseBody(res *goa.ServiceError) *CancelPolicyEvalRunInvalidResponseBody {
+	body := &CancelPolicyEvalRunInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelPolicyEvalRunInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "cancelPolicyEvalRun" endpoint of the
+// "risk" service.
+func NewCancelPolicyEvalRunInvariantViolationResponseBody(res *goa.ServiceError) *CancelPolicyEvalRunInvariantViolationResponseBody {
+	body := &CancelPolicyEvalRunInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelPolicyEvalRunUnexpectedResponseBody builds the HTTP response body
+// from the result of the "cancelPolicyEvalRun" endpoint of the "risk" service.
+func NewCancelPolicyEvalRunUnexpectedResponseBody(res *goa.ServiceError) *CancelPolicyEvalRunUnexpectedResponseBody {
+	body := &CancelPolicyEvalRunUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelPolicyEvalRunGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "cancelPolicyEvalRun" endpoint of the "risk" service.
+func NewCancelPolicyEvalRunGatewayErrorResponseBody(res *goa.ServiceError) *CancelPolicyEvalRunGatewayErrorResponseBody {
+	body := &CancelPolicyEvalRunGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateRiskPolicyPayload builds a risk service createRiskPolicy endpoint
 // payload.
 func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CreateRiskPolicyPayload {
@@ -13021,6 +15083,76 @@ func NewTestDetectionRulePayload(body *TestDetectionRuleRequestBody, apikeyToken
 	return v
 }
 
+// NewCreatePolicyEvalRunPayload builds a risk service createPolicyEvalRun
+// endpoint payload.
+func NewCreatePolicyEvalRunPayload(body *CreatePolicyEvalRunRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CreatePolicyEvalRunPayload {
+	v := &risk.CreatePolicyEvalRunPayload{
+		PolicyID: body.PolicyID,
+	}
+	if body.Candidate != nil {
+		v.Candidate = unmarshalPolicyEvalCandidateConfigRequestBodyToRiskPolicyEvalCandidateConfig(body.Candidate)
+	}
+	v.Sample = unmarshalPolicyEvalSampleDefinitionRequestBodyToRiskPolicyEvalSampleDefinition(body.Sample)
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListPolicyEvalRunsPayload builds a risk service listPolicyEvalRuns
+// endpoint payload.
+func NewListPolicyEvalRunsPayload(policyID *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListPolicyEvalRunsPayload {
+	v := &risk.ListPolicyEvalRunsPayload{}
+	v.PolicyID = policyID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetPolicyEvalRunPayload builds a risk service getPolicyEvalRun endpoint
+// payload.
+func NewGetPolicyEvalRunPayload(id string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetPolicyEvalRunPayload {
+	v := &risk.GetPolicyEvalRunPayload{}
+	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListPolicyEvalFindingsPayload builds a risk service
+// listPolicyEvalFindings endpoint payload.
+func NewListPolicyEvalFindingsPayload(runID string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListPolicyEvalFindingsPayload {
+	v := &risk.ListPolicyEvalFindingsPayload{}
+	v.RunID = runID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewCancelPolicyEvalRunPayload builds a risk service cancelPolicyEvalRun
+// endpoint payload.
+func NewCancelPolicyEvalRunPayload(body *CancelPolicyEvalRunRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CancelPolicyEvalRunPayload {
+	v := &risk.CancelPolicyEvalRunPayload{
+		ID: *body.ID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateCreateRiskPolicyRequestBody runs the validations defined on
 // CreateRiskPolicyRequestBody
 func ValidateCreateRiskPolicyRequestBody(body *CreateRiskPolicyRequestBody) (err error) {
@@ -13273,6 +15405,96 @@ func ValidateTestDetectionRuleRequestBody(body *TestDetectionRuleRequestBody) (e
 	if body.Text != nil {
 		if utf8.RuneCountInString(*body.Text) > 50000 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.text", *body.Text, utf8.RuneCountInString(*body.Text), 50000, false))
+		}
+	}
+	return
+}
+
+// ValidateCreatePolicyEvalRunRequestBody runs the validations defined on
+// CreatePolicyEvalRunRequestBody
+func ValidateCreatePolicyEvalRunRequestBody(body *CreatePolicyEvalRunRequestBody) (err error) {
+	if body.Sample == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sample", "body"))
+	}
+	if body.PolicyID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", *body.PolicyID, goa.FormatUUID))
+	}
+	if body.Candidate != nil {
+		if err2 := ValidatePolicyEvalCandidateConfigRequestBody(body.Candidate); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Sample != nil {
+		if err2 := ValidatePolicyEvalSampleDefinitionRequestBody(body.Sample); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateCancelPolicyEvalRunRequestBody runs the validations defined on
+// CancelPolicyEvalRunRequestBody
+func ValidateCancelPolicyEvalRunRequestBody(body *CancelPolicyEvalRunRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidatePolicyEvalCandidateConfigRequestBody runs the validations defined on
+// PolicyEvalCandidateConfigRequestBody
+func ValidatePolicyEvalCandidateConfigRequestBody(body *PolicyEvalCandidateConfigRequestBody) (err error) {
+	if body.PolicyType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_type", "body"))
+	}
+	if body.PolicyType != nil {
+		if !(*body.PolicyType == "standard" || *body.PolicyType == "prompt_based") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy_type", *body.PolicyType, []any{"standard", "prompt_based"}))
+		}
+	}
+	return
+}
+
+// ValidatePolicyEvalSampleDefinitionRequestBody runs the validations defined
+// on PolicyEvalSampleDefinitionRequestBody
+func ValidatePolicyEvalSampleDefinitionRequestBody(body *PolicyEvalSampleDefinitionRequestBody) (err error) {
+	if body.Mode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
+	}
+	if body.MaxMessages == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("max_messages", "body"))
+	}
+	if body.Mode != nil {
+		if !(*body.Mode == "auto" || *body.Mode == "manual") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"auto", "manual"}))
+		}
+	}
+	if body.LookbackDays != nil {
+		if *body.LookbackDays < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.lookback_days", *body.LookbackDays, 1, true))
+		}
+	}
+	if body.LookbackDays != nil {
+		if *body.LookbackDays > 365 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.lookback_days", *body.LookbackDays, 365, false))
+		}
+	}
+	if body.LastNSessions != nil {
+		if *body.LastNSessions < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.last_n_sessions", *body.LastNSessions, 1, true))
+		}
+	}
+	if body.MaxMessages != nil {
+		if *body.MaxMessages < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.max_messages", *body.MaxMessages, 1, true))
+		}
+	}
+	if body.MaxMessages != nil {
+		if *body.MaxMessages > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.max_messages", *body.MaxMessages, 10000, false))
 		}
 	}
 	return

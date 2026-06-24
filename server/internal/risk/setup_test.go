@@ -126,7 +126,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 	auditLogger := audit.NewLogger()
 	flags := &feature.InMemory{}
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, nil, shadowMCPClient, auditLogger, "test-jwt-secret", nil, nil, flags, testCELEngine(t))
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, nil, nil, shadowMCPClient, auditLogger, "test-jwt-secret", nil, nil, flags, testCELEngine(t))
 
 	return ctx, &testInstance{
 		service:        svc,

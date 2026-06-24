@@ -96,8 +96,12 @@ type AnalyzeBatchArgs struct {
 	CustomRuleIds    []string
 	// JudgeObserve, when non-nil, is forwarded to each prompt-policy judge call
 	// so a caller can roll up cost/latency. Set by the policy-eval ("session
-	// replay") path; nil for realtime/enforcement analysis, which pays nothing.
-	JudgeObserve func(JudgeUsage)
+	// replay") path, which invokes the scanners IN-PROCESS (ScanBatchForEval);
+	// nil for realtime/enforcement analysis, which pays nothing. It is `json:"-"`
+	// because AnalyzeBatchArgs is a Temporal activity input on the realtime path
+	// and a func value is not JSON-serializable — the eval path never sends this
+	// struct through Temporal, so the callback always survives where it's used.
+	JudgeObserve func(JudgeUsage) `json:"-"`
 }
 
 type AnalyzeBatchResult struct {
@@ -161,6 +165,35 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
 
+	findings, err := a.scanBatch(ctx, args, policy, messages)
+	if err != nil {
+		return nil, err
+	}
+
+	rowsToWrite, findingsCount := a.buildRows(ctx, args, messages, findings)
+	if err := a.writeResults(ctx, args, rowsToWrite); err != nil {
+		return nil, err
+	}
+
+	span.SetAttributes(
+		attribute.Int("risk.messages_processed", len(messages)),
+		attribute.Int("risk.findings_count", findingsCount),
+		attribute.Int("risk.rows_written", len(rowsToWrite)),
+	)
+
+	return &AnalyzeBatchResult{
+		Processed: len(messages),
+		Findings:  findingsCount,
+	}, nil
+}
+
+// scanBatch runs scope resolution, the type-appropriate scanners, and
+// disabled-rule filtering over the batch, returning one []Finding per message.
+// It is the pure analysis core shared by Do (which then persists enforcement
+// results) and ScanBatchForEval (which returns the findings for the
+// non-enforcing eval path). It performs no DB writes of its own beyond the
+// read-only scanner lookups.
+func (a *AnalyzeBatch) scanBatch(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage) ([][]Finding, error) {
 	scope, err := CompileScope(a.celEng, policy.ScopeInclude.String, policy.ScopeExempt.String)
 	if err != nil {
 		return nil, fmt.Errorf("compile policy scope: %w", err)
@@ -183,22 +216,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 			findings[i] = disabled.FilterFindings(batch)
 		}
 	}
-
-	rowsToWrite, findingsCount := a.buildRows(ctx, args, messages, findings)
-	if err := a.writeResults(ctx, args, rowsToWrite); err != nil {
-		return nil, err
-	}
-
-	span.SetAttributes(
-		attribute.Int("risk.messages_processed", len(messages)),
-		attribute.Int("risk.findings_count", findingsCount),
-		attribute.Int("risk.rows_written", len(rowsToWrite)),
-	)
-
-	return &AnalyzeBatchResult{
-		Processed: len(messages),
-		Findings:  findingsCount,
-	}, nil
+	return findings, nil
 }
 
 func (a *AnalyzeBatch) scanStandardPolicyBatch(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, outOfPolicyScope []bool) ([][]Finding, error) {
