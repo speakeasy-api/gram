@@ -349,7 +349,7 @@ function TurnHeader({
           {when && (
             // No explicit colour: inherit the divider's (red when flagged, muted
             // otherwise) so a risky turn's timestamp matches its "N risks" label.
-            <span className="font-mono text-sm font-medium uppercase">
+            <span className="font-mono text-[13px] font-medium uppercase">
               {when}
             </span>
           )}
@@ -360,7 +360,7 @@ function TurnHeader({
               trigger={
                 <button
                   type="button"
-                  className="inline-flex cursor-pointer items-center gap-1 font-mono text-sm font-medium whitespace-nowrap text-red-800 uppercase"
+                  className="inline-flex cursor-pointer items-center gap-1 font-mono text-[13px] font-medium whitespace-nowrap text-red-800 uppercase"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {riskCount} {riskCount === 1 ? "risk" : "risks"}
