@@ -267,7 +267,7 @@ func TestSearchUsers_FallsBackToUserEmail(t *testing.T) {
 	require.Equal(t, email, filtered.Users[0].UserID)
 }
 
-func TestSearchUsers_IncludesUserEmailWhenGroupedByOpaqueUserID(t *testing.T) {
+func TestSearchUsers_GroupsInternalUsersByEmailWhenOpaqueUserIDPresent(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
@@ -300,9 +300,68 @@ func TestSearchUsers_IncludesUserEmailWhenGroupedByOpaqueUserID(t *testing.T) {
 		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 1) {
 			return
 		}
-		assert.Equal(c, userID, res.Users[0].UserID)
+		assert.Equal(c, email, res.Users[0].UserID)
 		assert.Equal(c, email, res.Users[0].UserEmail)
 	}, 10*time.Second, 200*time.Millisecond)
+}
+
+func TestSearchUsers_MergesInternalUsersByEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	userID := "01924a0eb409b0ecf44e06d0ec03cbc4"
+	email := "merged-internal-" + uuid.New().String() + "@example.com"
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), email, 100, 50, 1.25)
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), userID, email, 200, 100, 2.5)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From: from,
+				To:   to,
+			},
+			UserType: "internal",
+			Limit:    100,
+			Sort:     "desc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) || !assert.Len(c, res.Users, 1) {
+			return
+		}
+
+		user := res.Users[0]
+		assert.Equal(c, email, user.UserID)
+		assert.Equal(c, email, user.UserEmail)
+		assert.Equal(c, int64(300), user.TotalInputTokens)
+		assert.Equal(c, int64(150), user.TotalOutputTokens)
+		assert.Equal(c, int64(450), user.TotalTokens)
+	}, 10*time.Second, 200*time.Millisecond)
+
+	filtered, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From:    from,
+			To:      to,
+			UserIds: []string{email},
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered.Users, 1)
+	require.Equal(t, email, filtered.Users[0].UserID)
+	require.Equal(t, int64(450), filtered.Users[0].TotalTokens)
 }
 
 func TestSearchUsers_Pagination(t *testing.T) {
@@ -881,6 +940,47 @@ func insertPollingLogWithEmail(t *testing.T, ctx context.Context, projectID, dep
 	attributes := map[string]any{
 		"gram.event.source":          string(tm.EventSourceAPI),
 		"gram.hook.source":           "cursor",
+		"user.email":                 email,
+		"gen_ai.usage.input_tokens":  inputTokens,
+		"gen_ai.usage.output_tokens": outputTokens,
+		"gen_ai.usage.cost":          cost,
+		"gen_ai.response.model":      "cursor-model",
+		"gen_ai.conversation.id":     uuid.New().String(),
+		"gen_ai.response.id":         uuid.New().String(),
+		"gen_ai.usage.total_tokens":  inputTokens + outputTokens,
+		"gen_ai.provider.name":       "cursor",
+		"cursor.event_hash":          uuid.New().String(),
+		"gram.resource.urn":          "cursor:usage:metrics",
+	}
+
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_deployment_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "cursor usage metrics",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, deploymentID, "cursor:usage:metrics", "gram-cursor")
+	require.NoError(t, err)
+}
+
+func insertPollingLogWithUserAndEmail(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, userID, email string, inputTokens, outputTokens int, cost float64) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gram.event.source":          string(tm.EventSourceAPI),
+		"gram.hook.source":           "cursor",
+		"user.id":                    userID,
 		"user.email":                 email,
 		"gen_ai.usage.input_tokens":  inputTokens,
 		"gen_ai.usage.output_tokens": outputTokens,
