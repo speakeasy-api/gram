@@ -82,13 +82,13 @@ export type UserSummary = {
    */
   totalToolCalls: number;
   /**
-   * User identifier (user_id or external_user_id depending on group_by)
-   */
-  userId: string;
-  /**
    * User email associated with this usage, when present
    */
   userEmail: string;
+  /**
+   * User identifier (user_id or external_user_id depending on group_by)
+   */
+  userId: string;
 };
 
 /** @internal */
