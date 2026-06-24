@@ -6926,7 +6926,7 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-chats: List all chats for a project`)
 	fmt.Fprintln(os.Stderr, `    load-chat: Load a chat by its ID. Messages within a generation are paginated by `+"`"+`seq`+"`"+` keyset: omit cursors to receive the newest page, pass `+"`"+`before_seq`+"`"+` to load older messages (scroll up) or `+"`"+`after_seq`+"`"+` to load newer ones (scroll down). Set `+"`"+`from_start`+"`"+` to receive the oldest page (the start of the thread) instead of the newest. Omit `+"`"+`generation`+"`"+` to receive the latest generation. Set `+"`"+`risk_only`+"`"+` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `+"`"+`query`+"`"+` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `+"`"+`risk_only`+"`"+`).`)
-	fmt.Fprintln(os.Stderr, `    generate-title: Generate a title for a chat based on its messages`)
+	fmt.Fprintln(os.Stderr, `    generate-title: Read or set a chat's title. Omit `+"`"+`title`+"`"+` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `+"`"+`title`+"`"+` to set a manual title that auto-generation will never overwrite; provide an empty `+"`"+`title`+"`"+` to clear the manual title and re-enable auto-generation.`)
 	fmt.Fprintln(os.Stderr, `    credit-usage: Get the total number of chat credits and usage for the current billing period`)
 	fmt.Fprintln(os.Stderr, `    delete-chat: Soft-delete a chat by its ID`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
@@ -7027,7 +7027,7 @@ func chatGenerateTitleUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Generate a title for a chat based on its messages`)
+	fmt.Fprintln(os.Stderr, `Read or set a chat's title. Omit `+"`"+`title`+"`"+` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `+"`"+`title`+"`"+` to set a manual title that auto-generation will never overwrite; provide an empty `+"`"+`title`+"`"+` to clear the manual title and re-enable auto-generation.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -7037,7 +7037,7 @@ func chatGenerateTitleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat generate-title --body '{\n      \"id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat generate-title --body '{\n      \"id\": \"abc123\",\n      \"title\": \"aaa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 func chatCreditUsageUsage() {

@@ -74,6 +74,11 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 		return fmt.Errorf("get chat: %w", err)
 	}
 
+	// A human renamed this chat — never overwrite a manually chosen title.
+	if chat.TitleManuallySet {
+		return nil
+	}
+
 	// Already has a meaningful title — nothing to do.
 	if chat.Title.Valid && !isDefaultChatTitle(chat.Title.String) {
 		return nil

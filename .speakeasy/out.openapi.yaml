@@ -6009,7 +6009,7 @@ paths:
       x-speakeasy-name-override: delete
   /rpc/chat.generateTitle:
     post:
-      description: Generate a title for a chat based on its messages
+      description: Read or set a chat's title. Omit `title` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `title` to set a manual title that auto-generation will never overwrite; provide an empty `title` to clear the manual title and re-enable auto-generation.
       operationId: generateTitle
       parameters:
         - allowEmptyValue: true
@@ -6037,7 +6037,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ServeImageForm'
+              $ref: '#/components/schemas/GenerateTitleRequestBody'
         required: true
       responses:
         "200":
@@ -38222,12 +38222,24 @@ components:
         - tool_urn
         - created_at
         - updated_at
+    GenerateTitleRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the chat
+        title:
+          type: string
+          description: When present, sets the chat's title manually (empty string resets to auto-generated). When omitted, the current title is returned without changes.
+          maxLength: 200
+      required:
+        - id
     GenerateTitleResponseBody:
       type: object
       properties:
         title:
           type: string
-          description: The generated title
+          description: The current title after the operation (empty when reset to auto-generated)
       required:
         - title
     GenerateWorkOSAdminPortalLinkRequestBody:

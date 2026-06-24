@@ -29,7 +29,11 @@ type Service interface {
 	// only messages whose text matches a search query plus surrounding context
 	// (mutually exclusive with `risk_only`).
 	LoadChat(context.Context, *LoadChatPayload) (res *Chat, err error)
-	// Generate a title for a chat based on its messages
+	// Read or set a chat's title. Omit `title` to return the
+	// current/auto-generated title (titles are generated asynchronously after a
+	// completion). Provide `title` to set a manual title that auto-generation will
+	// never overwrite; provide an empty `title` to clear the manual title and
+	// re-enable auto-generation.
 	GenerateTitle(context.Context, *GenerateTitlePayload) (res *GenerateTitleResult, err error)
 	// Get the total number of chat credits and usage for the current billing period
 	CreditUsage(context.Context, *CreditUsagePayload) (res *CreditUsageResult, err error)
@@ -307,12 +311,15 @@ type GenerateTitlePayload struct {
 	ChatSessionsToken *string
 	// The ID of the chat
 	ID string
+	// When present, sets the chat's title manually (empty string resets to
+	// auto-generated). When omitted, the current title is returned without changes.
+	Title *string
 }
 
 // GenerateTitleResult is the result type of the chat service generateTitle
 // method.
 type GenerateTitleResult struct {
-	// The generated title
+	// The current title after the operation (empty when reset to auto-generated)
 	Title string
 }
 
