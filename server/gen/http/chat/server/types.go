@@ -2340,12 +2340,13 @@ func NewSubmitFeedbackGatewayErrorResponseBody(res *goa.ServiceError) *SubmitFee
 }
 
 // NewListChatsPayload builds a chat service listChats endpoint payload.
-func NewListChatsPayload(search *string, externalUserID *string, assistantID *string, hasRisk *string, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
+func NewListChatsPayload(search *string, externalUserID *string, assistantID *string, hasRisk *string, minRiskScore *int, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
 	v := &chat.ListChatsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
 	v.AssistantID = assistantID
 	v.HasRisk = hasRisk
+	v.MinRiskScore = minRiskScore
 	v.From = from
 	v.To = to
 	v.Limit = limit
@@ -2360,13 +2361,14 @@ func NewListChatsPayload(search *string, externalUserID *string, assistantID *st
 }
 
 // NewLoadChatPayload builds a chat service loadChat endpoint payload.
-func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64, afterSeq *int64, riskOnly bool, query *string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.LoadChatPayload {
+func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64, afterSeq *int64, fromStart bool, riskOnly bool, query *string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.LoadChatPayload {
 	v := &chat.LoadChatPayload{}
 	v.ID = id
 	v.Generation = generation
 	v.Limit = limit
 	v.BeforeSeq = beforeSeq
 	v.AfterSeq = afterSeq
+	v.FromStart = fromStart
 	v.RiskOnly = riskOnly
 	v.Query = query
 	v.SessionToken = sessionToken

@@ -67,6 +67,9 @@ func EncodeListChatsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		if p.HasRisk != nil {
 			values.Add("has_risk", *p.HasRisk)
 		}
+		if p.MinRiskScore != nil {
+			values.Add("min_risk_score", fmt.Sprintf("%v", *p.MinRiskScore))
+		}
 		if p.From != nil {
 			values.Add("from", *p.From)
 		}
@@ -328,6 +331,7 @@ func EncodeLoadChatRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 		if p.AfterSeq != nil {
 			values.Add("after_seq", fmt.Sprintf("%v", *p.AfterSeq))
 		}
+		values.Add("from_start", fmt.Sprintf("%v", p.FromStart))
 		values.Add("risk_only", fmt.Sprintf("%v", p.RiskOnly))
 		if p.Query != nil {
 			values.Add("query", *p.Query)

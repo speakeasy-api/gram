@@ -58,6 +58,12 @@ type DesiredTopic struct {
 	Retention    time.Duration
 	Labels       map[string]string
 	ProtoMessage string
+	// NameOverridden reports whether the topic's `name` option was explicitly
+	// set (rather than the ID being derived from the proto full name). A topic
+	// with an explicit name may map onto a shared, externally-owned topic, so a
+	// generated schema — whose identity is tied to the proto message — must not
+	// be attached to it.
+	NameOverridden bool
 }
 
 type DesiredRetryPolicy struct {
@@ -221,10 +227,11 @@ func desiredTopicFromOptions(message protoreflect.MessageDescriptor, topicOption
 	}
 
 	return DesiredTopic{
-		Name:         ResolveTopicName(message, topicOptions),
-		Retention:    topicOptions.GetRetentionHint().AsDuration(),
-		Labels:       labels,
-		ProtoMessage: string(message.FullName()),
+		Name:           ResolveTopicName(message, topicOptions),
+		Retention:      topicOptions.GetRetentionHint().AsDuration(),
+		Labels:         labels,
+		ProtoMessage:   string(message.FullName()),
+		NameOverridden: strings.TrimSpace(topicOptions.GetName()) != "",
 	}
 }
 

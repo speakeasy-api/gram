@@ -197,7 +197,8 @@ type MetricsSummaryRow struct {
 // The UserID field holds whichever identifier was used for grouping; the caller
 // knows which one it represents based on the group_by parameter.
 type UserSummary struct {
-	UserID string `ch:"user_id"`
+	UserID    string `ch:"user_id"`
+	UserEmail string `ch:"user_email"`
 
 	// Activity timestamps
 	FirstSeenUnixNano int64 `ch:"first_seen_unix_nano"`

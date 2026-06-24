@@ -19,7 +19,7 @@ import (
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
 // from CLI flags.
-func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsAssistantID string, chatListChatsHasRisk string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
+func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsAssistantID string, chatListChatsHasRisk string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
 	var err error
 	var search *string
 	{
@@ -49,6 +49,24 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 			hasRisk = &chatListChatsHasRisk
 			if !(*hasRisk == "" || *hasRisk == "true" || *hasRisk == "false") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("has_risk", *hasRisk, []any{"", "true", "false"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var minRiskScore *int
+	{
+		if chatListChatsMinRiskScore != "" {
+			var v int64
+			v, err = strconv.ParseInt(chatListChatsMinRiskScore, 10, strconv.IntSize)
+			val := int(v)
+			minRiskScore = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for minRiskScore, must be INT")
+			}
+			if *minRiskScore < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("min_risk_score", *minRiskScore, 0, true))
 			}
 			if err != nil {
 				return nil, err
@@ -159,6 +177,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	v.ExternalUserID = externalUserID
 	v.AssistantID = assistantID
 	v.HasRisk = hasRisk
+	v.MinRiskScore = minRiskScore
 	v.From = from
 	v.To = to
 	v.Limit = limit
@@ -174,7 +193,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 
 // BuildLoadChatPayload builds the payload for the chat loadChat endpoint from
 // CLI flags.
-func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatRiskOnly string, chatLoadChatQuery string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
+func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatFromStart string, chatLoadChatRiskOnly string, chatLoadChatQuery string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
 	var err error
 	var id string
 	{
@@ -250,6 +269,15 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 			}
 		}
 	}
+	var fromStart bool
+	{
+		if chatLoadChatFromStart != "" {
+			fromStart, err = strconv.ParseBool(chatLoadChatFromStart)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for fromStart, must be BOOL")
+			}
+		}
+	}
 	var riskOnly bool
 	{
 		if chatLoadChatRiskOnly != "" {
@@ -298,6 +326,7 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 	v.Limit = limit
 	v.BeforeSeq = beforeSeq
 	v.AfterSeq = afterSeq
+	v.FromStart = fromStart
 	v.RiskOnly = riskOnly
 	v.Query = query
 	v.SessionToken = sessionToken

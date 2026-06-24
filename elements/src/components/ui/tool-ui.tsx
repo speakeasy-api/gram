@@ -346,16 +346,25 @@ interface MatchHit {
   matchIndex: number;
 }
 
-function findMatchHits(text: string, values: string[]): MatchHit[] {
+function findMatchHits(
+  text: string,
+  values: string[],
+  caseInsensitive = false,
+): MatchHit[] {
+  // Risk findings match an exact value; a text-search hit matches case-
+  // insensitively (the server search is ILIKE). Tool content is monospace
+  // code/JSON, so lowercasing doesn't shift offsets in practice.
+  const haystack = caseInsensitive ? text.toLowerCase() : text;
   const hits: MatchHit[] = [];
   values.forEach((value, matchIndex) => {
     if (!value) return;
+    const needle = caseInsensitive ? value.toLowerCase() : value;
     let from = 0;
-    let idx = text.indexOf(value, from);
+    let idx = haystack.indexOf(needle, from);
     while (idx !== -1) {
       hits.push({ start: idx, end: idx + value.length, matchIndex });
       from = idx + value.length;
-      idx = text.indexOf(value, from);
+      idx = haystack.indexOf(needle, from);
     }
   });
   hits.sort((a, b) => a.start - b.start);
@@ -393,8 +402,9 @@ function HighlightedCode({
       findMatchHits(
         text,
         matches.map((m) => m.value),
+        tone === "search",
       ),
-    [text, matches],
+    [text, matches, tone],
   );
   const count = hits.length;
   const [active, setActive] = useState(0);

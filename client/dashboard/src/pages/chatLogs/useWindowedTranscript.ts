@@ -99,6 +99,15 @@ export function useWindowedTranscript(
   const chatIdRef = useRef(chatId);
   chatIdRef.current = chatId;
 
+  // Clear in-flight loading state on a chat switch. The previous chat's in-flight
+  // load is guarded out of its own finally (it checks chatIdRef), so without this
+  // reset `loadingKey` could stay stuck and permanently disable loadBefore/After/
+  // Gap for the new chat.
+  useEffect(() => {
+    setLoadingKey(null);
+    setLoadError(false);
+  }, [chatId]);
+
   // Re-seed whenever a fresh base response arrives (chat switch, query change,
   // or refetch). User expansions and any prior incremental-load error are reset.
   useEffect(() => {

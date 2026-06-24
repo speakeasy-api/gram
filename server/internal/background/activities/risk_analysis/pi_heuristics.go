@@ -186,18 +186,19 @@ func runFamily(text string, fam ruleFamily) []Finding {
 		}
 		ruleID, description := DescribePromptInjection()
 		out = append(out, Finding{
-			RuleID:           ruleID,
-			Description:      description,
-			Match:            text[loc[0]:loc[1]],
-			StartPos:         loc[0],
-			EndPos:           loc[1],
-			Source:           SourcePromptInjection,
-			Confidence:       rule.confidence,
-			Tags:             nil,
-			DeadLetterReason: "",
-			toolCallID:       "",
-			field:            "",
-			path:             "",
+			RuleID:              ruleID,
+			Description:         description,
+			Match:               text[loc[0]:loc[1]],
+			StartPos:            loc[0],
+			EndPos:              loc[1],
+			Source:              SourcePromptInjection,
+			Confidence:          rule.confidence,
+			Tags:                []string{},
+			DeadLetterReason:    "",
+			mcpLookupToolCallID: "",
+			spanGroupKey:        "",
+			field:               "",
+			path:                "",
 		})
 	}
 	return out
@@ -225,18 +226,19 @@ func detectInstructionOverrides(text string) []Finding {
 		}
 		ruleID, description := DescribePromptInjection()
 		out = append(out, Finding{
-			RuleID:           ruleID,
-			Description:      description,
-			Match:            scan[idx : idx+len(kw)],
-			StartPos:         idx,
-			EndPos:           idx + len(kw),
-			Source:           SourcePromptInjection,
-			Confidence:       0.9,
-			Tags:             nil,
-			DeadLetterReason: "",
-			toolCallID:       "",
-			field:            "",
-			path:             "",
+			RuleID:              ruleID,
+			Description:         description,
+			Match:               scan[idx : idx+len(kw)],
+			StartPos:            idx,
+			EndPos:              idx + len(kw),
+			Source:              SourcePromptInjection,
+			Confidence:          0.9,
+			Tags:                []string{},
+			DeadLetterReason:    "",
+			mcpLookupToolCallID: "",
+			spanGroupKey:        "",
+			field:               "",
+			path:                "",
 		})
 		// One finding is enough for this family; multiple keywords would
 		// just produce overlapping findings the dedup pass would drop.
@@ -253,17 +255,18 @@ func detectDelimiterInjection(text string) []Finding {
 	}
 	ruleID, description := DescribePromptInjection()
 	return []Finding{{
-		RuleID:           ruleID,
-		Description:      description,
-		Match:            text[loc[0]:loc[1]],
-		StartPos:         loc[0],
-		EndPos:           loc[1],
-		Source:           SourcePromptInjection,
-		Confidence:       0.8,
-		Tags:             nil,
-		DeadLetterReason: "",
-		toolCallID:       "",
-		field:            "",
-		path:             "",
+		RuleID:              ruleID,
+		Description:         description,
+		Match:               text[loc[0]:loc[1]],
+		StartPos:            loc[0],
+		EndPos:              loc[1],
+		Source:              SourcePromptInjection,
+		Confidence:          0.8,
+		Tags:                []string{},
+		DeadLetterReason:    "",
+		mcpLookupToolCallID: "",
+		spanGroupKey:        "",
+		field:               "",
+		path:                "",
 	}}
 }

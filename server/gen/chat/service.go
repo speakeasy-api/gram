@@ -22,11 +22,12 @@ type Service interface {
 	// Load a chat by its ID. Messages within a generation are paginated by `seq`
 	// keyset: omit cursors to receive the newest page, pass `before_seq` to load
 	// older messages (scroll up) or `after_seq` to load newer ones (scroll down).
-	// Omit `generation` to receive the latest generation. Set `risk_only` to
-	// return only messages with risk findings plus a few messages of surrounding
-	// context per finding. Set `query` to instead return only messages whose text
-	// matches a search query plus surrounding context (mutually exclusive with
-	// `risk_only`).
+	// Set `from_start` to receive the oldest page (the start of the thread)
+	// instead of the newest. Omit `generation` to receive the latest generation.
+	// Set `risk_only` to return only messages with risk findings plus a few
+	// messages of surrounding context per finding. Set `query` to instead return
+	// only messages whose text matches a search query plus surrounding context
+	// (mutually exclusive with `risk_only`).
 	LoadChat(context.Context, *LoadChatPayload) (res *Chat, err error)
 	// Generate a title for a chat based on its messages
 	GenerateTitle(context.Context, *GenerateTitlePayload) (res *GenerateTitleResult, err error)
@@ -329,6 +330,9 @@ type ListChatsPayload struct {
 	// Filter by whether chat has risk findings: 'true', 'false', or empty for no
 	// filter.
 	HasRisk *string
+	// Filter to chats with at least this many active risk findings (inclusive).
+	// Omit or pass 0 for no threshold.
+	MinRiskScore *int
 	// Filter chats last active after this timestamp (ISO 8601)
 	From *string
 	// Filter chats last active before this timestamp (ISO 8601)
@@ -381,6 +385,11 @@ type LoadChatPayload struct {
 	// exclusive with `before_seq`; if both are supplied, `after_seq` takes
 	// precedence.
 	AfterSeq *int64
+	// When true, return the oldest page of the generation (the start of the
+	// thread), ordered oldest to newest, with `has_more_before=false`. Page
+	// forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`,
+	// or `risk_only` is set.
+	FromStart bool
 	// When true, return only messages that have active risk findings, each padded
 	// with a fixed window of surrounding messages, grouped into contiguous
 	// segments (see `risk_segments`). Cursors are ignored in this mode; expand a

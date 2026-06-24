@@ -8,10 +8,12 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { format } from "date-fns";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  ArrowUp,
   Bot,
   ChevronDown,
   ChevronUp,
@@ -837,12 +839,19 @@ export function ChatTranscript({
     scrollNonce,
   } = pagination;
 
+  // "Start of thread" affordance: shown once the reader has scrolled a screenful
+  // down from the top. Only meaningful in the normal (non-risk) view, where the
+  // first item is the thread's true first message — in risk mode index 0 is the
+  // top of the finding window, not the start.
+  const [scrolledDown, setScrolledDown] = useState(false);
+
   // Preserve scroll position across a prepend: capture distance-from-bottom
   // before fetching older messages, restore it once the list grows.
   const anchorRef = useRef<number | null>(null);
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
+    setScrolledDown(el.scrollTop > 400);
     if (el.scrollTop < 200 && hasMoreBefore) {
       anchorRef.current = el.scrollHeight - el.scrollTop;
       onLoadOlder();
@@ -850,6 +859,14 @@ export function ChatTranscript({
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (distanceFromBottom < 200 && hasMoreAfter) onLoadNewer();
   }, [hasMoreBefore, hasMoreAfter, onLoadOlder, onLoadNewer]);
+
+  // Jump back to the very first message. index 0 is always loaded (the from-start
+  // page is the initial page and the list only grows forward), so this is an
+  // instant scroll, no fetch. Reuse the virtualizer's align:"start".
+  const scrollToStart = useCallback(() => {
+    virtualizer.scrollToIndex(0, { align: "start" });
+  }, [virtualizer]);
+  const showStartButton = scrolledDown && !scrollToFinding && items.length > 0;
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -929,30 +946,42 @@ export function ChatTranscript({
   }
 
   return (
-    <div
-      ref={scrollRef}
-      onScroll={handleScroll}
-      className="flex-1 overflow-y-auto pt-4 pb-10"
-    >
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      {showStartButton && (
+        <button
+          type="button"
+          onClick={scrollToStart}
+          className="bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50 absolute top-2 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full border px-2.5 py-1 text-xs shadow-sm transition-colors"
+        >
+          <ArrowUp className="size-3" />
+          Start of thread
+        </button>
+      )}
       <div
-        className="relative w-full"
-        style={{ height: `${virtualizer.getTotalSize()}px` }}
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="min-h-0 flex-1 overflow-y-auto pt-4 pb-10"
       >
-        {virtualizer.getVirtualItems().map((virtualRow) => (
-          <div
-            key={virtualRow.key}
-            data-index={virtualRow.index}
-            ref={virtualizer.measureElement}
-            className="absolute top-0 left-0 w-full"
-            style={{ transform: `translateY(${virtualRow.start}px)` }}
-          >
-            <DisplayItemView
-              item={items[virtualRow.index]!}
-              ctx={ctx}
-              pagination={pagination}
-            />
-          </div>
-        ))}
+        <div
+          className="relative w-full"
+          style={{ height: `${virtualizer.getTotalSize()}px` }}
+        >
+          {virtualizer.getVirtualItems().map((virtualRow) => (
+            <div
+              key={virtualRow.key}
+              data-index={virtualRow.index}
+              ref={virtualizer.measureElement}
+              className="absolute top-0 left-0 w-full"
+              style={{ transform: `translateY(${virtualRow.start}px)` }}
+            >
+              <DisplayItemView
+                item={items[virtualRow.index]!}
+                ctx={ctx}
+                pagination={pagination}
+              />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

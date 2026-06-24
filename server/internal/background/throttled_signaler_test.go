@@ -214,6 +214,38 @@ func TestThrottledSignaler_SuppressedCallsReturnNil(t *testing.T) {
 	require.NoError(t, err, "suppressed calls should return nil")
 }
 
+func TestThrottledSignaler_ShutdownFlushesPending(t *testing.T) {
+	t.Parallel()
+
+	inner := &countingSignaler{}
+	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, testenv.NewLogger(t))
+
+	projectID := uuid.New()
+	_ = throttled.Signal(t.Context(), projectID) // leading edge fires immediately
+	_ = throttled.Signal(t.Context(), projectID) // suppressed → pending trailing
+	assert.Equal(t, 1, inner.callCount())
+
+	require.NoError(t, throttled.Shutdown(t.Context()))
+	assert.Equal(t, 2, inner.callCount(), "shutdown should flush the pending trailing signal")
+
+	require.NoError(t, throttled.Shutdown(t.Context()))
+	assert.Equal(t, 2, inner.callCount(), "second shutdown is a no-op once entries are cleared")
+}
+
+func TestThrottledSignaler_ShutdownNoPendingNoFire(t *testing.T) {
+	t.Parallel()
+
+	inner := &countingSignaler{}
+	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, testenv.NewLogger(t))
+
+	projectID := uuid.New()
+	_ = throttled.Signal(t.Context(), projectID) // leading edge only, nothing suppressed
+	assert.Equal(t, 1, inner.callCount())
+
+	require.NoError(t, throttled.Shutdown(t.Context()))
+	assert.Equal(t, 1, inner.callCount(), "shutdown fires nothing when no trailing signal is pending")
+}
+
 func TestThrottledSignaler_NegativeCooldownDisablesThrottling(t *testing.T) {
 	t.Parallel()
 

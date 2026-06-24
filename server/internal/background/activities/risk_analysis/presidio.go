@@ -473,18 +473,19 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 
 	ruleID, description := DescribePresidioDeadLetter()
 	return []Finding{{
-		Source:           SourcePresidio,
-		RuleID:           ruleID,
-		Description:      description,
-		Match:            "",
-		StartPos:         0,
-		EndPos:           0,
-		Tags:             nil,
-		Confidence:       0,
-		DeadLetterReason: lastErr.Error(),
-		toolCallID:       "",
-		field:            "",
-		path:             "",
+		Source:              SourcePresidio,
+		RuleID:              ruleID,
+		Description:         description,
+		Match:               "",
+		StartPos:            0,
+		EndPos:              0,
+		Tags:                []string{},
+		Confidence:          0,
+		DeadLetterReason:    lastErr.Error(),
+		mcpLookupToolCallID: "",
+		spanGroupKey:        "",
+		field:               "",
+		path:                "",
 	}}, true
 }
 
@@ -619,18 +620,19 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 
 		ruleID, description := DescribePresidioEntity(r.EntityType)
 		findings = append(findings, Finding{
-			RuleID:           ruleID,
-			Description:      description,
-			Match:            match,
-			StartPos:         startByte,
-			EndPos:           endByte,
-			Tags:             []string{"pii"},
-			Source:           SourcePresidio,
-			Confidence:       r.Score,
-			DeadLetterReason: "",
-			toolCallID:       "",
-			field:            "",
-			path:             "",
+			RuleID:              ruleID,
+			Description:         description,
+			Match:               match,
+			StartPos:            startByte,
+			EndPos:              endByte,
+			Tags:                []string{"pii"},
+			Source:              SourcePresidio,
+			Confidence:          r.Score,
+			DeadLetterReason:    "",
+			mcpLookupToolCallID: "",
+			spanGroupKey:        "",
+			field:               "",
+			path:                "",
 		})
 	}
 	return findings

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: dc490679c59e17a53d97f345da58e131
+  docChecksum: 86ecc4c4dfccc85fa8b261cbd358700b
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -387,7 +387,7 @@ trackedFiles:
   docs/models/components/getmetricssummaryresult.md:
     last_write_checksum: sha1:24f8b6ad1e5b6cbd5a7157d8f6ac0c5ad8c59c4a
   docs/models/components/getobservabilityoverviewpayload.md:
-    last_write_checksum: sha1:7fbf85481453216d99e15b0c70faf466910105d2
+    last_write_checksum: sha1:4a67734f8221d896d5833879621969eaafda7448
   docs/models/components/getobservabilityoverviewresult.md:
     last_write_checksum: sha1:0a0b5e2c3e4fb403705fe952952431992e172785
   docs/models/components/getpluginsresult.md:
@@ -1347,7 +1347,7 @@ trackedFiles:
   docs/models/components/usersessionissuer.md:
     last_write_checksum: sha1:cb4a44081b5bdf72a62ede5ae3c7e4d78d887ae8
   docs/models/components/usersummary.md:
-    last_write_checksum: sha1:b8e7c32810cf1b76604e41ca52ba8fc19e689a79
+    last_write_checksum: sha1:2d98d3144b74c9cebbfae6cece7f0dab2e0b707a
   docs/models/components/usertype.md:
     last_write_checksum: sha1:7d17bb1d480222f1a752aa50203326f03cede2fc
   docs/models/components/validatekeyorganization.md:
@@ -2387,7 +2387,7 @@ trackedFiles:
   docs/models/operations/listchallengessecurity.md:
     last_write_checksum: sha1:612e100b48e95978d1923e12137035d03b5d6e35
   docs/models/operations/listchatsrequest.md:
-    last_write_checksum: sha1:460c7b32af480277ff08d13562fff1050ff23b66
+    last_write_checksum: sha1:139856fa4991ee362f5e7b368a8d9354c03d0a25
   docs/models/operations/listchatssecurity.md:
     last_write_checksum: sha1:c76573b8e0ebe2778bfa7b1a48723ab02d93df84
   docs/models/operations/listchatssecurityoption1.md:
@@ -2789,7 +2789,7 @@ trackedFiles:
   docs/models/operations/listversionssecurityoption2.md:
     last_write_checksum: sha1:fd7633a5b4168ea6431ee69ad5a61f3cfe1ac186
   docs/models/operations/loadchatrequest.md:
-    last_write_checksum: sha1:c1a7aaa4a2d9d82c99b7f9a46d15cb588e97834f
+    last_write_checksum: sha1:16db9e63df9a82bd35966fbf265e825d71e2f3ec
   docs/models/operations/loadchatsecurity.md:
     last_write_checksum: sha1:7058ca86853f60f59abd5ea4fded21535f0de90d
   docs/models/operations/loadchatsecurityoption1.md:
@@ -3427,7 +3427,7 @@ trackedFiles:
   docs/sdks/categories/README.md:
     last_write_checksum: sha1:1c455de965567c85a0f47659a2ca4913f6c560aa
   docs/sdks/chat/README.md:
-    last_write_checksum: sha1:db7908fa55c62d22af9144558a615c74d2401939
+    last_write_checksum: sha1:1e30b91a7f90c39cd49070a2079fd7caa26cce66
   docs/sdks/chatsessions/README.md:
     last_write_checksum: sha1:5931e949f459441faaa30e05840cbaf1fab82836
   docs/sdks/collections/README.md:
@@ -3661,9 +3661,9 @@ trackedFiles:
   src/funcs/chatGenerateTitle.ts:
     last_write_checksum: sha1:a5c2fb0ee636e1060daf3a106602d629c1d7c5c4
   src/funcs/chatList.ts:
-    last_write_checksum: sha1:29c8c33bb467bfa5f27b352c45de8c9a47701c1b
+    last_write_checksum: sha1:c4a958d58a0588bb0c16b5108038f264b0e29076
   src/funcs/chatLoad.ts:
-    last_write_checksum: sha1:0962e366dfc77ccb7661ece2e8ea2b578c29435d
+    last_write_checksum: sha1:5b65897909c848f826e811751b7fd0dcd59e0858
   src/funcs/chatSessionsCreate.ts:
     last_write_checksum: sha1:4e2167a8cac556a7c2eb500c0406a65d7620cdd6
   src/funcs/chatSessionsRevoke.ts:
@@ -4502,7 +4502,7 @@ trackedFiles:
   src/models/components/getmetricssummaryresult.ts:
     last_write_checksum: sha1:5a47b03d97c320d6c11cd80f0401d5c42da3f011
   src/models/components/getobservabilityoverviewpayload.ts:
-    last_write_checksum: sha1:07bd958845b9cfdf7ebe84125e3b4ef413dca1ad
+    last_write_checksum: sha1:585deb7f25768892a2c34a36e3ec8fe96b9335d5
   src/models/components/getobservabilityoverviewresult.ts:
     last_write_checksum: sha1:0dbfa9a9afa50661ca0f7406e2ddc5e59aab954e
   src/models/components/getpluginsresult.ts:
@@ -5245,7 +5245,7 @@ trackedFiles:
   src/models/components/usersessionissuer.ts:
     last_write_checksum: sha1:05c87961878e6f1d346676d08336bffcdc96c101
   src/models/components/usersummary.ts:
-    last_write_checksum: sha1:30bcd0a435de606888e97cab8f3c75244ade3fde
+    last_write_checksum: sha1:01bd0464e94054110cc73b6c8aa9debfd7156552
   src/models/components/validatekeyorganization.ts:
     last_write_checksum: sha1:e537de74e0accdf9d82742dedee629feefa8873c
   src/models/components/validatekeyproject.ts:
@@ -5619,7 +5619,7 @@ trackedFiles:
   src/models/operations/listchallenges.ts:
     last_write_checksum: sha1:896d134449096d6fe8146621fa4d0ef257cfd16b
   src/models/operations/listchats.ts:
-    last_write_checksum: sha1:e3973d0a078f37fc86b0df2be5a1db7828e4f5fd
+    last_write_checksum: sha1:1173fe77a4eeea7f3fce6671094501d4bff51371
   src/models/operations/listcollections.ts:
     last_write_checksum: sha1:7008055d09d615b4fe08ec3e801dc289b8cc34f3
   src/models/operations/listcollectionservers.ts:
@@ -5739,7 +5739,7 @@ trackedFiles:
   src/models/operations/listversions.ts:
     last_write_checksum: sha1:b289f92453f9d48ef94149609cd2eba8af32862e
   src/models/operations/loadchat.ts:
-    last_write_checksum: sha1:4a258a4a0e245fefb9152e95829f808c240a6bab
+    last_write_checksum: sha1:2d4d64de0f6df740d05f184f205d1ce03306bed1
   src/models/operations/logout.ts:
     last_write_checksum: sha1:e7a8a55498652b4bb691e5cfb28825baeeac3a40
   src/models/operations/migratelegacygramregistrations.ts:
@@ -6309,9 +6309,9 @@ trackedFiles:
   src/react-query/listAttributeKeys.ts:
     last_write_checksum: sha1:2f45a816099a6dab33e836b234b9d1489a6d6bd4
   src/react-query/listChats.core.ts:
-    last_write_checksum: sha1:5bb54f98720e5736fdebd448424bc7bf3a2dc6ff
+    last_write_checksum: sha1:0a60c336bd880082bd6f6230611f1f6ff333ac4b
   src/react-query/listChats.ts:
-    last_write_checksum: sha1:c1bf7d34c0ad151875f6bd0f5a35845e6b1cd033
+    last_write_checksum: sha1:6b3b272d4c3b4a56a5ffe329a8a0b85d2ec92c77
   src/react-query/listCollections.core.ts:
     last_write_checksum: sha1:ffbfa28d9a9edac27a4609e5e61f8c5241af6bf0
   src/react-query/listCollections.ts:
@@ -6401,9 +6401,9 @@ trackedFiles:
   src/react-query/listVersions.ts:
     last_write_checksum: sha1:3c6aee8cbaa2b4e4cf34c58fa86b750f5dbdaad9
   src/react-query/loadChat.core.ts:
-    last_write_checksum: sha1:c6bc06eda8fcd13cdc0f8fc1faa0ea6def1e32aa
+    last_write_checksum: sha1:fa4bd7f9e68aeaf401469633c2d7f853200f5971
   src/react-query/loadChat.ts:
-    last_write_checksum: sha1:62e259ebce2d9f9e8710be1f4d1bdbc560fa7b8d
+    last_write_checksum: sha1:c81386d65fba72ee2f15d99179bd72a03b6812c5
   src/react-query/logout.ts:
     last_write_checksum: sha1:d46d30106fcd1382025cb3e0c44c91b0790e0257
   src/react-query/marketplaceSettings.core.ts:
@@ -6909,7 +6909,7 @@ trackedFiles:
   src/sdk/categories.ts:
     last_write_checksum: sha1:59fa481e654b66796749e75ac7c957f288a3e35b
   src/sdk/chat.ts:
-    last_write_checksum: sha1:57c89cd0413cc73e2a6ab6d19bf8e804cc41d605
+    last_write_checksum: sha1:8209a532d4022b7a6dad36d79120b72db29971fa
   src/sdk/chatsessions.ts:
     last_write_checksum: sha1:130846542da7bbe81bd0c676bc1513a4a1e4e8a5
   src/sdk/collections.ts:
@@ -7570,6 +7570,7 @@ examples:
           id: "<id>"
           limit: 50
           risk_only: false
+          from_start: false
       responses:
         "200":
           application/json: {"created_at": "2025-04-09T14:22:10.370Z", "generation": 828666, "has_more_after": true, "has_more_before": false, "id": "<id>", "last_message_timestamp": "2026-11-05T12:22:55.772Z", "max_generation": 159680, "messages": [{"created_at": "2025-03-05T16:47:00.180Z", "generation": 822312, "id": "<id>", "model": "Escalade", "role": "<value>", "seq": 948464}], "num_messages": 330731, "title": "<value>", "updated_at": "2026-01-13T22:10:05.983Z"}
@@ -9308,7 +9309,7 @@ examples:
         application/json: {"filter": {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}, "group_by": "employee", "limit": 50, "sort": "desc", "user_type": "external"}
       responses:
         "200":
-          application/json: {"users": [{"avg_tokens_per_request": 2445.8, "cache_creation_input_tokens": 298116, "cache_read_input_tokens": 261654, "first_seen_unix_nano": "<value>", "hook_sources": [], "last_seen_unix_nano": "<value>", "tool_call_failure": 344370, "tool_call_success": 262843, "tools": [{"count": 505126, "failure_count": 421094, "success_count": 638666, "urn": "<value>"}], "total_chat_requests": 818926, "total_chats": 659984, "total_cost": 45.75, "total_input_tokens": 504437, "total_output_tokens": 325254, "total_tokens": 66646, "total_tool_calls": 681888, "user_id": "<id>"}]}
+          application/json: {"users": [{"avg_tokens_per_request": 2445.8, "cache_creation_input_tokens": 298116, "cache_read_input_tokens": 261654, "first_seen_unix_nano": "<value>", "hook_sources": [], "last_seen_unix_nano": "<value>", "tool_call_failure": 344370, "tool_call_success": 262843, "tools": [{"count": 505126, "failure_count": 421094, "success_count": 638666, "urn": "<value>"}], "total_chat_requests": 818926, "total_chats": 659984, "total_cost": 45.75, "total_input_tokens": 504437, "total_output_tokens": 325254, "total_tokens": 66646, "total_tool_calls": 681888, "user_email": "<value>", "user_id": "<id>"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

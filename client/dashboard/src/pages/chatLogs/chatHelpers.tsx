@@ -174,22 +174,30 @@ const SEARCH_MARK_CLASS =
  * server matches with ILIKE, so a "foo" query must also highlight "Foo"/"FOO" —
  * unlike the risk highlighter, which matches an exact flagged substring. */
 export function highlightQuery(text: string, query: string): ReactNode {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return text;
-  const haystack = text.toLowerCase();
+  const q = query.trim();
+  if (!q) return text;
+  // Match case-insensitively over the ORIGINAL text so indices stay aligned —
+  // lowercasing the haystack can change its length (e.g. some Unicode folds), so
+  // slicing the original by lowered offsets would mis-highlight. Escape regex
+  // metacharacters since the query is arbitrary user text.
+  const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
   const nodes: ReactNode[] = [];
   let pos = 0;
   let k = 0;
-  let idx = haystack.indexOf(needle);
-  while (idx !== -1) {
-    if (idx > pos) nodes.push(text.slice(pos, idx));
+  for (let m = re.exec(text); m !== null; m = re.exec(text)) {
+    const start = m.index;
+    const end = start + m[0].length;
+    if (m[0].length === 0) {
+      re.lastIndex++; // defensive: never loop on a zero-length match
+      continue;
+    }
+    if (start > pos) nodes.push(text.slice(pos, start));
     nodes.push(
       <mark key={k++} className={SEARCH_MARK_CLASS}>
-        {text.slice(idx, idx + needle.length)}
+        {text.slice(start, end)}
       </mark>,
     );
-    pos = idx + needle.length;
-    idx = haystack.indexOf(needle, pos);
+    pos = end;
   }
   if (pos === 0) return text; // no occurrence
   if (pos < text.length) nodes.push(text.slice(pos));
