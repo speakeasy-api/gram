@@ -102,6 +102,34 @@ describe("buildEmployees attributed/unattributed split", () => {
     expect(isUnattributedEmployee(employees[0]!)).toBe(false);
   });
 
+  it("does not attribute one usage summary to multiple member emails", () => {
+    const primaryMember = makeMember({
+      id: "member-1",
+      email: "primary@example.com",
+      name: "Primary User",
+    });
+    const aliasMember = makeMember({
+      id: "member-2",
+      email: "alias@example.com",
+      name: "Alias User",
+    });
+
+    const employees = buildEmployees([primaryMember, aliasMember], noRoles, [
+      makeSummary({
+        userId: "alias@example.com",
+        userEmail: "primary@example.com",
+      }),
+    ]);
+
+    const primary = employees.find((employee) => employee.id === "member-1")!;
+    const alias = employees.find((employee) => employee.id === "member-2")!;
+
+    expect(primary.status).toBe("enrolled");
+    expect(primary.tokenCount).toBe(150);
+    expect(alias.status).toBe("not_enrolled");
+    expect(alias.tokenCount).toBe(0);
+  });
+
   it("creates unattributed rows with a usage: id for unmatched summaries", () => {
     const employees = buildEmployees([], noRoles, [
       makeSummary({ userId: "ghost@example.com" }),

@@ -35,12 +35,16 @@ export function buildEmployees(
     summaries.map((summary) => [summary.userId, summary]),
   );
   const summaryByEmail = new Map(
-    summaries.flatMap((summary) => {
-      const emails = [summary.userEmail, summary.userId].filter((value) =>
-        value.includes("@"),
-      );
-      return emails.map((email) => [email.toLowerCase(), summary] as const);
-    }),
+    summaries
+      .map((summary) => {
+        const email =
+          summary.userEmail ||
+          (summary.userId.includes("@") ? summary.userId : "");
+        return email ? ([email.toLowerCase(), summary] as const) : null;
+      })
+      .filter(
+        (entry): entry is readonly [string, UserSummary] => entry != null,
+      ),
   );
   const matchedSummaryIds = new Set<string>();
 
