@@ -312,14 +312,14 @@ function TurnHeader({
   author,
   userId,
   userLabel,
+  createdAt,
   results,
-  first,
 }: {
   author: TurnAuthor;
   userId?: string;
   userLabel?: string;
+  createdAt?: Date;
   results?: RiskResult[];
-  first: boolean;
 }) {
   const isUser = author === "user";
   const userName = userId ?? userLabel;
@@ -327,23 +327,32 @@ function TurnHeader({
   // assistant turn's findings live on its tool rows, aggregated into `results`.
   const flagged = !!results && results.length > 0;
   const riskCount = flagged ? distinctRiskCount(results) : 0;
+  // The turn's timestamp sits in the divider (replacing the old "Turn" label).
+  const when = createdAt ? format(new Date(createdAt), "MMM d, h:mm a") : null;
   return (
     <div className="px-4">
-      {/* Turn separator: a zig-zag rule with a centered label. A flagged turn
-          turns red and counts its risks instead of reading "Turn"; the label
-          opens the findings popover. */}
-      {(!first || flagged) && (
-        <div
-          className={cn(
-            "flex items-center gap-3 pt-7 pb-5",
-            flagged ? "text-red-800" : "text-muted-foreground",
+      {/* Turn separator: a zig-zag rule with a centered label showing the turn's
+          date + time (shown for every turn, including the first). A flagged turn
+          turns red and appends "N risks" after a divider; that label opens the
+          findings popover. */}
+      <div
+        className={cn(
+          "flex items-center gap-3 pt-7 pb-5",
+          flagged ? "text-red-800" : "text-muted-foreground",
+        )}
+      >
+        <ZigZagRule
+          bold={flagged}
+          className={flagged ? "bg-red-800" : undefined}
+        />
+        <div className="flex items-center gap-2 whitespace-nowrap">
+          {when && (
+            <span className="text-muted-foreground font-mono text-xs">
+              {when}
+            </span>
           )}
-        >
-          <ZigZagRule
-            bold={flagged}
-            className={flagged ? "bg-red-800" : undefined}
-          />
-          {flagged ? (
+          {flagged && when && <span className="bg-border h-3.5 w-px" />}
+          {flagged && (
             <RiskBadge
               results={results}
               trigger={
@@ -357,17 +366,13 @@ function TurnHeader({
                 </button>
               }
             />
-          ) : (
-            <span className="font-mono text-sm font-medium uppercase">
-              Turn
-            </span>
           )}
-          <ZigZagRule
-            bold={flagged}
-            className={flagged ? "bg-red-800" : undefined}
-          />
         </div>
-      )}
+        <ZigZagRule
+          bold={flagged}
+          className={flagged ? "bg-red-800" : undefined}
+        />
+      </div>
       <div className="flex items-center justify-between pt-1 pb-3">
         <div className="bg-background flex h-9 min-w-0 items-center gap-2 rounded-full border pr-3 pl-1">
           <Avatar className="size-7 shrink-0">
@@ -428,14 +433,10 @@ function UserMessageRow({
           </div>
         )}
       </div>
-      {(flagged || usage) && (
+      {(usage || sensitive) && (
         <div className="text-muted-foreground mx-2 flex items-center gap-2 pl-4 text-xs">
-          <span className="tabular-nums">
-            {format(new Date(message.createdAt), "h:mm a")}
-          </span>
-          {usage && <MetaSeparator />}
           {usage && <CostBadge usage={usage} />}
-          {sensitive && <MetaSeparator />}
+          {usage && sensitive && <MetaSeparator />}
           {sensitive && (
             <RevealSecretButton
               results={results}
@@ -610,13 +611,17 @@ function ToolRowView({
   const resMatches = toSectionMatches(resultResults, openExclusion);
   // Search: which of this tool's sections contain the query (case-insensitive,
   // mirroring the server's ILIKE) — drives which section auto-opens + highlights.
-  // The card itself opens whenever it holds the active match (`active`), even if
-  // the hit is in structured content not surfaced in the args/output text.
   const queryLc = ctx.searchQuery?.trim().toLowerCase();
+  const nameMatches = !!queryLc && name.toLowerCase().includes(queryLc);
   const requestMatches =
     !!queryLc && (request?.toLowerCase().includes(queryLc) ?? false);
   const resultMatches =
     !!queryLc && (result?.toLowerCase().includes(queryLc) ?? false);
+  // The active match is at the message level, but an assistant message can spawn
+  // several tool rows that all share its seq. Treat this tool as the active match
+  // only when its OWN name/args/output matches, so navigating to the message
+  // opens just the tool that actually matched — not every sibling tool.
+  const toolActive = active && (nameMatches || requestMatches || resultMatches);
   const searchSection: SectionMatch[] = ctx.searchQuery
     ? [{ value: ctx.searchQuery, label: "match" }]
     : [];
@@ -652,20 +657,20 @@ function ToolRowView({
         </div>
       )}
       <ToolUI
-        // ToolUI expansion is uncontrolled, so key on `active` to remount it:
+        // ToolUI expansion is uncontrolled, so key on `toolActive` to remount it:
         // landing on this tool's match opens it; moving to the next match
         // collapses it again. Non-active tools keep a stable key (and any manual
         // expansion the user made).
-        key={active ? "active" : "default"}
+        key={toolActive ? "active" : "default"}
         name={name}
         request={request}
         result={result}
         status="complete"
-        defaultExpanded={flagged || active}
+        defaultExpanded={flagged || toolActive}
         requestHighlight={requestHighlight}
         resultHighlight={resultHighlight}
         nameQuery={ctx.searchQuery}
-        searchActive={active}
+        searchActive={toolActive}
       />
     </div>
   );
@@ -788,10 +793,10 @@ function DisplayItemView({
           author={item.author}
           userId={item.userId}
           userLabel={ctx.userLabel}
+          createdAt={item.createdAt}
           results={item.messageIds.flatMap(
             (id) => ctx.riskResultsByMessage.get(id) ?? [],
           )}
-          first={item.first}
         />
       );
     case "loadMore":

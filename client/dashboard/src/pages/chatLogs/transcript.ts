@@ -191,7 +191,8 @@ export type DisplayItem =
       /** Every message in the turn (the assistant turn spans text + tool rows),
        * so the header can surface the turn's risk badge + exclusion actions. */
       messageIds: string[];
-      first: boolean;
+      /** Timestamp of the turn's first message, shown in the divider. */
+      createdAt?: Date;
     }
   | { type: "row"; id: string; row: TranscriptRow }
   /** Keyset-pagination affordance at the top/bottom of the loaded window. */
@@ -237,7 +238,6 @@ export function buildDisplayItems({
   let gi = 0;
   let lastGeneration: number | null = null;
   let lastAuthor: TurnAuthor | null = null;
-  let firstTurn = true;
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!;
@@ -272,12 +272,12 @@ export function buildDisplayItems({
           row.kind === "message"
             ? (row.message.externalUserId ?? row.message.userId)
             : undefined,
+        createdAt:
+          row.kind === "message"
+            ? row.message.createdAt
+            : (row.callMessage?.createdAt ?? row.resultMessage?.createdAt),
         messageIds,
-        // No divider rule above the very first turn (unless older pages sit
-        // above it, in which case the load-older affordance already separates).
-        first: firstTurn && !hasMoreBefore,
       });
-      firstTurn = false;
       lastAuthor = author;
     }
     items.push({ type: "row", id: row.id, row });
