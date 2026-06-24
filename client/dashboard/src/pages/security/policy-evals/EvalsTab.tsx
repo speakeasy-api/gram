@@ -53,6 +53,15 @@ import type {
   PolicyEvalRunStatus,
 } from "@gram/client/models/components/policyevalrun.js";
 import type { EvalSource } from "../policy-form/use-policy-form";
+import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
+import {
+  ConfidenceCell,
+  MatchCell,
+  SessionCell,
+  SourceRuleCell,
+  TagsCell,
+} from "../finding-cells";
+import { RevealAllProvider, RevealAllToggle } from "../risk-ui";
 import { NewRunSheet } from "./NewRunSheet";
 import {
   describeSample,
@@ -351,6 +360,10 @@ function RunDetail({
 }) {
   const queryClient = useQueryClient();
   const [reRunOpen, setReRunOpen] = useState(false);
+  // Lifted here so the findings table's Session cells can open the chat detail
+  // sheet — the same realtime-risk pattern (RiskEvents drives ChatDetailSheet
+  // off a selected chat id).
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
 
   const {
     data: run,
@@ -505,6 +518,7 @@ function RunDetail({
             isLoading={findingsLoading}
             isLoaded={findingsLoaded}
             suppressAllClear={judgeDidNotRun || noMessagesInScope}
+            onOpenChat={setSelectedChatId}
           />
         </>
       ) : isCancelled ? (
@@ -525,6 +539,13 @@ function RunDetail({
           onSelectRun(created.id);
         }}
         canRun={canRun}
+      />
+
+      <ChatDetailSheet
+        chatId={selectedChatId}
+        onClose={() => setSelectedChatId(null)}
+        onDelete={() => setSelectedChatId(null)}
+        riskFocus
       />
     </div>
   );
@@ -604,18 +625,11 @@ function RunNotFoundPanel({
 
 function InProgressPanel({ status }: { status: PolicyEvalRunStatus }) {
   const label = status === "pending" ? "Queued…" : "Scanning…";
-  const sub =
-    status === "pending"
-      ? "This run is queued and will start shortly."
-      : "Replaying the policy across the sample. Metrics appear as it runs.";
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-lg border border-dashed px-8 py-16">
-      <Loader2 className="text-muted-foreground mb-3 h-6 w-6 animate-spin" />
-      <Type variant="subheading" className="mb-1">
+    <div className="bg-muted/20 flex items-center justify-center gap-2 rounded-lg border border-dashed px-8 py-12">
+      <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
+      <Type small muted className="font-normal">
         {label}
-      </Type>
-      <Type small muted className="text-center">
-        {sub}
       </Type>
     </div>
   );
@@ -714,6 +728,7 @@ function FindingsSection({
   isLoading,
   isLoaded,
   suppressAllClear,
+  onOpenChat,
 }: {
   run: PolicyEvalRun;
   findings: PolicyEvalFinding[];
@@ -722,31 +737,41 @@ function FindingsSection({
   /** When true, never show the reassuring "ran clean" all-clear (the judge did
    *  not actually run, so an empty result is not a real pass). */
   suppressAllClear: boolean;
+  /** Opens the chat detail sheet for a finding's session. */
+  onOpenChat: (chatId: string) => void;
 }) {
+  const showLoader =
+    isLoading || !isLoaded || (run.findingsCount > 0 && findings.length === 0);
   return (
-    <div className="space-y-3">
-      <div className="flex items-baseline gap-2">
-        <Heading variant="h4">Findings</Heading>
-        <span className="text-muted-foreground text-sm">
-          {formatCount(run.findingsCount)}
-        </span>
-      </div>
-      {/* `findingsCount` (from the run) is authoritative; the list can lag it
-          briefly. While the count says there should be findings but none have
-          loaded, keep the loader — never flash the "ran clean" all-clear. */}
-      {isLoading ||
-      !isLoaded ||
-      (run.findingsCount > 0 && findings.length === 0) ? (
-        <div className="bg-muted/20 flex items-center justify-center rounded-lg border border-dashed py-12">
-          <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+    // RevealAllProvider powers MatchCell's per-row reveal plus the global
+    // "Reveal all" toggle, mirroring the realtime Risk Events table.
+    <RevealAllProvider>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-baseline gap-2">
+            <Heading variant="h4">Findings</Heading>
+            <span className="text-muted-foreground text-sm">
+              {formatCount(run.findingsCount)}
+            </span>
+          </div>
+          {!showLoader && findings.length > 0 && <RevealAllToggle />}
         </div>
-      ) : (
-        <FindingsTable
-          findings={findings}
-          suppressAllClear={suppressAllClear}
-        />
-      )}
-    </div>
+        {/* `findingsCount` (from the run) is authoritative; the list can lag it
+            briefly. While the count says there should be findings but none have
+            loaded, keep the loader — never flash the "ran clean" all-clear. */}
+        {showLoader ? (
+          <div className="bg-muted/20 flex items-center justify-center rounded-lg border border-dashed py-12">
+            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+          </div>
+        ) : (
+          <FindingsTable
+            findings={findings}
+            suppressAllClear={suppressAllClear}
+            onOpenChat={onOpenChat}
+          />
+        )}
+      </div>
+    </RevealAllProvider>
   );
 }
 
@@ -869,9 +894,11 @@ function EnableSignalCta({
 function FindingsTable({
   findings,
   suppressAllClear,
+  onOpenChat,
 }: {
   findings: PolicyEvalFinding[];
   suppressAllClear: boolean;
+  onOpenChat: (chatId: string) => void;
 }) {
   const columns: Column<PolicyEvalFinding>[] = [
     {
@@ -879,70 +906,37 @@ function FindingsTable({
       header: "Session",
       width: "1.4fr",
       render: (f) => (
-        <div className="min-w-0">
-          <div className="truncate text-sm">
-            {f.chatTitle ??
-              (f.chatId ? `${f.chatId.slice(0, 8)}…` : "Unknown session")}
-          </div>
-          <div className="text-muted-foreground truncate text-xs">
-            {f.chatUserId ?? "unknown user"}
-          </div>
-        </div>
+        <SessionCell
+          chatId={f.chatId}
+          chatTitle={f.chatTitle}
+          userId={f.chatUserId}
+          onOpen={onOpenChat}
+        />
       ),
     },
     {
       key: "source",
       header: "Source / rule",
       width: "1fr",
-      render: (f) => (
-        <div className="flex min-w-0 items-center gap-2">
-          <Badge variant="neutral">
-            <Badge.Text>{f.source}</Badge.Text>
-          </Badge>
-          {f.ruleId && (
-            <span className="text-muted-foreground truncate font-mono text-xs">
-              {f.ruleId}
-            </span>
-          )}
-        </div>
-      ),
+      render: (f) => <SourceRuleCell source={f.source} ruleId={f.ruleId} />,
     },
     {
       key: "match",
       header: "Match",
       width: "1.3fr",
-      render: (f) => (
-        <span className="text-muted-foreground block truncate font-mono text-xs">
-          {f.match ?? "—"}
-        </span>
-      ),
+      render: (f) => <MatchCell match={f.match} source={f.source} />,
     },
     {
       key: "confidence",
       header: "Confidence",
       width: "0.6fr",
-      render: (f) => (
-        <span className="text-sm">
-          {f.confidence == null ? "—" : `${Math.round(f.confidence * 100)}%`}
-        </span>
-      ),
+      render: (f) => <ConfidenceCell confidence={f.confidence} />,
     },
     {
       key: "tags",
       header: "Tags",
       width: "1fr",
-      render: (f) =>
-        f.tags && f.tags.length > 0 ? (
-          <div className="flex flex-wrap gap-1">
-            {f.tags.map((tag) => (
-              <Badge key={tag} variant="neutral">
-                <Badge.Text>{tag}</Badge.Text>
-              </Badge>
-            ))}
-          </div>
-        ) : (
-          <span className="text-muted-foreground text-sm">—</span>
-        ),
+      render: (f) => <TagsCell tags={f.tags} />,
     },
   ];
 

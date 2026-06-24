@@ -29,8 +29,8 @@ import { useRoutes } from "@/routes";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRiskPoliciesGet } from "@gram/client/react-query/index.js";
 import { Badge, Stack } from "@speakeasy-api/moonshine";
-import { Loader2, Shield } from "lucide-react";
-import { Navigate, useParams } from "react-router";
+import { ArrowLeft, Loader2, Shield } from "lucide-react";
+import { Link, Navigate, useParams } from "react-router";
 import { useQueryState } from "nuqs";
 import { EvalsTab } from "./policy-evals/EvalsTab";
 import { EvalSignalBanner } from "./policy-evals/EvalSignalBanner";
@@ -105,6 +105,15 @@ function PolicyDetailContent(): JSX.Element {
       </Page.Header>
 
       <Page.Body fullWidth noPadding className="gap-0">
+        <div className="mx-auto w-full max-w-[1440px] px-8 pt-6">
+          <Link
+            to={routes.policyCenter.href()}
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Risk Policies
+          </Link>
+        </div>
         <PolicyHero
           name={isCreate ? "New Policy" : policy?.name}
           enabled={isCreate ? undefined : policy?.enabled}
