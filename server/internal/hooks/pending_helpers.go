@@ -140,7 +140,7 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeP
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
-			UserInfo:   telemetry.UserInfoByID(metadata.UserID),
+			UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
 			Attributes: attrs,
 		})
 
