@@ -644,6 +644,7 @@ function ToolRowView({
         defaultExpanded={flagged || active}
         requestHighlight={requestHighlight}
         resultHighlight={resultHighlight}
+        nameQuery={ctx.searchQuery}
       />
     </div>
   );

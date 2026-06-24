@@ -115,6 +115,9 @@ interface ToolUIProps {
   requestHighlight?: SectionHighlight;
   /** Flag matches inside the output (risk review). */
   resultHighlight?: SectionHighlight;
+  /** When set, highlight occurrences of this query (case-insensitive) in the
+   * tool name — e.g. a thread search for "customer" lights up `get_customer`. */
+  nameQuery?: string;
   /** Additional class names */
   className?: string;
   /** MCP tool annotations */
@@ -711,6 +714,37 @@ type ApprovalMode = "one-time" | "for-session";
  * ToolUI - Main component
  * -------------------------------------------------------------------------- */
 
+// Highlight every case-insensitive occurrence of `query` in a short label (the
+// tool name), preserving original casing. Matches over the original string so
+// offsets stay aligned; escapes regex metacharacters in the user query.
+function highlightLabel(text: string, query?: string): React.ReactNode {
+  const q = query?.trim();
+  if (!q) return text;
+  const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+  const nodes: React.ReactNode[] = [];
+  let pos = 0;
+  let k = 0;
+  for (let m = re.exec(text); m !== null; m = re.exec(text)) {
+    if (m[0].length === 0) {
+      re.lastIndex++;
+      continue;
+    }
+    if (m.index > pos) nodes.push(text.slice(pos, m.index));
+    nodes.push(
+      <mark
+        key={k++}
+        className="rounded-sm bg-yellow-300/70 px-0.5 text-foreground"
+      >
+        {m[0]}
+      </mark>,
+    );
+    pos = m.index + m[0].length;
+  }
+  if (pos === 0) return text;
+  if (pos < text.length) nodes.push(text.slice(pos));
+  return nodes;
+}
+
 function ToolUI({
   name,
   icon,
@@ -721,6 +755,7 @@ function ToolUI({
   defaultExpanded = false,
   requestHighlight,
   resultHighlight,
+  nameQuery,
   className,
   annotations,
   onApproveOnce,
@@ -806,7 +841,7 @@ function ToolUI({
             !provider && isApprovalPending && "shimmer",
           )}
         >
-          {displayName}
+          {highlightLabel(displayName, nameQuery)}
         </span>
         {hasContent && (
           <ChevronDownIcon
