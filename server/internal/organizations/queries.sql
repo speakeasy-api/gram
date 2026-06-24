@@ -153,10 +153,34 @@ resolved AS (
     FROM input_memberships
     JOIN organization_metadata ON organization_metadata.workos_id = input_memberships.workos_org_id
 ),
+claimed_placeholders AS (
+    UPDATE organization_user_relationships pending
+    SET user_id = @user_id,
+        deleted_at = NULL,
+        updated_at = clock_timestamp()
+    FROM resolved
+    WHERE pending.workos_membership_id = resolved.workos_membership_id
+      AND pending.user_id IS NULL
+      AND pending.deleted_at IS NULL
+      AND @user_id::text IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1
+          FROM organization_user_relationships existing
+          WHERE existing.organization_id = pending.organization_id
+            AND existing.user_id = @user_id
+            AND existing.deleted_at IS NULL
+      )
+    RETURNING pending.organization_id, pending.workos_membership_id
+),
 upserted AS (
     INSERT INTO organization_user_relationships (organization_id, user_id, workos_membership_id)
     SELECT resolved.organization_id, @user_id, resolved.workos_membership_id
     FROM resolved
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM claimed_placeholders
+        WHERE claimed_placeholders.workos_membership_id = resolved.workos_membership_id
+    )
     ON CONFLICT (organization_id, user_id) DO UPDATE SET
         workos_membership_id = EXCLUDED.workos_membership_id,
         deleted_at = NULL,
