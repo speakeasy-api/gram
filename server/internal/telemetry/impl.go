@@ -1422,119 +1422,91 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		metricsMode = "session"
 	}
 
-	// Fetch chat metrics from PostgreSQL for current period
-	chatMetrics, err := s.chatRepo.GetChatMetricsSummary(ctx, chatRepo.GetChatMetricsSummaryParams{
-		ProjectID: *authCtx.ProjectID,
-		TimeStart: timeStartPG,
-		TimeEnd:   timeEndPG,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving chat metrics summary")
-	}
+	// These queries hit two databases. The PostgreSQL pool is safe for concurrent
+	// use, so each PG query runs in its own goroutine. The shared ClickHouse
+	// connection races when queried concurrently with itself, so every ClickHouse
+	// query runs sequentially in a single lane. Total latency is the slower of
+	// (serial ClickHouse total) and (slowest PostgreSQL query) rather than the sum
+	// of every query.
+	var (
+		chatMetrics           chatRepo.GetChatMetricsSummaryRow
+		toolMetrics           *repo.OverviewSummary
+		chatMetricsComparison chatRepo.GetChatMetricsSummaryRow
+		toolMetricsComparison *repo.OverviewSummary
+		activeServersRaw      *repo.ActiveCounts
+		topServers            []repo.TopServer
+		serverNameOverrides   []hooksRepo.ListHooksServerNameOverridesRow
 
-	// Fetch tool call metrics from ClickHouse for current period (no filters)
-	toolMetrics, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
-		GramProjectID:     projectID,
-		TimeStart:         timeStart,
-		TimeEnd:           timeEnd,
-		UserID:            "",
-		ExternalUserID:    "",
-		APIKeyID:          "",
-		ToolsetSlug:       "",
-		RemoteMCPServerID: "",
-		MCPServerID:       "",
-		EventSource:       "",
-		HookSource:        "",
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tool call metrics")
-	}
+		// Session-mode (PostgreSQL) results; only populated when sessionMode is true.
+		activeUsersCountPG int64
+		topUsersPG         []chatRepo.GetTopUsersByMessagesRow
+		llmClientsPG       []chatRepo.GetLLMClientBreakdownByMessagesRow
 
-	// Fetch comparison period metrics from PostgreSQL
-	chatMetricsComparison, err := s.chatRepo.GetChatMetricsSummary(ctx, chatRepo.GetChatMetricsSummaryParams{
-		ProjectID: *authCtx.ProjectID,
-		TimeStart: comparisonStartPG,
-		TimeEnd:   comparisonEndPG,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison chat metrics")
-	}
+		// Tool-call-mode (ClickHouse) results; only populated when sessionMode is false.
+		topUsersCH   []repo.TopUser
+		llmClientsCH []repo.LLMClientUsage
+	)
 
-	// Fetch comparison period tool metrics from ClickHouse
-	toolMetricsComparison, err := s.chRepo.GetOverviewSummary(ctx, repo.GetOverviewSummaryParams{
-		GramProjectID:     projectID,
-		TimeStart:         comparisonStart,
-		TimeEnd:           comparisonEnd,
-		UserID:            "",
-		ExternalUserID:    "",
-		APIKeyID:          "",
-		ToolsetSlug:       "",
-		RemoteMCPServerID: "",
-		MCPServerID:       "",
-		EventSource:       "",
-		HookSource:        "",
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison tool call metrics")
-	}
+	eg, egCtx := errgroup.WithContext(ctx)
 
-	// Get active counts and user/session data based on metrics mode
-	var activeServersCount int64
-	var activeUsersCount int64
-	var topUsers []*telem_gen.TopUser
-	var llmClientBreakdown []*telem_gen.LLMClientUsage
+	// ClickHouse lane: a single goroutine runs every ClickHouse query in sequence.
+	// The shared clickhouse.Conn does not tolerate concurrent queries against
+	// itself, so these must not be split across goroutines.
+	eg.Go(func() error {
+		var fetchErr error
 
-	// Active servers count - always from ClickHouse hooks data
-	activeServersRaw, err := s.chRepo.GetActiveCounts(ctx, repo.GetActiveCountsParams{
-		GramProjectID:  projectID,
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		ExternalUserID: "",
-		APIKeyID:       "",
-		ToolsetSlug:    "",
-		SessionMode:    sessionMode,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving active server counts")
-	}
-	activeServersCount = int64(activeServersRaw.ActiveServersCount) //nolint:gosec // Bounded count that won't overflow int64
-
-	if sessionMode {
-		// Use PostgreSQL for session-based metrics
-		activeUsersCount, err = s.chatRepo.GetActiveUserCountByMessages(ctx, chatRepo.GetActiveUserCountByMessagesParams{
-			ProjectID: *authCtx.ProjectID,
-			TimeStart: timeStartPG,
-			TimeEnd:   timeEndPG,
+		// Tool call metrics (no filters): current and comparison periods.
+		toolMetrics, fetchErr = s.chRepo.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
+			GramProjectID:     projectID,
+			TimeStart:         timeStart,
+			TimeEnd:           timeEnd,
+			UserID:            "",
+			ExternalUserID:    "",
+			APIKeyID:          "",
+			ToolsetSlug:       "",
+			RemoteMCPServerID: "",
+			MCPServerID:       "",
+			EventSource:       "",
+			HookSource:        "",
 		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving active user count from PG")
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving tool call metrics")
 		}
 
-		topUsersPG, err := s.chatRepo.GetTopUsersByMessages(ctx, chatRepo.GetTopUsersByMessagesParams{
-			ProjectID:   *authCtx.ProjectID,
-			TimeStart:   timeStartPG,
-			TimeEnd:     timeEndPG,
-			ResultLimit: 10,
+		toolMetricsComparison, fetchErr = s.chRepo.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
+			GramProjectID:     projectID,
+			TimeStart:         comparisonStart,
+			TimeEnd:           comparisonEnd,
+			UserID:            "",
+			ExternalUserID:    "",
+			APIKeyID:          "",
+			ToolsetSlug:       "",
+			RemoteMCPServerID: "",
+			MCPServerID:       "",
+			EventSource:       "",
+			HookSource:        "",
 		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving top users from PG")
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving comparison tool call metrics")
 		}
-		topUsers = toTopUsersFromPG(topUsersPG)
 
-		llmClientsPG, err := s.chatRepo.GetLLMClientBreakdownByMessages(ctx, chatRepo.GetLLMClientBreakdownByMessagesParams{
-			ProjectID: *authCtx.ProjectID,
-			TimeStart: timeStartPG,
-			TimeEnd:   timeEndPG,
+		// Active server count from hooks data. In tool-call mode this same row also
+		// yields the active user count (resolved after Wait).
+		activeServersRaw, fetchErr = s.chRepo.GetActiveCounts(egCtx, repo.GetActiveCountsParams{
+			GramProjectID:  projectID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			ExternalUserID: "",
+			APIKeyID:       "",
+			ToolsetSlug:    "",
+			SessionMode:    sessionMode,
 		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving LLM client breakdown from PG")
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving active server counts")
 		}
-		llmClientBreakdown = toLLMClientUsageFromPG(llmClientsPG)
-	} else {
-		// Use ClickHouse for tool-call-based metrics
-		activeUsersCount = int64(activeServersRaw.ActiveUsersCount) //nolint:gosec // Bounded count that won't overflow int64
 
-		topUsersCH, err := s.chRepo.GetTopUsers(ctx, repo.GetTopUsersParams{
+		// Top servers from hooks data.
+		topServers, fetchErr = s.chRepo.GetTopServers(egCtx, repo.GetTopServersParams{
 			GramProjectID:  projectID,
 			TimeStart:      timeStart,
 			TimeEnd:        timeEnd,
@@ -1542,46 +1514,141 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 			APIKeyID:       "",
 			ToolsetSlug:    "",
 			Limit:          10,
-			SessionMode:    false,
 		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving top users from CH")
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving top servers")
 		}
-		topUsers = toTopUsers(topUsersCH)
 
-		llmClientsCH, err := s.chRepo.GetLLMClientBreakdown(ctx, repo.GetLLMClientBreakdownParams{
-			GramProjectID:  projectID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			ExternalUserID: "",
-			APIKeyID:       "",
-			ToolsetSlug:    "",
-			SessionMode:    false,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving LLM client breakdown from CH")
+		// In tool-call mode, top users and the LLM client breakdown also come from
+		// ClickHouse. In session mode they come from PostgreSQL (separate lanes).
+		if !sessionMode {
+			topUsersCH, fetchErr = s.chRepo.GetTopUsers(egCtx, repo.GetTopUsersParams{
+				GramProjectID:  projectID,
+				TimeStart:      timeStart,
+				TimeEnd:        timeEnd,
+				ExternalUserID: "",
+				APIKeyID:       "",
+				ToolsetSlug:    "",
+				Limit:          10,
+				SessionMode:    false,
+			})
+			if fetchErr != nil {
+				return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving top users from CH")
+			}
+
+			llmClientsCH, fetchErr = s.chRepo.GetLLMClientBreakdown(egCtx, repo.GetLLMClientBreakdownParams{
+				GramProjectID:  projectID,
+				TimeStart:      timeStart,
+				TimeEnd:        timeEnd,
+				ExternalUserID: "",
+				APIKeyID:       "",
+				ToolsetSlug:    "",
+				SessionMode:    false,
+			})
+			if fetchErr != nil {
+				return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving LLM client breakdown from CH")
+			}
 		}
-		llmClientBreakdown = toLLMClientUsage(llmClientsCH)
-	}
 
-	// Get top servers - always from ClickHouse hooks data
-	topServers, err := s.chRepo.GetTopServers(ctx, repo.GetTopServersParams{
-		GramProjectID:  projectID,
-		TimeStart:      timeStart,
-		TimeEnd:        timeEnd,
-		ExternalUserID: "",
-		APIKeyID:       "",
-		ToolsetSlug:    "",
-		Limit:          10,
+		return nil
 	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving top servers")
+
+	// PostgreSQL lanes: the pgxpool is safe for concurrent use, so fan these out.
+
+	// Chat metrics: current and comparison periods.
+	eg.Go(func() error {
+		var fetchErr error
+		chatMetrics, fetchErr = s.chatRepo.GetChatMetricsSummary(egCtx, chatRepo.GetChatMetricsSummaryParams{
+			ProjectID: *authCtx.ProjectID,
+			TimeStart: timeStartPG,
+			TimeEnd:   timeEndPG,
+		})
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving chat metrics summary")
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var fetchErr error
+		chatMetricsComparison, fetchErr = s.chatRepo.GetChatMetricsSummary(egCtx, chatRepo.GetChatMetricsSummaryParams{
+			ProjectID: *authCtx.ProjectID,
+			TimeStart: comparisonStartPG,
+			TimeEnd:   comparisonEndPG,
+		})
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving comparison chat metrics")
+		}
+		return nil
+	})
+
+	// Server name overrides.
+	eg.Go(func() error {
+		var fetchErr error
+		serverNameOverrides, fetchErr = s.hooksRepo.ListHooksServerNameOverrides(egCtx, *authCtx.ProjectID)
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving server name overrides")
+		}
+		return nil
+	})
+
+	if sessionMode {
+		// Session-based metrics come from PostgreSQL.
+		eg.Go(func() error {
+			var fetchErr error
+			activeUsersCountPG, fetchErr = s.chatRepo.GetActiveUserCountByMessages(egCtx, chatRepo.GetActiveUserCountByMessagesParams{
+				ProjectID: *authCtx.ProjectID,
+				TimeStart: timeStartPG,
+				TimeEnd:   timeEndPG,
+			})
+			if fetchErr != nil {
+				return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving active user count from PG")
+			}
+			return nil
+		})
+		eg.Go(func() error {
+			var fetchErr error
+			topUsersPG, fetchErr = s.chatRepo.GetTopUsersByMessages(egCtx, chatRepo.GetTopUsersByMessagesParams{
+				ProjectID:   *authCtx.ProjectID,
+				TimeStart:   timeStartPG,
+				TimeEnd:     timeEndPG,
+				ResultLimit: 10,
+			})
+			if fetchErr != nil {
+				return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving top users from PG")
+			}
+			return nil
+		})
+		eg.Go(func() error {
+			var fetchErr error
+			llmClientsPG, fetchErr = s.chatRepo.GetLLMClientBreakdownByMessages(egCtx, chatRepo.GetLLMClientBreakdownByMessagesParams{
+				ProjectID: *authCtx.ProjectID,
+				TimeStart: timeStartPG,
+				TimeEnd:   timeEndPG,
+			})
+			if fetchErr != nil {
+				return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving LLM client breakdown from PG")
+			}
+			return nil
+		})
 	}
 
-	// Get server name overrides from PostgreSQL
-	serverNameOverrides, err := s.hooksRepo.ListHooksServerNameOverrides(ctx, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving server name overrides")
+	if err := eg.Wait(); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving project overview")
+	}
+
+	// Resolve active counts and top lists now that every query has returned.
+	activeServersCount := int64(activeServersRaw.ActiveServersCount) //nolint:gosec // Bounded count that won't overflow int64
+	var activeUsersCount int64
+	var topUsers []*telem_gen.TopUser
+	var llmClientBreakdown []*telem_gen.LLMClientUsage
+	if sessionMode {
+		activeUsersCount = activeUsersCountPG
+		topUsers = toTopUsersFromPG(topUsersPG)
+		llmClientBreakdown = toLLMClientUsageFromPG(llmClientsPG)
+	} else {
+		activeUsersCount = int64(activeServersRaw.ActiveUsersCount) //nolint:gosec // Bounded count that won't overflow int64
+		topUsers = toTopUsers(topUsersCH)
+		llmClientBreakdown = toLLMClientUsage(llmClientsCH)
 	}
 
 	// Build a map for quick lookup: raw_server_name -> display_name
