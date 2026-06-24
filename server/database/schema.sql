@@ -1193,6 +1193,9 @@ CREATE TABLE IF NOT EXISTS chats (
   external_user_id TEXT,
   external_chat_id TEXT,
   title TEXT,
+  -- True when a human explicitly renamed the chat. Auto title generation skips
+  -- these so it never overwrites a manually chosen name.
+  title_manually_set boolean NOT NULL DEFAULT false,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
