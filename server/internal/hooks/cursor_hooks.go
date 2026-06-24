@@ -265,7 +265,7 @@ func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayl
 // persistCursorToolCallEvent writes tool call events to both ClickHouse and PostgreSQL
 func (s *Service) persistCursorToolCallEvent(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, blockReason string, hookEvent HookEvent) error {
 	// Write to ClickHouse for telemetry
-	s.writeCursorHookToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, blockReason)
+	s.writeCursorHookToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, metadata.UserEmail, blockReason)
 
 	// Write to PostgreSQL for chat history
 	switch hookEvent {
@@ -291,7 +291,7 @@ func isCursorConversationEvent(hookEvent HookEvent) bool {
 // writeCursorHookToClickHouse writes a Cursor hook event directly to ClickHouse
 // Unlike Claude hooks, Cursor payloads are already authenticated and include user_email,
 // so no Redis buffering is needed.
-func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string, blockReason string) {
+func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string, userEmail string, blockReason string) {
 	attrs := s.buildCursorTelemetryAttributes(ctx, payload, orgID, projectID)
 	if blockReason != "" {
 		attrs[attr.HookBlockReasonKey] = blockReason
@@ -318,7 +318,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
-			UserInfo:   telemetry.UserInfoByID(userID),
+			UserInfo:   telemetry.UserInfoByIDAndEmail(userID, userEmail),
 			Attributes: attrs,
 		})
 
