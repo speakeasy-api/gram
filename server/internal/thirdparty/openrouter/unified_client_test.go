@@ -81,7 +81,6 @@ type mockMessageCaptureStrategy struct {
 	capturedResponse     *CompletionResponse
 }
 
-//go:fix inline
 func (m *mockMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request CompletionRequest) (CaptureSession, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
