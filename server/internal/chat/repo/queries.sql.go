@@ -1786,6 +1786,154 @@ func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWind
 	return items, nil
 }
 
+const listSearchWindowedMessages = `-- name: ListSearchWindowedMessages :many
+WITH ordered AS (
+  SELECT
+    cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at,
+    row_number() OVER (ORDER BY cm.seq) AS rn,
+    count(*) OVER () AS total
+  FROM chat_messages cm
+  WHERE cm.chat_id = $2
+    AND (cm.project_id IS NULL OR cm.project_id = $3::uuid)
+    AND cm.generation = $4::integer
+),
+match_rns AS (
+  SELECT o.rn FROM ordered o
+  WHERE o.content ILIKE '%' || $5::text || '%'
+     OR (o.tool_calls IS NOT NULL AND o.tool_calls::text ILIKE '%' || $5::text || '%')
+     OR (o.content_raw IS NOT NULL AND o.content_raw::text ILIKE '%' || $5::text || '%')
+  ORDER BY o.rn
+  LIMIT $6::integer
+)
+SELECT
+  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.created_at, o.risk_analyzed_at, o.rn, o.total,
+  EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn) AS is_match
+FROM ordered o
+WHERE EXISTS (
+  SELECT 1 FROM match_rns m
+  WHERE o.rn BETWEEN m.rn - $1::bigint AND m.rn + $1::bigint
+)
+ORDER BY o.seq ASC
+`
+
+type ListSearchWindowedMessagesParams struct {
+	ContextSize int64
+	ChatID      uuid.UUID
+	ProjectID   uuid.UUID
+	Generation  int32
+	Query       string
+	MatchLimit  int32
+}
+
+type ListSearchWindowedMessagesRow struct {
+	ID                uuid.UUID
+	Seq               int64
+	ChatID            uuid.UUID
+	ProjectID         uuid.NullUUID
+	Role              string
+	Content           string
+	ContentRaw        []byte
+	ContentAssetUrl   pgtype.Text
+	Model             pgtype.Text
+	MessageID         pgtype.Text
+	FinishReason      pgtype.Text
+	ToolCalls         []byte
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	StorageError      pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	Origin            pgtype.Text
+	UserAgent         pgtype.Text
+	IpAddress         pgtype.Text
+	Source            pgtype.Text
+	ToolCallID        pgtype.Text
+	ToolUrn           pgtype.Text
+	ToolOutcome       pgtype.Text
+	ToolOutcomeNotes  pgtype.Text
+	ContentHash       []byte
+	Generation        int32
+	CreatedAt         pgtype.Timestamptz
+	RiskAnalyzedAt    pgtype.Timestamptz
+	Rn                int64
+	Total             int64
+	IsMatch           bool
+}
+
+// Query-search view: same windowing as ListRiskWindowedMessages, but the seed
+// rows are messages whose searchable text matches @query (case-insensitive
+// substring over the narrative content, the tool-call name/arguments JSON, and
+// any structured/multimodal content) instead of messages with a risk finding.
+// Each match is padded with +/- @context_size ordinal positions. rn/total drive
+// segment folding and the has_more flags; is_match flags the seed rows so the
+// caller can return the explicit jump-to-match seq list (context rows are
+// is_match = false). Seed matches are capped at @match_limit (earliest first by
+// ordinal) to bound the response on broad queries. Asset-offloaded content (too
+// large to store inline) is not searchable here.
+func (q *Queries) ListSearchWindowedMessages(ctx context.Context, arg ListSearchWindowedMessagesParams) ([]ListSearchWindowedMessagesRow, error) {
+	rows, err := q.db.Query(ctx, listSearchWindowedMessages,
+		arg.ContextSize,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Generation,
+		arg.Query,
+		arg.MatchLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSearchWindowedMessagesRow
+	for rows.Next() {
+		var i ListSearchWindowedMessagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.Model,
+			&i.MessageID,
+			&i.FinishReason,
+			&i.ToolCalls,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.TotalTokens,
+			&i.StorageError,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.ExternalMessageID,
+			&i.Origin,
+			&i.UserAgent,
+			&i.IpAddress,
+			&i.Source,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.ToolOutcome,
+			&i.ToolOutcomeNotes,
+			&i.ContentHash,
+			&i.Generation,
+			&i.CreatedAt,
+			&i.RiskAnalyzedAt,
+			&i.Rn,
+			&i.Total,
+			&i.IsMatch,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserFeedbackForChat = `-- name: ListUserFeedbackForChat :many
 SELECT id, project_id, chat_id, message_id, user_resolution, user_resolution_notes, chat_resolution_id, created_at
 FROM chat_user_feedback
@@ -1915,6 +2063,27 @@ type SeedChatMessageParams struct {
 // instead of relying on wall-clock gaps between inserts.
 func (q *Queries) SeedChatMessage(ctx context.Context, arg SeedChatMessageParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, seedChatMessage, arg.ChatID, arg.ProjectID, arg.CreatedAt)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedChatMessageContent = `-- name: SeedChatMessageContent :one
+INSERT INTO chat_messages (chat_id, project_id, role, content)
+VALUES ($1, $2, 'user', $3)
+RETURNING id
+`
+
+type SeedChatMessageContentParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.NullUUID
+	Content   string
+}
+
+// Test fixture: insert a user chat message with explicit content and return its
+// id, for exercising the text-search windowed view.
+func (q *Queries) SeedChatMessageContent(ctx context.Context, arg SeedChatMessageContentParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedChatMessageContent, arg.ChatID, arg.ProjectID, arg.Content)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
