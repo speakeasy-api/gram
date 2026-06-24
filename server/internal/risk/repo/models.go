@@ -43,31 +43,32 @@ type RiskExclusion struct {
 }
 
 type RiskPolicy struct {
-	ID                   uuid.UUID
-	ProjectID            uuid.UUID
-	OrganizationID       string
-	Enabled              bool
-	Name                 string
-	PolicyType           string
-	Sources              []string
-	PresidioEntities     []string
-	PromptInjectionRules []string
-	DisabledRules        []string
-	CustomRuleIds        []string
-	MessageTypes         []string
-	ScopeInclude         pgtype.Text
-	ScopeExempt          pgtype.Text
-	Action               string
-	AudienceType         string
-	AutoName             bool
-	UserMessage          pgtype.Text
-	Prompt               pgtype.Text
-	ModelConfig          []byte
-	Version              int64
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	DeletedAt            pgtype.Timestamptz
-	Deleted              bool
+	ID                     uuid.UUID
+	ProjectID              uuid.UUID
+	OrganizationID         string
+	Enabled                bool
+	Name                   string
+	PolicyType             string
+	Sources                []string
+	PresidioEntities       []string
+	PresidioScoreThreshold pgtype.Float8
+	PromptInjectionRules   []string
+	DisabledRules          []string
+	CustomRuleIds          []string
+	MessageTypes           []string
+	ScopeInclude           pgtype.Text
+	ScopeExempt            pgtype.Text
+	Action                 string
+	AudienceType           string
+	AutoName               bool
+	UserMessage            pgtype.Text
+	Prompt                 pgtype.Text
+	ModelConfig            []byte
+	Version                int64
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }
 
 // Risk-policy bypass request workflow. A block records a request here; an admin approves by granting risk_policy:bypass.
