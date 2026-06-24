@@ -1,4 +1,4 @@
-h1:/3CGXu85i6RRt6AI67G9nJU0pKqU8NzynaBGHUp39bw=
+h1:/rJyAbs+Jts31lacu4xxU+oSmpJpbi0ffSRY1Uz2iYU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -224,3 +224,4 @@ h1:/3CGXu85i6RRt6AI67G9nJU0pKqU8NzynaBGHUp39bw=
 20260618194743_deployments-functions-add-infra-overrides.sql h1:MNR3+BYsl1tfjLes6MbKUWqGkw/nMs8HO2cfyZvTTPs=
 20260618215143_add_custom_rule_match_config.sql h1:ZALVgDTK3jWQrHREznqnbbQDNdfIuOZAWr3VnqLAgbo=
 20260620160523_policy-scope-columns.sql h1:Nd+/ilugIcMRbweLykPze7LzXxiEmd51qsfla1gj3Ig=
+20260624120126_presidio-score-threshold.sql h1:zyOiaX0UseYGcW/QGxKco9Ll8Wkaccvxh2BPQ39FP8E=
