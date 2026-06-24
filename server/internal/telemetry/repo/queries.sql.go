@@ -31,6 +31,15 @@ func userIdentifierExpr(col string) string {
 	return "if(telemetry_logs." + col + " != '', telemetry_logs." + col + ", telemetry_logs.user_email)"
 }
 
+// SearchUsers powers employee enrollment lists, so internal users are grouped by
+// email first to collapse rows that mix email-only and opaque user.id identity.
+func searchUsersGroupExpr(groupBy string) string {
+	if groupBy == "external_user_id" {
+		return userIdentifierExpr("external_user_id")
+	}
+	return "if(telemetry_logs.user_email != '', telemetry_logs.user_email, telemetry_logs.user_id)"
+}
+
 // totalTokensExpr is a grouped-aggregate expression that yields a reliable total
 // token count. AI-coding providers like Claude Code report
 // gen_ai.usage.input_tokens and gen_ai.usage.output_tokens but never emit
@@ -1389,8 +1398,8 @@ type SearchUsersParams struct {
 
 // SearchUsers retrieves aggregated usage metrics grouped by user identifier.
 //
-// Groups telemetry logs by user_id or external_user_id and computes per-user
-// metrics including tokens, chats, and tool call breakdowns.
+// Groups telemetry logs by internal email/user_id or external_user_id and
+// computes per-user metrics including tokens, chats, and tool call breakdowns.
 // Pagination uses last_seen_unix_nano + the group column for stable cursor ordering.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
@@ -1399,7 +1408,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	if arg.GroupBy == "external_user_id" {
 		groupCol = "external_user_id"
 	}
-	groupExpr := userIdentifierExpr(groupCol)
+	groupExpr := searchUsersGroupExpr(arg.GroupBy)
 
 	tc := toolCallExprsFor(arg.EventSource)
 
@@ -1454,7 +1463,14 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		sb = sb.Where("hook_source = ?", arg.HookSource)
 	}
 	if len(arg.UserIDs) > 0 {
-		sb = sb.Where(squirrel.Eq{groupExpr: arg.UserIDs})
+		if arg.GroupBy == "external_user_id" {
+			sb = sb.Where(squirrel.Eq{groupExpr: arg.UserIDs})
+		} else {
+			sb = sb.Where(squirrel.Or{
+				squirrel.Eq{groupExpr: arg.UserIDs},
+				squirrel.Eq{userIdentifierExpr(groupCol): arg.UserIDs},
+			})
+		}
 	}
 
 	sb = sb.GroupBy(groupExpr)
