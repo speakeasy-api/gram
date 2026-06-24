@@ -551,6 +551,108 @@ func TestClaude_PreToolUse_PayloadInventoryBlocksNonGramServer(t *testing.T) {
 		"a payload inventory was supplied, so the block must come from the policy, not the cache-miss fail-closed path")
 }
 
+// A payload inventory gathered live this call (mcp_inventory_fresh) must
+// supersede a stale cached snapshot. Here the cache resolves "gram" to a
+// Gram-hosted URL (would allow), but the fresh payload resolves the same server
+// to a non-Gram URL — the fresh inventory must win and BLOCK, and overwrite the
+// cache. This is the inline-gather path hook.sh takes on a session's first tool
+// call when the SessionStart file does not exist yet.
+func TestClaude_PreToolUse_FreshPayloadInventorySupersedesCache(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__gram__do_thing"
+	toolUseID := "toolu_fresh_supersedes"
+	userEmail := "claude-fresh-supersedes@example.com"
+
+	// Cache holds a Gram-hosted entry that would allow on its own.
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
+		sessionMCPListTTL,
+	))
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+		AdditionalData: map[string]any{
+			"mcp_inventory_claude_code": "gram: https://shadow.example.com/mcp (HTTP) - connected",
+			"mcp_inventory_fresh":       true,
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision,
+		"a live-gathered (fresh) payload inventory must supersede the cached snapshot")
+
+	// The fresh inventory must overwrite the cache, not be discarded.
+	cached, cacheErr := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, cacheErr)
+	require.Len(t, cached, 1)
+	assert.Equal(t, "https://shadow.example.com/mcp", cached[0].URL,
+		"fresh inventory should overwrite the previously cached snapshot")
+}
+
+// A replayed (non-fresh) payload inventory must NOT override a cached snapshot.
+// This guards the ConfigChange race danielkov flagged: the server may already
+// hold a fresher inventory (cached synchronously on ConfigChange) while hook.sh
+// replays an older per-session file. Here the cache allows (Gram-hosted) and
+// the non-fresh replayed payload would block (non-Gram) — the cache must win.
+func TestClaude_PreToolUse_StaleReplayDoesNotOverrideCache(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__gram__do_thing"
+	toolUseID := "toolu_stale_replay"
+	userEmail := "claude-stale-replay@example.com"
+
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
+		sessionMCPListTTL,
+	))
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+		AdditionalData: map[string]any{
+			// No mcp_inventory_fresh: this is a replay from the per-session file.
+			"mcp_inventory_claude_code": "gram: https://shadow.example.com/mcp (HTTP) - connected",
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "allow", *output.PermissionDecision,
+		"a non-fresh replayed inventory must not override the cached snapshot")
+
+	// The cache must remain the Gram-hosted entry, untouched by the replay.
+	cached, cacheErr := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, cacheErr)
+	require.Len(t, cached, 1)
+	assert.Equal(t, "https://app.getgram.ai/mcp/team-foo", cached[0].URL,
+		"replayed inventory must not clobber a fresher cached snapshot")
+}
+
 func TestMergeClaudeAuthContextMetadata_DoesNotSelectUserID(t *testing.T) {
 	t.Parallel()
 

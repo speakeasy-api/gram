@@ -426,22 +426,63 @@ func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, en
 	}
 }
 
+// payloadInventoryIsFresh reports whether the hook payload's MCP inventory was
+// gathered live during this PreToolUse call (additional_data.mcp_inventory_fresh)
+// rather than replayed from the per-session inventory file. hook.sh sets the
+// flag only when it shells out to gather the inventory inline because the file
+// did not exist yet; a replay from the file leaves it unset. A live gather
+// reflects the agent's current MCP configuration and supersedes the cache; a
+// replayed snapshot may lag a ConfigChange the server already cached, so it is
+// only used to fill cache misses (see resolveMCPListForEnforcement).
+func payloadInventoryIsFresh(payload *gen.ClaudePayload) bool {
+	if payload.AdditionalData == nil {
+		return false
+	}
+	switch v := payload.AdditionalData["mcp_inventory_fresh"].(type) {
+	case bool:
+		return v
+	case string:
+		return v == "true" || v == "1"
+	default:
+		return false
+	}
+}
+
 // resolveMCPListForEnforcement returns the MCP inventory the PreToolUse
-// shadow-MCP guard should enforce against. It prefers the inventory carried in
-// the request payload — replayed from the session inventory file that
-// hook.sh attaches on every PreToolUse — because that is self-contained and
-// immune to the SessionStart-snapshot race that DNO-286 reported. When the
-// payload carries an inventory it is also written back to the cache so the
-// best-effort telemetry annotation path heals on subsequent events. When the
-// payload has none (e.g. the inventory file did not exist yet on a brand-new
-// session), it falls back to the cached SessionStart snapshot; callers treat a
-// returned error as fail-closed.
+// shadow-MCP guard should enforce against. The resolution order is:
+//
+//  1. A payload inventory gathered live this call (fresh) is authoritative —
+//     it reflects the agent's current MCP configuration — so it supersedes any
+//     cached snapshot and is written back to heal the cache.
+//  2. Otherwise the cached SessionStart/ConfigChange snapshot when present.
+//     ConfigChange refreshes the cache synchronously server-side, whereas the
+//     per-session file the payload replays is written asynchronously and can
+//     lag, so a replayed (non-fresh) inventory must not clobber a cache the
+//     server just updated.
+//  3. On a cache miss (the DNO-286 window, before the async SessionStart
+//     snapshot has landed) a replayed payload inventory fills the gap and is
+//     written back so the best-effort telemetry path heals on later events.
+//
+// Callers treat a returned error as fail-closed.
 func (s *Service) resolveMCPListForEnforcement(ctx context.Context, payload *gen.ClaudePayload, sessionID string) ([]MCPServerEntry, error) {
-	if entries, variant, ok := s.parseMCPInventoryFromPayload(ctx, payload); ok {
+	entries, variant, ok := s.parseMCPInventoryFromPayload(ctx, payload)
+
+	if ok && payloadInventoryIsFresh(payload) {
 		s.cacheMCPListSnapshot(ctx, sessionID, entries, variant)
 		return entries, nil
 	}
-	return s.getCachedMCPList(ctx, sessionID)
+
+	cached, err := s.getCachedMCPList(ctx, sessionID)
+	if err == nil {
+		return cached, nil
+	}
+
+	if ok {
+		s.cacheMCPListSnapshot(ctx, sessionID, entries, variant)
+		return entries, nil
+	}
+
+	return nil, err
 }
 
 // refreshMCPListTTL extends the MCP list cache TTL for the session if the
