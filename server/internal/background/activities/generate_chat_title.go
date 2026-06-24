@@ -74,7 +74,10 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 		return fmt.Errorf("get chat: %w", err)
 	}
 
-	// A human renamed this chat — never overwrite a manually chosen title.
+	// A human renamed this chat — never overwrite a manually chosen title. This
+	// is a fast-path check on the snapshot we just read; a rename that lands
+	// *during* generation (below) is caught by the title_manually_set guard in
+	// the final UpdateChatTitle write, which is the authoritative protection.
 	if chat.TitleManuallySet {
 		return nil
 	}
@@ -102,6 +105,8 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 		return nil
 	}
 
+	// UpdateChatTitle only writes when title_manually_set is still false, so a
+	// manual rename that raced this generation wins and is left untouched.
 	err = g.repo.UpdateChatTitle(ctx, repo.UpdateChatTitleParams{
 		ID:    chatID,
 		Title: conv.ToPGText(title),

@@ -2254,7 +2254,8 @@ func (q *Queries) UpdateAIIntegrationConfigChatCursor(ctx context.Context, arg U
 }
 
 const updateChatTitle = `-- name: UpdateChatTitle :exec
-UPDATE chats SET title = $1, updated_at = NOW() WHERE id = $2
+UPDATE chats SET title = $1, updated_at = NOW()
+WHERE id = $2 AND title_manually_set IS FALSE
 `
 
 type UpdateChatTitleParams struct {
@@ -2262,6 +2263,9 @@ type UpdateChatTitleParams struct {
 	ID    uuid.UUID
 }
 
+// Auto-generated title write. Guarded on title_manually_set so a manual rename
+// landing during title generation (between the activity's read and this write)
+// is never clobbered: the row no longer matches and the update no-ops.
 func (q *Queries) UpdateChatTitle(ctx context.Context, arg UpdateChatTitleParams) error {
 	_, err := q.db.Exec(ctx, updateChatTitle, arg.Title, arg.ID)
 	return err

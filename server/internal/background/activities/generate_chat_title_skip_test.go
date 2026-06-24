@@ -96,3 +96,60 @@ func TestGenerateChatTitle_SkipsManuallyTitledChat(t *testing.T) {
 	require.Equal(t, "Human Picked", chat.Title.String)
 	require.True(t, chat.TitleManuallySet)
 }
+
+// Race guard: a manual rename can land between the activity reading the chat
+// and writing the generated title. UpdateChatTitle is guarded on
+// title_manually_set, so the racing auto-title write must no-op and leave the
+// human's title in place.
+func TestGenerateChatTitle_WriteSkipsManuallyTitledChat(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+
+	conn, err := infra.CloneTestDatabase(t, "generatetitle_writeguard")
+	require.NoError(t, err)
+
+	orgID := "org-" + uuid.NewString()[:8]
+	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        "Test Org",
+		Slug:        orgID,
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Test Project",
+		Slug:           "proj-" + uuid.NewString()[:8],
+		OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+
+	cr := chatrepo.New(conn)
+	chatID, err := cr.UpsertChat(ctx, chatrepo.UpsertChatParams{
+		ID:             uuid.New(),
+		ProjectID:      project.ID,
+		OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+
+	// A manual rename lands while title generation is in flight.
+	require.NoError(t, cr.RenameChat(ctx, chatrepo.RenameChatParams{
+		Title:            pgtype.Text{String: "Human Picked", Valid: true},
+		TitleManuallySet: true,
+		ID:               chatID,
+		ProjectID:        project.ID,
+	}))
+
+	// The activity's generated-title write races in afterwards — and must no-op.
+	require.NoError(t, cr.UpdateChatTitle(ctx, chatrepo.UpdateChatTitleParams{
+		ID:    chatID,
+		Title: pgtype.Text{String: "Auto Generated", Valid: true},
+	}))
+
+	chat, err := cr.GetChat(ctx, chatID)
+	require.NoError(t, err)
+	require.Equal(t, "Human Picked", chat.Title.String)
+	require.True(t, chat.TitleManuallySet)
+}
