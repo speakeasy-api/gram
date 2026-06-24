@@ -180,7 +180,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -840,7 +840,7 @@ jobs:
         run: mise run github
 
       - name: Cache Go
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -930,7 +930,7 @@ jobs:
         run: mise run github
 
       - name: Cache Go
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -941,7 +941,7 @@ jobs:
             ${{ env.GOMODCACHE }}
 
       - name: Cache uv
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_UV_KEY }}
           restore-keys: |
@@ -996,7 +996,7 @@ jobs:
         run: mise run github
 
       - name: Cache uv
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_UV_KEY }}
           restore-keys: |
@@ -1051,7 +1051,7 @@ jobs:
         run: mise run github
 
       - name: Cache Go
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -1105,7 +1105,7 @@ jobs:
         run: mise run github
 
       - name: Cache Go
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -1162,7 +1162,7 @@ jobs:
         run: mise run github
 
       - name: Cache Go
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -1203,7 +1203,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1288,7 +1288,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1342,7 +1342,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1393,7 +1393,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1439,7 +1439,7 @@ jobs:
         run: mise run github
 
       - name: Cache Go
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_GO_KEY }}
           restore-keys: |
@@ -1450,7 +1450,7 @@ jobs:
             ${{ env.GOMODCACHE }}
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1539,7 +1539,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1679,7 +1679,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1722,7 +1722,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1769,7 +1769,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
@@ -1812,7 +1812,7 @@ jobs:
         run: mise run github
 
       - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           key: ${{ env.GH_CACHE_PNPM_KEY }}
           restore-keys: |
