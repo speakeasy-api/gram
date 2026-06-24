@@ -347,7 +347,9 @@ function TurnHeader({
         />
         <div className="flex items-center gap-2 whitespace-nowrap">
           {when && (
-            <span className="text-muted-foreground font-mono text-xs">
+            // No explicit colour: inherit the divider's (red when flagged, muted
+            // otherwise) so a risky turn's timestamp matches its "N risks" label.
+            <span className="font-mono text-sm font-medium uppercase">
               {when}
             </span>
           )}

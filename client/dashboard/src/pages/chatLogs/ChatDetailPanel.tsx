@@ -329,7 +329,7 @@ function MessageFilterBar({
           checked={riskyOnly}
           onCheckedChange={onRiskyOnlyChange}
           aria-label="Show only risky messages"
-          className={riskyOnly ? "bg-red-700" : undefined}
+          className={riskyOnly ? "bg-red-800" : undefined}
         />
         <span className="text-muted-foreground text-xs font-medium">
           Risky only
