@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	goahttp "goa.design/goa/v3/http"
@@ -459,9 +460,11 @@ func payloadInventoryIsFresh(payload *gen.ClaudePayload) bool {
 //     per-session file the payload replays is written asynchronously and can
 //     lag, so a replayed (non-fresh) inventory must not clobber a cache the
 //     server just updated.
-//  3. On a cache miss (the DNO-286 window, before the async SessionStart
-//     snapshot has landed) a replayed payload inventory fills the gap and is
-//     written back so the best-effort telemetry path heals on later events.
+//  3. On a genuine cache miss (the DNO-286 window, before the async
+//     SessionStart snapshot has landed) a replayed payload inventory fills the
+//     gap and is written back so the best-effort telemetry path heals on later
+//     events. A cache transport error is NOT a miss: it fails closed rather
+//     than enforcing against a possibly-stale replay.
 //
 // Callers treat a returned error as fail-closed.
 func (s *Service) resolveMCPListForEnforcement(ctx context.Context, payload *gen.ClaudePayload, sessionID string) ([]MCPServerEntry, error) {
@@ -477,7 +480,13 @@ func (s *Service) resolveMCPListForEnforcement(ctx context.Context, payload *gen
 		return cached, nil
 	}
 
-	if ok {
+	// Only a genuine cache miss lets a non-fresh replayed inventory stand in: it
+	// means the cache is legitimately empty (the DNO-286 window before the async
+	// SessionStart snapshot lands), not that we failed to read it. On a Redis
+	// transport error we cannot establish the cache-authoritative ordering, so
+	// we fail closed exactly as the no-payload path does rather than enforce
+	// against a possibly-stale replay.
+	if ok && errors.Is(err, redisCache.ErrCacheMiss) {
 		s.cacheMCPListSnapshot(ctx, sessionID, entries, variant)
 		return entries, nil
 	}

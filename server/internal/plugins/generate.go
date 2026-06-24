@@ -1356,8 +1356,13 @@ def gram_trusted(path):
             and stat.S_ISREG(fst.st_mode) and fst.st_uid == uid and not (fst.st_mode & 0o077))
 if data.get("hook_event_name") == "PreToolUse":
     ad = data.get("additional_data")
-    has_inventory = isinstance(ad, dict) and (
-        ad.get("mcp_inventory_claude_code") or ad.get("mcp_inventory_cowork"))
+    # Mirror the server-side presence test (parseMCPInventoryFromPayload): a
+    # non-empty claude_code string OR a non-null cowork value (an empty list is
+    # a valid "no servers" inventory) counts as caller-supplied. Truthiness
+    # would misread that empty list as missing and trigger a needless gather.
+    cc_val = ad.get("mcp_inventory_claude_code") if isinstance(ad, dict) else None
+    cw_val = ad.get("mcp_inventory_cowork") if isinstance(ad, dict) else None
+    has_inventory = (isinstance(cc_val, str) and cc_val != "") or cw_val is not None
     sid = re.sub(r"[^A-Za-z0-9_-]", "", str(data.get("session_id") or ""))[:128]
     fp = os.path.join(os.environ.get("PAYLOAD_TMPDIR", "/tmp"), "gram-hooks", "mcp-" + sid + ".json") if sid else ""
     frag = None

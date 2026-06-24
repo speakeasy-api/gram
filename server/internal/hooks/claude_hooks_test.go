@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -651,6 +653,72 @@ func TestClaude_PreToolUse_StaleReplayDoesNotOverrideCache(t *testing.T) {
 	require.Len(t, cached, 1)
 	assert.Equal(t, "https://app.getgram.ai/mcp/team-foo", cached[0].URL,
 		"replayed inventory must not clobber a fresher cached snapshot")
+}
+
+// mcpGetErrorCache wraps a real cache but forces a non-miss (transport-style)
+// error on Get for one key, so tests can exercise the fail-closed path without
+// a flaky real Redis outage.
+type mcpGetErrorCache struct {
+	cache.Cache
+	failKey string
+	err     error
+}
+
+func (c mcpGetErrorCache) Get(ctx context.Context, key string, value any) error {
+	if key == c.failKey {
+		return c.err
+	}
+	//nolint:wrapcheck // test pass-through to the embedded real cache
+	return c.Cache.Get(ctx, key, value)
+}
+
+// A Redis transport error (not a cache miss) must fail closed even when the
+// payload carries a non-fresh replayed inventory. A genuine miss legitimately
+// falls back to the replay (DNO-286), but on a transport error we cannot
+// establish cache-authoritative ordering, so enforcing against a possibly-stale
+// replay is unsafe — deny with the retry/restart message instead.
+func TestClaude_PreToolUse_CacheTransportErrorFailsClosedDespiteReplay(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__gram__do_thing"
+	toolUseID := "toolu_cache_transport_err"
+	userEmail := "claude-cache-transport-err@example.com"
+
+	// Force a non-miss error specifically on the MCP list key; everything else
+	// (session metadata, auth) still resolves through the real cache.
+	ti.service.cache = mcpGetErrorCache{
+		Cache:   ti.service.cache,
+		failKey: sessionMCPListCacheKey(sessionID),
+		err:     errors.New("redis: connection refused"),
+	}
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+		AdditionalData: map[string]any{
+			// Non-fresh replayed inventory (no mcp_inventory_fresh).
+			"mcp_inventory_claude_code": "gram: https://app.getgram.ai/mcp/team-foo (HTTP) - connected",
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision,
+		"a cache transport error must fail closed, not fall back to a non-fresh replay")
+	require.NotNil(t, output.PermissionDecisionReason)
+	assert.Contains(t, *output.PermissionDecisionReason, "restart Claude Code",
+		"the block must be the cache-unavailable fail-closed message, not a policy decision")
 }
 
 func TestMergeClaudeAuthContextMetadata_DoesNotSelectUserID(t *testing.T) {

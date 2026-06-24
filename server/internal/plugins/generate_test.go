@@ -698,6 +698,10 @@ func TestRenderHookScriptClaudeGathersInventoryInlineOnFileMiss(t *testing.T) {
 	require.Contains(t, script, "raise SystemExit(3)")
 	require.Contains(t, script, `enriched=$(gram_gather_mcp_inventory "$payload" 5)`)
 	require.Contains(t, script, "type gram_gather_mcp_inventory >/dev/null 2>&1")
+	// Caller-supplied inventory is detected by presence (mirroring the server),
+	// not truthiness, so an explicit empty cowork list is not re-gathered.
+	require.Contains(t, script, "cw_val is not None")
+	require.Contains(t, script, "isinstance(cc_val, str)")
 }
 
 func TestRenderHookScriptCursorUsesGramKeyAndProjectHeaders(t *testing.T) {
