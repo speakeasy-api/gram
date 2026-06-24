@@ -28,15 +28,15 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * updateRemoteSessionClient remoteSessionClients
+ * attachUserSessionIssuer remoteSessionClients
  *
  * @remarks
- * Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.
+ * Attach a user_session_issuer to a remote_session_client by recording the binding in the join table. Rejected when another client is already bound to the same user_session_issuer for this client's remote_session_issuer.
  */
-export function remoteSessionClientsUpdate(
+export function remoteSessionClientsAttachUserSessionIssuer(
   client: GramCore,
-  request: operations.UpdateRemoteSessionClientRequest,
-  security?: operations.UpdateRemoteSessionClientSecurity | undefined,
+  request: operations.AttachUserSessionIssuerRequest,
+  security?: operations.AttachUserSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -62,8 +62,8 @@ export function remoteSessionClientsUpdate(
 
 async function $do(
   client: GramCore,
-  request: operations.UpdateRemoteSessionClientRequest,
-  security?: operations.UpdateRemoteSessionClientSecurity | undefined,
+  request: operations.AttachUserSessionIssuerRequest,
+  security?: operations.AttachUserSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -85,21 +85,20 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        operations.UpdateRemoteSessionClientRequest$outboundSchema,
-        value,
-      ),
+      z.parse(operations.AttachUserSessionIssuerRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.UpdateRemoteSessionClientForm, {
+  const body = encodeJSON("body", payload.AttachUserSessionIssuerForm, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/remoteSessionClients.update")();
+  const path = pathToFunc(
+    "/rpc/remoteSessionClients.attachUserSessionIssuer",
+  )();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -148,7 +147,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "updateRemoteSessionClient",
+    operationID: "attachUserSessionIssuer",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

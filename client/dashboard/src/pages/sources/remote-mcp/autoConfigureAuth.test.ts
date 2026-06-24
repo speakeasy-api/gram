@@ -59,7 +59,7 @@ describe("autoConfigureRemoteMcpAuth", () => {
     expect(client.remoteSessionClients.create).toHaveBeenCalledWith({
       createRemoteSessionClientForm: expect.objectContaining({
         remoteSessionIssuerId: "project-issuer",
-        userSessionIssuerId: "user-session-issuer-1",
+        userSessionIssuerIds: ["user-session-issuer-1"],
         clientId: "client-from-dcr",
         clientSecret: "secret-from-dcr",
         tokenEndpointAuthMethod: "client_secret_post",
@@ -140,7 +140,7 @@ describe("autoConfigureRemoteMcpAuth", () => {
       issuerClients: [
         remoteSessionClient({
           remoteSessionIssuerId: "project-issuer",
-          userSessionIssuerId: "existing-user-session-issuer",
+          userSessionIssuerIds: ["existing-user-session-issuer"],
         }),
       ],
       issuerDraft: {
@@ -195,7 +195,7 @@ describe("autoConfigureRemoteMcpAuth", () => {
       issuerClients: [
         remoteSessionClient({
           remoteSessionIssuerId: "project-issuer",
-          userSessionIssuerId: "existing-user-session-issuer",
+          userSessionIssuerIds: ["existing-user-session-issuer"],
         }),
       ],
     });
@@ -414,8 +414,9 @@ function remoteSessionClient(
     id: overrides.id ?? "existing-client-1",
     projectId: overrides.projectId ?? "project-1",
     remoteSessionIssuerId: overrides.remoteSessionIssuerId ?? "issuer-1",
-    userSessionIssuerId:
-      overrides.userSessionIssuerId ?? "existing-user-session-issuer",
+    userSessionIssuerIds: overrides.userSessionIssuerIds ?? [
+      "existing-user-session-issuer",
+    ],
     clientId: overrides.clientId ?? "existing-upstream-client",
     clientIdIssuedAt: new Date(0),
     createdAt: new Date(0),

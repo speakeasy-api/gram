@@ -47,10 +47,6 @@ export type UpdateRemoteSessionClientForm = {
   tokenEndpointAuthMethod?:
     | UpdateRemoteSessionClientFormTokenEndpointAuthMethod
     | undefined;
-  /**
-   * Re-pair with a different user_session_issuer.
-   */
-  userSessionIssuerId?: string | undefined;
 };
 
 /** @internal */
@@ -65,7 +61,6 @@ export type UpdateRemoteSessionClientForm$Outbound = {
   id: string;
   scope?: Array<string> | undefined;
   token_endpoint_auth_method?: string | undefined;
-  user_session_issuer_id?: string | undefined;
 };
 
 /** @internal */
@@ -81,13 +76,11 @@ export const UpdateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
     tokenEndpointAuthMethod: z.optional(
       UpdateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,
     ),
-    userSessionIssuerId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       clientSecret: "client_secret",
       tokenEndpointAuthMethod: "token_endpoint_auth_method",
-      userSessionIssuerId: "user_session_issuer_id",
     });
   }),
 );

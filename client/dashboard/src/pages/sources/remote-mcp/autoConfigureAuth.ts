@@ -140,24 +140,25 @@ export async function autoConfigureRemoteMcpAuth({
         true,
       );
     }
-    if (existingClient) {
+    const reusableUserSessionIssuerId = existingClient?.userSessionIssuerIds[0];
+    if (existingClient && reusableUserSessionIssuerId) {
       try {
         const updatedMcpServer = await pointMcpServerAtUserSessionIssuer(
           client,
           mcpServer,
-          existingClient.userSessionIssuerId,
+          reusableUserSessionIssuerId,
         );
         return {
           status: "configured",
           mcpServer: updatedMcpServer,
           remoteSessionIssuerId: existingIssuer.id,
-          userSessionIssuerId: existingClient.userSessionIssuerId,
+          userSessionIssuerId: reusableUserSessionIssuerId,
         };
       } catch (error) {
         console.info("Remote MCP existing issuer attachment failed.", {
           remoteMcpServerId: remoteMcpServer.id,
           remoteSessionIssuerId: existingIssuer.id,
-          userSessionIssuerId: existingClient.userSessionIssuerId,
+          userSessionIssuerId: reusableUserSessionIssuerId,
           error,
         });
         return skipped(
@@ -253,7 +254,7 @@ export async function autoConfigureRemoteMcpAuth({
     await client.remoteSessionClients.create({
       createRemoteSessionClientForm: {
         remoteSessionIssuerId: remoteSessionIssuer.id,
-        userSessionIssuerId: userSessionIssuer.id,
+        userSessionIssuerIds: [userSessionIssuer.id],
         clientId: registered.clientId,
         clientSecret: registered.clientSecret || undefined,
         tokenEndpointAuthMethod:

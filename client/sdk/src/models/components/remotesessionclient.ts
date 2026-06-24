@@ -64,9 +64,9 @@ export type RemoteSessionClient = {
   tokenEndpointAuthMethod?: TokenEndpointAuthMethod | undefined;
   updatedAt: Date;
   /**
-   * The user_session_issuer this client is paired with.
+   * The user_session_issuers this client is attached to via the join table. Empty for a standalone client with no attachments.
    */
-  userSessionIssuerId: string;
+  userSessionIssuerIds: Array<string>;
 };
 
 /** @internal */
@@ -104,7 +104,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
-    user_session_issuer_id: z.string(),
+    user_session_issuer_ids: z.array(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -116,7 +116,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "remote_session_issuer_id": "remoteSessionIssuerId",
       "token_endpoint_auth_method": "tokenEndpointAuthMethod",
       "updated_at": "updatedAt",
-      "user_session_issuer_id": "userSessionIssuerId",
+      "user_session_issuer_ids": "userSessionIssuerIds",
     });
   }),
 );

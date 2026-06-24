@@ -28,15 +28,15 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * updateRemoteSessionClient remoteSessionClients
+ * detachUserSessionIssuer remoteSessionClients
  *
  * @remarks
- * Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.
+ * Detach a user_session_issuer from a remote_session_client by removing the binding from the join table. A no-op when the binding does not exist.
  */
-export function remoteSessionClientsUpdate(
+export function remoteSessionClientsDetachUserSessionIssuer(
   client: GramCore,
-  request: operations.UpdateRemoteSessionClientRequest,
-  security?: operations.UpdateRemoteSessionClientSecurity | undefined,
+  request: operations.DetachUserSessionIssuerRequest,
+  security?: operations.DetachUserSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -62,8 +62,8 @@ export function remoteSessionClientsUpdate(
 
 async function $do(
   client: GramCore,
-  request: operations.UpdateRemoteSessionClientRequest,
-  security?: operations.UpdateRemoteSessionClientSecurity | undefined,
+  request: operations.DetachUserSessionIssuerRequest,
+  security?: operations.DetachUserSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -85,21 +85,20 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        operations.UpdateRemoteSessionClientRequest$outboundSchema,
-        value,
-      ),
+      z.parse(operations.DetachUserSessionIssuerRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.UpdateRemoteSessionClientForm, {
+  const body = encodeJSON("body", payload.AttachUserSessionIssuerForm, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/remoteSessionClients.update")();
+  const path = pathToFunc(
+    "/rpc/remoteSessionClients.detachUserSessionIssuer",
+  )();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -148,7 +147,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "updateRemoteSessionClient",
+    operationID: "detachUserSessionIssuer",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

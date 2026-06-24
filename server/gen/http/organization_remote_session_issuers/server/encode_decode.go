@@ -4100,7 +4100,6 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 		ID:                      v.ID,
 		ProjectID:               v.ProjectID,
 		RemoteSessionIssuerID:   v.RemoteSessionIssuerID,
-		UserSessionIssuerID:     v.UserSessionIssuerID,
 		ClientID:                v.ClientID,
 		ClientIDIssuedAt:        v.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
@@ -4108,6 +4107,14 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 		Audience:                v.Audience,
 		CreatedAt:               v.CreatedAt,
 		UpdatedAt:               v.UpdatedAt,
+	}
+	if v.UserSessionIssuerIds != nil {
+		res.UserSessionIssuerIds = make([]string, len(v.UserSessionIssuerIds))
+		for i, val := range v.UserSessionIssuerIds {
+			res.UserSessionIssuerIds[i] = val
+		}
+	} else {
+		res.UserSessionIssuerIds = []string{}
 	}
 	if v.Scope != nil {
 		res.Scope = make([]string, len(v.Scope))

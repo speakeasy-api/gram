@@ -28,9 +28,17 @@ type Service interface {
 	// proxy provider's stored secrets, re-encrypted, and persisted on the
 	// remote_session_client row without ever crossing the wire.
 	CloneClientFromOAuthProxyProvider(context.Context, *CloneClientFromOAuthProxyProviderPayload) (res *types.RemoteSessionClient, err error)
-	// Rotate the client_secret or change the user_session_issuer_id linkage on an
-	// existing remote_session_client.
+	// Rotate the client_secret or change the non-issuer settings on an existing
+	// remote_session_client. Issuer attachments are managed via
+	// attachUserSessionIssuer / detachUserSessionIssuer.
 	UpdateRemoteSessionClient(context.Context, *UpdateRemoteSessionClientPayload) (res *types.RemoteSessionClient, err error)
+	// Attach a user_session_issuer to a remote_session_client by recording the
+	// binding in the join table. Rejected when another client is already bound to
+	// the same user_session_issuer for this client's remote_session_issuer.
+	AttachUserSessionIssuer(context.Context, *AttachUserSessionIssuerPayload) (res *types.RemoteSessionClient, err error)
+	// Detach a user_session_issuer from a remote_session_client by removing the
+	// binding from the join table. A no-op when the binding does not exist.
+	DetachUserSessionIssuer(context.Context, *DetachUserSessionIssuerPayload) (res *types.RemoteSessionClient, err error)
 	// List remote_session_clients in the caller's project.
 	ListRemoteSessionClients(context.Context, *ListRemoteSessionClientsPayload) (res *ListRemoteSessionClientsResult, err error)
 	// Get a remote_session_client by id.
@@ -60,7 +68,19 @@ const ServiceName = "remoteSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"createRemoteSessionClient", "cloneClientFromOAuthProxyProvider", "updateRemoteSessionClient", "listRemoteSessionClients", "getRemoteSessionClient", "deleteRemoteSessionClient"}
+var MethodNames = [8]string{"createRemoteSessionClient", "cloneClientFromOAuthProxyProvider", "updateRemoteSessionClient", "attachUserSessionIssuer", "detachUserSessionIssuer", "listRemoteSessionClients", "getRemoteSessionClient", "deleteRemoteSessionClient"}
+
+// AttachUserSessionIssuerPayload is the payload type of the
+// remoteSessionClients service attachUserSessionIssuer method.
+type AttachUserSessionIssuerPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The remote_session_client id.
+	ID string
+	// The user_session_issuer to attach.
+	UserSessionIssuerID string
+}
 
 // CloneClientFromOAuthProxyProviderPayload is the payload type of the
 // remoteSessionClients service cloneClientFromOAuthProxyProvider method.
@@ -73,8 +93,9 @@ type CloneClientFromOAuthProxyProviderPayload struct {
 	OauthProxyProviderID string
 	// The remote_session_issuer the new client is registered with.
 	RemoteSessionIssuerID string
-	// The user_session_issuer the new client is paired with.
-	UserSessionIssuerID string
+	// The user_session_issuers to attach the new client to via the join table.
+	// Omit or pass an empty array to clone a standalone client with no attachments.
+	UserSessionIssuerIds []string
 	// How the cloned client authenticates at the issuer's token endpoint. Omit to
 	// default to client_secret_basic.
 	TokenEndpointAuthMethod *string
@@ -94,8 +115,9 @@ type CreateRemoteSessionClientPayload struct {
 	ProjectSlugInput *string
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string
-	// The user_session_issuer this client is paired with.
-	UserSessionIssuerID string
+	// The user_session_issuers to attach this client to via the join table. Omit
+	// or pass an empty array to create a standalone client with no attachments.
+	UserSessionIssuerIds []string
 	// client_id supplied by the caller.
 	ClientID string
 	// client_secret supplied by the caller. Gram encrypts before persisting.
@@ -119,6 +141,18 @@ type DeleteRemoteSessionClientPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// DetachUserSessionIssuerPayload is the payload type of the
+// remoteSessionClients service detachUserSessionIssuer method.
+type DetachUserSessionIssuerPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The remote_session_client id.
+	ID string
+	// The user_session_issuer to detach.
+	UserSessionIssuerID string
 }
 
 // GetRemoteSessionClientPayload is the payload type of the
@@ -165,8 +199,6 @@ type UpdateRemoteSessionClientPayload struct {
 	ID string
 	// Rotate the client secret. Gram re-encrypts before persisting.
 	ClientSecret *string
-	// Re-pair with a different user_session_issuer.
-	UserSessionIssuerID *string
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string
 	// Replace the explicit upstream OAuth scopes for this client. Omit to leave

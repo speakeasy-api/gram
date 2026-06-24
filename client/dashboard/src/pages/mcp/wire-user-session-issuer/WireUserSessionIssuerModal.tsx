@@ -195,7 +195,9 @@ function WireUserSessionIssuerBody({
     existingUserSessionIssuer && existingRemoteSessionIssuer
       ? (remoteClients.data?.result.items?.find(
           (client) =>
-            client.userSessionIssuerId === existingUserSessionIssuer.id &&
+            client.userSessionIssuerIds.includes(
+              existingUserSessionIssuer.id,
+            ) &&
             client.remoteSessionIssuerId === existingRemoteSessionIssuer.id,
         ) ?? null)
       : null;
