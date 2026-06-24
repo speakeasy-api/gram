@@ -85,6 +85,9 @@ const (
 	// runs on a fresh deadline rather than the dead request context.
 	teardownCapCleanupTimeout = 30 * time.Second
 
+	assistantPipelineTelemetryURN = "assistants:pipeline"
+	assistantRuntimeTelemetryURN  = "assistants:runtime"
+
 	meterAssistantTurnClassified = "assistant.turn.classified"
 
 	runtimeStartupReapGrace = 2 * time.Minute
@@ -484,7 +487,7 @@ func (s *ServiceCore) emitAssistantTelemetry(
 		Timestamp: time.Now().UTC(),
 		ToolInfo: telemetry.ToolInfo{
 			ID:             assistant.ID.String(),
-			URN:            "urn:uuid:" + assistant.ID.String(),
+			URN:            assistantPipelineTelemetryURN,
 			Name:           "assistant:" + assistant.Name,
 			ProjectID:      assistant.ProjectID.String(),
 			DeploymentID:   "",

@@ -242,7 +242,7 @@ func (t *telemetryRuntimeBackend) emit(
 		Timestamp: time.Now().UTC(),
 		ToolInfo: telemetry.ToolInfo{
 			ID:             runtime.AssistantID.String(),
-			URN:            "urn:uuid:" + runtime.AssistantID.String(),
+			URN:            assistantRuntimeTelemetryURN,
 			Name:           name,
 			ProjectID:      runtime.ProjectID.String(),
 			DeploymentID:   "",
