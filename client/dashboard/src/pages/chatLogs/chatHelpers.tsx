@@ -164,16 +164,24 @@ export function highlightMatches(
   return nodes;
 }
 
-/** Browser-find style yellow wash for a search-query hit. (Search and risk are
- * mutually exclusive modes, so sharing the yellow family is unambiguous.) */
-const SEARCH_MARK_CLASS =
+/** Browser-find style yellow wash for a search-query hit. The active match (the
+ * row the user has navigated to) is bright; every other match is pale so the
+ * current one stands out. (Search and risk are mutually exclusive modes, so
+ * sharing the yellow family is unambiguous.) */
+const SEARCH_MARK_ACTIVE =
   "rounded-sm bg-yellow-300/70 px-0.5 text-foreground ring-1 ring-yellow-500/40";
+const SEARCH_MARK_INACTIVE =
+  "rounded-sm bg-yellow-200/30 px-0.5 text-foreground ring-1 ring-yellow-400/20";
 
 /** Wrap every case-insensitive occurrence of `query` in `text` with the search
  * highlight, preserving the text's original casing. Case-insensitive because the
  * server matches with ILIKE, so a "foo" query must also highlight "Foo"/"FOO" —
  * unlike the risk highlighter, which matches an exact flagged substring. */
-export function highlightQuery(text: string, query: string): ReactNode {
+export function highlightQuery(
+  text: string,
+  query: string,
+  active = true,
+): ReactNode {
   const q = query.trim();
   if (!q) return text;
   // Match case-insensitively over the ORIGINAL text so indices stay aligned —
@@ -181,6 +189,7 @@ export function highlightQuery(text: string, query: string): ReactNode {
   // slicing the original by lowered offsets would mis-highlight. Escape regex
   // metacharacters since the query is arbitrary user text.
   const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+  const markClass = active ? SEARCH_MARK_ACTIVE : SEARCH_MARK_INACTIVE;
   const nodes: ReactNode[] = [];
   let pos = 0;
   let k = 0;
@@ -193,7 +202,7 @@ export function highlightQuery(text: string, query: string): ReactNode {
     }
     if (start > pos) nodes.push(text.slice(pos, start));
     nodes.push(
-      <mark key={k++} className={SEARCH_MARK_CLASS}>
+      <mark key={k++} className={markClass}>
         {text.slice(start, end)}
       </mark>,
     );

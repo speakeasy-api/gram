@@ -118,6 +118,9 @@ interface ToolUIProps {
   /** When set, highlight occurrences of this query (case-insensitive) in the
    * tool name — e.g. a thread search for "customer" lights up `get_customer`. */
   nameQuery?: string;
+  /** Whether this tool holds the active thread-search match: bright highlights
+   * (name + sections) when true, pale when false. */
+  searchActive?: boolean;
   /** Additional class names */
   className?: string;
   /** MCP tool annotations */
@@ -141,6 +144,9 @@ interface ToolUISectionProps {
   language?: BundledLanguage;
   /** Flagged substrings — renders a navigable highlighted view + header icon. */
   highlight?: SectionHighlight;
+  /** Search tone only: whether this tool holds the active thread match (bright
+   * vs pale marks). */
+  searchActive?: boolean;
 }
 
 /* -----------------------------------------------------------------------------
@@ -395,11 +401,15 @@ function HighlightedCode({
   matches,
   masked,
   tone = "risk",
+  searchActive = false,
 }: {
   text: string;
   matches: SectionMatch[];
   masked?: boolean;
   tone?: "risk" | "search";
+  /** Search tone only: whether this tool holds the active thread match. Active
+   * → bright marks; inactive → pale. (Risk tone steps per-section instead.) */
+  searchActive?: boolean;
 }): React.JSX.Element {
   const hits = React.useMemo(
     () =>
@@ -460,9 +470,11 @@ function HighlightedCode({
           // red; a plain text-search hit is yellow.
           "rounded-sm px-0.5 font-mono ring-1",
           tone === "search"
-            ? i === active
+            ? // Search nav is per-row, so all occurrences here share the row's
+              // active state: bright when this tool is the active match, else pale.
+              searchActive
               ? "bg-yellow-400 text-yellow-950 ring-yellow-300"
-              : "bg-yellow-700 text-yellow-100 ring-yellow-600"
+              : "bg-yellow-800/50 text-yellow-200/90 ring-yellow-700/50"
             : i === active
               ? "bg-red-700 text-red-50 ring-red-400"
               : "bg-red-900 text-red-300 ring-red-800",
@@ -639,6 +651,7 @@ function ToolUISection({
   highlightSyntax = true,
   language = "json",
   highlight,
+  searchActive = false,
 }: ToolUISectionProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
@@ -692,6 +705,7 @@ function ToolUISection({
               matches={highlight!.matches}
               masked={highlight?.masked}
               tone={highlight?.tone}
+              searchActive={searchActive}
             />
           ) : isStructured ? (
             <StructuredResultContent content={content} />
@@ -717,10 +731,18 @@ type ApprovalMode = "one-time" | "for-session";
 // Highlight every case-insensitive occurrence of `query` in a short label (the
 // tool name), preserving original casing. Matches over the original string so
 // offsets stay aligned; escapes regex metacharacters in the user query.
-function highlightLabel(text: string, query?: string): React.ReactNode {
+function highlightLabel(
+  text: string,
+  query?: string,
+  active = false,
+): React.ReactNode {
   const q = query?.trim();
   if (!q) return text;
   const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+  // Active match bright, others pale.
+  const markClass = active
+    ? "rounded-sm bg-yellow-300/80 px-0.5 text-foreground"
+    : "rounded-sm bg-yellow-200/30 px-0.5 text-foreground";
   const nodes: React.ReactNode[] = [];
   let pos = 0;
   let k = 0;
@@ -731,10 +753,7 @@ function highlightLabel(text: string, query?: string): React.ReactNode {
     }
     if (m.index > pos) nodes.push(text.slice(pos, m.index));
     nodes.push(
-      <mark
-        key={k++}
-        className="rounded-sm bg-yellow-300/70 px-0.5 text-foreground"
-      >
+      <mark key={k++} className={markClass}>
         {m[0]}
       </mark>,
     );
@@ -756,6 +775,7 @@ function ToolUI({
   requestHighlight,
   resultHighlight,
   nameQuery,
+  searchActive = false,
   className,
   annotations,
   onApproveOnce,
@@ -841,7 +861,7 @@ function ToolUI({
             !provider && isApprovalPending && "shimmer",
           )}
         >
-          {highlightLabel(displayName, nameQuery)}
+          {highlightLabel(displayName, nameQuery, searchActive)}
         </span>
         {hasContent && (
           <ChevronDownIcon
@@ -864,6 +884,7 @@ function ToolUI({
               highlightSyntax
               language="json"
               highlight={requestHighlight}
+              searchActive={searchActive}
               defaultExpanded={(requestHighlight?.matches?.length ?? 0) > 0}
             />
           )}
@@ -875,6 +896,7 @@ function ToolUI({
               highlightSyntax
               language="json"
               highlight={resultHighlight}
+              searchActive={searchActive}
               defaultExpanded={(resultHighlight?.matches?.length ?? 0) > 0}
             />
           )}

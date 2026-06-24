@@ -389,7 +389,15 @@ function TurnHeader({
 // bubble. The avatar/name + risk badge + Actions menu sit in the turn header
 // above; the meta strip below keeps the message time, cost, and reveal toggle
 // (create-exclusion moved to the header Actions menu).
-function UserMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
+function UserMessageRow({
+  row,
+  ctx,
+  active,
+}: {
+  row: MessageRow;
+  ctx: RowContext;
+  active: boolean;
+}) {
   const { message } = row;
   const results = ctx.riskResultsByMessage.get(message.id);
   const usage = ctx.claudeUsageByMessage.get(message.id);
@@ -414,7 +422,9 @@ function UserMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
           />
         ) : (
           <div className="whitespace-pre-wrap">
-            {ctx.searchQuery ? highlightQuery(text, ctx.searchQuery) : text}
+            {ctx.searchQuery
+              ? highlightQuery(text, ctx.searchQuery, active)
+              : text}
           </div>
         )}
       </div>
@@ -444,9 +454,11 @@ function UserMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
 function AssistantMessageRow({
   row,
   ctx,
+  active,
 }: {
   row: MessageRow;
   ctx: RowContext;
+  active: boolean;
 }) {
   const { message } = row;
   const results = ctx.riskResultsByMessage.get(message.id);
@@ -468,7 +480,7 @@ function AssistantMessageRow({
           // While searching, render plain (non-markdown) text so query hits can
           // be highlighted inline — markdown output can't carry <mark> spans.
           <div className="whitespace-pre-wrap">
-            {highlightQuery(text, ctx.searchQuery)}
+            {highlightQuery(text, ctx.searchQuery, active)}
           </div>
         ) : (
           <MessageContent markdown content={text} />
@@ -510,12 +522,20 @@ function SystemMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
   );
 }
 
-function MessageRowView({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
+function MessageRowView({
+  row,
+  ctx,
+  active,
+}: {
+  row: MessageRow;
+  ctx: RowContext;
+  active: boolean;
+}) {
   switch (row.entryType) {
     case "user":
-      return <UserMessageRow row={row} ctx={ctx} />;
+      return <UserMessageRow row={row} ctx={ctx} active={active} />;
     case "assistant":
-      return <AssistantMessageRow row={row} ctx={ctx} />;
+      return <AssistantMessageRow row={row} ctx={ctx} active={active} />;
     case "system":
       return <SystemMessageRow row={row} ctx={ctx} />;
   }
@@ -645,6 +665,7 @@ function ToolRowView({
         requestHighlight={requestHighlight}
         resultHighlight={resultHighlight}
         nameQuery={ctx.searchQuery}
+        searchActive={active}
       />
     </div>
   );
@@ -743,7 +764,7 @@ const RowView = memo(function RowView({
   active: boolean;
 }) {
   return row.kind === "message" ? (
-    <MessageRowView row={row} ctx={ctx} />
+    <MessageRowView row={row} ctx={ctx} active={active} />
   ) : (
     <ToolRowView row={row} ctx={ctx} active={active} />
   );
