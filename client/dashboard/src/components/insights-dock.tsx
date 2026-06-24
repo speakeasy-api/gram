@@ -10,6 +10,7 @@ import type {
   ElementsTransportFactory,
 } from "@gram-ai/elements";
 import {
+  ActiveChatTitle,
   Chat,
   ChatHistory,
   GramElementsProvider,
@@ -1117,19 +1118,22 @@ export function InsightsProvider({
           {/* Chat view */}
           {!historyView && (
             <>
-              <div className="flex shrink-0 items-center justify-between px-2 pt-2">
-                <button
-                  onClick={() => {
-                    setHistoryReturnable(true);
-                    setHistoryView(true);
-                  }}
-                  className={PANEL_ICON_BUTTON_CLASS}
-                  aria-label="Conversation history"
-                  title="History"
-                >
-                  <HistoryIcon className="size-4" />
-                </button>
-                <div className="flex items-center gap-0.5">
+              <div className="flex shrink-0 items-center justify-between gap-1 px-2 pt-2">
+                <div className="flex min-w-0 items-center gap-0.5">
+                  <button
+                    onClick={() => {
+                      setHistoryReturnable(true);
+                      setHistoryView(true);
+                    }}
+                    className={PANEL_ICON_BUTTON_CLASS}
+                    aria-label="Conversation history"
+                    title="History"
+                  >
+                    <HistoryIcon className="size-4" />
+                  </button>
+                  <ActiveChatTitle className="min-w-0 flex-1" />
+                </div>
+                <div className="flex shrink-0 items-center gap-0.5">
                   <button
                     onClick={handleStartFresh}
                     className={PANEL_ICON_BUTTON_CLASS}

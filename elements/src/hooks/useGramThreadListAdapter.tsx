@@ -15,6 +15,7 @@ import {
   convertGramMessagesToUIMessages,
 } from "@/lib/messageConverter";
 import { sleep } from "@/lib/utils";
+import { trackError } from "@/lib/errorTracking";
 import {
   ThreadMetaContext,
   type ThreadMeta,
@@ -473,8 +474,42 @@ export function useGramThreadListAdapter(
         };
       },
 
-      async rename() {
-        // No-op
+      async rename(remoteId: string, newTitle: string) {
+        // Brand-new threads only have a local id until the first message
+        // persists them server-side; there's nothing to rename yet.
+        if (!remoteId || isLocalThreadId(remoteId)) {
+          return;
+        }
+
+        // Reuses chat.generateTitle: passing `title` sets a manual title that
+        // auto-generation won't overwrite (empty string resets to auto-naming).
+        //
+        // On failure we track AND rethrow: assistant-ui applies the rename
+        // optimistically and only rolls the title back if this promise rejects.
+        // Swallowing the error would leave a title showing that never persisted.
+        try {
+          const response = await fetch(
+            `${optionsRef.current.apiUrl}/rpc/chat.generateTitle`,
+            {
+              method: "POST",
+              headers: {
+                ...(await resolveAdapterHeaders(optionsRef.current)),
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ id: remoteId, title: newTitle }),
+            },
+          );
+
+          if (!response.ok) {
+            throw new Error(`Failed to rename chat: ${response.status}`);
+          }
+        } catch (error) {
+          trackError(error, {
+            source: "custom",
+            context: "useGramThreadListAdapter.rename",
+          });
+          throw error;
+        }
       },
 
       async archive() {
