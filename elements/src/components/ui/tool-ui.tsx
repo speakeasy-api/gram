@@ -10,6 +10,7 @@ import {
   EyeIcon,
   EyeOffIcon,
   LoaderIcon,
+  SearchIcon,
   TriangleAlertIcon,
   XIcon,
 } from "lucide-react";
@@ -477,10 +478,17 @@ function HighlightedCode({
       {count > 0 && (
         <div className="flex items-center justify-between gap-3 bg-slate-900 px-4 py-2 text-xs text-slate-300">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="flex shrink-0 items-center gap-1.5 font-medium text-amber-400">
-              <TriangleAlertIcon className="size-3.5" />
-              {count} flagged {count === 1 ? "match" : "matches"}
-            </span>
+            {tone === "search" ? (
+              <span className="flex shrink-0 items-center gap-1.5 font-medium text-yellow-300">
+                <SearchIcon className="size-3.5" />
+                {count} {count === 1 ? "match" : "matches"}
+              </span>
+            ) : (
+              <span className="flex shrink-0 items-center gap-1.5 font-medium text-amber-400">
+                <TriangleAlertIcon className="size-3.5" />
+                {count} flagged {count === 1 ? "match" : "matches"}
+              </span>
+            )}
             {activeMatch?.label && (
               <span className="truncate rounded bg-slate-700/60 px-1.5 py-0.5 font-mono text-slate-300">
                 {activeMatch.label}
@@ -644,7 +652,12 @@ function ToolUISection({
   let headerIndicator: React.ReactNode = null;
   if (highlight?.headerBadge) headerIndicator = highlight.headerBadge;
   else if (matchCount > 0)
-    headerIndicator = <TriangleAlertIcon className="size-3.5 text-amber-500" />;
+    headerIndicator =
+      highlight?.tone === "search" ? (
+        <SearchIcon className="size-3.5 text-yellow-500" />
+      ) : (
+        <TriangleAlertIcon className="size-3.5 text-amber-500" />
+      );
 
   return (
     <div data-slot="tool-ui-section" className="border-t border-border">

@@ -11,7 +11,7 @@ import { TRANSCRIPT_PAGE_SIZE } from "./useChatTranscript";
 
 // Initial window is generous so most matches + context arrive in one request;
 // gaps between disjoint windows are expanded on demand.
-export const WINDOW_INITIAL_LIMIT = 200;
+const WINDOW_INITIAL_LIMIT = 200;
 
 type WindowLoadKey = "before" | "after" | `gap:${number}`;
 
@@ -94,19 +94,22 @@ export function useWindowedTranscript(
   const [loadingKey, setLoadingKey] = useState<WindowLoadKey | null>(null);
   const [loadError, setLoadError] = useState(false);
 
-  // Tracks the chat the hook currently represents so a slow in-flight page from
-  // a previous chat can't apply its response (or error) after a switch.
-  const chatIdRef = useRef(chatId);
-  chatIdRef.current = chatId;
+  // A stable key for the active windowed request (chat + mode). A slow in-flight
+  // page from a previous chat OR a previous query/risk request must not apply its
+  // response into the now-current transcript, so each load captures this key and
+  // drops its result/error if the key changed mid-flight.
+  const requestKey = `${chatId}|${JSON.stringify(request)}`;
+  const requestKeyRef = useRef(requestKey);
+  requestKeyRef.current = requestKey;
 
-  // Clear in-flight loading state on a chat switch. The previous chat's in-flight
-  // load is guarded out of its own finally (it checks chatIdRef), so without this
-  // reset `loadingKey` could stay stuck and permanently disable loadBefore/After/
-  // Gap for the new chat.
+  // Clear in-flight loading state when the request changes (chat switch or new
+  // query). The previous request's in-flight load is guarded out of its own
+  // finally (it checks requestKeyRef), so without this reset `loadingKey` could
+  // stay stuck and permanently disable loadBefore/After/Gap.
   useEffect(() => {
     setLoadingKey(null);
     setLoadError(false);
-  }, [chatId]);
+  }, [requestKey]);
 
   // Re-seed whenever a fresh base response arrives (chat switch, query change,
   // or refetch). User expansions and any prior incremental-load error are reset.
@@ -117,9 +120,9 @@ export function useWindowedTranscript(
     }
   }, [base.data, segmentsOf]);
 
-  // Runs one incremental page load: ignores the result if the chat changed
-  // mid-flight, and records failures so they surface via isError instead of
-  // silently no-opping.
+  // Runs one incremental page load: ignores the result if the active request
+  // changed mid-flight (chat switch or new query), and records failures so they
+  // surface via isError instead of silently no-opping.
   const runIncrementalLoad = useCallback(
     (
       key: WindowLoadKey,
@@ -127,19 +130,19 @@ export function useWindowedTranscript(
       apply: (prev: WindowState, page: Chat) => WindowState,
     ) => {
       if (loadingKey) return;
-      const requestChatId = chatId;
+      const startKey = requestKeyRef.current;
       setLoadingKey(key);
       void client.chat
         .load({ id: chatId, limit: TRANSCRIPT_PAGE_SIZE, ...req })
         .then((page) => {
-          if (chatIdRef.current !== requestChatId) return; // chat switched
+          if (requestKeyRef.current !== startKey) return; // request changed
           setState((prev) => (prev ? apply(prev, page) : prev));
         })
         .catch(() => {
-          if (chatIdRef.current === requestChatId) setLoadError(true);
+          if (requestKeyRef.current === startKey) setLoadError(true);
         })
         .finally(() => {
-          if (chatIdRef.current === requestChatId) setLoadingKey(null);
+          if (requestKeyRef.current === startKey) setLoadingKey(null);
         });
     },
     [client, chatId, loadingKey],

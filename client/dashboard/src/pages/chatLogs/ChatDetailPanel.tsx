@@ -370,11 +370,21 @@ function ThreadSearchBar({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
+          // Don't hijack keys mid-IME-composition (e.g. selecting a CJK
+          // candidate with Enter) — let the input method consume them.
+          if (e.nativeEvent.isComposing) return;
           // Enter jumps to the next match; Shift+Enter the previous. Both wrap.
           if (e.key === "Enter") {
             e.preventDefault();
             if (e.shiftKey) onPrev();
             else onNext();
+          }
+          // Escape clears the query (and is swallowed) while one is typed, so it
+          // doesn't bubble up and close the whole sheet.
+          if (e.key === "Escape" && value.trim().length > 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            onChange("");
           }
         }}
         placeholder="Search this conversation…"
