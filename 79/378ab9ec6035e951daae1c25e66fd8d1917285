@@ -1,0 +1,118 @@
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_1fd25e6450fcc7::t_0d1823305f69cd 108-116
+  s_1fd25e6450fcc7::t_f4301e7964d010 32-33
+client/dashboard/src/pages/security/policy-form/prompt-policy-body.tsx
+  s_1fd25e6450fcc7::t_54ff6ce8faf052 138-143
+  s_1fd25e6450fcc7::t_4e8de80c7d72b5 1-19,22-23,26-117,119-137,144-207,209,215-239,241,249,255-271,282-293,296-495
+  s_1fd25e6450fcc7::t_5c31c702f21b44 208,210-214
+  s_1fd25e6450fcc7::t_ecbd2be31db09b 272-281
+  s_1fd25e6450fcc7::t_5443d8573cfc08 240,242-248,250-254
+  s_1fd25e6450fcc7::t_316a3a582db820 118
+  s_1fd25e6450fcc7::t_f8a40170b88b3b 294-295
+  s_1fd25e6450fcc7::t_58b6db13a37e82 24-25
+  s_1fd25e6450fcc7::t_fc5ca43fa034a9 20
+  s_1fd25e6450fcc7::t_7d75b1df841851 21
+client/dashboard/src/pages/security/policy-evals/format.ts
+  s_1fd25e6450fcc7::t_be42c9293e93c3 77
+  s_1fd25e6450fcc7::t_28432729316f16 1-6,10-51
+  s_1fd25e6450fcc7::t_ad6693440d6ebf 7-9
+  s_1fd25e6450fcc7::t_55071b6cb37cda 52-76,78-88
+client/dashboard/src/pages/security/policy-display.ts
+  s_1fd25e6450fcc7::t_e2c4389d3fa664 1-143
+client/dashboard/src/pages/security/policy-form/detector-card.tsx
+  s_1fd25e6450fcc7::t_316a3a582db820 42,127,320
+  s_1fd25e6450fcc7::t_6f2b63da56cefb 1-41,43-126,128-319,321-327
+client/dashboard/src/pages/security/policy-form/wizard-chrome.tsx
+  s_1fd25e6450fcc7::t_72bf11054247ff 132
+  s_1fd25e6450fcc7::t_04fe1f6890b67a 122
+  s_1fd25e6450fcc7::t_31f6eab01d0398 91-92,94,96-98,102,104-107,112-113,115,117-118,121,126-128,136,140-142
+  s_1fd25e6450fcc7::t_99d1523fb8ffcb 9
+  s_1fd25e6450fcc7::t_316a3a582db820 95,120,135
+  s_1fd25e6450fcc7::t_ffc68c7ccea3b1 1-8,10-75,77-90,93,99-101,103,108-111,114,116,119,123-125,129-131,133-134,137-139
+  s_1fd25e6450fcc7::t_7599d8f404eb4d 76
+client/dashboard/src/pages/security/policy-evals/EvalsTab.tsx
+  s_1fd25e6450fcc7::t_dcbe8676e4b1ed 731,740-741,743-744,746-757,759-770,914
+  s_1fd25e6450fcc7::t_70e79d1bb0e951 897,901,909-911
+  s_1fd25e6450fcc7::t_1d1ad6e67e9bf5 363-366
+  s_1fd25e6450fcc7::t_39edb07cbd1fa4 56-64
+  s_1fd25e6450fcc7::t_e35224f6afbb64 521
+  s_1fd25e6450fcc7::t_2dd3ad699cbd6e 543-548
+client/dashboard/src/pages/security/finding-cells.tsx
+  s_1fd25e6450fcc7::t_3008996748e531 1-127
+client/dashboard/src/pages/security/policy-form/PolicyConfigurationTab.tsx
+  s_1fd25e6450fcc7::t_bf6fb40ff83cfd 108-113
+  s_1fd25e6450fcc7::t_a9a1f08330baf0 8
+  s_1fd25e6450fcc7::t_0504ec22052e51 3-6,9,114-118,120-127
+  s_1fd25e6450fcc7::t_e4e0934c5cc2d6 1-2,7,10-24,26-107,119,128-131
+  s_1fd25e6450fcc7::t_316a3a582db820 25
+client/dashboard/src/pages/security/policy-evals/NewRunSheet.tsx
+  s_1fd25e6450fcc7::t_af9d80c5dce3c7 60
+  s_1fd25e6450fcc7::t_edb2414e9a5764 101,104-105,109-118
+  s_1fd25e6450fcc7::t_27cd89179dc48e 133-138,158
+  s_1fd25e6450fcc7::t_671d4329ffc8df 1-25,27-28,33-36,39-42,48-53,56-59,68-100,102-103,106-108,119-132,150-157,159-167
+  s_1fd25e6450fcc7::t_c722245179e3d7 145-146
+  s_1fd25e6450fcc7::t_0ca76f2267a515 66-67
+  s_1fd25e6450fcc7::t_dc8804c1e7058c 26,29-32,37-38,43-47,54-55,61-65
+  s_1fd25e6450fcc7::t_595940fd2a99ee 139-144,147-149
+client/dashboard/src/pages/security/policy-form/payload.ts
+  s_1fd25e6450fcc7::t_e2e092df341b71 374-380
+  s_1fd25e6450fcc7::t_69347b05dc0cb0 1-19,21-116,123-294,298-339,341-369,373,381-397,399-405,410-429,431-505
+  s_1fd25e6450fcc7::t_da996ed066e2cb 117-122
+  s_1fd25e6450fcc7::t_8b59fdd6ade9d9 20
+  s_1fd25e6450fcc7::t_f5298a9a67d920 430
+  s_1fd25e6450fcc7::t_57514f47e3c359 340
+  s_1fd25e6450fcc7::t_72bf11054247ff 295-297,370-372,406-409
+  s_1fd25e6450fcc7::t_3b09a6576b9580 398
+client/dashboard/src/pages/security/policy-evals/EvalSignalBanner.tsx
+  s_1fd25e6450fcc7::t_0f3dbb1c649c9f 1-2,7-8,10-12,14-15,17-20,22,25-29,38-49,52-59,68-69,73-76,78,80-87,92-94,96-103,106-109
+  s_1fd25e6450fcc7::t_3f76717071aa96 32-33
+  s_1fd25e6450fcc7::t_c2d94ea0f5229d 77,79
+  s_1fd25e6450fcc7::t_abadad874d9ade 13,23-24,34-37
+  s_1fd25e6450fcc7::t_42fbeea978a939 88-91
+  s_1fd25e6450fcc7::t_b50a28f8321a74 104-105
+  s_1fd25e6450fcc7::t_277dd41d6ecd5c 3-6,9,16,21,30-31,50-51,60-67,70-72,95
+client/dashboard/src/pages/security/policy-form/wizard-steps.ts
+  s_1fd25e6450fcc7::t_4676b72013127e 1,4-6,8,10-16,19,21-25
+  s_1fd25e6450fcc7::t_74d01734e40834 2-3,7,9,17-18,20,26
+client/dashboard/src/pages/security/policy-form/risk-policy-body.tsx
+  s_1fd25e6450fcc7::t_4e890f1d8cd732 255,257-261
+  s_1fd25e6450fcc7::t_7881a0c73d4331 26-27
+  s_1fd25e6450fcc7::t_86e5bfe2590493 31-32
+  s_1fd25e6450fcc7::t_1f302f9fc9dab1 357,359-363
+  s_1fd25e6450fcc7::t_0ca76f2267a515 433-435
+  s_1fd25e6450fcc7::t_3eb3dac7360583 220
+  s_1fd25e6450fcc7::t_59b02f0152be4f 1-15,17-25,28-29,33-158,160-204,211-219,221-254,256,262-356,358,364-399,401,407-425,438-451,454-477,479-888,890-920,922-1000,1002-1056
+  s_1fd25e6450fcc7::t_72bf11054247ff 16,30
+  s_1fd25e6450fcc7::t_c7d2089905406c 426-432,436-437
+  s_1fd25e6450fcc7::t_d7fd8169406054 400,402-406,452-453
+  s_1fd25e6450fcc7::t_316a3a582db820 159,478,889,921,1001
+  s_1fd25e6450fcc7::t_aa31fad9e8b723 205-210
+client/dashboard/src/pages/security/policy-form/policy-kind-choice.tsx
+  s_1fd25e6450fcc7::t_316a3a582db820 13
+  s_1fd25e6450fcc7::t_8f363a1cfc778e 1-12,14-57
+client/dashboard/src/pages/security/policy-form/use-policy-form.ts
+  s_1fd25e6450fcc7::t_7b6a149863c7ab 543
+  s_1fd25e6450fcc7::t_cba21dde868b4f 194,198,202
+  s_1fd25e6450fcc7::t_dd95f7071ebc57 417-422
+  s_1fd25e6450fcc7::t_3283bbc38e3aee 56-66
+  s_1fd25e6450fcc7::t_72bf11054247ff 16,120-140,207-211
+  s_1fd25e6450fcc7::t_b4779f5f2a3fc5 1-7,9-15,17-28,30-55,67-119,141-193,195-197,199-201,203-206,212-416,423-542,544-553
+  s_1fd25e6450fcc7::t_c7fc7a8c78bd0f 8
+  s_1fd25e6450fcc7::t_b3ca605ece2106 29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "79378ab9ec6035e951daae1c25e66fd8d1917285",
+  "prompts": {},
+  "sessions": {
+    "s_1fd25e6450fcc7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7ea42380-1a11-45cd-902e-a44d16cbae01",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
