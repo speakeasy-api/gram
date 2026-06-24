@@ -1,13 +1,12 @@
 // Policy Evals (session replay) — AGE-2704
 //
-// Scaffold for the "Evals" tab on the Policy Detail view. Renders:
+// The "Evals" tab on the Policy Detail view. Renders:
 //   - a list of eval runs (status, time, messages scanned, findings, cost, p50/p95 latency)
-//   - a "New eval run" sheet stub (sampler config + cost estimate + confirm)
-//   - a run-detail view (stats panel + findings table)
+//   - a "New eval run" sheet (sampler config + confirm)
+//   - a run-detail view (stats panel + findings table) that polls while running
 //   - an "enough signal? enable policy" CTA
 //
-// All data is currently mock. Every spot that will call the backend is marked
-// with `// TODO(AGE-2704): replace with generated eval API client`.
+// Data comes from the generated @gram/client eval API hooks.
 
 import { Type } from "@/components/ui/type";
 import { Heading } from "@/components/ui/heading";
@@ -31,16 +30,33 @@ import {
   Icon,
   Table,
 } from "@speakeasy-api/moonshine";
-import { ArrowLeft, ChevronRight, FlaskConical, Plus } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { useMemo, useState } from "react";
 import {
-  getMockEvalFindings,
-  getMockEvalRuns,
-  type PolicyEvalFinding,
-  type PolicyEvalRun,
-  type PolicyEvalRunStatus,
-} from "./types";
+  ArrowLeft,
+  ChevronRight,
+  FlaskConical,
+  Loader2,
+  Plus,
+} from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  invalidateAllRiskGetPolicyEvalRun,
+  invalidateAllRiskListPolicies,
+  invalidateAllRiskListPolicyEvalRuns,
+  useRiskCancelPolicyEvalRunMutation,
+  useRiskCreatePolicyEvalRunMutation,
+  useRiskGetPolicyEvalRun,
+  useRiskListPolicyEvalFindings,
+  useRiskListPolicyEvalRuns,
+  useRiskPoliciesGet,
+  useRiskPoliciesUpdateMutation,
+} from "@gram/client/react-query/index.js";
+import type { PolicyEvalFinding } from "@gram/client/models/components/policyevalfinding.js";
+import type {
+  PolicyEvalRun,
+  PolicyEvalRunStatus,
+} from "@gram/client/models/components/policyevalrun.js";
 
 const STATUS_BADGE: Record<
   PolicyEvalRunStatus,
@@ -75,19 +91,21 @@ export function EvalsTab({
   /** Drives the "enable policy" CTA copy/affordance. */
   policyEnabled: boolean;
 }): JSX.Element {
-  // TODO(AGE-2704): replace with generated eval API client.
-  // e.g. const { data: runs, isLoading } = useListPolicyEvalRuns({ riskPolicyId });
-  const runs = useMemo(() => getMockEvalRuns(riskPolicyId), [riskPolicyId]);
+  const { data, isLoading } = useRiskListPolicyEvalRuns({
+    policyId: riskPolicyId,
+  });
+  const runs = data?.runs ?? [];
 
   const [newRunOpen, setNewRunOpen] = useState(false);
-  const [selectedRun, setSelectedRun] = useState<PolicyEvalRun | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
-  if (selectedRun) {
+  if (selectedRunId) {
     return (
       <RunDetail
-        run={selectedRun}
+        runId={selectedRunId}
+        policyId={riskPolicyId}
         policyEnabled={policyEnabled}
-        onBack={() => setSelectedRun(null)}
+        onBack={() => setSelectedRunId(null)}
       />
     );
   }
@@ -98,8 +116,9 @@ export function EvalsTab({
         <div className="min-w-0 space-y-1">
           <Heading variant="h3">Evals</Heading>
           <Type small muted className="font-normal">
-            Replay this policy across a sample of historical messages to see what
-            it would have flagged — and what it would cost — before you enable it.
+            Replay this policy across a sample of historical messages to see
+            what it would have flagged — and what it would cost — before you
+            enable it.
           </Type>
         </div>
         <Button onClick={() => setNewRunOpen(true)}>
@@ -110,10 +129,14 @@ export function EvalsTab({
         </Button>
       </div>
 
-      {runs.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+        </div>
+      ) : runs.length === 0 ? (
         <EvalsEmptyState onNewRun={() => setNewRunOpen(true)} />
       ) : (
-        <RunsTable runs={runs} onSelect={setSelectedRun} />
+        <RunsTable runs={runs} onSelect={(run) => setSelectedRunId(run.id)} />
       )}
 
       <NewRunSheet
@@ -161,7 +184,9 @@ function RunsTable({
       key: "findingsCount",
       header: "Findings",
       width: "0.6fr",
-      render: (run) => <span className="text-sm">{num(run.findingsCount)}</span>,
+      render: (run) => (
+        <span className="text-sm">{num(run.findingsCount)}</span>
+      ),
     },
     {
       key: "totalCostUsd",
@@ -183,9 +208,7 @@ function RunsTable({
       key: "chevron",
       header: "",
       width: "0.2fr",
-      render: () => (
-        <ChevronRight className="text-muted-foreground h-4 w-4" />
-      ),
+      render: () => <ChevronRight className="text-muted-foreground h-4 w-4" />,
     },
   ];
 
@@ -220,7 +243,7 @@ function EvalsEmptyState({ onNewRun }: { onNewRun: () => void }) {
 }
 
 // ---------------------------------------------------------------------------
-// New eval run — sampler config + cost estimate + confirm (placeholder).
+// New eval run — sampler config + confirm.
 // ---------------------------------------------------------------------------
 
 function NewRunSheet({
@@ -232,22 +255,30 @@ function NewRunSheet({
   onOpenChange: (open: boolean) => void;
   riskPolicyId: string;
 }) {
-  // Sampler config — local-only placeholders. These feed the (future) run-create call.
+  const queryClient = useQueryClient();
   const [sampleSize, setSampleSize] = useState(2000);
   const [lookbackDays, setLookbackDays] = useState(30);
 
-  // TODO(AGE-2704): replace with generated eval API client.
-  // A real cost estimate should come from a server-side estimate endpoint,
-  // e.g. usePolicyEvalCostEstimate({ riskPolicyId, sampleSize, lookbackDays }).
-  // This is a crude placeholder so the confirm flow is wired end-to-end.
-  const estimatedCostUsd = (sampleSize / 1000) * 0.4;
+  const createMutation = useRiskCreatePolicyEvalRunMutation({
+    onSuccess: () => {
+      void invalidateAllRiskListPolicyEvalRuns(queryClient);
+      onOpenChange(false);
+    },
+  });
 
   const handleConfirm = () => {
-    // TODO(AGE-2704): replace with generated eval API client.
-    // e.g. createPolicyEvalRun.mutate({ riskPolicyId, sampleSize, lookbackDays })
-    //   then invalidate the runs query and close.
-    void riskPolicyId;
-    onOpenChange(false);
+    createMutation.mutate({
+      request: {
+        createPolicyEvalRunRequestBody: {
+          policyId: riskPolicyId,
+          sample: {
+            mode: "auto",
+            maxMessages: sampleSize,
+            lookbackDays,
+          },
+        },
+      },
+    });
   };
 
   return (
@@ -269,7 +300,7 @@ function NewRunSheet({
               onChange={(v) => setSampleSize(Number(v) || 0)}
             />
             <Type small muted className="font-normal">
-              Number of historical messages to replay.
+              Maximum number of historical messages to replay.
             </Type>
           </div>
 
@@ -283,28 +314,23 @@ function NewRunSheet({
               onChange={(v) => setLookbackDays(Math.round(v))}
             />
           </div>
-
-          {/* Cost estimate (placeholder) */}
-          <div className="bg-muted/30 rounded-lg border p-4">
-            <div className="flex items-center justify-between">
-              <Type small muted className="font-normal">
-                Estimated cost
-              </Type>
-              <span className="font-medium">{usd(estimatedCostUsd)}</span>
-            </div>
-            <Type small muted className="mt-1 font-normal">
-              {/* TODO(AGE-2704): replace with server-provided estimate. */}
-              Rough estimate — the real figure will come from the eval API.
-            </Type>
-          </div>
         </div>
 
         <SheetFooter>
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="secondary"
+            onClick={() => onOpenChange(false)}
+            disabled={createMutation.isPending}
+          >
             <Button.Text>Cancel</Button.Text>
           </Button>
-          <Button onClick={handleConfirm}>
-            <Button.Text>Start run</Button.Text>
+          <Button
+            onClick={handleConfirm}
+            disabled={createMutation.isPending || sampleSize < 1}
+          >
+            <Button.Text>
+              {createMutation.isPending ? "Starting…" : "Start run"}
+            </Button.Text>
           </Button>
         </SheetFooter>
       </SheetContent>
@@ -317,17 +343,37 @@ function NewRunSheet({
 // ---------------------------------------------------------------------------
 
 function RunDetail({
-  run,
+  runId,
+  policyId,
   policyEnabled,
   onBack,
 }: {
-  run: PolicyEvalRun;
+  runId: string;
+  policyId: string;
   policyEnabled: boolean;
   onBack: () => void;
 }) {
-  // TODO(AGE-2704): replace with generated eval API client.
-  // e.g. const { data: findings } = useListPolicyEvalFindings({ runId: run.id });
-  const findings = useMemo(() => getMockEvalFindings(run.id), [run.id]);
+  const queryClient = useQueryClient();
+
+  const { data: run } = useRiskGetPolicyEvalRun({ id: runId }, undefined, {
+    // Poll while the run is in flight so stats and status stay fresh.
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "pending" || status === "running" ? 3000 : false;
+    },
+  });
+
+  const { data: findingsData } = useRiskListPolicyEvalFindings({ runId });
+  const findings = findingsData?.findings ?? [];
+
+  const cancelMutation = useRiskCancelPolicyEvalRunMutation({
+    onSuccess: () => {
+      void invalidateAllRiskGetPolicyEvalRun(queryClient);
+      void invalidateAllRiskListPolicyEvalRuns(queryClient);
+    },
+  });
+
+  const isInFlight = run?.status === "pending" || run?.status === "running";
 
   return (
     <div className="space-y-6">
@@ -343,22 +389,44 @@ function RunDetail({
           </button>
           <div className="flex items-center gap-2">
             <Heading variant="h3" className="font-mono normal-case">
-              {run.id}
+              {runId}
             </Heading>
-            <StatusBadge status={run.status} />
+            {run && <StatusBadge status={run.status} />}
           </div>
         </div>
+        {isInFlight && (
+          <Button
+            variant="secondary"
+            disabled={cancelMutation.isPending}
+            onClick={() =>
+              cancelMutation.mutate({
+                request: { riskIDRequestBody: { id: runId } },
+              })
+            }
+          >
+            <Button.Text>Cancel run</Button.Text>
+          </Button>
+        )}
       </div>
 
-      <StatsPanel run={run} />
-
-      {/* "Enough signal? enable policy" CTA */}
-      <EnableSignalCta run={run} policyEnabled={policyEnabled} />
-
-      <div className="space-y-3">
-        <Heading variant="h4">Findings</Heading>
-        <FindingsTable findings={findings} />
-      </div>
+      {run ? (
+        <>
+          <StatsPanel run={run} />
+          <EnableSignalCta
+            run={run}
+            policyId={policyId}
+            policyEnabled={policyEnabled}
+          />
+          <div className="space-y-3">
+            <Heading variant="h4">Findings</Heading>
+            <FindingsTable findings={findings} />
+          </div>
+        </>
+      ) : (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+        </div>
+      )}
     </div>
   );
 }
@@ -368,8 +436,8 @@ function StatsPanel({ run }: { run: PolicyEvalRun }) {
     { label: "Messages scanned", value: num(run.messagesScanned) },
     { label: "Findings", value: num(run.findingsCount) },
     { label: "Total cost", value: usd(run.totalCostUsd) },
-    { label: "Input tokens", value: num(run.inputTokens) },
-    { label: "Output tokens", value: num(run.outputTokens) },
+    { label: "Input tokens", value: num(run.inputTokens ?? 0) },
+    { label: "Output tokens", value: num(run.outputTokens ?? 0) },
     { label: "Judge p50", value: ms(run.judgeLatencyP50Ms) },
     { label: "Judge p95", value: ms(run.judgeLatencyP95Ms) },
     {
@@ -395,17 +463,62 @@ function StatsPanel({ run }: { run: PolicyEvalRun }) {
 
 function EnableSignalCta({
   run,
+  policyId,
   policyEnabled,
 }: {
   run: PolicyEvalRun;
+  policyId: string;
   policyEnabled: boolean;
 }) {
+  const queryClient = useQueryClient();
+  const { data: policy } = useRiskPoliciesGet({ id: policyId }, undefined, {
+    enabled: !policyEnabled,
+  });
+  const updateMutation = useRiskPoliciesUpdateMutation({
+    onSuccess: () => {
+      void invalidateAllRiskListPolicies(queryClient);
+    },
+  });
+
   if (policyEnabled) {
     return null;
   }
-  // Trivial heuristic stand-in for "enough signal". The real threshold logic
-  // will live server-side / in product analytics.
+
+  // Trivial heuristic stand-in for "enough signal".
   const enoughSignal = run.status === "completed" && run.findingsCount > 0;
+
+  const handleEnable = () => {
+    if (!policy) {
+      return;
+    }
+    // Echo the policy's current configuration with enabled:true — updateRiskPolicy
+    // overwrites detection fields, so a partial update would clobber them.
+    updateMutation.mutate({
+      request: {
+        updateRiskPolicyRequestBody: {
+          id: policy.id,
+          name: policy.name,
+          enabled: true,
+          action: policy.action,
+          audienceType: policy.audienceType,
+          audiencePrincipalUrns: policy.audiencePrincipalUrns,
+          autoName: policy.autoName,
+          sources: policy.sources,
+          presidioEntities: policy.presidioEntities,
+          promptInjectionRules: policy.promptInjectionRules,
+          disabledRules: policy.disabledRules,
+          customRuleIds: policy.customRuleIds,
+          messageTypes: policy.messageTypes,
+          scopeInclude: policy.scopeInclude,
+          scopeExempt: policy.scopeExempt,
+          userMessage: policy.userMessage,
+          prompt: policy.prompt,
+          modelConfig: policy.modelConfig,
+        },
+      },
+    });
+  };
+
   return (
     <div
       className={cn(
@@ -434,14 +547,12 @@ function EnableSignalCta({
         </div>
       </div>
       <Button
-        disabled={!enoughSignal}
-        onClick={() => {
-          // TODO(AGE-2704): replace with generated eval API client.
-          // Enabling should reuse the existing risk-policy update mutation
-          // (useRiskPoliciesUpdateMutation) with enabled: true.
-        }}
+        disabled={!enoughSignal || !policy || updateMutation.isPending}
+        onClick={handleEnable}
       >
-        <Button.Text>Enable policy</Button.Text>
+        <Button.Text>
+          {updateMutation.isPending ? "Enabling…" : "Enable policy"}
+        </Button.Text>
       </Button>
     </div>
   );
@@ -482,7 +593,7 @@ function FindingsTable({ findings }: { findings: PolicyEvalFinding[] }) {
     },
     {
       key: "match",
-      header: "Match (redacted)",
+      header: "Match",
       width: "1.2fr",
       render: (f) => (
         <span className="text-muted-foreground truncate font-mono text-xs">
@@ -512,7 +623,5 @@ function FindingsTable({ findings }: { findings: PolicyEvalFinding[] }) {
     );
   }
 
-  return (
-    <Table columns={columns} data={findings} rowKey={(f) => f.id} />
-  );
+  return <Table columns={columns} data={findings} rowKey={(f) => f.id} />;
 }
