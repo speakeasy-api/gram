@@ -21,6 +21,7 @@ import { ArrowUpRight, Copy, ExternalLink } from "lucide-react";
 import { type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+import { useProtectedResourceMetadata } from "./settings/sections/authentication/useProtectedResourceMetadata";
 
 type OverviewTabProps = {
   mcpServer: McpServer | undefined;
@@ -30,13 +31,19 @@ type OverviewTabProps = {
   onShowAuthentication: () => void;
 };
 
-type StatusTone = "ready" | "needs-setup";
+type StatusTone = "ready" | "needs-setup" | "warning";
 type RowStatus = { label: string; tone: StatusTone };
 
 const READY_STATUS: RowStatus = { label: "READY", tone: "ready" };
 const NEEDS_SETUP_STATUS: RowStatus = {
   label: "NEEDS SETUP",
   tone: "needs-setup",
+};
+// Distinct from NEEDS SETUP: something is configured, but a required piece is
+// missing and the server won't work as intended until it's addressed.
+const ACTION_NEEDED_STATUS: RowStatus = {
+  label: "ACTION NEEDED",
+  tone: "warning",
 };
 
 /** "Ready" once set up, "Needs Setup" otherwise; undefined while loading. */
@@ -238,6 +245,9 @@ function useServerAddressOverview(
 type AuthenticationOverview = OverviewReadiness & {
   state: AuthState;
   secure: boolean;
+  // Upstream advertises OAuth but no remote_session_client is connected. Gram
+  // gating can read "secure" while upstream login still fails for every client.
+  missingUpstreamAuth: boolean;
   status: RowStatus | undefined;
 };
 
@@ -253,20 +263,43 @@ function useAuthenticationOverview(
 
   const hasIssuer = !!userSessionIssuerId;
   const hasRemote = (clientsResult?.result.items.length ?? 0) > 0;
+
+  // Probe the upstream for OAuth metadata only when the server is gram-gated
+  // (has a USI) but has no remote client. A server with no USI is NEEDS SETUP
+  // regardless of upstream OAuth, and a connected client already closes the
+  // gap; probing either is wasted work (and would mislabel the no-USI case).
+  const { status: probeStatus } = useProtectedResourceMetadata(
+    mcpServer.remoteMcpServerId,
+    hasIssuer && !hasRemote,
+  );
+  const upstreamNeedsOAuth = probeStatus === "available";
+  const missingUpstreamAuth = upstreamNeedsOAuth && hasIssuer && !hasRemote;
+
   const state = deriveAuthState({
     isPublic: mcpServer.visibility === "public",
     hasIssuer,
     hasRemote,
   });
-  const loading = hasIssuer && isLoading;
+  const loading = (hasIssuer && isLoading) || probeStatus === "loading";
   const secure = state !== "none";
+  const ready = !loading && secure && !missingUpstreamAuth;
+
+  let status: RowStatus | undefined;
+  if (loading) {
+    status = undefined;
+  } else if (missingUpstreamAuth) {
+    status = ACTION_NEEDED_STATUS;
+  } else {
+    status = secure ? READY_STATUS : NEEDS_SETUP_STATUS;
+  }
 
   return {
-    ready: !loading && secure,
+    ready,
     loading,
     state,
     secure,
-    status: readyStatus(loading, secure),
+    missingUpstreamAuth,
+    status,
   };
 }
 
@@ -411,6 +444,12 @@ const AUTH_ROW_COPY: Record<AuthState, string> = {
   none: "No authentication method configured - anyone with the URL can connect.",
 };
 
+// Shown instead of the AuthState copy on missingUpstreamAuth: the gap makes the
+// row misleading, since clients can pass Gram gating yet still fail upstream
+// login.
+const MISSING_UPSTREAM_AUTH_COPY =
+  "The upstream server requires OAuth, but no upstream identity provider is connected. Connect one so clients can authenticate.";
+
 function deriveAuthState({
   isPublic,
   hasIssuer,
@@ -435,8 +474,12 @@ function AuthenticationOverviewRow({
   authentication: AuthenticationOverview;
   onConfigure: () => void;
 }) {
-  const actionLabel = authentication.secure ? "Manage" : "Configure";
-  const actionVariant = authentication.secure ? "secondary" : "primary";
+  // An unmet OAuth requirement needs the same call to action as an unsecured
+  // server even though gram gating reads "secure", so treat both as Configure.
+  const callToAction =
+    !authentication.secure || authentication.missingUpstreamAuth;
+  const actionLabel = callToAction ? "Configure" : "Manage";
+  const actionVariant = callToAction ? "primary" : "secondary";
 
   return (
     <OverviewRow
@@ -446,6 +489,8 @@ function AuthenticationOverviewRow({
       description={
         authentication.loading ? (
           <Skeleton className="h-4 w-[520px] max-w-full" />
+        ) : authentication.missingUpstreamAuth ? (
+          MISSING_UPSTREAM_AUTH_COPY
         ) : (
           AUTH_ROW_COPY[authentication.state]
         )
@@ -617,7 +662,7 @@ function StatusDot({
   }
 
   const colorClassName =
-    status?.tone === "needs-setup" ? "bg-amber-500" : "bg-green-500";
+    status?.tone === "ready" ? "bg-green-500" : "bg-amber-500";
 
   return (
     <span
@@ -656,6 +701,10 @@ const STATUS_BADGE_TONE_CLASSES: Record<
     text: "text-green-700! dark:text-green-300!",
   },
   "needs-setup": {
+    root: "border-amber-500/25! bg-amber-500/10! dark:border-amber-500/30! dark:bg-amber-500/15!",
+    text: "text-amber-700! dark:text-amber-300!",
+  },
+  warning: {
     root: "border-amber-500/25! bg-amber-500/10! dark:border-amber-500/30! dark:bg-amber-500/15!",
     text: "text-amber-700! dark:text-amber-300!",
   },
