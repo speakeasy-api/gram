@@ -26,6 +26,8 @@ type Service interface {
 	// Endpoint for Codex hook events. Handles SessionStart, PreToolUse,
 	// PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.
 	Codex(context.Context, *CodexPayload) (res *CodexHookResult, err error)
+	// Unified endpoint for hook events from supported coding assistants.
+	Ingest(context.Context, *IngestPayload) (res *IngestHookResult, err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
 	// authentication.
 	Logs(context.Context, *LogsPayload) (err error)
@@ -54,7 +56,7 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"claude", "cursor", "codex", "logs", "metrics"}
+var MethodNames = [6]string{"claude", "cursor", "codex", "ingest", "logs", "metrics"}
 
 // ClaudeHookResult is the result type of the hooks service claude method.
 type ClaudeHookResult struct {
@@ -261,6 +263,130 @@ type CursorPayload struct {
 	ResultJSON *string
 	// Execution duration in milliseconds, excluding approval wait time
 	// (afterMCPExecution only)
+	Duration *float64
+}
+
+// IngestHookResult is the result type of the hooks service ingest method.
+type IngestHookResult struct {
+	// Claude SessionStart continue flag
+	Continue *bool
+	// Claude SessionStart stop reason
+	StopReason *string
+	// Claude output suppression flag
+	SuppressOutput *bool
+	// Claude warning message
+	SystemMessage *string
+	// Claude hook-specific output
+	HookSpecificOutput any
+	// Codex or Claude top-level block decision
+	Decision *string
+	// Reason accompanying decision
+	Reason *string
+	// Cursor permission decision
+	Permission *string
+	// Cursor user-facing message
+	UserMessage *string
+	// Cursor context to inject
+	AdditionalContext *string
+	// Cursor agent-facing message
+	AgentMessage *string
+}
+
+// IngestPayload is the payload type of the hooks service ingest method.
+type IngestPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The sending hook adapter or agent platform. Built-in values include claude,
+	// cursor, and codex; customer plugins may send their own stable slug.
+	HookSource string
+	// Optional endpoint hostname supplied by the Gram hook plugin.
+	HookHostname *string
+	// Optional per-invocation token reused across retries so the server stores a
+	// redelivered event exactly once.
+	IdempotencyKey *string
+	// Normalized Gram hook event type
+	EventType string
+	// Original platform-native hook event name, if the source has one
+	HookEventName *string
+	// The agent session ID
+	SessionID *string
+	// The agent conversation ID
+	ConversationID *string
+	// The generation or turn ID
+	GenerationID *string
+	// The model identifier
+	Model *string
+	// User email reported by the local agent. Informational only; attribution
+	// comes from the authenticated token.
+	ReportedUserEmail *string
+	// Legacy source-reported user email. Informational only; attribution comes
+	// from the authenticated token.
+	UserEmail *string
+	// Additional hook-specific data
+	AdditionalData map[string]any
+	// Path to the conversation transcript file
+	TranscriptPath *string
+	// The working directory when the event fired
+	Cwd *string
+	// The name of the tool
+	ToolName *string
+	// The unique ID for this tool use
+	ToolUseID *string
+	// The input to the tool
+	ToolInput any
+	// The response from the tool
+	ToolResponse any
+	// The output from the tool
+	ToolOutput any
+	// The error from the tool
+	Error any
+	// Whether the failure was caused by user interruption
+	IsInterrupt *bool
+	// The type of permission being requested
+	PermissionType *string
+	// The user's prompt text
+	Prompt *string
+	// The final assistant message text for the turn
+	LastAssistantMessage *string
+	// How the session started (Claude SessionStart only)
+	Source *string
+	// Whether a stop hook continuation is active
+	StopHookActive *bool
+	// Why the session ended
+	Reason *string
+	// Type of notification
+	NotificationType *string
+	// Notification message text
+	Message *string
+	// Notification title
+	Title *string
+	// The Cursor IDE version
+	CursorVersion *string
+	// Cursor composer mode
+	ComposerMode *string
+	// Completion status
+	Status *string
+	// Number of agentic loops executed
+	LoopCount *int
+	// Total input tokens used
+	InputTokens *int
+	// Total output tokens used
+	OutputTokens *int
+	// Tokens read from cache
+	CacheReadTokens *int
+	// Tokens written to cache
+	CacheWriteTokens *int
+	// Assistant response or thinking text
+	Text *string
+	// Duration in milliseconds
+	DurationMs *int
+	// URL of the MCP server
+	URL *string
+	// Command string for command-based MCP servers
+	Command *string
+	// JSON-encoded MCP tool response
+	ResultJSON *string
+	// Execution duration in milliseconds
 	Duration *float64
 }
 

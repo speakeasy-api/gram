@@ -5,6 +5,7 @@
 import { hooksHooksNumberClaude } from "../funcs/hooksHooksNumberClaude.js";
 import { hooksHooksNumberCodex } from "../funcs/hooksHooksNumberCodex.js";
 import { hooksHooksNumberCursor } from "../funcs/hooksHooksNumberCursor.js";
+import { hooksHooksNumberIngest } from "../funcs/hooksHooksNumberIngest.js";
 import { hooksHooksNumberLogs } from "../funcs/hooksHooksNumberLogs.js";
 import { hooksHooksNumberMetrics } from "../funcs/hooksHooksNumberMetrics.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -61,6 +62,25 @@ export class Hooks extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.CursorHookResult> {
     return unwrapAsync(hooksHooksNumberCursor(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * ingest hooks
+   *
+   * @remarks
+   * Unified endpoint for hook events from supported coding assistants.
+   */
+  async hooksNumberIngest(
+    request: operations.HooksNumberIngestRequest,
+    security?: operations.HooksNumberIngestSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.IngestHookResult> {
+    return unwrapAsync(hooksHooksNumberIngest(
       this,
       request,
       security,

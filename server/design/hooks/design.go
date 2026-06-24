@@ -138,6 +138,74 @@ var CodexHookResult = Type("CodexHookResult", func() {
 	Attribute("reason", String, "Reason for the decision, shown to the user")
 })
 
+// Ingest hook payload
+var IngestHookPayload = Type("IngestHookPayload", func() {
+	Description("Unified payload for hook events from coding assistants")
+	Required("event_type")
+	Attribute("event_type", String, "Normalized Gram hook event type", func() {
+		Enum("config_change", "session_start", "before_tool_use", "after_tool_use", "after_tool_use_failure",
+			"before_mcp_execution", "after_mcp_execution", "permission_request", "user_prompt_submit",
+			"after_agent_response", "after_agent_thought", "stop", "session_end", "notification")
+	})
+	Attribute("hook_event_name", String, "Original platform-native hook event name, if the source has one")
+	Attribute("session_id", String, "The agent session ID")
+	Attribute("conversation_id", String, "The agent conversation ID")
+	Attribute("generation_id", String, "The generation or turn ID")
+	Attribute("model", String, "The model identifier")
+	Attribute("reported_user_email", String, "User email reported by the local agent. Informational only; attribution comes from the authenticated token.")
+	Attribute("user_email", String, "Legacy source-reported user email. Informational only; attribution comes from the authenticated token.")
+	Attribute("additional_data", MapOf(String, Any), "Additional hook-specific data")
+	Attribute("transcript_path", String, "Path to the conversation transcript file")
+	Attribute("cwd", String, "The working directory when the event fired")
+	Attribute("tool_name", String, "The name of the tool")
+	Attribute("tool_use_id", String, "The unique ID for this tool use")
+	Attribute("tool_input", Any, "The input to the tool")
+	Attribute("tool_response", Any, "The response from the tool")
+	Attribute("tool_output", Any, "The output from the tool")
+	Attribute("error", Any, "The error from the tool")
+	Attribute("is_interrupt", Boolean, "Whether the failure was caused by user interruption")
+	Attribute("permission_type", String, "The type of permission being requested")
+	Attribute("prompt", String, "The user's prompt text")
+	Attribute("last_assistant_message", String, "The final assistant message text for the turn")
+	Attribute("source", String, "How the session started (Claude SessionStart only)")
+	Attribute("stop_hook_active", Boolean, "Whether a stop hook continuation is active")
+	Attribute("reason", String, "Why the session ended")
+	Attribute("notification_type", String, "Type of notification")
+	Attribute("message", String, "Notification message text")
+	Attribute("title", String, "Notification title")
+	Attribute("cursor_version", String, "The Cursor IDE version")
+	Attribute("composer_mode", String, "Cursor composer mode")
+	Attribute("status", String, "Completion status")
+	Attribute("loop_count", Int, "Number of agentic loops executed")
+	Attribute("input_tokens", Int, "Total input tokens used")
+	Attribute("output_tokens", Int, "Total output tokens used")
+	Attribute("cache_read_tokens", Int, "Tokens read from cache")
+	Attribute("cache_write_tokens", Int, "Tokens written to cache")
+	Attribute("text", String, "Assistant response or thinking text")
+	Attribute("duration_ms", Int, "Duration in milliseconds")
+	Attribute("url", String, "URL of the MCP server")
+	Attribute("command", String, "Command string for command-based MCP servers")
+	Attribute("result_json", String, "JSON-encoded MCP tool response")
+	Attribute("duration", Float64, "Execution duration in milliseconds")
+})
+
+// Ingest hook result contains the union of hook response shapes used by the
+// supported agent platforms. Each platform reads only the fields it knows.
+var IngestHookResult = Type("IngestHookResult", func() {
+	Description("Unified result for hook events")
+	Attribute("continue", Boolean, "Claude SessionStart continue flag")
+	Attribute("stopReason", String, "Claude SessionStart stop reason")
+	Attribute("suppressOutput", Boolean, "Claude output suppression flag")
+	Attribute("systemMessage", String, "Claude warning message")
+	Attribute("hookSpecificOutput", Any, "Claude hook-specific output")
+	Attribute("decision", String, "Codex or Claude top-level block decision")
+	Attribute("reason", String, "Reason accompanying decision")
+	Attribute("permission", String, "Cursor permission decision")
+	Attribute("user_message", String, "Cursor user-facing message")
+	Attribute("additional_context", String, "Cursor context to inject")
+	Attribute("agent_message", String, "Cursor agent-facing message")
+})
+
 // Server name override types
 var ServerNameOverride = Type("ServerNameOverride", func() {
 	Description("User-defined display name for a hooks server")
@@ -227,6 +295,35 @@ var _ = Service("hooks", func() {
 			POST("/rpc/hooks.codex")
 			security.ByKeyHeader()
 			security.ProjectHeader()
+			Header("hook_hostname:X-Gram-Hook-Hostname")
+			Header("idempotency_key:Idempotency-Key")
+		})
+	})
+
+	Method("ingest", func() {
+		Description("Unified endpoint for hook events from supported coding assistants.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			Extend(IngestHookPayload)
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Attribute("hook_source", String, "The sending hook adapter or agent platform. Built-in values include claude, cursor, and codex; customer plugins may send their own stable slug.")
+			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
+			Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
+			Required("hook_source")
+		})
+
+		Result(IngestHookResult)
+
+		HTTP(func() {
+			POST("/rpc/hooks.ingest")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Header("hook_source:X-Gram-Hook-Source")
 			Header("hook_hostname:X-Gram-Hook-Hostname")
 			Header("idempotency_key:Idempotency-Key")
 		})

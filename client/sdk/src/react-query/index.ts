@@ -133,6 +133,7 @@ export * from "./grants.js";
 export * from "./hooksHooksNumberClaude.js";
 export * from "./hooksHooksNumberCodex.js";
 export * from "./hooksHooksNumberCursor.js";
+export * from "./hooksHooksNumberIngest.js";
 export * from "./hooksHooksNumberLogs.js";
 export * from "./hooksHooksNumberMetrics.js";
 export * from "./hooksServerNamesDeleteServerNameOverride.js";

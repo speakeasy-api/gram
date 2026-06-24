@@ -287,6 +287,7 @@ run();
 * [hooksNumberClaude](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
 * [hooksNumberCodex](docs/sdks/hooks/README.md#hooksnumbercodex) - codex hooks
 * [hooksNumberCursor](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
+* [hooksNumberIngest](docs/sdks/hooks/README.md#hooksnumberingest) - ingest hooks
 * [hooksNumberLogs](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
 * [hooksNumberMetrics](docs/sdks/hooks/README.md#hooksnumbermetrics) - metrics hooks
 
@@ -764,6 +765,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`hooksHooksNumberClaude`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
 - [`hooksHooksNumberCodex`](docs/sdks/hooks/README.md#hooksnumbercodex) - codex hooks
 - [`hooksHooksNumberCursor`](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
+- [`hooksHooksNumberIngest`](docs/sdks/hooks/README.md#hooksnumberingest) - ingest hooks
 - [`hooksHooksNumberLogs`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
 - [`hooksHooksNumberMetrics`](docs/sdks/hooks/README.md#hooksnumbermetrics) - metrics hooks
 - [`hooksServerNamesDeleteServerNameOverride`](docs/sdks/hooksservernames/README.md#deleteservernameoverride) - delete hooksServerNames
@@ -1151,6 +1153,7 @@ To learn about this feature and how to get started, check
 - [`useHooksHooksNumberClaudeMutation`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
 - [`useHooksHooksNumberCodexMutation`](docs/sdks/hooks/README.md#hooksnumbercodex) - codex hooks
 - [`useHooksHooksNumberCursorMutation`](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
+- [`useHooksHooksNumberIngestMutation`](docs/sdks/hooks/README.md#hooksnumberingest) - ingest hooks
 - [`useHooksHooksNumberLogsMutation`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
 - [`useHooksHooksNumberMetricsMutation`](docs/sdks/hooks/README.md#hooksnumbermetrics) - metrics hooks
 - [`useHooksServerNamesDeleteServerNameOverrideMutation`](docs/sdks/hooksservernames/README.md#deleteservernameoverride) - delete hooksServerNames

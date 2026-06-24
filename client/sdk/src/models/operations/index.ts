@@ -163,6 +163,7 @@ export * from "./getusersessionissuer.js";
 export * from "./hooksnumberclaude.js";
 export * from "./hooksnumbercodex.js";
 export * from "./hooksnumbercursor.js";
+export * from "./hooksnumberingest.js";
 export * from "./hooksnumberlogs.js";
 export * from "./hooksnumbermetrics.js";
 export * from "./integrationsnumberget.js";

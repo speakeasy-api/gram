@@ -246,6 +246,110 @@ func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hook
 	return v, nil
 }
 
+// BuildIngestPayload builds the payload for the hooks ingest endpoint from CLI
+// flags.
+func BuildIngestPayload(hooksIngestBody string, hooksIngestApikeyToken string, hooksIngestProjectSlugInput string, hooksIngestHookSource string, hooksIngestHookHostname string, hooksIngestIdempotencyKey string) (*hooks.IngestPayload, error) {
+	var err error
+	var body IngestRequestBody
+	{
+		err = json.Unmarshal([]byte(hooksIngestBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cache_read_tokens\": 1,\n      \"cache_write_tokens\": 1,\n      \"command\": \"abc123\",\n      \"composer_mode\": \"abc123\",\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"cwd\": \"abc123\",\n      \"duration\": 1,\n      \"duration_ms\": 1,\n      \"error\": \"abc123\",\n      \"event_type\": \"session_start\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"abc123\",\n      \"input_tokens\": 1,\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"loop_count\": 1,\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"output_tokens\": 1,\n      \"permission_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"reported_user_email\": \"abc123\",\n      \"result_json\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"status\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"text\": \"abc123\",\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_output\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"url\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }'")
+		}
+		if !(body.EventType == "config_change" || body.EventType == "session_start" || body.EventType == "before_tool_use" || body.EventType == "after_tool_use" || body.EventType == "after_tool_use_failure" || body.EventType == "before_mcp_execution" || body.EventType == "after_mcp_execution" || body.EventType == "permission_request" || body.EventType == "user_prompt_submit" || body.EventType == "after_agent_response" || body.EventType == "after_agent_thought" || body.EventType == "stop" || body.EventType == "session_end" || body.EventType == "notification") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.event_type", body.EventType, []any{"config_change", "session_start", "before_tool_use", "after_tool_use", "after_tool_use_failure", "before_mcp_execution", "after_mcp_execution", "permission_request", "user_prompt_submit", "after_agent_response", "after_agent_thought", "stop", "session_end", "notification"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if hooksIngestApikeyToken != "" {
+			apikeyToken = &hooksIngestApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if hooksIngestProjectSlugInput != "" {
+			projectSlugInput = &hooksIngestProjectSlugInput
+		}
+	}
+	var hookSource string
+	{
+		hookSource = hooksIngestHookSource
+	}
+	var hookHostname *string
+	{
+		if hooksIngestHookHostname != "" {
+			hookHostname = &hooksIngestHookHostname
+		}
+	}
+	var idempotencyKey *string
+	{
+		if hooksIngestIdempotencyKey != "" {
+			idempotencyKey = &hooksIngestIdempotencyKey
+		}
+	}
+	v := &hooks.IngestPayload{
+		EventType:            body.EventType,
+		HookEventName:        body.HookEventName,
+		SessionID:            body.SessionID,
+		ConversationID:       body.ConversationID,
+		GenerationID:         body.GenerationID,
+		Model:                body.Model,
+		ReportedUserEmail:    body.ReportedUserEmail,
+		UserEmail:            body.UserEmail,
+		TranscriptPath:       body.TranscriptPath,
+		Cwd:                  body.Cwd,
+		ToolName:             body.ToolName,
+		ToolUseID:            body.ToolUseID,
+		ToolInput:            body.ToolInput,
+		ToolResponse:         body.ToolResponse,
+		ToolOutput:           body.ToolOutput,
+		Error:                body.Error,
+		IsInterrupt:          body.IsInterrupt,
+		PermissionType:       body.PermissionType,
+		Prompt:               body.Prompt,
+		LastAssistantMessage: body.LastAssistantMessage,
+		Source:               body.Source,
+		StopHookActive:       body.StopHookActive,
+		Reason:               body.Reason,
+		NotificationType:     body.NotificationType,
+		Message:              body.Message,
+		Title:                body.Title,
+		CursorVersion:        body.CursorVersion,
+		ComposerMode:         body.ComposerMode,
+		Status:               body.Status,
+		LoopCount:            body.LoopCount,
+		InputTokens:          body.InputTokens,
+		OutputTokens:         body.OutputTokens,
+		CacheReadTokens:      body.CacheReadTokens,
+		CacheWriteTokens:     body.CacheWriteTokens,
+		Text:                 body.Text,
+		DurationMs:           body.DurationMs,
+		URL:                  body.URL,
+		Command:              body.Command,
+		ResultJSON:           body.ResultJSON,
+		Duration:             body.Duration,
+	}
+	if body.AdditionalData != nil {
+		v.AdditionalData = make(map[string]any, len(body.AdditionalData))
+		for key, val := range body.AdditionalData {
+			tk := key
+			tv := val
+			v.AdditionalData[tk] = tv
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.HookSource = hookSource
+	v.HookHostname = hookHostname
+	v.IdempotencyKey = idempotencyKey
+
+	return v, nil
+}
+
 // BuildLogsPayload builds the payload for the hooks logs endpoint from CLI
 // flags.
 func BuildLogsPayload(hooksLogsBody string, hooksLogsApikeyToken string, hooksLogsProjectSlugInput string) (*hooks.LogsPayload, error) {

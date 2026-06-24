@@ -744,6 +744,252 @@ func DecodeCodexResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 	}
 }
 
+// BuildIngestRequest instantiates a HTTP request object with method and path
+// set to call the "hooks" service "ingest" endpoint
+func (c *Client) BuildIngestRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: IngestHooksPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("hooks", "ingest", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeIngestRequest returns an encoder for requests sent to the hooks ingest
+// server.
+func EncodeIngestRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*hooks.IngestPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("hooks", "ingest", "*hooks.IngestPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		{
+			head := p.HookSource
+			req.Header.Set("X-Gram-Hook-Source", head)
+		}
+		if p.HookHostname != nil {
+			head := *p.HookHostname
+			req.Header.Set("X-Gram-Hook-Hostname", head)
+		}
+		if p.IdempotencyKey != nil {
+			head := *p.IdempotencyKey
+			req.Header.Set("Idempotency-Key", head)
+		}
+		body := NewIngestRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("hooks", "ingest", err)
+		}
+		return nil
+	}
+}
+
+// DecodeIngestResponse returns a decoder for responses returned by the hooks
+// ingest endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeIngestResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeIngestResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body IngestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			res := NewIngestHookResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body IngestUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body IngestForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body IngestBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body IngestNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body IngestConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body IngestUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body IngestInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body IngestInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+				}
+				err = ValidateIngestInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+				}
+				return nil, NewIngestInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body IngestUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+				}
+				err = ValidateIngestUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+				}
+				return nil, NewIngestUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("hooks", "ingest", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body IngestGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "ingest", err)
+			}
+			err = ValidateIngestGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "ingest", err)
+			}
+			return nil, NewIngestGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("hooks", "ingest", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildLogsRequest instantiates a HTTP request object with method and path set
 // to call the "hooks" service "logs" endpoint
 func (c *Client) BuildLogsRequest(ctx context.Context, v any) (*http.Request, error) {

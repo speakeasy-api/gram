@@ -164,6 +164,8 @@ export * from "./hooksusersummary.js";
 export * from "./hooktracesummary.js";
 export * from "./httptooldefinition.js";
 export * from "./inforesponsebody.js";
+export * from "./ingesthookpayload.js";
+export * from "./ingesthookresult.js";
 export * from "./instancemcpserver.js";
 export * from "./integration.js";
 export * from "./integrationentry.js";

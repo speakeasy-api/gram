@@ -757,7 +757,11 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 		ProjectID:           authCtx.ProjectID.String(),
 	}
 	if metadata.UserEmail != "" {
-		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+		if authCtx.Email != nil && conv.NormalizeEmail(*authCtx.Email) == conv.NormalizeEmail(metadata.UserEmail) {
+			metadata.UserID = authCtx.UserID
+		} else {
+			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+		}
 	}
 
 	return metadata, true

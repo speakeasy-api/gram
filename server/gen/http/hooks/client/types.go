@@ -160,6 +160,95 @@ type CodexRequestBody struct {
 	LastAssistantMessage *string `form:"last_assistant_message,omitempty" json:"last_assistant_message,omitempty" xml:"last_assistant_message,omitempty"`
 }
 
+// IngestRequestBody is the type of the "hooks" service "ingest" endpoint HTTP
+// request body.
+type IngestRequestBody struct {
+	// Normalized Gram hook event type
+	EventType string `form:"event_type" json:"event_type" xml:"event_type"`
+	// Original platform-native hook event name, if the source has one
+	HookEventName *string `form:"hook_event_name,omitempty" json:"hook_event_name,omitempty" xml:"hook_event_name,omitempty"`
+	// The agent session ID
+	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// The agent conversation ID
+	ConversationID *string `form:"conversation_id,omitempty" json:"conversation_id,omitempty" xml:"conversation_id,omitempty"`
+	// The generation or turn ID
+	GenerationID *string `form:"generation_id,omitempty" json:"generation_id,omitempty" xml:"generation_id,omitempty"`
+	// The model identifier
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// User email reported by the local agent. Informational only; attribution
+	// comes from the authenticated token.
+	ReportedUserEmail *string `form:"reported_user_email,omitempty" json:"reported_user_email,omitempty" xml:"reported_user_email,omitempty"`
+	// Legacy source-reported user email. Informational only; attribution comes
+	// from the authenticated token.
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Additional hook-specific data
+	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
+	// Path to the conversation transcript file
+	TranscriptPath *string `form:"transcript_path,omitempty" json:"transcript_path,omitempty" xml:"transcript_path,omitempty"`
+	// The working directory when the event fired
+	Cwd *string `form:"cwd,omitempty" json:"cwd,omitempty" xml:"cwd,omitempty"`
+	// The name of the tool
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// The unique ID for this tool use
+	ToolUseID *string `form:"tool_use_id,omitempty" json:"tool_use_id,omitempty" xml:"tool_use_id,omitempty"`
+	// The input to the tool
+	ToolInput any `form:"tool_input,omitempty" json:"tool_input,omitempty" xml:"tool_input,omitempty"`
+	// The response from the tool
+	ToolResponse any `form:"tool_response,omitempty" json:"tool_response,omitempty" xml:"tool_response,omitempty"`
+	// The output from the tool
+	ToolOutput any `form:"tool_output,omitempty" json:"tool_output,omitempty" xml:"tool_output,omitempty"`
+	// The error from the tool
+	Error any `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// Whether the failure was caused by user interruption
+	IsInterrupt *bool `form:"is_interrupt,omitempty" json:"is_interrupt,omitempty" xml:"is_interrupt,omitempty"`
+	// The type of permission being requested
+	PermissionType *string `form:"permission_type,omitempty" json:"permission_type,omitempty" xml:"permission_type,omitempty"`
+	// The user's prompt text
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// The final assistant message text for the turn
+	LastAssistantMessage *string `form:"last_assistant_message,omitempty" json:"last_assistant_message,omitempty" xml:"last_assistant_message,omitempty"`
+	// How the session started (Claude SessionStart only)
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Whether a stop hook continuation is active
+	StopHookActive *bool `form:"stop_hook_active,omitempty" json:"stop_hook_active,omitempty" xml:"stop_hook_active,omitempty"`
+	// Why the session ended
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Type of notification
+	NotificationType *string `form:"notification_type,omitempty" json:"notification_type,omitempty" xml:"notification_type,omitempty"`
+	// Notification message text
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Notification title
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// The Cursor IDE version
+	CursorVersion *string `form:"cursor_version,omitempty" json:"cursor_version,omitempty" xml:"cursor_version,omitempty"`
+	// Cursor composer mode
+	ComposerMode *string `form:"composer_mode,omitempty" json:"composer_mode,omitempty" xml:"composer_mode,omitempty"`
+	// Completion status
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Number of agentic loops executed
+	LoopCount *int `form:"loop_count,omitempty" json:"loop_count,omitempty" xml:"loop_count,omitempty"`
+	// Total input tokens used
+	InputTokens *int `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
+	// Total output tokens used
+	OutputTokens *int `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
+	// Tokens read from cache
+	CacheReadTokens *int `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
+	// Tokens written to cache
+	CacheWriteTokens *int `form:"cache_write_tokens,omitempty" json:"cache_write_tokens,omitempty" xml:"cache_write_tokens,omitempty"`
+	// Assistant response or thinking text
+	Text *string `form:"text,omitempty" json:"text,omitempty" xml:"text,omitempty"`
+	// Duration in milliseconds
+	DurationMs *int `form:"duration_ms,omitempty" json:"duration_ms,omitempty" xml:"duration_ms,omitempty"`
+	// URL of the MCP server
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Command string for command-based MCP servers
+	Command *string `form:"command,omitempty" json:"command,omitempty" xml:"command,omitempty"`
+	// JSON-encoded MCP tool response
+	ResultJSON *string `form:"result_json,omitempty" json:"result_json,omitempty" xml:"result_json,omitempty"`
+	// Execution duration in milliseconds
+	Duration *float64 `form:"duration,omitempty" json:"duration,omitempty" xml:"duration,omitempty"`
+}
+
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
 // request body.
 type LogsRequestBody struct {
@@ -215,6 +304,33 @@ type CodexResponseBody struct {
 	Decision *string `form:"decision,omitempty" json:"decision,omitempty" xml:"decision,omitempty"`
 	// Reason for the decision, shown to the user
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
+// IngestResponseBody is the type of the "hooks" service "ingest" endpoint HTTP
+// response body.
+type IngestResponseBody struct {
+	// Claude SessionStart continue flag
+	Continue *bool `form:"continue,omitempty" json:"continue,omitempty" xml:"continue,omitempty"`
+	// Claude SessionStart stop reason
+	StopReason *string `form:"stopReason,omitempty" json:"stopReason,omitempty" xml:"stopReason,omitempty"`
+	// Claude output suppression flag
+	SuppressOutput *bool `form:"suppressOutput,omitempty" json:"suppressOutput,omitempty" xml:"suppressOutput,omitempty"`
+	// Claude warning message
+	SystemMessage *string `form:"systemMessage,omitempty" json:"systemMessage,omitempty" xml:"systemMessage,omitempty"`
+	// Claude hook-specific output
+	HookSpecificOutput any `form:"hookSpecificOutput,omitempty" json:"hookSpecificOutput,omitempty" xml:"hookSpecificOutput,omitempty"`
+	// Codex or Claude top-level block decision
+	Decision *string `form:"decision,omitempty" json:"decision,omitempty" xml:"decision,omitempty"`
+	// Reason accompanying decision
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Cursor permission decision
+	Permission *string `form:"permission,omitempty" json:"permission,omitempty" xml:"permission,omitempty"`
+	// Cursor user-facing message
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// Cursor context to inject
+	AdditionalContext *string `form:"additional_context,omitempty" json:"additional_context,omitempty" xml:"additional_context,omitempty"`
+	// Cursor agent-facing message
+	AgentMessage *string `form:"agent_message,omitempty" json:"agent_message,omitempty" xml:"agent_message,omitempty"`
 }
 
 // ClaudeUnauthorizedResponseBody is the type of the "hooks" service "claude"
@@ -742,6 +858,186 @@ type CodexUnexpectedResponseBody struct {
 // CodexGatewayErrorResponseBody is the type of the "hooks" service "codex"
 // endpoint HTTP response body for the "gateway_error" error.
 type CodexGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// IngestUnauthorizedResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "unauthorized" error.
+type IngestUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// IngestForbiddenResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "forbidden" error.
+type IngestForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// IngestBadRequestResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "bad_request" error.
+type IngestBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// IngestNotFoundResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "not_found" error.
+type IngestNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// IngestConflictResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "conflict" error.
+type IngestConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// IngestUnsupportedMediaResponseBody is the type of the "hooks" service
+// "ingest" endpoint HTTP response body for the "unsupported_media" error.
+type IngestUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// IngestInvalidResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "invalid" error.
+type IngestInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// IngestInvariantViolationResponseBody is the type of the "hooks" service
+// "ingest" endpoint HTTP response body for the "invariant_violation" error.
+type IngestInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// IngestUnexpectedResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "unexpected" error.
+type IngestUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// IngestGatewayErrorResponseBody is the type of the "hooks" service "ingest"
+// endpoint HTTP response body for the "gateway_error" error.
+type IngestGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1378,6 +1674,62 @@ func NewCodexRequestBody(p *hooks.CodexPayload) *CodexRequestBody {
 	return body
 }
 
+// NewIngestRequestBody builds the HTTP request body from the payload of the
+// "ingest" endpoint of the "hooks" service.
+func NewIngestRequestBody(p *hooks.IngestPayload) *IngestRequestBody {
+	body := &IngestRequestBody{
+		EventType:            p.EventType,
+		HookEventName:        p.HookEventName,
+		SessionID:            p.SessionID,
+		ConversationID:       p.ConversationID,
+		GenerationID:         p.GenerationID,
+		Model:                p.Model,
+		ReportedUserEmail:    p.ReportedUserEmail,
+		UserEmail:            p.UserEmail,
+		TranscriptPath:       p.TranscriptPath,
+		Cwd:                  p.Cwd,
+		ToolName:             p.ToolName,
+		ToolUseID:            p.ToolUseID,
+		ToolInput:            p.ToolInput,
+		ToolResponse:         p.ToolResponse,
+		ToolOutput:           p.ToolOutput,
+		Error:                p.Error,
+		IsInterrupt:          p.IsInterrupt,
+		PermissionType:       p.PermissionType,
+		Prompt:               p.Prompt,
+		LastAssistantMessage: p.LastAssistantMessage,
+		Source:               p.Source,
+		StopHookActive:       p.StopHookActive,
+		Reason:               p.Reason,
+		NotificationType:     p.NotificationType,
+		Message:              p.Message,
+		Title:                p.Title,
+		CursorVersion:        p.CursorVersion,
+		ComposerMode:         p.ComposerMode,
+		Status:               p.Status,
+		LoopCount:            p.LoopCount,
+		InputTokens:          p.InputTokens,
+		OutputTokens:         p.OutputTokens,
+		CacheReadTokens:      p.CacheReadTokens,
+		CacheWriteTokens:     p.CacheWriteTokens,
+		Text:                 p.Text,
+		DurationMs:           p.DurationMs,
+		URL:                  p.URL,
+		Command:              p.Command,
+		ResultJSON:           p.ResultJSON,
+		Duration:             p.Duration,
+	}
+	if p.AdditionalData != nil {
+		body.AdditionalData = make(map[string]any, len(p.AdditionalData))
+		for key, val := range p.AdditionalData {
+			tk := key
+			tv := val
+			body.AdditionalData[tk] = tv
+		}
+	}
+	return body
+}
+
 // NewLogsRequestBody builds the HTTP request body from the payload of the
 // "logs" endpoint of the "hooks" service.
 func NewLogsRequestBody(p *hooks.LogsPayload) *LogsRequestBody {
@@ -1872,6 +2224,170 @@ func NewCodexUnexpected(body *CodexUnexpectedResponseBody) *goa.ServiceError {
 // NewCodexGatewayError builds a hooks service codex endpoint gateway_error
 // error.
 func NewCodexGatewayError(body *CodexGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewIngestHookResultOK builds a "hooks" service "ingest" endpoint result from
+// a HTTP "OK" response.
+func NewIngestHookResultOK(body *IngestResponseBody) *hooks.IngestHookResult {
+	v := &hooks.IngestHookResult{
+		Continue:           body.Continue,
+		StopReason:         body.StopReason,
+		SuppressOutput:     body.SuppressOutput,
+		SystemMessage:      body.SystemMessage,
+		HookSpecificOutput: body.HookSpecificOutput,
+		Decision:           body.Decision,
+		Reason:             body.Reason,
+		Permission:         body.Permission,
+		UserMessage:        body.UserMessage,
+		AdditionalContext:  body.AdditionalContext,
+		AgentMessage:       body.AgentMessage,
+	}
+
+	return v
+}
+
+// NewIngestUnauthorized builds a hooks service ingest endpoint unauthorized
+// error.
+func NewIngestUnauthorized(body *IngestUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewIngestForbidden builds a hooks service ingest endpoint forbidden error.
+func NewIngestForbidden(body *IngestForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewIngestBadRequest builds a hooks service ingest endpoint bad_request error.
+func NewIngestBadRequest(body *IngestBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewIngestNotFound builds a hooks service ingest endpoint not_found error.
+func NewIngestNotFound(body *IngestNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewIngestConflict builds a hooks service ingest endpoint conflict error.
+func NewIngestConflict(body *IngestConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewIngestUnsupportedMedia builds a hooks service ingest endpoint
+// unsupported_media error.
+func NewIngestUnsupportedMedia(body *IngestUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewIngestInvalid builds a hooks service ingest endpoint invalid error.
+func NewIngestInvalid(body *IngestInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewIngestInvariantViolation builds a hooks service ingest endpoint
+// invariant_violation error.
+func NewIngestInvariantViolation(body *IngestInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewIngestUnexpected builds a hooks service ingest endpoint unexpected error.
+func NewIngestUnexpected(body *IngestUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewIngestGatewayError builds a hooks service ingest endpoint gateway_error
+// error.
+func NewIngestGatewayError(body *IngestGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2871,6 +3387,246 @@ func ValidateCodexUnexpectedResponseBody(body *CodexUnexpectedResponseBody) (err
 // ValidateCodexGatewayErrorResponseBody runs the validations defined on
 // codex_gateway_error_response_body
 func ValidateCodexGatewayErrorResponseBody(body *CodexGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateIngestUnauthorizedResponseBody runs the validations defined on
+// ingest_unauthorized_response_body
+func ValidateIngestUnauthorizedResponseBody(body *IngestUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateIngestForbiddenResponseBody runs the validations defined on
+// ingest_forbidden_response_body
+func ValidateIngestForbiddenResponseBody(body *IngestForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateIngestBadRequestResponseBody runs the validations defined on
+// ingest_bad_request_response_body
+func ValidateIngestBadRequestResponseBody(body *IngestBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateIngestNotFoundResponseBody runs the validations defined on
+// ingest_not_found_response_body
+func ValidateIngestNotFoundResponseBody(body *IngestNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateIngestConflictResponseBody runs the validations defined on
+// ingest_conflict_response_body
+func ValidateIngestConflictResponseBody(body *IngestConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateIngestUnsupportedMediaResponseBody runs the validations defined on
+// ingest_unsupported_media_response_body
+func ValidateIngestUnsupportedMediaResponseBody(body *IngestUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateIngestInvalidResponseBody runs the validations defined on
+// ingest_invalid_response_body
+func ValidateIngestInvalidResponseBody(body *IngestInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateIngestInvariantViolationResponseBody runs the validations defined on
+// ingest_invariant_violation_response_body
+func ValidateIngestInvariantViolationResponseBody(body *IngestInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateIngestUnexpectedResponseBody runs the validations defined on
+// ingest_unexpected_response_body
+func ValidateIngestUnexpectedResponseBody(body *IngestUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateIngestGatewayErrorResponseBody runs the validations defined on
+// ingest_gateway_error_response_body
+func ValidateIngestGatewayErrorResponseBody(body *IngestGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
