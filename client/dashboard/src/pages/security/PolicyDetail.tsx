@@ -11,7 +11,6 @@ import { Page } from "@/components/page-layout";
 import { DetailHero } from "@/components/detail-hero";
 import { Heading } from "@/components/ui/heading";
 import { RequireScope } from "@/components/require-scope";
-import { Type } from "@/components/ui/type";
 import {
   PageTabsTrigger,
   Tabs,
@@ -25,6 +24,7 @@ import { Loader2, Shield } from "lucide-react";
 import { Navigate, useParams } from "react-router";
 import { useQueryState } from "nuqs";
 import { EvalsTab } from "./policy-evals/EvalsTab";
+import { PolicySummary } from "./policy-summary";
 
 // The tab value lives in `?tab=` so a tab is deep-linkable and survives reload
 // without a route-per-tab. To add the "Derived rules" tab (AGE-2706):
@@ -99,7 +99,13 @@ function PolicyDetailContent(): JSX.Element {
               value="overview"
               className="mt-0 w-full data-[state=inactive]:hidden"
             >
-              <OverviewPlaceholder />
+              {isLoading || !policy ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+                </div>
+              ) : (
+                <PolicySummary policy={policy} />
+              )}
             </TabsContent>
 
             <TabsContent
@@ -151,20 +157,5 @@ function PolicyHero({
         </Stack>
       </Stack>
     </DetailHero>
-  );
-}
-
-function OverviewPlaceholder() {
-  return (
-    <div className="bg-muted/20 rounded-xl border border-dashed px-8 py-16 text-center">
-      <Type variant="subheading" className="mb-1">
-        Policy overview
-      </Type>
-      <Type small muted className="mx-auto max-w-md">
-        {/* TODO(AGE-2704): render policy summary (detectors, scope, action,
-            audience) here, reusing PolicyCenter's view helpers. */}
-        Policy configuration summary will live here.
-      </Type>
-    </div>
   );
 }

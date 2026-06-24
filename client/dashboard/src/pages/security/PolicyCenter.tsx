@@ -49,7 +49,7 @@ import {
   Icon,
   Table,
 } from "@speakeasy-api/moonshine";
-import type { BadgeProps, IconName } from "@speakeasy-api/moonshine";
+import type { IconName } from "@speakeasy-api/moonshine";
 import {
   ArrowLeft,
   Plus,
@@ -103,6 +103,19 @@ import {
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
+import {
+  ActionBadge,
+  ALL_POLICY_MESSAGE_TYPES,
+  hasOnlyToolCallMessageTypes,
+  messageTypesSummary,
+  policyAudienceSummary,
+  policyMessageTypesForDisplay,
+  policyMessageTypesForForm,
+  policyToCategories,
+  PRESIDIO_CATEGORIES,
+  sourcesToCategories,
+  truncatePrompt,
+} from "./policy-summary";
 import { useDetectionRulesStore } from "./detection-rules-data";
 import { CelExpressionField } from "./cel-field";
 import { useCelStatus } from "./use-cel-status";
@@ -110,14 +123,6 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { useNavigate } from "react-router";
 import { PROMPT_POLICY_TEMPLATES } from "./prompt-policy-templates";
-
-/** Presidio-backed categories */
-const PRESIDIO_CATEGORIES: RuleCategory[] = [
-  "financial",
-  "pii",
-  "government_ids",
-  "healthcare",
-];
 
 /** Categories that are currently available */
 const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
@@ -564,41 +569,6 @@ type PolicyRow = { kind: PolicyKind; policy: RiskPolicy };
 
 const USER_SEARCH_RESULT_LIMIT = 10;
 
-const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
-  "tool_request",
-  "tool_response",
-]);
-
-const ALL_POLICY_MESSAGE_TYPES = Object.keys(
-  POLICY_MESSAGE_TYPE_META,
-) as Array<PolicyMessageType>;
-
-/** Derive selected categories from a policy's sources + presidioEntities.
- *
- * DETECTION_RULES.id is the canonical `pii.<snake_case>` form; the wire format
- * stored on the policy is the UPPER_SNAKE entity name Presidio speaks. We
- * translate at this boundary so callers never see the wire format. */
-function policyToCategories(
-  sources: string[],
-  presidioEntities?: string[],
-): Set<RuleCategory> {
-  const cats = new Set<RuleCategory>();
-  if (sources.includes("gitleaks")) cats.add("secrets");
-  if (sources.includes("shadow_mcp")) cats.add("shadow_mcp");
-  if (sources.includes("destructive_tool")) cats.add("destructive_tool");
-  if (sources.includes("cli_destructive")) cats.add("cli_destructive");
-  if (sources.includes("prompt_injection")) cats.add("prompt_injection");
-  for (const cat of PRESIDIO_CATEGORIES) {
-    const wireEntities = DETECTION_RULES[cat].map((r) =>
-      ruleIdToPresidioEntity(r.id),
-    );
-    if (wireEntities.some((id) => presidioEntities?.includes(id))) {
-      cats.add(cat);
-    }
-  }
-  return cats;
-}
-
 /** Derive sources, presidioEntities, promptInjectionRules, and disabledRules
  * from selected categories + per-rule disable set.
  *
@@ -682,28 +652,6 @@ function pinnedHiddenRuleIds(presidioEntities?: string[]): Set<string> {
   return pinned;
 }
 
-/** Map sources to display categories for the table row badges. */
-function sourcesToCategories(
-  sources: string[],
-  presidioEntities?: string[],
-): RuleCategory[] {
-  return [...policyToCategories(sources, presidioEntities)];
-}
-
-function policyMessageTypesForForm(
-  messageTypes?: string[],
-): Set<PolicyMessageType> {
-  if (!messageTypes?.length) {
-    return new Set(ALL_POLICY_MESSAGE_TYPES);
-  }
-
-  return new Set(
-    messageTypes.filter((type): type is PolicyMessageType =>
-      ALL_POLICY_MESSAGE_TYPES.includes(type as PolicyMessageType),
-    ),
-  );
-}
-
 function policyMessageTypesForPayload(
   selectedMessageTypes: Set<PolicyMessageType>,
 ): PolicyMessageType[] {
@@ -714,27 +662,6 @@ function policyMessageTypesForPayload(
     return [];
   }
   return orderedTypes;
-}
-
-function policyMessageTypesForDisplay(
-  messageTypes?: string[],
-): PolicyMessageType[] {
-  return [...policyMessageTypesForForm(messageTypes)];
-}
-
-function policyAudienceSummary(row: PolicyRow): string {
-  if (row.kind === "prompt") {
-    return "Everyone";
-  }
-  if (row.policy.audienceType !== "targeted") {
-    return "Everyone";
-  }
-
-  const count = row.policy.audiencePrincipalUrns.length;
-  if (count === 1) {
-    return "1 target";
-  }
-  return `${count} targets`;
 }
 
 function policyAudienceChoiceForSelection(
@@ -800,42 +727,6 @@ function compareMembersByName(a: AccessMember, b: AccessMember): number {
 
 function compareRolesByName(a: Role, b: Role): number {
   return a.name.localeCompare(b.name);
-}
-
-function hasOnlyToolCallMessageTypes(types: Set<PolicyMessageType>): boolean {
-  return (
-    types.size === TOOL_CALL_MESSAGE_TYPES.size &&
-    [...types].every((type) => TOOL_CALL_MESSAGE_TYPES.has(type))
-  );
-}
-
-function messageTypesSummary(
-  selectedMessageTypes: Set<PolicyMessageType>,
-): string {
-  if (selectedMessageTypes.size === ALL_POLICY_MESSAGE_TYPES.length) {
-    return "All types";
-  }
-
-  if (hasOnlyToolCallMessageTypes(selectedMessageTypes)) {
-    return "Tool Calls";
-  }
-
-  if (
-    selectedMessageTypes.size === 1 &&
-    selectedMessageTypes.has("tool_request")
-  ) {
-    return "Tool Requests";
-  }
-
-  return `${selectedMessageTypes.size} of ${ALL_POLICY_MESSAGE_TYPES.length} types selected`;
-}
-
-function truncatePrompt(prompt: string, maxLength = 60): string {
-  const singleLine = prompt.trim().replace(/\s+/g, " ");
-  if (singleLine.length <= maxLength) {
-    return singleLine;
-  }
-  return `${singleLine.slice(0, maxLength - 1)}…`;
 }
 
 function promptTemplateNameForInstruction(prompt: string): string | undefined {
@@ -1492,7 +1383,7 @@ function PolicyCenterContent() {
         <span
           className={cn("text-muted-foreground text-sm", dimIfDisabled(row))}
         >
-          {policyAudienceSummary(row)}
+          {policyAudienceSummary(row.policy)}
         </span>
       ),
     },
@@ -1667,7 +1558,9 @@ function PolicyCenterContent() {
       columns={policyColumns}
       data={policyRows}
       rowKey={(row) => row.policy.id}
-      onRowClick={(row) => handleEdit(row.policy)}
+      onRowClick={(row) =>
+        void navigate(routes.policyDetail.href(row.policy.id))
+      }
     />
   );
   if (isLoading) {
@@ -3444,14 +3337,6 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
 /*  ActionBadge                                                               */
 /* -------------------------------------------------------------------------- */
 
-const ACTION_BADGE_CONFIG: Record<
-  PolicyAction,
-  { label: string; variant: NonNullable<BadgeProps["variant"]> }
-> = {
-  flag: { label: "Flag", variant: "neutral" },
-  block: { label: "Block", variant: "destructive" },
-};
-
 const ACTION_OPTIONS: {
   value: PolicyAction;
   title: string;
@@ -3468,15 +3353,6 @@ const ACTION_OPTIONS: {
     description: "Deny prompts and tool calls that match detection rules",
   },
 ];
-
-function ActionBadge({ action }: { action: PolicyAction }) {
-  const config = ACTION_BADGE_CONFIG[action] ?? ACTION_BADGE_CONFIG.flag;
-  return (
-    <Badge variant={config.variant}>
-      <Badge.Text>{config.label}</Badge.Text>
-    </Badge>
-  );
-}
 
 /** One session-part as a selectable card (Scope step). */
 function ScopeCard({
