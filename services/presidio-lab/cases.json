@@ -1,0 +1,47 @@
+[
+  {
+    "id": "medical-license-control",
+    "entity": "MEDICAL_LICENSE",
+    "text": "Physician license MD123456 was renewed before onboarding."
+  },
+  {
+    "id": "us-mbi",
+    "entity": "US_MBI",
+    "text": "The patient confirmed Medicare ID 1EG4TE5MK73 during intake."
+  },
+  {
+    "id": "us-npi",
+    "entity": "US_NPI",
+    "text": "Referring provider NPI 1234567893 is listed on the claim."
+  },
+  {
+    "id": "disease-disorder",
+    "entity": "MEDICAL_DISEASE_DISORDER",
+    "text": "She was diagnosed with Crohn's disease after the GI workup."
+  },
+  {
+    "id": "medication",
+    "entity": "MEDICAL_MEDICATION",
+    "text": "He started amoxicillin 500 mg twice daily after the visit."
+  },
+  {
+    "id": "therapeutic-procedure",
+    "entity": "MEDICAL_THERAPEUTIC_PROCEDURE",
+    "text": "He underwent a colonoscopy after the positive screening result."
+  },
+  {
+    "id": "clinical-event",
+    "entity": "MEDICAL_CLINICAL_EVENT",
+    "text": "She was hospitalized after a seizure episode last weekend."
+  },
+  {
+    "id": "biological-attribute",
+    "entity": "MEDICAL_BIOLOGICAL_ATTRIBUTE",
+    "text": "Her blood pressure was 168/96 and A1C was 8.4% at triage."
+  },
+  {
+    "id": "family-history",
+    "entity": "MEDICAL_FAMILY_HISTORY",
+    "text": "Family history of breast cancer was noted on the maternal side."
+  }
+]
