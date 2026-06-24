@@ -987,6 +987,7 @@ var UserSummaryType = Type("UserSummary", func() {
 	Description("Aggregated usage summary for a single user")
 
 	Attribute("user_id", String, "User identifier (user_id or external_user_id depending on group_by)")
+	Attribute("user_email", String, "User email associated with this usage, when present")
 
 	// Activity timestamps (string for JS int64 precision)
 	Attribute("first_seen_unix_nano", String, "Earliest activity timestamp in Unix nanoseconds")
@@ -1018,6 +1019,7 @@ var UserSummaryType = Type("UserSummary", func() {
 
 	Required(
 		"user_id",
+		"user_email",
 		"first_seen_unix_nano",
 		"last_seen_unix_nano",
 		"total_chats",

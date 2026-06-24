@@ -672,6 +672,22 @@ type challengeUserInfo struct {
 	photoURL *string
 }
 
+// activeOrgMemberUserIDs returns the Gram user IDs of active members of the
+// organization. The challenge UI uses it to suppress challenges raised by users
+// outside the organization — e.g. Speakeasy staff impersonating a customer org,
+// whose entries otherwise clutter the list while they switch accounts. Always
+// returns a non-nil slice so callers unconditionally apply the suppression.
+func (s *Service) activeOrgMemberUserIDs(ctx context.Context, orgID string) ([]string, error) {
+	ids, err := orgrepo.New(s.db).ListActiveOrganizationUserIDs(ctx, orgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list active org member ids").LogError(ctx, s.logger)
+	}
+	if ids == nil {
+		ids = []string{}
+	}
+	return ids, nil
+}
+
 func (s *Service) fetchChallengeUserInfo(ctx context.Context, userIDs []string) map[string]challengeUserInfo {
 	userMap := make(map[string]challengeUserInfo, len(userIDs))
 	if len(userIDs) == 0 {
@@ -725,6 +741,13 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	// apply the resolved filter in Go, then slice for the requested page.
 	skipPagination := payload.Resolved != nil
 
+	// Suppress challenges from users outside the org so counts and pagination
+	// stay correct (filtering happens in ClickHouse, before grouping/paging).
+	memberIDs, err := s.activeOrgMemberUserIDs(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+
 	filters := chrepo.ChallengeListFilters{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      payload.ProjectID,
@@ -734,6 +757,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,
+		MemberUserIDs:  memberIDs,
 	}
 
 	var total uint64
@@ -928,6 +952,12 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 
 	skipPagination := payload.Resolved != nil
 
+	// Suppress challenges from users outside the org (see activeOrgMemberUserIDs).
+	memberIDs, err := s.activeOrgMemberUserIDs(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+
 	filters := chrepo.ChallengeListFilters{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      payload.ProjectID,
@@ -937,6 +967,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,
+		MemberUserIDs:  memberIDs,
 	}
 
 	chQueries := chrepo.New(s.chConn)

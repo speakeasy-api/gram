@@ -57,13 +57,14 @@ export function ModifyRemoteIdentityProviderSheet({
       { enabled: open },
     );
   const primaryClient: RemoteSessionClient | undefined = allClients.find(
-    (clientRow) => clientRow.userSessionIssuerId === userSessionIssuer.id,
+    (clientRow) =>
+      clientRow.userSessionIssuerIds.includes(userSessionIssuer.id),
   );
   const otherUserSessionIssuerIds = useMemo(
     () =>
       new Set(
         allClients
-          .map((clientRow) => clientRow.userSessionIssuerId)
+          .flatMap((clientRow) => clientRow.userSessionIssuerIds)
           .filter((id) => id !== userSessionIssuer.id),
       ),
     [allClients, userSessionIssuer.id],

@@ -249,6 +249,53 @@ func TestListChallengeBuckets_Pagination(t *testing.T) {
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
+// TestListChallengeBuckets_SuppressesUsersOutsideOrg mirrors the row-level test
+// for the bucketed endpoint: member and unknown-principal buckets survive, the
+// outside-org user's bucket is suppressed, and the total reflects the filter.
+func TestListChallengeBuckets_SuppressesUsersOutsideOrg(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	orgID := challengeAuthContext(t, ctx).ActiveOrganizationID
+
+	memberID := seedOrgMember(t, ctx, ti, orgID, "member@example.com")
+	insertCHChallengeWithUser(t, ti, orgID, uuid.NewString(), "deny", "user:"+memberID, "org:read", &memberID, nil)
+
+	insertCHChallengeWithUser(t, ti, orgID, uuid.NewString(), "deny", "api_key:ext", "org:read", nil, nil)
+
+	outsiderID := seedNonMemberUser(t, ctx, ti, "staff@speakeasy.com")
+	insertCHChallengeWithUser(t, ti, orgID, uuid.NewString(), "deny", "user:"+outsiderID, "org:read", &outsiderID, nil)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
+			Outcome:      nil,
+			PrincipalUrn: nil,
+			Scope:        nil,
+			ProjectID:    nil,
+			Resolved:     nil,
+			Limit:        20,
+			Offset:       0,
+			ApikeyToken:  nil,
+			SessionToken: nil,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, result) {
+			return
+		}
+		urns := make(map[string]bool, len(result.Buckets))
+		for _, b := range result.Buckets {
+			urns[b.PrincipalUrn] = true
+		}
+		assert.Len(c, result.Buckets, 2)
+		assert.Equal(c, 2, result.Total)
+		assert.True(c, urns["user:"+memberID], "org member bucket should be present")
+		assert.True(c, urns["api_key:ext"], "unknown principal bucket should be present")
+		assert.False(c, urns["user:"+outsiderID], "outside-org user bucket should be suppressed")
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
 func TestListChallengeBuckets_IsolatesByOrganization(t *testing.T) {
 	t.Parallel()
 

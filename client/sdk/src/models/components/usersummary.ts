@@ -82,6 +82,10 @@ export type UserSummary = {
    */
   totalToolCalls: number;
   /**
+   * User email associated with this usage, when present
+   */
+  userEmail: string;
+  /**
    * User identifier (user_id or external_user_id depending on group_by)
    */
   userId: string;
@@ -107,6 +111,7 @@ export const UserSummary$inboundSchema: z.ZodMiniType<UserSummary, unknown> = z
       total_output_tokens: z.int(),
       total_tokens: z.int(),
       total_tool_calls: z.int(),
+      user_email: z.string(),
       user_id: z.string(),
     }),
     z.transform((v) => {
@@ -126,6 +131,7 @@ export const UserSummary$inboundSchema: z.ZodMiniType<UserSummary, unknown> = z
         "total_output_tokens": "totalOutputTokens",
         "total_tokens": "totalTokens",
         "total_tool_calls": "totalToolCalls",
+        "user_email": "userEmail",
         "user_id": "userId",
       });
     }),

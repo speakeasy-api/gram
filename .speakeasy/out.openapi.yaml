@@ -6311,7 +6311,7 @@ paths:
         type: query
   /rpc/chat.load:
     get:
-      description: 'Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding.'
+      description: 'Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).'
       operationId: loadChat
       parameters:
         - allowEmptyValue: true
@@ -6369,13 +6369,22 @@ paths:
             description: When true, return the oldest page of the generation (the start of the thread), ordered oldest to newest, with `has_more_before=false`. Page forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`, or `risk_only` is set.
             type: boolean
         - allowEmptyValue: true
-          description: When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request.
+          description: When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.
           in: query
           name: risk_only
           schema:
             default: false
-            description: When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request.
+            description: When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.
             type: boolean
+        - allowEmptyValue: true
+          description: When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). The seqs that actually matched are listed in `match_seqs`. Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
+          in: query
+          name: query
+          schema:
+            description: When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). The seqs that actually matched are listed in `match_seqs`. Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
+            maxLength: 200
+            minLength: 1
+            type: string
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -20350,6 +20359,111 @@ paths:
       x-speakeasy-name-override: verifyURL
       x-speakeasy-react-hook:
         name: VerifyRemoteMcpURL
+  /rpc/remoteSessionClients.attachUserSessionIssuer:
+    post:
+      description: Attach a user_session_issuer to a remote_session_client by recording the binding in the join table. Rejected when another client is already bound to the same user_session_issuer for this client's remote_session_issuer.
+      operationId: attachUserSessionIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachUserSessionIssuerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: attachUserSessionIssuer remoteSessionClients
+      tags:
+        - remoteSessionClients
+      x-speakeasy-name-override: attachUserSessionIssuer
+      x-speakeasy-react-hook:
+        name: AttachUserSessionIssuer
   /rpc/remoteSessionClients.cloneClientFromOAuthProxyProvider:
     post:
       description: 'Platform-admin-only. Clone the client_id / client_secret from an existing oauth_proxy_provider into a new remote_session_client paired with the supplied issuers. The upstream secret stays server-side: it is read from the proxy provider''s stored secrets, re-encrypted, and persisted on the remote_session_client row without ever crossing the wire.'
@@ -20664,6 +20778,111 @@ paths:
       x-speakeasy-name-override: delete
       x-speakeasy-react-hook:
         name: DeleteRemoteSessionClient
+  /rpc/remoteSessionClients.detachUserSessionIssuer:
+    post:
+      description: Detach a user_session_issuer from a remote_session_client by removing the binding from the join table. A no-op when the binding does not exist.
+      operationId: detachUserSessionIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachUserSessionIssuerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: detachUserSessionIssuer remoteSessionClients
+      tags:
+        - remoteSessionClients
+      x-speakeasy-name-override: detachUserSessionIssuer
+      x-speakeasy-react-hook:
+        name: DetachUserSessionIssuer
   /rpc/remoteSessionClients.get:
     get:
       description: Get a remote_session_client by id.
@@ -20912,7 +21131,7 @@ paths:
         name: RemoteSessionClients
   /rpc/remoteSessionClients.update:
     post:
-      description: Rotate the client_secret or change the user_session_issuer_id linkage on an existing remote_session_client.
+      description: Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.
       operationId: updateRemoteSessionClient
       parameters:
         - allowEmptyValue: true
@@ -34351,6 +34570,21 @@ components:
           format: uuid
       required:
         - collection_id
+    AttachUserSessionIssuerForm:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The remote_session_client id.
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          description: The user_session_issuer to attach.
+          format: uuid
+      description: Form for attaching a user_session_issuer to a remote_session_client via the join table.
+      required:
+        - id
+        - user_session_issuer_id
     AuditLog:
       type: object
       properties:
@@ -34879,6 +35113,17 @@ components:
           type: string
           description: When the last message in the chat was created.
           format: date-time
+        match_segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskSegment'
+          description: 'Present only when `query` was requested: contiguous runs of returned messages, each spanning one or more query matches and their surrounding context. Use each segment''s cursors to expand it.'
+        match_seqs:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: 'Present only when `query` was requested: the `seq` of every message whose text matched the query, ascending. These are the jump-to-match navigation targets; surrounding-context messages in `messages` are not listed here.'
         max_generation:
           type: integer
           description: The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
@@ -35397,15 +35642,16 @@ components:
             - client_secret_basic
             - client_secret_post
             - none
-        user_session_issuer_id:
-          type: string
-          description: The user_session_issuer the new client is paired with.
-          format: uuid
-      description: Form for cloning an oauth_proxy_provider's client credentials into a new remote_session_client. The caller supplies the existing oauth_proxy_provider, plus the remote_session_issuer and user_session_issuer to pair the new client with.
+        user_session_issuer_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: The user_session_issuers to attach the new client to via the join table. Omit or pass an empty array to clone a standalone client with no attachments.
+      description: Form for cloning an oauth_proxy_provider's client credentials into a new remote_session_client. The caller supplies the existing oauth_proxy_provider and the remote_session_issuer to register the new client with, plus zero or more user_session_issuers to attach it to.
       required:
         - oauth_proxy_provider_id
         - remote_session_issuer_id
-        - user_session_issuer_id
     CloneEnvironmentForm:
       type: object
       properties:
@@ -36019,14 +36265,15 @@ components:
             - client_secret_basic
             - client_secret_post
             - none
-        user_session_issuer_id:
-          type: string
-          description: The user_session_issuer this client is paired with.
-          format: uuid
+        user_session_issuer_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: The user_session_issuers to attach this client to via the join table. Omit or pass an empty array to create a standalone client with no attachments.
       description: Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer.
       required:
         - remote_session_issuer_id
-        - user_session_issuer_id
         - client_id
     CreateRemoteSessionIssuerForm:
       type: object
@@ -37093,6 +37340,21 @@ components:
         - functions_tool_count
         - external_mcp_asset_count
         - external_mcp_tool_count
+    DetachUserSessionIssuerForm:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The remote_session_client id.
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          description: The user_session_issuer to detach.
+          format: uuid
+      description: Form for detaching a user_session_issuer from a remote_session_client via the join table.
+      required:
+        - id
+        - user_session_issuer_id
     DiscoverProtectedResourceMetadataRequestBody:
       type: object
       properties:
@@ -42990,16 +43252,18 @@ components:
         updated_at:
           type: string
           format: date-time
-        user_session_issuer_id:
-          type: string
-          description: The user_session_issuer this client is paired with.
-          format: uuid
+        user_session_issuer_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: The user_session_issuers this client is attached to via the join table. Empty for a standalone client with no attachments.
       description: A remote_session_client record. client_secret_encrypted is never returned.
       required:
         - id
         - project_id
         - remote_session_issuer_id
-        - user_session_issuer_id
+        - user_session_issuer_ids
         - client_id
         - client_id_issued_at
         - created_at
@@ -44066,7 +44330,7 @@ components:
           type: integer
           description: The `seq` of the last (newest) message in this segment.
           format: int64
-      description: A contiguous run of messages in the risk-only view, covering one or more risk findings plus their surrounding context. Messages for a segment are the entries of `Chat.messages` whose `seq` falls within `[first_seq, last_seq]`.
+      description: A contiguous run of messages in a windowed view (`risk_only` via `risk_segments`, or `query` via `match_segments`), covering one or more matches plus their surrounding context. Messages for a segment are the entries of `Chat.messages` whose `seq` falls within `[first_seq, last_seq]`.
       required:
         - first_seq
         - last_seq
@@ -47606,10 +47870,6 @@ components:
             - client_secret_basic
             - client_secret_post
             - none
-        user_session_issuer_id:
-          type: string
-          description: Re-pair with a different user_session_issuer.
-          format: uuid
       description: Form for an org admin to update a remote_session_client's non-secret fields.
       required:
         - id
@@ -47793,10 +48053,6 @@ components:
             - client_secret_basic
             - client_secret_post
             - none
-        user_session_issuer_id:
-          type: string
-          description: Re-pair with a different user_session_issuer.
-          format: uuid
       description: Form for updating a remote_session_client. All non-id fields are optional patches.
       required:
         - id
@@ -48784,12 +49040,16 @@ components:
           type: integer
           description: Total number of tool calls
           format: int64
+        user_email:
+          type: string
+          description: User email associated with this usage, when present
         user_id:
           type: string
           description: User identifier (user_id or external_user_id depending on group_by)
       description: Aggregated usage summary for a single user
       required:
         - user_id
+        - user_email
         - first_seen_unix_nano
         - last_seen_unix_nano
         - total_chats

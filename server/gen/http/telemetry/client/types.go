@@ -4248,6 +4248,8 @@ type SearchUsersFilterRequestBody struct {
 type UserSummaryResponseBody struct {
 	// User identifier (user_id or external_user_id depending on group_by)
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// User email associated with this usage, when present
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
 	// Earliest activity timestamp in Unix nanoseconds
 	FirstSeenUnixNano *string `form:"first_seen_unix_nano,omitempty" json:"first_seen_unix_nano,omitempty" xml:"first_seen_unix_nano,omitempty"`
 	// Latest activity timestamp in Unix nanoseconds
@@ -14121,6 +14123,9 @@ func ValidateSearchUsersFilterRequestBody(body *SearchUsersFilterRequestBody) (e
 func ValidateUserSummaryResponseBody(body *UserSummaryResponseBody) (err error) {
 	if body.UserID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
+	}
+	if body.UserEmail == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_email", "body"))
 	}
 	if body.FirstSeenUnixNano == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("first_seen_unix_nano", "body"))

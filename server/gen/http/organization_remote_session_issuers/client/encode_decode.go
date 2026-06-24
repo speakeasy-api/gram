@@ -4368,7 +4368,6 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		ID:                      *v.ID,
 		ProjectID:               *v.ProjectID,
 		RemoteSessionIssuerID:   *v.RemoteSessionIssuerID,
-		UserSessionIssuerID:     *v.UserSessionIssuerID,
 		ClientID:                *v.ClientID,
 		ClientIDIssuedAt:        *v.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
@@ -4376,6 +4375,10 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		Audience:                v.Audience,
 		CreatedAt:               *v.CreatedAt,
 		UpdatedAt:               *v.UpdatedAt,
+	}
+	res.UserSessionIssuerIds = make([]string, len(v.UserSessionIssuerIds))
+	for i, val := range v.UserSessionIssuerIds {
+		res.UserSessionIssuerIds[i] = val
 	}
 	if v.Scope != nil {
 		res.Scope = make([]string, len(v.Scope))

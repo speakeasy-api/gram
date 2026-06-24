@@ -871,6 +871,10 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   organization_id TEXT,
 
   slug TEXT NOT NULL,
+
+  -- RFC 8414 authorization server metadata, discovered from the upstream's
+  -- .well-known/oauth-authorization-server document and refreshed on each
+  -- discovery cycle: the endpoint URLs plus the advertised capability sets.
   issuer TEXT NOT NULL,
   authorization_endpoint TEXT,
   token_endpoint TEXT,
@@ -881,6 +885,11 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   grant_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   response_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   token_endpoint_auth_methods_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  -- Unlike the fields above, this comes from the OAuth CIMD draft
+  -- (draft-ietf-oauth-client-id-metadata-document), not base RFC 8414. It
+  -- marks whether the issuer accepts a Client ID Metadata Document URL as
+  -- client_id, which Gram uses to pre-flight whether outbound CIMD is viable.
+  client_id_metadata_document_supported BOOLEAN NOT NULL DEFAULT FALSE,
 
   oidc BOOLEAN NOT NULL DEFAULT FALSE,
   passthrough BOOLEAN NOT NULL DEFAULT FALSE,
@@ -923,6 +932,14 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   scope TEXT[],
   audience TEXT,
 
+  -- CIMD: when non-null, Gram publishes its OAuth Client ID Metadata
+  -- Document at this HTTPS URL and uses the URL as the client_id on every
+  -- outbound /authorize, /token, and refresh call. Per
+  -- draft-ietf-oauth-client-id-metadata-document the client_id MUST equal
+  -- this URL, so client_id and client_id_metadata_uri must stay in sync;
+  -- the CHECK constraint below enforces that.
+  client_id_metadata_uri TEXT,
+
   -- TRUE when this client was registered upstream with the legacy
   -- /oauth/callback redirect_uri (e.g. cloned from oauth_proxy_providers).
   -- The authorize leg sends the legacy URL + a JSON state carrying
@@ -941,7 +958,20 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   CONSTRAINT remote_session_clients_pkey PRIMARY KEY (id),
   CONSTRAINT remote_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT remote_session_clients_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE,
-  CONSTRAINT remote_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
+  CONSTRAINT remote_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
+  -- CIMD spec forbids symmetric secrets, so a row that publishes a CIMD
+  -- document must not have an encrypted secret on file. The spec also
+  -- requires the client_id value in the metadata document to equal the
+  -- document URL. We persist them as separate columns so the two roles are
+  -- explicit, and this CHECK keeps them in sync (and rejects an empty URL).
+  CONSTRAINT remote_session_clients_client_id_metadata_uri_check CHECK (
+    client_id_metadata_uri IS NULL
+    OR (
+      client_id_metadata_uri <> ''
+      AND client_secret_encrypted IS NULL
+      AND client_id = client_id_metadata_uri
+    )
+  )
 );
 
 CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (

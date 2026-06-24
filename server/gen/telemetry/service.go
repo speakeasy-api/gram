@@ -1582,6 +1582,8 @@ type TopUser struct {
 type UserSummary struct {
 	// User identifier (user_id or external_user_id depending on group_by)
 	UserID string
+	// User email associated with this usage, when present
+	UserEmail string
 	// Earliest activity timestamp in Unix nanoseconds
 	FirstSeenUnixNano string
 	// Latest activity timestamp in Unix nanoseconds
