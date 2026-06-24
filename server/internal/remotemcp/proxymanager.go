@@ -20,7 +20,7 @@ import (
 
 // ProxyManager builds configured remote-MCP proxies wired up with the
 // MCP-aware interceptor stack: usage limits and tracking, per-tool RBAC,
-// shadow-MCP validation/injection, ClickHouse logging, OTel counters, and
+// shadow-MCP validation, ClickHouse logging, OTel counters, and
 // PostHog event capture.
 //
 // One factory is constructed at server startup and reused across requests.
@@ -151,12 +151,12 @@ func (f *ProxyManager) Build(
 	// be unable to invoke any tool, and the tools/list filter would
 	// have no grants to consult.
 	//
-	// The shadow-MCP interceptors are attached unconditionally — public
-	// AND private — because they enforce a project-scoped risk policy,
-	// not an identity-scoped grant. A project that enables tool-identity
-	// capture wants the property injected and validated on every call
-	// the proxy serves, regardless of whether the underlying transport
-	// authenticated the caller. The pair self-gates via
+	// The shadow-MCP call interceptor is attached unconditionally —
+	// public AND private — because it enforces a project-scoped risk
+	// policy, not an identity-scoped grant. Remote MCP routes already
+	// identify the target remote_mcp_server, so validation can use that
+	// route identity whether or not the transport authenticated the
+	// caller. The interceptor self-gates via
 	// shadowmcp.Client.IsEnabledForProject at intercept time; the lookup
 	// is Redis-cached (15-minute TTL) so the hot-path cost when the
 	// policy is disabled is a single cache GET.
@@ -172,20 +172,15 @@ func (f *ProxyManager) Build(
 		)
 	}
 
-	// ToolsList response chain ordering: filter first (drop tools the
-	// caller can't see), then inject (only mutate schemas of tools that
-	// survive the filter — saves work and prevents leaking the
-	// proxy-only x-gram-toolset-id property on tools the caller couldn't
-	// invoke anyway).
+	// ToolsList response chain ordering: private servers filter out tools
+	// the caller can't see. Remote MCP tools/list schemas are otherwise
+	// relayed without Gram-specific mutation.
 	toolsListRespInterceptors := []proxy.ToolsListResponseInterceptor{}
 	if visibility == mcpservers.VisibilityPrivate {
 		toolsListRespInterceptors = append(toolsListRespInterceptors,
 			NewToolsListMCPConnectFilterInterceptor(f.authz, mcpServerID, projectID, logger),
 		)
 	}
-	toolsListRespInterceptors = append(toolsListRespInterceptors,
-		NewToolsListShadowMCPInjectInterceptor(f.shadowmcpClient, serverID, projectID, logger),
-	)
 
 	// Resources request chain: free-tier ToolCalls usage limits apply to
 	// resources/read invocations alongside tools/call. Per-resource RBAC

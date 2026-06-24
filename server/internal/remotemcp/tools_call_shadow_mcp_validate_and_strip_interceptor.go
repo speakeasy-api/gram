@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 
 	"github.com/google/uuid"
 
@@ -13,23 +14,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
-// ToolsCallShadowMCPValidateAndStripInterceptor is the request-side pair
-// of [ToolsListShadowMCPInjectInterceptor]. It validates the
-// `x-gram-toolset-id` const the caller echoed back from the tool's input
-// schema, then strips the property from the arguments before the request
-// is forwarded upstream — the remote MCP server should see its declared
-// argument shape, not Gram's envelope.
+// ToolsCallShadowMCPValidateAndStripInterceptor validates remote MCP
+// tool calls for projects with Shadow MCP enabled. Remote MCP routes
+// already identify the target remote_mcp_server, so the interceptor uses
+// that route identity when callers omit Gram's internal
+// `x-gram-toolset-id` property.
+//
+// Stale clients may still echo `x-gram-toolset-id` from a previously
+// mutated tools/list schema. When present, the value must be a non-empty
+// string matching the routed server, and it is stripped before the
+// request is forwarded upstream — the remote MCP server should see its
+// declared argument shape, not Gram's envelope.
 //
 // Validation calls [shadowmcp.Client.ValidateRemoteMCPServerCall], which
-// confirms the echoed UUID resolves to a remote_mcp_server in the
+// confirms the routed UUID resolves to a remote_mcp_server in the
 // calling project. A failure surfaces as a [*proxy.RejectError] with
 // [proxy.RejectCodeServerError] and the validator's detail string as
 // the user-visible message; the upstream tool call is never issued.
 //
-// Strip-only mode (no validation) is intentionally not exposed: the
-// downstream client-side hook layer relies on echoed UUIDs being
-// authentic, so the proxy must validate at this layer too rather than
-// trusting whatever the caller sent.
+// Strip-only mode (no validation) is intentionally not exposed: stale
+// echoed UUIDs still need to be authentic, so the proxy must validate at
+// this layer too rather than trusting whatever the caller sent.
 //
 // Gated on [shadowmcp.Client.IsEnabledForProject] at intercept time — a
 // no-op when the project has no enabled tool-identity risk policy.
@@ -44,12 +49,10 @@ var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallShadowMCPValidateAndStripIn
 
 // NewToolsCallShadowMCPValidateAndStripInterceptor constructs an
 // interceptor scoped to a single Remote MCP Server. serverID is the
-// routed server's UUID and is cross-checked against the caller's
-// echoed scope after the validator confirms the echoed UUID resolves
-// in the project — guarding against sibling-server echoes within the
-// same project, where a caller could otherwise satisfy validation by
-// echoing any project-scoped server's UUID rather than the one the
-// route actually targets.
+// routed server's UUID used as the validation provenance. If a caller
+// still echoes an `x-gram-toolset-id` value, it is cross-checked against
+// serverID to guard against sibling-server echoes within the same
+// project.
 func NewToolsCallShadowMCPValidateAndStripInterceptor(shadowmcpClient *shadowmcp.Client, serverID, projectID string, logger *slog.Logger) *ToolsCallShadowMCPValidateAndStripInterceptor {
 	return &ToolsCallShadowMCPValidateAndStripInterceptor{
 		shadowmcpClient: shadowmcpClient,
@@ -65,9 +68,10 @@ func (i *ToolsCallShadowMCPValidateAndStripInterceptor) Name() string {
 }
 
 // InterceptToolsCallRequest implements [proxy.ToolsCallRequestInterceptor].
-// When the project has shadow-MCP enabled, it validates the echoed
-// `x-gram-toolset-id` against the calling project and strips the
-// property from the arguments before the proxy forwards them upstream.
+// When the project has shadow-MCP enabled, it validates the routed
+// remote server against the calling project and strips any stale
+// `x-gram-toolset-id` property from the arguments before the proxy
+// forwards them upstream.
 func (i *ToolsCallShadowMCPValidateAndStripInterceptor) InterceptToolsCallRequest(ctx context.Context, call *proxy.ToolsCallRequest) error {
 	if call == nil || call.Params == nil {
 		return nil
@@ -104,8 +108,46 @@ func (i *ToolsCallShadowMCPValidateAndStripInterceptor) InterceptToolsCallReques
 			}
 		}
 	}
+	if argsMap == nil {
+		argsMap = map[string]any{}
+	}
 
-	detail, denied := i.shadowmcpClient.ValidateRemoteMCPServerCall(ctx, argsMap, call.Params.Name, i.projectID)
+	// Remote MCP routes already identify the target remote_mcp_server. Use
+	// that route identity as the provenance signal when a client omits the
+	// internal toolset field. This keeps Shadow MCP compatible with clients
+	// that never saw Gram-specific schema properties while still rejecting
+	// forged stale echoes that point at a sibling server.
+	echoedValue, hasEchoed := argsMap[shadowmcp.XGramToolsetIDField]
+	echoedRaw, ok := echoedValue.(string)
+	if hasEchoed && !ok {
+		return &proxy.RejectError{
+			Code:    proxy.RejectCodeServerError,
+			Message: fmt.Sprintf("shadow-mcp: invalid %s value", shadowmcp.XGramToolsetIDField),
+			Data:    nil,
+		}
+	}
+	if hasEchoed && echoedRaw == "" {
+		return &proxy.RejectError{
+			Code:    proxy.RejectCodeServerError,
+			Message: fmt.Sprintf("shadow-mcp: invalid %s value", shadowmcp.XGramToolsetIDField),
+			Data:    nil,
+		}
+	}
+	if hasEchoed && echoedRaw != "" && echoedRaw != i.serverID {
+		return &proxy.RejectError{
+			Code:    proxy.RejectCodeServerError,
+			Message: fmt.Sprintf("shadow-mcp: echoed %s does not match the routed server", shadowmcp.XGramToolsetIDField),
+			Data:    nil,
+		}
+	}
+	validationInput := argsMap
+	if !hasEchoed {
+		validationInput = make(map[string]any, len(argsMap)+1)
+		maps.Copy(validationInput, argsMap)
+		validationInput[shadowmcp.XGramToolsetIDField] = i.serverID
+	}
+
+	detail, denied := i.shadowmcpClient.ValidateRemoteMCPServerCall(ctx, validationInput, call.Params.Name, i.projectID)
 	if denied {
 		return &proxy.RejectError{
 			Code:    proxy.RejectCodeServerError,
@@ -114,25 +156,8 @@ func (i *ToolsCallShadowMCPValidateAndStripInterceptor) InterceptToolsCallReques
 		}
 	}
 
-	// Defense in depth: after the validator confirms the echoed UUID
-	// resolves to a real remote_mcp_server in the project, ensure the
-	// caller didn't echo a sibling server's UUID within the same
-	// project. The route's serverID is the source of truth for which
-	// server the call targets, so an echo that matches the project
-	// scope but not the route shape is a forged/replayed provenance
-	// signal and must not satisfy validation.
-	echoedRaw, _ := argsMap[shadowmcp.XGramToolsetIDField].(string)
-	if echoedRaw != i.serverID {
-		return &proxy.RejectError{
-			Code:    proxy.RejectCodeServerError,
-			Message: fmt.Sprintf("shadow-mcp: echoed %s does not match the routed server", shadowmcp.XGramToolsetIDField),
-			Data:    nil,
-		}
-	}
-
 	// Strip the proxy envelope so the upstream tool sees its declared
-	// argument shape. Strip is a no-op when the property is absent; the
-	// validator already confirmed it is present and well-formed.
+	// argument shape. Strip is a no-op when the property is absent.
 	stripped, err := shadowmcp.StripToolsetIDProperty(call.Params.Arguments)
 	if err != nil {
 		return fmt.Errorf("strip x-gram-toolset-id from tool arguments: %w", err)

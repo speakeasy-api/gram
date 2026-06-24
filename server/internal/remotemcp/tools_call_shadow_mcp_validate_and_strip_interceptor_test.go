@@ -197,6 +197,40 @@ func TestToolsCallShadowMCPValidateAndStripInterceptor_RouteMismatchRejects(t *t
 	require.Contains(t, rejErr.Message, "does not match the routed server")
 }
 
+func TestToolsCallShadowMCPValidateAndStripInterceptor_InvalidEchoRejects(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	f := newEnabledShadowMCPFixture(t, ctx, ti)
+
+	interceptor := remotemcp.NewToolsCallShadowMCPValidateAndStripInterceptor(f.client, f.serverA.String(), f.projectID.String(), testenv.NewLogger(t))
+
+	args := json.RawMessage(fmt.Sprintf(`{"%s":123}`, shadowmcp.XGramToolsetIDField))
+	call := newToolsCallRequestForSetArguments("tool_a", args)
+
+	err := interceptor.InterceptToolsCallRequest(ctx, call)
+	var rejErr *proxy.RejectError
+	require.ErrorAs(t, err, &rejErr, "non-string echoes must surface as a JSON-RPC rejection")
+	require.Contains(t, rejErr.Message, "invalid")
+}
+
+func TestToolsCallShadowMCPValidateAndStripInterceptor_EmptyEchoRejects(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	f := newEnabledShadowMCPFixture(t, ctx, ti)
+
+	interceptor := remotemcp.NewToolsCallShadowMCPValidateAndStripInterceptor(f.client, f.serverA.String(), f.projectID.String(), testenv.NewLogger(t))
+
+	args := json.RawMessage(fmt.Sprintf(`{"%s":""}`, shadowmcp.XGramToolsetIDField))
+	call := newToolsCallRequestForSetArguments("tool_a", args)
+
+	err := interceptor.InterceptToolsCallRequest(ctx, call)
+	var rejErr *proxy.RejectError
+	require.ErrorAs(t, err, &rejErr, "empty echoes must surface as a JSON-RPC rejection")
+	require.Contains(t, rejErr.Message, "invalid")
+}
+
 func TestToolsCallShadowMCPValidateAndStripInterceptor_MatchingEchoStripsProperty(t *testing.T) {
 	t.Parallel()
 
@@ -214,6 +248,25 @@ func TestToolsCallShadowMCPValidateAndStripInterceptor_MatchingEchoStripsPropert
 	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, call))
 	require.NotContains(t, string(call.Params.Arguments), shadowmcp.XGramToolsetIDField, "echoed property must be stripped before forwarding")
 	require.Contains(t, string(call.Params.Arguments), `"sf"`, "real tool arguments must survive the strip")
+}
+
+func TestToolsCallShadowMCPValidateAndStripInterceptor_MissingEchoUsesRouteIdentity(t *testing.T) {
+	t.Parallel()
+
+	// Remote MCP endpoints already route to a specific remote_mcp_server.
+	// If a client does not echo Gram's internal toolset field, validation
+	// should use that routed identity rather than reject the call before
+	// the upstream server can handle it.
+	ctx, ti := newTestService(t)
+	f := newEnabledShadowMCPFixture(t, ctx, ti)
+
+	interceptor := remotemcp.NewToolsCallShadowMCPValidateAndStripInterceptor(f.client, f.serverA.String(), f.projectID.String(), testenv.NewLogger(t))
+
+	args := json.RawMessage(`{"location":"sf"}`)
+	call := newToolsCallRequestForSetArguments("tool_a", args)
+
+	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, call))
+	require.JSONEq(t, `{"location":"sf"}`, string(call.Params.Arguments))
 }
 
 func TestToolsCallShadowMCPValidateAndStripInterceptor_MalformedJSONArgumentsRejects(t *testing.T) {
