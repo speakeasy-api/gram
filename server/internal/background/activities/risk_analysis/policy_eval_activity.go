@@ -24,6 +24,12 @@ import (
 // over these batches, writing findings and heartbeating between them.
 const evalScanBatchSize = 100
 
+// judgeFailFastMinCalls is how many judge calls must be attempted before the
+// run aborts on a 100% failure rate. Set above one batch's worth so a couple of
+// transient errors don't trip it, but low enough to fail within the first batch
+// or two when the provider is systematically down (e.g. network/TLS errors).
+const judgeFailFastMinCalls = 25
+
 // evalRunErrorMaxLen caps the failure reason persisted on a run.
 const evalRunErrorMaxLen = 2000
 
@@ -259,6 +265,15 @@ func (p *PolicyEval) RunScan(ctx context.Context, ref PolicyEvalRunRef) (*Policy
 		}
 		if _, err := WriteEvalFindings(ctx, q, rows); err != nil {
 			return nil, fmt.Errorf("write eval findings: %w", err)
+		}
+
+		// Fail fast when the judge provider is systematically unavailable: once a
+		// batch's worth of judge calls has all errored, abort with a clear reason
+		// instead of grinding the rest of the sample (which leaves the run looking
+		// "stuck" in progress). Standard policies make no judge calls, so calls is
+		// 0 and this never trips.
+		if calls, errs, firstErr := acc.JudgeHealth(); calls >= judgeFailFastMinCalls && errs == calls {
+			return nil, fmt.Errorf("judge calls are failing (provider or network error): %w", firstErr)
 		}
 
 		activity.RecordHeartbeat(ctx, end)

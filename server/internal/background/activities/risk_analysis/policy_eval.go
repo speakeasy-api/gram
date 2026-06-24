@@ -36,18 +36,38 @@ type PolicyEvalUsageAccumulator struct {
 	inputTokens  int
 	outputTokens int
 	latencies    []time.Duration
+	calls        int
+	errors       int
+	firstErr     error
 }
 
 // Observe implements the JudgeInput.Observe callback signature.
 func (a *PolicyEvalUsageAccumulator) Observe(u JudgeUsage) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.calls++
+	if u.Err != nil {
+		a.errors++
+		if a.firstErr == nil {
+			a.firstErr = u.Err
+		}
+	}
 	if u.CostUSD != nil {
 		a.costUSD += *u.CostUSD
 	}
 	a.inputTokens += u.InputTokens
 	a.outputTokens += u.OutputTokens
 	a.latencies = append(a.latencies, u.Latency)
+}
+
+// JudgeHealth reports attempted judge calls, how many errored, and the first
+// error seen. Used to fail an eval fast when the judge provider is
+// systematically unavailable instead of grinding the whole sample (which leaves
+// the run "stuck" in progress until the activity timeout).
+func (a *PolicyEvalUsageAccumulator) JudgeHealth() (calls int, errs int, firstErr error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.calls, a.errors, a.firstErr
 }
 
 // PolicyEvalUsageStats is the rolled-up cost/latency for a run, ready to write

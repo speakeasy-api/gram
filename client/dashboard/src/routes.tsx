@@ -83,7 +83,7 @@ import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDet
 import RiskOverviewRulesIndex from "./pages/security/RiskOverviewRulesIndex";
 import RiskOverviewUserDetail from "./pages/security/RiskOverviewUserDetail";
 import RiskOverviewUsersIndex from "./pages/security/RiskOverviewUsersIndex";
-import PolicyCenter from "./pages/security/PolicyCenter";
+import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
 import PolicyDetail from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
@@ -508,11 +508,24 @@ const ROUTE_STRUCTURE = {
     icon: "inbox",
     component: ApprovalRequests,
   },
+  // Risk Policies list + the create route (AGE-2704). `PolicyCenterRoot` renders
+  // an <Outlet>; the list is the index, and `new` is the create shell, which is
+  // the routed PolicyDetail page in create mode. Mirrors `collections`.
   policyCenter: {
     title: "Risk Policies",
     url: "risk-policies",
     icon: "shield-check",
-    component: PolicyCenter,
+    component: PolicyCenterRoot,
+    indexComponent: PolicyCenter,
+    subPages: {
+      // Static `new` segment is matched ahead of the dynamic `:policyId`
+      // sibling route, so /risk-policies/new is the create shell.
+      new: {
+        title: "New Policy",
+        url: "new",
+        component: PolicyDetail,
+      },
+    },
   },
   // Policy Detail View (AGE-2704). A standalone top-level route so it does not
   // require PolicyCenter to become an Outlet-rendering layout. It is

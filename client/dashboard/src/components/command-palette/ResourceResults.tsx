@@ -261,10 +261,8 @@ function RiskPoliciesGroup({ onNavigate }: GroupProps) {
           label={policy.name}
           icon="shield-check"
           onSelect={() => {
-            // No per-policy route; deep-link opens the policy's sheet by id.
-            void navigate(
-              `${routes.policyCenter.href()}?policy=${encodeURIComponent(policy.id)}`,
-            );
+            // Drill into the policy's detail view (AGE-2704).
+            void navigate(routes.policyDetail.href(policy.id));
             onNavigate();
           }}
         />

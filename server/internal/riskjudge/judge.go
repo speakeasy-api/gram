@@ -199,7 +199,11 @@ func (j *Judge) Evaluate(ctx context.Context, in ra.JudgeInput) *ra.JudgeVerdict
 
 	// Org-scoped guardrail on the billable judge call. A throttled call is
 	// treated like a judge error: the policy's fail-mode decides the verdict.
-	if !j.limiter.allow(in.OrgID, time.Now()) {
+	// The policy-eval replay path (Observe != nil) is exempt: it is a deliberate,
+	// user-initiated, sample-bounded batch, and the realtime per-org limiter would
+	// throttle its burst down to ~0 useful verdicts (a prompt-policy eval would
+	// always look like "the judge never ran"). Realtime callers leave Observe nil.
+	if in.Observe == nil && !j.limiter.allow(in.OrgID, time.Now()) {
 		j.metrics.RecordRateLimited(ctx, in.OrgID)
 		span.SetAttributes(attribute.Bool("risk.judge.rate_limited", true))
 		j.logger.WarnContext(ctx, "llm judge rate limited",
