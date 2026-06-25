@@ -1131,7 +1131,7 @@ SELECT
     b.created_at,
     rp.name AS policy_name
 FROM tool_call_blocks b
-LEFT JOIN risk_policies rp ON rp.id = b.risk_policy_id
+LEFT JOIN risk_policies rp ON rp.id = b.risk_policy_id AND rp.deleted IS FALSE
 WHERE b.id = @id
   AND b.organization_id = @organization_id
   AND b.deleted IS FALSE;
