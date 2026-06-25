@@ -30,7 +30,11 @@ export default defineConfig({
     }),
   ],
   build: {
-    sourcemap: true,
+    // DNO-132: Do not ship source maps to browsers in production builds. They expose
+    // the original .tsx source via DevTools. (Ignored by the dev server,
+    // which always serves maps.) Switch to "hidden" if we later wire up
+    // source-map upload for error symbolication (e.g. PostHog/Sentry).
+    sourcemap: false,
     minify: "esbuild",
     lib: {
       entry: {

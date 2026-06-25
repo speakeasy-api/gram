@@ -59,7 +59,11 @@ export default defineConfig(({ command }) => {
     },
     build: {
       target: "es2022",
-      sourcemap: true,
+      // DNO-132: Do not ship source maps to browsers in production builds. They expose
+      // the original .tsx source via DevTools. (Ignored by the dev server,
+      // which always serves maps.) Switch to "hidden" if we later wire up
+      // source-map upload for error symbolication (e.g. PostHog/Sentry).
+      sourcemap: false,
       rollupOptions: {
         input: {
           main: path.resolve(__dirname, "index.html"),
