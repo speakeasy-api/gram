@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -20,9 +19,11 @@ import (
 
 // GetRiskBlock returns a durable tool call block by its ID. Blocks are recorded
 // at hook-time deny into tool_call_blocks, carrying the exact reason shown to
-// the agent. Access is scoped to the viewer's active organization and gated on
-// the same org-admin scope as the rest of the risk surface, so the plain-UUID
-// URL is not usable by outsiders.
+// the agent. The block page is opened from the link an agent embeds in its deny
+// message, so access is intentionally NOT gated on org-admin — the person whose
+// agent was blocked is usually a regular member. Access is scoped to org
+// MEMBERSHIP (see the query below), so a block is readable by any signed-in
+// member of the organization that owns it, regardless of their active org.
 func (s *Service) GetRiskBlock(ctx context.Context, payload *gen.GetRiskBlockPayload) (*gen.RiskBlock, error) {
 	authCtx, err := s.authorizeBlockAccess(ctx)
 	if err != nil {
@@ -35,8 +36,8 @@ func (s *Service) GetRiskBlock(ctx context.Context, payload *gen.GetRiskBlockPay
 	}
 
 	row, err := s.repo.GetToolCallBlock(ctx, repo.GetToolCallBlockParams{
-		ID:             blockID,
-		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:           blockID,
+		ViewerUserID: authCtx.UserID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -79,7 +80,7 @@ func (s *Service) SubmitRiskBlockFeedback(ctx context.Context, payload *gen.Subm
 		Feedback:       conv.ToPGTextEmpty(payload.Sentiment),
 		FeedbackUserID: conv.ToPGTextEmpty(authCtx.UserID),
 		ID:             blockID,
-		OrganizationID: authCtx.ActiveOrganizationID,
+		ViewerUserID:   authCtx.UserID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -99,15 +100,16 @@ func (s *Service) SubmitRiskBlockFeedback(ctx context.Context, payload *gen.Subm
 	}, nil
 }
 
-// authorizeBlockAccess requires a session whose active organization can read
-// the risk surface, matching the org-admin gate on Risk Events.
+// authorizeBlockAccess requires an authenticated session but, unlike the rest
+// of the risk surface, does NOT require org-admin: the durable block page is
+// meant to be opened by the end user whose agent was blocked, who is typically
+// a regular org member. The block queries scope access to membership of the
+// block's owning organization, so a block is only readable by a signed-in
+// member of that org (regardless of which org is currently active).
 func (s *Service) authorizeBlockAccess(ctx context.Context) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
 	}
 	return authCtx, nil
 }

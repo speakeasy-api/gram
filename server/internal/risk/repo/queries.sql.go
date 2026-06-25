@@ -1231,13 +1231,21 @@ SELECT
 FROM tool_call_blocks b
 LEFT JOIN risk_policies rp ON rp.id = b.risk_policy_id AND rp.deleted IS FALSE
 WHERE b.id = $1
-  AND b.organization_id = $2
   AND b.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM users u
+    JOIN organization_user_relationships our ON our.user_id = u.id
+    WHERE u.id = $2
+      AND u.deleted_at IS NULL
+      AND our.organization_id = b.organization_id
+      AND our.deleted_at IS NULL
+  )
 `
 
 type GetToolCallBlockParams struct {
-	ID             uuid.UUID
-	OrganizationID string
+	ID           uuid.UUID
+	ViewerUserID string
 }
 
 type GetToolCallBlockRow struct {
@@ -1251,10 +1259,12 @@ type GetToolCallBlockRow struct {
 }
 
 // Loads a durable tool call block for the block page. Scoped to the viewer's
-// organization (the page is org-admin gated, like Risk Events); the policy name
-// is joined for display when the policy still exists.
+// organization MEMBERSHIP (not their active org): the block is opened from the
+// link an agent embeds in its block message, often by a non-admin member, so it
+// is readable by any active member of the organization that owns it. The policy
+// name is joined for display when the policy still exists.
 func (q *Queries) GetToolCallBlock(ctx context.Context, arg GetToolCallBlockParams) (GetToolCallBlockRow, error) {
-	row := q.db.QueryRow(ctx, getToolCallBlock, arg.ID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, getToolCallBlock, arg.ID, arg.ViewerUserID)
 	var i GetToolCallBlockRow
 	err := row.Scan(
 		&i.ID,
@@ -3125,8 +3135,16 @@ SET feedback = $1,
     feedback_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE tool_call_blocks.id = $3
-  AND tool_call_blocks.organization_id = $4
   AND tool_call_blocks.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM users u
+    JOIN organization_user_relationships our ON our.user_id = u.id
+    WHERE u.id = $4
+      AND u.deleted_at IS NULL
+      AND our.organization_id = tool_call_blocks.organization_id
+      AND our.deleted_at IS NULL
+  )
 RETURNING tool_call_blocks.id, tool_call_blocks.project_id, tool_call_blocks.reason, tool_call_blocks.tool_name,
   tool_call_blocks.feedback, tool_call_blocks.created_at,
   COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id AND rp.deleted IS FALSE), '')::text AS policy_name
@@ -3136,7 +3154,7 @@ type UpdateToolCallBlockFeedbackParams struct {
 	Feedback       pgtype.Text
 	FeedbackUserID pgtype.Text
 	ID             uuid.UUID
-	OrganizationID string
+	ViewerUserID   string
 }
 
 type UpdateToolCallBlockFeedbackRow struct {
@@ -3150,12 +3168,14 @@ type UpdateToolCallBlockFeedbackRow struct {
 }
 
 // Records the latest thumbs feedback on a block and returns the refreshed row.
+// Scoped to org membership (see GetToolCallBlock): only an active member of the
+// block's owning organization can vote.
 func (q *Queries) UpdateToolCallBlockFeedback(ctx context.Context, arg UpdateToolCallBlockFeedbackParams) (UpdateToolCallBlockFeedbackRow, error) {
 	row := q.db.QueryRow(ctx, updateToolCallBlockFeedback,
 		arg.Feedback,
 		arg.FeedbackUserID,
 		arg.ID,
-		arg.OrganizationID,
+		arg.ViewerUserID,
 	)
 	var i UpdateToolCallBlockFeedbackRow
 	err := row.Scan(

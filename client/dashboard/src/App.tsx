@@ -39,7 +39,7 @@ import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import CliCallback from "./pages/cli/CliCallback";
 import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
-import { BlockDetailPage, BlockRedirect } from "./pages/blocks/BlockDetail";
+import { BlockPage } from "./pages/blocks/BlockDetail";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
@@ -301,14 +301,13 @@ const RouteProvider = () => {
           path="/risk-policy-bypass/request"
           element={<ShadowMCPRequestAccess />}
         />
-        <Route path="/blocks/:id" element={<BlockRedirect />} />
+        <Route path="/blocks/:id" element={<BlockPage />} />
         <Route path="/" element={<LoginCheck />}>
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}
           </Route>
           <Route path=":orgSlug/projects/:projectSlug" element={<AppLayout />}>
             {routesWithSubroutes(authenticatedRoutes)}
-            <Route path="blocks/:id" element={<BlockDetailPage />} />
           </Route>
           {/* Org routes that render without OrgLayout (full-screen standalone pages) */}
           <Route path=":orgSlug">

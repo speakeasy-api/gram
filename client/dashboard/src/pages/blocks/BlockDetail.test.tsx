@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   refetch: vi.fn(),
 }));
 
-// Only useParams is exercised by BlockDetailPage; keep the rest of react-router real.
+// Only useParams is exercised by BlockPage; keep the rest of react-router real.
 vi.mock("react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router")>()),
   useParams: () => ({ id: "block-123" }),
@@ -28,22 +28,14 @@ vi.mock("@gram/client/react-query/riskSubmitBlockFeedback.js", () => ({
   useRiskSubmitBlockFeedbackMutation: mocks.useSubmitMutation,
 }));
 
-vi.mock("@/contexts/Auth", () => ({ useSession: () => ({ session: null }) }));
-
-vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
+// A signed-in session so BlockPage renders the body rather than redirecting.
+vi.mock("@/contexts/Auth", () => ({
+  useSession: () => ({ session: { id: "sess-1" } }),
 }));
 
-vi.mock("@/components/page-layout", () => {
-  const Page = ({ children }: { children: ReactNode }) => <div>{children}</div>;
-  const Header = ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  );
-  Header.Title = ({ children }: { children: ReactNode }) => <h1>{children}</h1>;
-  Page.Header = Header;
-  Page.Body = ({ children }: { children: ReactNode }) => <div>{children}</div>;
-  return { Page };
-});
+vi.mock("@/lib/utils", () => ({ buildLoginRedirectURL: () => "/login" }));
+
+vi.mock("@/components/gram-logo", () => ({ GramLogo: () => null }));
 
 vi.mock("@/components/ui/type", () => ({
   Type: ({ children }: { children: ReactNode }) => <span>{children}</span>,
@@ -80,12 +72,12 @@ vi.mock("@speakeasy-api/moonshine", () => {
   };
 });
 
-import { BlockDetailPage } from "./BlockDetail";
+import { BlockPage } from "./BlockDetail";
 
 const sampleBlock = {
   id: "block-123",
   projectId: "proj-1",
-  reason: `Speakeasy blocked this tool call: matched policy "Block Secrets"`,
+  reason: `Speakeasy blocked this tool call: matched policy "Block Secrets" (Attempted to read .env secrets)`,
   policyName: "Block Secrets",
   toolName: "Bash",
   createdAt: "2026-06-24T21:00:00Z",
@@ -110,22 +102,26 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("BlockDetailPage", () => {
-  it("renders the block reason, policy name, and tool", () => {
+describe("BlockPage", () => {
+  it("shows the policy/tool header and the de-duplicated explanation", () => {
     mockLoadedBlock(sampleBlock);
 
-    render(<BlockDetailPage />);
+    render(<BlockPage />);
 
-    expect(screen.getByText(/matched policy/)).toBeTruthy();
     expect(screen.getByText(/Blocked by policy/)).toBeTruthy();
     expect(screen.getByText(/tool Bash/)).toBeTruthy();
+    // The detail box shows only the policy-specific explanation — the
+    // "Speakeasy blocked this tool call: matched policy ..." boilerplate is
+    // stripped because it duplicates the header.
+    expect(screen.getByText("Attempted to read .env secrets")).toBeTruthy();
+    expect(screen.queryByText(/matched policy/)).toBeNull();
   });
 
   it("submits 'up' feedback and refetches when Helpful is clicked", async () => {
     mockLoadedBlock(sampleBlock);
     mocks.mutateAsync.mockResolvedValue({});
 
-    render(<BlockDetailPage />);
+    render(<BlockPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Helpful" }));
 
@@ -145,7 +141,7 @@ describe("BlockDetailPage", () => {
   it("confirms recorded feedback once a vote is present", () => {
     mockLoadedBlock({ ...sampleBlock, feedback: "down" });
 
-    render(<BlockDetailPage />);
+    render(<BlockPage />);
 
     expect(screen.getByText("Thanks for the feedback.")).toBeTruthy();
   });
@@ -162,7 +158,7 @@ describe("BlockDetailPage", () => {
       isPending: false,
     });
 
-    render(<BlockDetailPage />);
+    render(<BlockPage />);
 
     expect(screen.getByText(/couldn't load this block/)).toBeTruthy();
   });

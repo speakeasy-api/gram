@@ -39,8 +39,10 @@ func seedToolCallBlock(t *testing.T, ti *testInstance, orgID string, projectID u
 	return id
 }
 
-// orgAdminContext grants the active org the org-admin scope the block endpoints
-// require, mirroring the gate on the rest of the risk surface.
+// orgAdminContext grants the active org the org-admin scope. The block
+// endpoints no longer require it — a regular member can open their own block
+// page (see TestGetRiskBlock_NonAdminMemberCanRead) — but an admin is a valid
+// superset caller, so the rest of the cases exercise this path.
 func orgAdminContext(t *testing.T, ctx context.Context, ti *testInstance) (context.Context, *contextvalues.AuthContext) {
 	t.Helper()
 
@@ -73,6 +75,77 @@ func TestGetRiskBlock_ReturnsBlock(t *testing.T) {
 	require.Equal(t, "Bash", *block.ToolName)
 	require.NotEmpty(t, block.CreatedAt)
 	require.Nil(t, block.Feedback, "a fresh block has no feedback recorded")
+}
+
+// TestGetRiskBlock_NonAdminMemberCanRead locks in that the durable block page
+// is readable by a regular org member, not just org admins: it is opened from
+// the link an agent embeds in its block message. The base test context is an
+// authenticated session with no org-admin grant.
+func TestGetRiskBlock_NonAdminMemberCanRead(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	blockID := seedToolCallBlock(t, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID,
+		`Speakeasy blocked this tool call: matched policy "Block Secrets"`, "Bash")
+
+	block, err := ti.service.GetRiskBlock(ctx, &gen.GetRiskBlockPayload{ID: blockID.String()})
+	require.NoError(t, err)
+	require.Equal(t, blockID.String(), block.ID)
+}
+
+// TestGetRiskBlock_MemberWithDifferentActiveOrgCanRead is the core of the
+// membership-scoping change: a member of the block's org can read it even when
+// their *active* org is a different one. Access keys on org membership, not the
+// active org carried in the session.
+func TestGetRiskBlock_MemberWithDifferentActiveOrgCanRead(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	blockID := seedToolCallBlock(t, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID,
+		`Speakeasy blocked this tool call: matched policy "Block Secrets"`, "Bash")
+
+	// Same member, but their session's active org is now some other org.
+	switched := *authCtx
+	switched.ActiveOrganizationID = uuid.NewString()
+	switchedCtx := contextvalues.SetAuthContext(ctx, &switched)
+
+	block, err := ti.service.GetRiskBlock(switchedCtx, &gen.GetRiskBlockPayload{ID: blockID.String()})
+	require.NoError(t, err)
+	require.Equal(t, blockID.String(), block.ID)
+}
+
+// TestGetRiskBlock_NonMemberDenied confirms a signed-in user who is NOT a member
+// of the block's org cannot read it — the plain-UUID link is not usable by
+// authenticated outsiders.
+func TestGetRiskBlock_NonMemberDenied(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	blockID := seedToolCallBlock(t, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "blocked", "Bash")
+
+	// A different user with no membership in the block's org.
+	outsider := *authCtx
+	outsider.UserID = uuid.NewString()
+	outsiderCtx := contextvalues.SetAuthContext(ctx, &outsider)
+
+	block, err := ti.service.GetRiskBlock(outsiderCtx, &gen.GetRiskBlockPayload{ID: blockID.String()})
+	require.Nil(t, block)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
 func TestGetRiskBlock_InvalidID(t *testing.T) {

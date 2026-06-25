@@ -1,6 +1,6 @@
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { type ReactElement, type ReactNode, useMemo } from "react";
-import { Link, useParams } from "react-router";
+import { Link } from "react-router";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import type { RiskResult } from "@gram/client/models/components";
 import {
@@ -148,7 +148,6 @@ export function RiskBadge({
    * to the default destructive badge. */
   trigger?: ReactElement;
 }): ReactNode {
-  const { orgSlug, projectSlug } = useParams();
   const findings = useMemo(() => {
     const grouped = new Map<
       string,
@@ -225,9 +224,11 @@ export function RiskBadge({
                  * finding's message (any agent — Claude, Cursor, Codex), link
                  * to its block page where the viewer can read the full reason
                  * and leave 👍/👎 feedback. */}
-                {r.blockId && orgSlug && projectSlug && (
+                {r.blockId && (
                   <Link
-                    to={`/${orgSlug}/projects/${projectSlug}/blocks/${r.blockId}`}
+                    to={`/blocks/${r.blockId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
                     className="text-primary mt-1.5 inline-flex items-center gap-1 text-xs hover:underline"
                   >

@@ -1120,8 +1120,10 @@ RETURNING id;
 
 -- name: GetToolCallBlock :one
 -- Loads a durable tool call block for the block page. Scoped to the viewer's
--- organization (the page is org-admin gated, like Risk Events); the policy name
--- is joined for display when the policy still exists.
+-- organization MEMBERSHIP (not their active org): the block is opened from the
+-- link an agent embeds in its block message, often by a non-admin member, so it
+-- is readable by any active member of the organization that owns it. The policy
+-- name is joined for display when the policy still exists.
 SELECT
     b.id,
     b.project_id,
@@ -1133,19 +1135,37 @@ SELECT
 FROM tool_call_blocks b
 LEFT JOIN risk_policies rp ON rp.id = b.risk_policy_id AND rp.deleted IS FALSE
 WHERE b.id = @id
-  AND b.organization_id = @organization_id
-  AND b.deleted IS FALSE;
+  AND b.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM users u
+    JOIN organization_user_relationships our ON our.user_id = u.id
+    WHERE u.id = @viewer_user_id
+      AND u.deleted_at IS NULL
+      AND our.organization_id = b.organization_id
+      AND our.deleted_at IS NULL
+  );
 
 -- name: UpdateToolCallBlockFeedback :one
 -- Records the latest thumbs feedback on a block and returns the refreshed row.
+-- Scoped to org membership (see GetToolCallBlock): only an active member of the
+-- block's owning organization can vote.
 UPDATE tool_call_blocks
 SET feedback = sqlc.arg(feedback),
     feedback_user_id = sqlc.narg(feedback_user_id),
     feedback_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE tool_call_blocks.id = sqlc.arg(id)
-  AND tool_call_blocks.organization_id = sqlc.arg(organization_id)
   AND tool_call_blocks.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM users u
+    JOIN organization_user_relationships our ON our.user_id = u.id
+    WHERE u.id = sqlc.arg(viewer_user_id)
+      AND u.deleted_at IS NULL
+      AND our.organization_id = tool_call_blocks.organization_id
+      AND our.deleted_at IS NULL
+  )
 RETURNING tool_call_blocks.id, tool_call_blocks.project_id, tool_call_blocks.reason, tool_call_blocks.tool_name,
   tool_call_blocks.feedback, tool_call_blocks.created_at,
   COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id AND rp.deleted IS FALSE), '')::text AS policy_name;
