@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 19bf58d57b9dad34f1e7e112756fe596
+  docChecksum: fb4183e3ae0df88a893d80148710e465
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -333,7 +333,7 @@ trackedFiles:
   docs/models/components/externalmcpserver.md:
     last_write_checksum: sha1:ca245142f4b32155ee6581f7fb02463fe75fb605
   docs/models/components/externalmcpserverentry.md:
-    last_write_checksum: sha1:8a00d88282da59764721a683b9c5af42532b3ee8
+    last_write_checksum: sha1:e127a7fb971d200566a1a6e61ea6b73070f2dec2
   docs/models/components/externalmcptool.md:
     last_write_checksum: sha1:719b8eb5236a84fd95fcc4c72d4f4eeaa77c065d
   docs/models/components/externalmcptooldefinition.md:
@@ -479,7 +479,7 @@ trackedFiles:
   docs/models/components/listauditlogsresult.md:
     last_write_checksum: sha1:544e05707ab700f2e0fdd7260e344bb34e2d376f
   docs/models/components/listcatalogresponsebody.md:
-    last_write_checksum: sha1:9587eabb596a16607a4d7d55213078ac5c370e4e
+    last_write_checksum: sha1:fa3cc305b151cf1ef8b52d612dec3e7bf61a14d7
   docs/models/components/listchallengebucketsresult.md:
     last_write_checksum: sha1:93c858675bf6d05181da9214a8366fbbc744cb58
   docs/models/components/listchallengesresult.md:
@@ -4488,7 +4488,7 @@ trackedFiles:
   src/models/components/externalmcpserver.ts:
     last_write_checksum: sha1:1616e32c2edfd82c7b55f53d4b2939af8dc1085c
   src/models/components/externalmcpserverentry.ts:
-    last_write_checksum: sha1:af44c5b4d7de7a3e7fbed6600aa25e2c7ac2cd44
+    last_write_checksum: sha1:67a7056050d4f73e517433f81e832ac9ecff8b52
   src/models/components/externalmcptool.ts:
     last_write_checksum: sha1:55574649b1ec65964750666d902ac9bd87c5e989
   src/models/components/externalmcptooldefinition.ts:

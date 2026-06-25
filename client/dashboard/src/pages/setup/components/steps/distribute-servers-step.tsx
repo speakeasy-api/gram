@@ -43,7 +43,6 @@ import {
 import { InstallInstructionsButton } from "@/pages/plugins/InstallInstructionsDialog";
 import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import { cn } from "@/lib/utils";
-import { isAutoConfigurableServer } from "./auto-configurable-servers";
 
 /** Display name of the shared plugin bundle catalog servers are added to. */
 const DEFAULT_PLUGIN_NAME = "Default";
@@ -118,12 +117,14 @@ export function DistributeServersStep({
     () => data?.pages.flatMap((page) => page.servers as PulseMCPServer[]) ?? [],
     [data],
   );
-  // Onboarding only surfaces servers Gram can fully auto-configure (no-auth or
-  // OAuth with dynamic client registration). Everything else would dead-end on
-  // "OAuth setup required" or a missing API key, so we steer the user to the
-  // full catalog for those (see note below the list).
+  // Onboarding only surfaces servers Gram can fully auto-configure: those whose
+  // OAuth authorization server advertises a dynamic client registration
+  // endpoint (DCR), reported live by the catalog's `supports_dcr` flag.
+  // Everything else would dead-end on "OAuth setup required" or a missing API
+  // key, so we steer the user to the full catalog for those (see note below the
+  // list).
   const autoConfigurableServers = useMemo(
-    () => servers.filter((s) => isAutoConfigurableServer(s.registrySpecifier)),
+    () => servers.filter((s) => s.supportsDcr),
     [servers],
   );
   const visibleServers = showAll

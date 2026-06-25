@@ -848,6 +848,10 @@ type ExternalMCPServerEntryResponseBody struct {
 	ToolCount *int `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
 	// Whether every tool on the server is read-only
 	IsReadOnly *bool `form:"is_read_only,omitempty" json:"is_read_only,omitempty" xml:"is_read_only,omitempty"`
+	// Whether the server's OAuth authorization server advertises a dynamic client
+	// registration endpoint (RFC 7591). When false, connecting requires manual
+	// setup (static OAuth client credentials or API keys).
+	SupportsDcr *bool `form:"supports_dcr,omitempty" json:"supports_dcr,omitempty" xml:"supports_dcr,omitempty"`
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 }
@@ -2645,6 +2649,9 @@ func ValidateExternalMCPServerEntryResponseBody(body *ExternalMCPServerEntryResp
 	}
 	if body.IsReadOnly == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_read_only", "body"))
+	}
+	if body.SupportsDcr == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("supports_dcr", "body"))
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))

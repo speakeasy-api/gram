@@ -1,15 +1,15 @@
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
-import { Badge } from "@/components/ui/badge";
 import { DotRow } from "@/components/ui/dot-row";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { DeploymentExternalMCP } from "@gram/client/models/components";
-import { Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@speakeasy-api/moonshine";
 import { ArrowRight, Check } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import type { PulseMCPServer } from "./hooks";
 import { parseServerMetadata } from "./hooks/serverMetadata";
+import { ManualSetupBadge } from "./ManualSetupBadge";
 
 interface ServerTableRowProps {
   server: PulseMCPServer;
@@ -84,18 +84,16 @@ export function ServerTableRow({
             {displayName}
           </Type>
           {isAdded && (
-            <Badge
-              variant="outline"
-              className="border-success/50 bg-success/10 text-success text-xs"
-            >
-              Added
+            <Badge variant="success">
+              <Badge.Text>Added</Badge.Text>
             </Badge>
           )}
           {metadata.visitorsMonth === 0 && (
-            <Badge variant="outline" className="text-xs">
-              New
+            <Badge variant="neutral">
+              <Badge.Text>New</Badge.Text>
             </Badge>
           )}
+          <ManualSetupBadge server={server} />
         </div>
       </td>
 
