@@ -103,18 +103,16 @@ afterEach(() => {
 });
 
 describe("BlockPage", () => {
-  it("shows the policy/tool header and the de-duplicated explanation", () => {
+  it("shows the policy/tool header and the server-provided reason verbatim", () => {
     mockLoadedBlock(sampleBlock);
 
     render(<BlockPage />);
 
     expect(screen.getByText(/Blocked by policy/)).toBeTruthy();
     expect(screen.getByText(/tool Bash/)).toBeTruthy();
-    // The detail box shows only the policy-specific explanation — the
-    // "Speakeasy blocked this tool call: matched policy ..." boilerplate is
-    // stripped because it duplicates the header.
-    expect(screen.getByText("Attempted to read .env secrets")).toBeTruthy();
-    expect(screen.queryByText(/matched policy/)).toBeNull();
+    // The reason box renders block.reason exactly as the backend stored it —
+    // no client-side parsing of the message wording.
+    expect(screen.getByText(sampleBlock.reason)).toBeTruthy();
   });
 
   it("submits 'up' feedback and refetches when Helpful is clicked", async () => {

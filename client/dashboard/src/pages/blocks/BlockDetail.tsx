@@ -85,8 +85,6 @@ function BlockBody({ id }: { id: string | undefined }) {
     );
   }
 
-  const explanation = blockExplanation(block.reason, block.policyName);
-
   const onVote = async (sentiment: Sentiment) => {
     await submitFeedback({
       request: { submitRiskBlockFeedbackRequestBody: { id, sentiment } },
@@ -111,10 +109,10 @@ function BlockBody({ id }: { id: string | undefined }) {
         </Stack>
       </Stack>
 
-      {explanation ? (
+      {block.reason ? (
         <div className="bg-muted/40 w-full rounded-md border p-4">
           <Type small className="whitespace-pre-wrap text-center">
-            {explanation}
+            {block.reason}
           </Type>
         </div>
       ) : null}
@@ -154,22 +152,3 @@ function BlockBody({ id }: { id: string | undefined }) {
     </Stack>
   );
 }
-
-// The stored reason is a self-contained audit sentence (also surfaced to the
-// agent) that repeats the "blocked" framing and policy name already shown in
-// the header above. Strip that boilerplate so the detail box carries only the
-// policy-specific explanation; fall back to the full reason when it doesn't
-// match the known shape.
-function blockExplanation(reason: string, policyName: string): string {
-  const prefix = `Speakeasy blocked this tool call: matched policy "${policyName}"`;
-  let detail = reason.trim();
-  if (detail.startsWith(prefix)) {
-    detail = detail.slice(prefix.length).trim();
-    if (detail.startsWith("(") && detail.endsWith(")")) {
-      detail = detail.slice(1, -1).trim();
-    }
-  }
-  return detail;
-}
-
-export default BlockPage;
