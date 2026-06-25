@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
 type Service struct {
@@ -35,31 +37,37 @@ type Service struct {
 	authz            *authz.Engine
 	core             *ServiceCore
 	signaler         WorkflowSignaler
-	bootstrapLimiter *assistantRateLimiter
+	bootstrapLimiter *ratelimit.Limiter
 }
 
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
-var _ bgtriggers.Dispatcher = (*Service)(nil)
+var (
+	_ gen.Service           = (*Service)(nil)
+	_ gen.Auther            = (*Service)(nil)
+	_ bgtriggers.Dispatcher = (*Service)(nil)
+)
 
 func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	core *ServiceCore,
 	signaler WorkflowSignaler,
+	bootstrapStore ratelimit.Store,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("assistants"))
 	return &Service{
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
-		logger:           logger,
-		auth:             auth.New(logger, db, sessions, authzEngine),
-		authz:            authzEngine,
-		core:             core,
-		signaler:         signaler,
-		bootstrapLimiter: newAssistantRateLimiter(),
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
+		logger:   logger,
+		auth:     auth.New(logger, db, sessions, authzEngine),
+		authz:    authzEngine,
+		core:     core,
+		signaler: signaler,
+		bootstrapLimiter: ratelimit.New(bootstrapStore, "assistant-bootstrap",
+			ratelimit.PerMinute(bootstrapRatePerMin).WithBurst(bootstrapRateBurst),
+			ratelimit.WithMetrics(meterProvider)),
 	}
 }
 
