@@ -88,6 +88,12 @@ type WorkerOptions struct {
 	ProductFeatures                *productfeatures.Client
 	PluginPublisher                *plugins.Service
 	Publishers                     *Publishers
+	// ReplicaDB is a read-only pool (read replica in dev/prod, primary in local
+	// dev). Used by analytics workloads such as the risk export workflow.
+	ReplicaDB *pgxpool.Pool
+	// RiskExportLocalDir, when set, allows risk exports to write to the local
+	// filesystem instead of object storage. Dev only.
+	RiskExportLocalDir string
 }
 
 func ForDeploymentProcessing(
@@ -136,6 +142,8 @@ func ForDeploymentProcessing(
 		ProductFeatures:                nil,
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
+		ReplicaDB:                      nil,
+		RiskExportLocalDir:             "",
 		Publishers: &Publishers{
 			PresidioAnalysis: gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
 			GitleaksAnalysis: gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
@@ -187,6 +195,8 @@ func NewTemporalWorker(
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
 		Publishers:                     nil,
+		ReplicaDB:                      nil,
+		RiskExportLocalDir:             "",
 	}
 
 	for _, o := range options {
@@ -227,6 +237,8 @@ func NewTemporalWorker(
 			ClickhouseConn:                 conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
 			PluginPublisher:                conv.Default(o.PluginPublisher, opts.PluginPublisher),
 			Publishers:                     conv.Default(o.Publishers, opts.Publishers),
+			ReplicaDB:                      conv.Default(o.ReplicaDB, opts.ReplicaDB),
+			RiskExportLocalDir:             conv.Default(o.RiskExportLocalDir, opts.RiskExportLocalDir),
 		}
 	}
 
@@ -299,6 +311,8 @@ func NewTemporalWorker(
 		opts.ChatMessageWriter,
 		opts.Publishers,
 		celEng,
+		opts.ReplicaDB,
+		opts.RiskExportLocalDir,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -334,6 +348,11 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ReconcileExclusion)
 	temporalWorker.RegisterActivity(activities.CleanRiskPolicyResults)
 	riskWorker.RegisterActivity(activities.AnalyzeBatch)
+
+	temporalWorker.RegisterActivity(activities.CountExportRows)
+	temporalWorker.RegisterActivity(activities.FetchExportChatPage)
+	temporalWorker.RegisterActivity(activities.WriteExportChunk)
+	temporalWorker.RegisterActivity(activities.FinalizeExport)
 	// Assistant activities
 	temporalWorker.RegisterActivity(activities.AdmitAssistantThreads)
 	temporalWorker.RegisterActivity(activities.ProcessAssistantThread)
@@ -393,6 +412,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(RiskAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(RiskExclusionReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(RiskPolicyCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(RiskExportWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantReaperWorkflow)

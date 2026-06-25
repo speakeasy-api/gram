@@ -204,6 +204,10 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 
 type dbClientOptions struct {
 	enableUnsafeLogging bool
+	// readOnly forces every session on the pool into a read-only transaction
+	// state. Used for the read-replica pool so an accidental write fails fast
+	// rather than reaching a writable primary.
+	readOnly bool
 }
 
 func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, connstring string, opts dbClientOptions) (*pgxpool.Pool, error) {
@@ -221,6 +225,10 @@ func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.
 
 	idleInTxSessionTimeout := 60 * time.Second
 	poolcfg.ConnConfig.RuntimeParams["idle_in_transaction_session_timeout"] = fmt.Sprintf("%d", int(idleInTxSessionTimeout.Milliseconds()))
+
+	if opts.readOnly {
+		poolcfg.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
+	}
 
 	poolcfg.ConnConfig.Tracer = multitracer.New(
 		&pgxotel.QueryTracer{

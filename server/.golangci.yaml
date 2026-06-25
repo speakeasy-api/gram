@@ -440,4 +440,7 @@ linters:
 
       ignore-sig-regexps:
         - "\\(\\*github\\.com\\/speakeasy-api\\/gram\\/server\\/internal\\/background\\/activities\\..+\\)\\.Do\\("
+        # Risk-export activity entrypoints wrap their own errors internally; the
+        # thin Activities wrappers re-return them like the activities.*.Do above.
+        - "\\(\\*github\\.com\\/speakeasy-api\\/gram\\/server\\/internal\\/background\\/activities\\/risk_export\\.RiskExport\\)\\..+\\("
         - "github\\.com\\/speakeasy-api\\/gram\\/server\\/internal\\/mv\\.Describe.+\\("

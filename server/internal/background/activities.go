@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities/outbox_relay"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion"
+	risk_export "github.com/speakeasy-api/gram/server/internal/background/activities/risk_export"
 	risk_policy "github.com/speakeasy-api/gram/server/internal/background/activities/risk_policy"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -108,6 +109,7 @@ type Activities struct {
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
 	pluginPublisher                 *activities.PluginPublisher
+	riskExport                      *risk_export.RiskExport
 }
 
 func NewActivities(
@@ -150,6 +152,8 @@ func NewActivities(
 	chatWriter *chat.ChatMessageWriter,
 	publishers *Publishers,
 	celEng *celenv.Engine,
+	replicaDB *pgxpool.Pool,
+	riskExportLocalDir string,
 ) *Activities {
 	return &Activities{
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
@@ -205,6 +209,7 @@ func NewActivities(
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
+		riskExport:                      risk_export.NewRiskExport(logger, tracerProvider, replicaDB, assetStorage, riskExportLocalDir),
 	}
 }
 
@@ -314,6 +319,22 @@ func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.Gen
 
 func (a *Activities) CorrelateClaudePrompts(ctx context.Context, input activities.CorrelateClaudePromptsArgs) error {
 	return a.correlateClaudePrompts.Do(ctx, input)
+}
+
+func (a *Activities) CountExportRows(ctx context.Context, args risk_export.CountExportRowsArgs) (*risk_export.CountExportRowsResult, error) {
+	return a.riskExport.CountExportRows(ctx, args)
+}
+
+func (a *Activities) FetchExportChatPage(ctx context.Context, args risk_export.FetchExportChatPageArgs) (*risk_export.FetchExportChatPageResult, error) {
+	return a.riskExport.FetchExportChatPage(ctx, args)
+}
+
+func (a *Activities) WriteExportChunk(ctx context.Context, args risk_export.WriteExportChunkArgs) (*risk_export.WriteExportChunkResult, error) {
+	return a.riskExport.WriteExportChunk(ctx, args)
+}
+
+func (a *Activities) FinalizeExport(ctx context.Context, args risk_export.FinalizeExportArgs) (*risk_export.FinalizeExportResult, error) {
+	return a.riskExport.FinalizeExport(ctx, args)
 }
 
 func (a *Activities) SegmentChat(ctx context.Context, input resolution_activities.SegmentChatArgs) (*resolution_activities.SegmentChatOutput, error) {

@@ -486,6 +486,7 @@ func newStartCommand() *cli.Command {
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
+				readOnly:            false,
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to database: %w", err)
@@ -1238,6 +1239,12 @@ func newStartCommand() *cli.Command {
 						ProductFeatures:                productFeatures,
 						PluginPublisher:                pluginPublisher,
 						Publishers:                     publishers,
+						// The server-embedded worker has no dedicated read
+						// replica; reuse the primary pool. Risk exports run on
+						// the standalone worker process where ReplicaDB points at
+						// the replica.
+						ReplicaDB:          db,
+						RiskExportLocalDir: "",
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

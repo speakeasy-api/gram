@@ -132,6 +132,16 @@ func newWorkerCommand() *cli.Command {
 			EnvVars: []string{"GRAM_UNSAFE_DB_LOG"},
 			Value:   false,
 		},
+		&cli.StringFlag{
+			Name:    "database-read-replica-url",
+			Usage:   "Read-only replica database URL for analytics workloads (e.g. risk exports). Falls back to the primary database-url when unset.",
+			EnvVars: []string{"GRAM_DATABASE_READ_REPLICA_URL"},
+		},
+		&cli.StringFlag{
+			Name:    "risk-export-local-dir",
+			Usage:   "Local filesystem directory for risk export output. Dev only; when set, exports may target the local filesystem instead of object storage.",
+			EnvVars: []string{"GRAM_RISK_EXPORT_LOCAL_DIR"},
+		},
 		&cli.BoolFlag{
 			Name:    "with-otel-tracing",
 			Usage:   "Enable OpenTelemetry traces",
@@ -388,6 +398,7 @@ func newWorkerCommand() *cli.Command {
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
+				readOnly:            false,
 			})
 			if err != nil {
 				return err
@@ -398,6 +409,25 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("database ping failed: %w", err)
 			}
 			defer db.Close()
+
+			// Read-only replica pool for analytics workloads (risk exports). When
+			// no replica URL is configured (local dev, or environments without a
+			// replica) we reuse the primary pool.
+			replicaDB := db
+			if replicaURL := c.String("database-read-replica-url"); replicaURL != "" {
+				replicaDB, err = newDBClient(ctx, logger, meterProvider, replicaURL, dbClientOptions{
+					enableUnsafeLogging: c.Bool("unsafe-db-log"),
+					readOnly:            true,
+				})
+				if err != nil {
+					return fmt.Errorf("failed to create read replica db client: %w", err)
+				}
+				if err := replicaDB.Ping(ctx); err != nil {
+					logger.ErrorContext(ctx, "failed to ping read replica database", attr.SlogError(err))
+					return fmt.Errorf("read replica database ping failed: %w", err)
+				}
+				defer replicaDB.Close()
+			}
 
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
@@ -786,6 +816,8 @@ func newWorkerCommand() *cli.Command {
 				ProductFeatures:                productFeatures,
 				PluginPublisher:                pluginPublisher,
 				Publishers:                     publishers,
+				ReplicaDB:                      replicaDB,
+				RiskExportLocalDir:             c.String("risk-export-local-dir"),
 			})
 
 			// Flush the throttle's queued trailing risk signals before this Action

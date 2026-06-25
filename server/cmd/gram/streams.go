@@ -144,6 +144,7 @@ func newStreamsCommand() *cli.Command {
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
+				readOnly:            false,
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to database: %w", err)
