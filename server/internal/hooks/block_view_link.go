@@ -70,7 +70,10 @@ func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p 
 // this from providers whose persistence already runs detached (Cursor, Codex);
 // the page becomes valid within moments. Returns "" when it can't proceed.
 func (s *Service) recordToolCallBlockAsync(ctx context.Context, p toolCallBlockParams) string {
-	if p.ProjectID == uuid.Nil {
+	// Only mint a URL when the block row can actually be persisted; otherwise
+	// the link would resolve to a /blocks/<id> page with no backing row. These
+	// preconditions must mirror insertToolCallBlock's guard.
+	if s.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
 		return ""
 	}
 	blockID, err := uuid.NewV7()

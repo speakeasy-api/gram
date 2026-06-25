@@ -1042,9 +1042,15 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	// immediately, then persist the Recent Findings row and the block row off
 	// the hot path. The page becomes valid within moments — well before a human
 	// opens the link.
-	if blockID, err := uuid.NewV7(); err == nil {
+	// Only mint the durable block URL when the project id parses: an invalid id
+	// would make insertToolCallBlock (and recordShadowMCPBlockFinding) skip the
+	// write, leaving the appended /blocks/<id> link pointing at a page with no
+	// backing row.
+	if projectUUID, parseErr := uuid.Parse(metadata.ProjectID); parseErr != nil {
+		s.logger.WarnContext(ctx, "tool call block: invalid project id; skipping durable block link",
+			attr.SlogEvent("claude_hook_block_invalid_project"), attr.SlogError(parseErr))
+	} else if blockID, err := uuid.NewV7(); err == nil {
 		userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
-		projectUUID, _ := uuid.Parse(metadata.ProjectID)
 		asyncCtx := context.WithoutCancel(ctx)
 		metaCopy := metadata
 		go func() {
