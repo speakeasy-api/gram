@@ -1148,5 +1148,5 @@ WHERE tool_call_blocks.id = sqlc.arg(id)
   AND tool_call_blocks.deleted IS FALSE
 RETURNING tool_call_blocks.id, tool_call_blocks.project_id, tool_call_blocks.reason, tool_call_blocks.tool_name,
   tool_call_blocks.feedback, tool_call_blocks.created_at,
-  COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id), '')::text AS policy_name;
+  COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id AND rp.deleted IS FALSE), '')::text AS policy_name;
 
