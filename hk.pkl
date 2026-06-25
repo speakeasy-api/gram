@@ -68,6 +68,16 @@ local linters = new Mapping<String, Step> {
   ["ruff"] = (Builtins.ruff) {
     exclude = List("**/vendor/**", "**/node_modules/**", "**/dist/**", "**/*_pb2.*")
   }
+  ["infra-gen"] {
+    glob = List("infra/**/*")
+    exclude = List("infra/gen/**/*", "infra/gen_py/**/*")
+    fix = "mise run -q gen:infra"
+  }
+  ["infra-lint"] {
+    glob = List("infra/**/*")
+    exclude = List("infra/gen/**/*", "infra/gen_py/**/*")
+    check = "mise run -q lint:infra && mise run -q test:infra"
+  }
 }
 
 hooks {
