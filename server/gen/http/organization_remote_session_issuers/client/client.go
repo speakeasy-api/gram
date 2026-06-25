@@ -66,6 +66,10 @@ type Client struct {
 	// listClientSessions endpoint.
 	ListClientSessionsDoer goahttp.Doer
 
+	// CreateClient Doer is the HTTP client used to make requests to the
+	// createClient endpoint.
+	CreateClientDoer goahttp.Doer
+
 	// UpdateClient Doer is the HTTP client used to make requests to the
 	// updateClient endpoint.
 	UpdateClientDoer goahttp.Doer
@@ -123,6 +127,7 @@ func NewClient(
 		GetClientDeletePreflightDoer:  doer,
 		ListClientMcpServersDoer:      doer,
 		ListClientSessionsDoer:        doer,
+		CreateClientDoer:              doer,
 		UpdateClientDoer:              doer,
 		DeleteClientDoer:              doer,
 		RemoveClientFromMcpServerDoer: doer,
@@ -420,6 +425,30 @@ func (c *Client) ListClientSessions() goa.Endpoint {
 		resp, err := c.ListClientSessionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "listClientSessions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateClient returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service createClient server.
+func (c *Client) CreateClient() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateClientRequest(c.encoder)
+		decodeResponse = DecodeCreateClientResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateClientRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateClientDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "createClient", err)
 		}
 		return decodeResponse(resp)
 	}
