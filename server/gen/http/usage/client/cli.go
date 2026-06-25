@@ -53,11 +53,16 @@ func BuildSetBillingMetadataPayload(usageSetBillingMetadataBody string, usageSet
 	{
 		err = json.Unmarshal([]byte(usageSetBillingMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"alert_email\": \"alice@example.com\",\n      \"billing_cycle_anchor_day\": 2,\n      \"monthly_token_limit\": 1\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"alert_email\": \"alice@example.com\",\n      \"billing_cycle_anchor_day\": 2,\n      \"monthly_token_limit\": 1,\n      \"tunnelled_mcp_server_limit\": 1\n   }'")
 		}
 		if body.MonthlyTokenLimit != nil {
 			if *body.MonthlyTokenLimit < 0 {
 				err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_token_limit", *body.MonthlyTokenLimit, 0, true))
+			}
+		}
+		if body.TunnelledMcpServerLimit != nil {
+			if *body.TunnelledMcpServerLimit < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.tunnelled_mcp_server_limit", *body.TunnelledMcpServerLimit, 0, true))
 			}
 		}
 		if body.AlertEmail != nil {
@@ -80,9 +85,10 @@ func BuildSetBillingMetadataPayload(usageSetBillingMetadataBody string, usageSet
 		}
 	}
 	v := &usage.SetBillingMetadataPayload{
-		MonthlyTokenLimit:     body.MonthlyTokenLimit,
-		AlertEmail:            body.AlertEmail,
-		BillingCycleAnchorDay: body.BillingCycleAnchorDay,
+		MonthlyTokenLimit:       body.MonthlyTokenLimit,
+		TunnelledMcpServerLimit: body.TunnelledMcpServerLimit,
+		AlertEmail:              body.AlertEmail,
+		BillingCycleAnchorDay:   body.BillingCycleAnchorDay,
 	}
 	v.SessionToken = sessionToken
 

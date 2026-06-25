@@ -13646,7 +13646,7 @@ paths:
                 name: GetMcpServer
     /rpc/mcpServers.list:
         get:
-            description: List MCP servers for a project. Accepts optional remote_mcp_server_id or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the two backends are mutually exclusive.
+            description: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
             operationId: listMcpServers
             parameters:
                 - allowEmptyValue: true
@@ -13655,6 +13655,14 @@ paths:
                   name: remote_mcp_server_id
                   schema:
                     description: Filter to MCP servers backed by this remote MCP server
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter to MCP servers backed by this tunnelled MCP server
+                  in: query
+                  name: tunnelled_mcp_server_id
+                  schema:
+                    description: Filter to MCP servers backed by this tunnelled MCP server
                     format: uuid
                     type: string
                 - allowEmptyValue: true
@@ -13873,7 +13881,7 @@ paths:
                 name: ListMcpServerToolFilters
     /rpc/mcpServers.update:
         post:
-            description: 'Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.'
+            description: 'Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be provided.'
             operationId: updateMcpServer
             parameters:
                 - allowEmptyValue: true
@@ -31539,6 +31547,522 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdateTrigger
+    /rpc/tunnelledMcp.createServer:
+        post:
+            description: Create a new tunnelled MCP server source. Returns the tunnel key once.
+            operationId: createTunnelledMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateTunnelledMcpServerForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreateTunnelledMcpServerResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createServer tunnelledMcp
+            tags:
+                - tunnelledMcp
+            x-speakeasy-name-override: createServer
+            x-speakeasy-react-hook:
+                name: CreateTunnelledMcpServer
+    /rpc/tunnelledMcp.deleteServer:
+        delete:
+            description: Delete a tunnelled MCP server source
+            operationId: deleteTunnelledMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the tunnelled MCP server to delete
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the tunnelled MCP server to delete
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteServer tunnelledMcp
+            tags:
+                - tunnelledMcp
+            x-speakeasy-name-override: deleteServer
+            x-speakeasy-react-hook:
+                name: DeleteTunnelledMcpServer
+    /rpc/tunnelledMcp.getServer:
+        get:
+            description: Get a tunnelled MCP server by ID
+            operationId: getTunnelledMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the tunnelled MCP server
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the tunnelled MCP server
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TunnelledMcpServer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getServer tunnelledMcp
+            tags:
+                - tunnelledMcp
+            x-speakeasy-name-override: getServer
+            x-speakeasy-react-hook:
+                name: GetTunnelledMcpServer
+    /rpc/tunnelledMcp.listServers:
+        get:
+            description: List all tunnelled MCP server sources for a project
+            operationId: listTunnelledMcpServers
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListTunnelledMcpServersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listServers tunnelledMcp
+            tags:
+                - tunnelledMcp
+            x-speakeasy-name-override: listServers
+            x-speakeasy-react-hook:
+                name: TunnelledMcpServers
+    /rpc/tunnelledMcp.updateServer:
+        post:
+            description: Update a tunnelled MCP server source
+            operationId: updateTunnelledMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateTunnelledMcpServerForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TunnelledMcpServer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateServer tunnelledMcp
+            tags:
+                - tunnelledMcp
+            x-speakeasy-name-override: updateServer
+            x-speakeasy-react-hook:
+                name: UpdateTunnelledMcpServer
     /rpc/usage.createCheckout:
         post:
             description: Create a checkout link for upgrading to the business plan
@@ -36586,6 +37110,10 @@ components:
                     type: string
                     description: The ID of the toolset to use as the backend
                     format: uuid
+                tunnelled_mcp_server_id:
+                    type: string
+                    description: The ID of the tunnelled MCP server to use as the backend
+                    format: uuid
                 user_session_issuer_id:
                     type: string
                     description: The ID of the user session issuer that gates OAuth-based MCP client authentication. When set, MCP clients are required to authenticate against this issuer before connecting.
@@ -36597,7 +37125,7 @@ components:
                         - disabled
                         - private
                         - public
-            description: Form for creating a new MCP server. Exactly one of remote_mcp_server_id or toolset_id must be provided.
+            description: Form for creating a new MCP server. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be provided.
             required:
                 - name
                 - visibility
@@ -37363,6 +37891,27 @@ components:
                 - target_ref
                 - target_display
                 - config
+        CreateTunnelledMcpServerForm:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: Human-readable display name for the tunnelled MCP server
+            description: Form for creating a new tunnelled MCP server source
+            required:
+                - name
+        CreateTunnelledMcpServerResult:
+            type: object
+            properties:
+                server:
+                    $ref: '#/components/schemas/TunnelledMcpServer'
+                tunnel_key:
+                    type: string
+                    description: Plaintext tunnel key. Only returned at creation time.
+            description: Created tunnelled MCP server plus the one-time tunnel key
+            required:
+                - server
+                - tunnel_key
         CreateUserSessionIssuerForm:
             type: object
             properties:
@@ -41161,6 +41710,16 @@ components:
                     description: The trigger instances for the current project.
             required:
                 - triggers
+        ListTunnelledMcpServersResult:
+            type: object
+            properties:
+                tunnelled_mcp_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TunnelledMcpServer'
+            description: Result type for listing tunnelled MCP servers
+            required:
+                - tunnelled_mcp_servers
         ListUserGrantsResult:
             type: object
             properties:
@@ -41636,6 +42195,10 @@ components:
                 toolset_id:
                     type: string
                     description: The ID of the toolset used as the backend
+                    format: uuid
+                tunnelled_mcp_server_id:
+                    type: string
+                    description: The ID of the tunnelled MCP server used as the backend
                     format: uuid
                 updated_at:
                     type: string
@@ -45976,6 +46539,11 @@ components:
                     description: The contracted monthly tokens under management limit. Omit to clear.
                     format: int64
                     minimum: 0
+                tunnelled_mcp_server_limit:
+                    type: integer
+                    description: The contracted tunnelled MCP server source cap. Omit to use the plan default.
+                    format: int64
+                    minimum: 0
             required:
                 - billing_cycle_anchor_day
         SetMcpMetadataRequestBody:
@@ -46853,6 +47421,10 @@ components:
                 tokens:
                     type: integer
                     description: Tokens under management consumed during the active billing cycle
+                    format: int64
+                tunnelled_mcp_server_limit:
+                    type: integer
+                    description: The contracted tunnelled MCP server source cap, if one has been configured
                     format: int64
             required:
                 - period_start
@@ -48174,6 +48746,130 @@ components:
                     minimum: 0
             required:
                 - id
+        TunnelledMcpConnection:
+            type: object
+            properties:
+                active_consumer_sessions:
+                    type: integer
+                    description: Number of MCP consumer sessions currently pinned to this tunnel connection
+                    format: int64
+                active_substreams:
+                    type: integer
+                    description: Number of active request substreams on this tunnel session
+                    format: int64
+                agent_version:
+                    type: string
+                    description: Tunnel agent version reported by the connection
+                connected_at:
+                    type: string
+                    description: When this tunnel session connected
+                    format: date-time
+                last_heartbeat_at:
+                    type: string
+                    description: Most recent heartbeat observed for this tunnel session
+                    format: date-time
+                metadata:
+                    type: object
+                    description: User-provided tunnel metadata reported by the agent
+                    additionalProperties:
+                        type: string
+                remote_addr:
+                    type: string
+                    description: Remote address reported by the gateway
+                service_id:
+                    type: string
+                    description: Customer-declared stable ID for the MCP service behind this tunnel connection
+                service_slug:
+                    type: string
+                    description: Customer-declared slug for the MCP service behind this tunnel connection
+                service_version:
+                    type: string
+                    description: Customer-declared version of the MCP service behind this tunnel connection
+                session_id:
+                    type: string
+                    description: Gateway session ID for a live tunnel connection
+            required:
+                - session_id
+                - service_id
+                - service_slug
+                - service_version
+                - connected_at
+                - last_heartbeat_at
+                - active_substreams
+                - active_consumer_sessions
+                - metadata
+        TunnelledMcpServer:
+            type: object
+            properties:
+                active_connection_count:
+                    type: integer
+                    description: Number of active tunnel connections currently visible in Redis
+                    format: int64
+                active_consumer_session_count:
+                    type: integer
+                    description: Total MCP consumer sessions currently pinned across active tunnel connections
+                    format: int64
+                agent_version:
+                    type: string
+                    description: Most recent agent version reported by the tunnel
+                connection_status:
+                    type: string
+                    description: Derived live connection status for a tunnelled MCP server source
+                    enum:
+                        - connected
+                        - inactive
+                        - never_connected
+                connections:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TunnelledMcpConnection'
+                    description: Live tunnel connections currently visible in Redis
+                created_at:
+                    type: string
+                    description: When the tunnelled MCP server source was created
+                    format: date-time
+                id:
+                    type: string
+                    description: The ID of the tunnelled MCP server
+                    format: uuid
+                key_prefix:
+                    type: string
+                    description: Non-secret prefix of the tunnel key
+                last_seen_at:
+                    type: string
+                    description: Most recent persisted heartbeat timestamp
+                    format: date-time
+                name:
+                    type: string
+                    description: Human-readable name for the tunnelled MCP server
+                project_id:
+                    type: string
+                    description: The project ID this tunnelled MCP server belongs to
+                    format: uuid
+                status:
+                    type: string
+                    description: Stored lifecycle status for a tunnelled MCP server source
+                    enum:
+                        - created
+                        - active
+                        - revoked
+                updated_at:
+                    type: string
+                    description: When the tunnelled MCP server source was last updated
+                    format: date-time
+            description: A customer-hosted MCP server connected through a tunnel
+            required:
+                - id
+                - project_id
+                - name
+                - key_prefix
+                - status
+                - connection_status
+                - connections
+                - active_connection_count
+                - active_consumer_session_count
+                - created_at
+                - updated_at
         UpdateAssistantForm:
             type: object
             properties:
@@ -48384,6 +49080,10 @@ components:
                     type: string
                     description: The ID of the toolset to use as the backend
                     format: uuid
+                tunnelled_mcp_server_id:
+                    type: string
+                    description: The ID of the tunnelled MCP server to use as the backend
+                    format: uuid
                 user_session_issuer_id:
                     type: string
                     description: The ID of the user session issuer that gates OAuth-based MCP client authentication. Omit to disable issuer-gated OAuth.
@@ -48395,7 +49095,7 @@ components:
                         - disabled
                         - private
                         - public
-            description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
+            description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
             required:
                 - id
                 - visibility
@@ -49104,6 +49804,20 @@ components:
                     description: The opaque target reference.
             required:
                 - id
+        UpdateTunnelledMcpServerForm:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the tunnelled MCP server to update
+                    format: uuid
+                name:
+                    type: string
+                    description: Human-readable display name for the tunnelled MCP server
+            description: Form for updating a tunnelled MCP server source
+            required:
+                - id
+                - name
         UpdateUserSessionIssuerForm:
             type: object
             properties:
@@ -49904,6 +50618,8 @@ tags:
       description: Managed toolsets for gram AI consumers.
     - name: triggers
       description: Manage project trigger instances and static trigger definitions.
+    - name: tunnelledMcp
+      description: Managing customer-hosted tunnelled MCP servers.
     - name: usage
       description: Read usage for gram.
     - name: userSessionClients

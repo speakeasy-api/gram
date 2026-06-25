@@ -2,9 +2,12 @@ package remotemcp
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -108,9 +111,16 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	requestBytes := int64(len(call.Request.Params.Arguments))
 
 	var outputBytes int64
+	var outputContent []byte
 	if call.RemoteMessage != nil {
 		if rpcResp, ok := call.RemoteMessage.Message.(*jsonrpc.Response); ok && rpcResp != nil {
 			outputBytes = int64(len(rpcResp.Result))
+			outputContent = rpcResp.Result
+		}
+	}
+	if len(outputContent) == 0 && call.Error != nil {
+		if encodedError, err := json.Marshal(call.Error); err == nil {
+			outputContent = encodedError
 		}
 	}
 
@@ -138,7 +148,10 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	logAttrs.RecordStatusCode(statusCode)
 	logAttrs.RecordRequestBody(requestBytes)
 	logAttrs.RecordResponseBody(outputBytes)
+	logAttrs.RecordRequestBodyContent(call.Request.Params.Arguments)
+	logAttrs.RecordResponseBodyContent(outputContent)
 	logAttrs.RecordTraceContext(ctx)
+	ensureTraceContext(logAttrs)
 	if durationMissing {
 		logAttrs[DurationMissingKey] = true
 	}
@@ -171,6 +184,21 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	go i.telemLogger.Log(context.WithoutCancel(ctx), params)
 
 	return nil
+}
+
+func ensureTraceContext(logAttrs tm.HTTPLogAttributes) {
+	if _, ok := logAttrs[attr.TraceIDKey]; !ok {
+		traceID := strings.ReplaceAll(uuid.NewString(), "-", "")
+		logAttrs[attr.TraceIDKey] = traceID
+	}
+	if _, ok := logAttrs[attr.SpanIDKey]; !ok {
+		traceID, _ := logAttrs[attr.TraceIDKey].(string)
+		if len(traceID) >= 16 {
+			logAttrs[attr.SpanIDKey] = traceID[:16]
+			return
+		}
+		logAttrs[attr.SpanIDKey] = strings.ReplaceAll(uuid.NewString(), "-", "")[:16]
+	}
 }
 
 // upstreamStatusCode returns the upstream HTTP status code for a tools/call

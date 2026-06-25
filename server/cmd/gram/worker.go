@@ -63,6 +63,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 func newWorkerCommand() *cli.Command {
@@ -715,6 +716,7 @@ func newWorkerCommand() *cli.Command {
 				// runtime request through mcp.Service, so the factory is
 				// intentionally nil here.
 				nil,
+				route.NewMemory(),
 			)
 
 			chatClient := chat.NewAgenticChatClient(

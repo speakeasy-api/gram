@@ -42,6 +42,7 @@ var All = []outbox.EventRegistration{
 	TemplateV1,
 	ToolsetV1,
 	TriggerInstanceV1,
+	TunnelledMcpServerV1,
 	UserSessionClientV1,
 	UserSessionConsentV1,
 	UserSessionIssuerV1,

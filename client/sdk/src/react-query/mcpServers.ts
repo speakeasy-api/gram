@@ -56,7 +56,7 @@ export type McpServersQueryError =
  * listMcpServers mcpServers
  *
  * @remarks
- * List MCP servers for a project. Accepts optional remote_mcp_server_id or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the two backends are mutually exclusive.
+ * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
  */
 export function useMcpServers(
   request?: operations.ListMcpServersRequest | undefined,
@@ -79,7 +79,7 @@ export function useMcpServers(
  * listMcpServers mcpServers
  *
  * @remarks
- * List MCP servers for a project. Accepts optional remote_mcp_server_id or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the two backends are mutually exclusive.
+ * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
  */
 export function useMcpServersSuspense(
   request?: operations.ListMcpServersRequest | undefined,
@@ -103,6 +103,7 @@ export function setMcpServersData(
   queryKeyBase: [
     parameters: {
       remoteMcpServerId?: string | undefined;
+      tunnelledMcpServerId?: string | undefined;
       toolsetId?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
@@ -121,6 +122,7 @@ export function invalidateMcpServers(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       remoteMcpServerId?: string | undefined;
+      tunnelledMcpServerId?: string | undefined;
       toolsetId?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
