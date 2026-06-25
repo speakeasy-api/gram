@@ -110,7 +110,7 @@ func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFi
 // sessionScalarHaving matches a chat when any of its rows carries one of the
 // requested scalar values. A requested "" (the "(unset)" bucket) matches chats
 // that have no non-empty value for the dimension on any row, mirroring how the
-// session's effective value is computed with anyIf(col, col != '').
+// session's effective value is computed with anyIf over non-empty values.
 func sessionScalarHaving(expr string, values []string) squirrel.Sqlizer {
 	hasEmpty := false
 	nonEmpty := make([]string, 0, len(values))
