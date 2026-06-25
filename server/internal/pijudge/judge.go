@@ -160,6 +160,8 @@ func (c *Engine) Classify(ctx context.Context, req ra.PromptInjectionRequest) (_
 	}
 
 	ctx, span := c.tracer.Start(ctx, "risk.prompt_injection.classify", trace.WithAttributes(
+		attr.OrganizationID(req.OrgID),
+		attr.ProjectID(req.ProjectID),
 		attribute.Int(spanAttrBatchSize, n),
 		attribute.String(spanAttrStage, stageJudge),
 	))
