@@ -124,9 +124,7 @@ func blockReason(reason string) string {
 func blockFeedbackSentiment(feedback pgtype.Text) *string {
 	switch feedback.String {
 	case "up", "down":
-		if feedback.Valid {
-			return conv.PtrEmpty(feedback.String)
-		}
+		return conv.PtrEmpty(feedback.String)
 	}
 	return nil
 }
