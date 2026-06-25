@@ -65,6 +65,8 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.ClaudePayload, e
 	case "Stop":
 		return hookevents.NewStop(base, hookevents.StopParams{
 			LastAssistantMessage: conv.PtrValOr(payload.LastAssistantMessage, ""),
+			InputTokens:          0,
+			OutputTokens:         0,
 		}), nil
 	case "SessionEnd":
 		return hookevents.NewSessionEnd(base, hookevents.SessionEndParams{

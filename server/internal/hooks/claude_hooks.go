@@ -776,10 +776,10 @@ func (s *Service) persistHook(ctx context.Context, hookEvent hookevents.Eventer,
 
 	metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 
-	if s.telemetryWriter == nil {
+	if s.eventWriter == nil {
 		return
 	}
-	if err := s.telemetryWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: "", SkipChat: false}); err != nil {
+	if err := s.eventWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: "", SkipChat: false}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to persist Claude hook event", attr.SlogError(err))
 	}
 }
@@ -1174,10 +1174,10 @@ func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen
 		s.logger.WarnContext(ctx, "failed to normalize Claude block hook for telemetry", attr.SlogError(err))
 		return
 	}
-	if s.telemetryWriter == nil {
+	if s.eventWriter == nil {
 		return
 	}
-	if err := s.telemetryWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: reason, SkipChat: true}); err != nil {
+	if err := s.eventWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: reason, SkipChat: true}); err != nil {
 		s.logger.WarnContext(ctx, "failed to write Claude block telemetry", attr.SlogError(err))
 	}
 }

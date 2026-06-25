@@ -1,10 +1,12 @@
 package hookevents
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
@@ -71,6 +73,14 @@ type Eventer interface {
 	HookEvent() Event
 }
 
+type SpanAttributer interface {
+	AppendSpanAttributes(attrs map[attr.Key]any)
+}
+
+// JSONString marks provider-supplied JSON text that is already serialized and
+// should be stored as-is in telemetry attributes.
+type JSONString string
+
 func (e Event) HookEvent() Event {
 	return e
 }
@@ -118,24 +128,30 @@ func NewBeforeToolUse(event Event, params BeforeToolUseParams) *BeforeToolUse {
 
 type BeforeMCPExecution struct {
 	Event
-	ToolCallID string
-	ToolName   string
-	ToolInput  any
+	ToolCallID   string
+	ToolName     string
+	ToolInput    any
+	ToolSource   string
+	MCPServerURL string
 }
 
 type BeforeMCPExecutionParams struct {
-	ToolCallID string
-	ToolName   string
-	ToolInput  any
+	ToolCallID   string
+	ToolName     string
+	ToolInput    any
+	ToolSource   string
+	MCPServerURL string
 }
 
 func NewBeforeMCPExecution(event Event, params BeforeMCPExecutionParams) *BeforeMCPExecution {
 	event.Type = EventTypeBeforeMCPExecution
 	return &BeforeMCPExecution{
-		Event:      event,
-		ToolCallID: params.ToolCallID,
-		ToolName:   params.ToolName,
-		ToolInput:  params.ToolInput,
+		Event:        event,
+		ToolCallID:   params.ToolCallID,
+		ToolName:     params.ToolName,
+		ToolInput:    params.ToolInput,
+		ToolSource:   params.ToolSource,
+		MCPServerURL: params.MCPServerURL,
 	}
 }
 
@@ -190,24 +206,33 @@ func NewAfterToolUseFailure(event Event, params AfterToolUseFailureParams) *Afte
 
 type AfterMCPExecution struct {
 	Event
-	ToolCallID string
-	ToolName   string
-	ToolOutput any
+	ToolCallID   string
+	ToolName     string
+	ToolOutput   any
+	ToolSource   string
+	MCPServerURL string
+	IsError      bool
 }
 
 type AfterMCPExecutionParams struct {
-	ToolCallID string
-	ToolName   string
-	ToolOutput any
+	ToolCallID   string
+	ToolName     string
+	ToolOutput   any
+	ToolSource   string
+	MCPServerURL string
+	IsError      bool
 }
 
 func NewAfterMCPExecution(event Event, params AfterMCPExecutionParams) *AfterMCPExecution {
 	event.Type = EventTypeAfterMCPExecution
 	return &AfterMCPExecution{
-		Event:      event,
-		ToolCallID: params.ToolCallID,
-		ToolName:   params.ToolName,
-		ToolOutput: params.ToolOutput,
+		Event:        event,
+		ToolCallID:   params.ToolCallID,
+		ToolName:     params.ToolName,
+		ToolOutput:   params.ToolOutput,
+		ToolSource:   params.ToolSource,
+		MCPServerURL: params.MCPServerURL,
+		IsError:      params.IsError,
 	}
 }
 
@@ -256,18 +281,24 @@ func NewUserPromptSubmit(event Event, params UserPromptSubmitParams) *UserPrompt
 
 type AfterAgentResponse struct {
 	Event
-	Text string
+	Text         string
+	InputTokens  int
+	OutputTokens int
 }
 
 type AfterAgentResponseParams struct {
-	Text string
+	Text         string
+	InputTokens  int
+	OutputTokens int
 }
 
 func NewAfterAgentResponse(event Event, params AfterAgentResponseParams) *AfterAgentResponse {
 	event.Type = EventTypeAfterAgentResponse
 	return &AfterAgentResponse{
-		Event: event,
-		Text:  params.Text,
+		Event:        event,
+		Text:         params.Text,
+		InputTokens:  params.InputTokens,
+		OutputTokens: params.OutputTokens,
 	}
 }
 
@@ -294,10 +325,14 @@ func NewAfterAgentThought(event Event, params AfterAgentThoughtParams) *AfterAge
 type Stop struct {
 	Event
 	LastAssistantMessage string
+	InputTokens          int
+	OutputTokens         int
 }
 
 type StopParams struct {
 	LastAssistantMessage string
+	InputTokens          int
+	OutputTokens         int
 }
 
 func NewStop(event Event, params StopParams) *Stop {
@@ -305,6 +340,8 @@ func NewStop(event Event, params StopParams) *Stop {
 	return &Stop{
 		Event:                event,
 		LastAssistantMessage: params.LastAssistantMessage,
+		InputTokens:          params.InputTokens,
+		OutputTokens:         params.OutputTokens,
 	}
 }
 
@@ -346,4 +383,105 @@ func NewNotification(event Event, params NotificationParams) *Notification {
 		Message:          params.Message,
 		Title:            params.Title,
 	}
+}
+
+func (e *BeforeToolUse) AppendSpanAttributes(attrs map[attr.Key]any) {
+	appendToolCallAttributes(attrs, e.ToolCallID, e.ToolName)
+	appendValue(attrs, attr.GenAIToolCallArgumentsKey, e.ToolInput)
+}
+
+func (e *BeforeMCPExecution) AppendSpanAttributes(attrs map[attr.Key]any) {
+	appendToolCallAttributes(attrs, e.ToolCallID, mcpDisplayToolName(e.ToolName))
+	appendMCPAttributes(attrs, e.ToolSource, e.MCPServerURL)
+	appendValue(attrs, attr.GenAIToolCallArgumentsKey, e.ToolInput)
+}
+
+func (e *PermissionRequest) AppendSpanAttributes(attrs map[attr.Key]any) {
+	appendToolCallAttributes(attrs, e.ToolCallID, e.ToolName)
+	appendValue(attrs, attr.GenAIToolCallArgumentsKey, e.ToolInput)
+}
+
+func (e *AfterToolUse) AppendSpanAttributes(attrs map[attr.Key]any) {
+	appendToolCallAttributes(attrs, e.ToolCallID, e.ToolName)
+	appendValue(attrs, attr.GenAIToolCallResultKey, e.ToolOutput)
+}
+
+func (e *AfterMCPExecution) AppendSpanAttributes(attrs map[attr.Key]any) {
+	appendToolCallAttributes(attrs, e.ToolCallID, mcpDisplayToolName(e.ToolName))
+	appendMCPAttributes(attrs, e.ToolSource, e.MCPServerURL)
+	appendValue(attrs, attr.GenAIToolCallResultKey, e.ToolOutput)
+	if e.IsError {
+		if raw, ok := e.ToolOutput.(JSONString); ok {
+			attrs[attr.HookErrorKey] = string(raw)
+		} else {
+			appendValue(attrs, attr.HookErrorKey, e.ToolOutput)
+		}
+	}
+}
+
+func (e *AfterToolUseFailure) AppendSpanAttributes(attrs map[attr.Key]any) {
+	appendToolCallAttributes(attrs, e.ToolCallID, e.ToolName)
+	appendValue(attrs, attr.HookErrorKey, e.Error)
+	attrs[attr.HookIsInterruptKey] = e.IsInterrupt
+	appendValue(attrs, attr.GenAIToolCallResultKey, e.Error)
+}
+
+func (e *UserPromptSubmit) AppendSpanAttributes(attrs map[attr.Key]any) {
+	if e.Prompt != "" {
+		attrs[attr.LogBodyKey] = e.Prompt
+	}
+}
+
+func (e *AfterAgentResponse) AppendSpanAttributes(attrs map[attr.Key]any) {
+	if e.Text != "" {
+		attrs[attr.LogBodyKey] = e.Text
+	}
+	appendTokenUsage(attrs, e.InputTokens, e.OutputTokens)
+}
+
+func (e *Stop) AppendSpanAttributes(attrs map[attr.Key]any) {
+	if e.LastAssistantMessage != "" {
+		attrs[attr.LogBodyKey] = e.LastAssistantMessage
+	}
+	appendTokenUsage(attrs, e.InputTokens, e.OutputTokens)
+}
+
+func appendToolCallAttributes(attrs map[attr.Key]any, toolCallID, toolName string) {
+	if toolCallID != "" {
+		attrs[attr.GenAIToolCallIDKey] = toolCallID
+	}
+	if toolName != "" {
+		attrs[attr.ToolNameKey] = toolName
+	}
+}
+
+func appendMCPAttributes(attrs map[attr.Key]any, toolSource, serverURL string) {
+	if toolSource != "" {
+		attrs[attr.ToolCallSourceKey] = toolSource
+	}
+	if serverURL != "" {
+		attrs[attr.MCPServerURLKey] = serverURL
+	}
+}
+
+func appendValue(attrs map[attr.Key]any, key attr.Key, value any) {
+	if value != nil {
+		attrs[key] = value
+	}
+}
+
+func appendTokenUsage(attrs map[attr.Key]any, inputTokens, outputTokens int) {
+	if inputTokens > 0 {
+		attrs[attr.GenAIUsageInputTokensKey] = inputTokens
+	}
+	if outputTokens > 0 {
+		attrs[attr.GenAIUsageOutputTokensKey] = outputTokens
+	}
+}
+
+func mcpDisplayToolName(toolName string) string {
+	if stripped, ok := strings.CutPrefix(toolName, "MCP:"); ok {
+		return stripped
+	}
+	return toolName
 }

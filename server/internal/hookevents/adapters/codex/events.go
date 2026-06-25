@@ -63,6 +63,8 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CodexPayload, ev
 	case "Stop":
 		return hookevents.NewStop(base, hookevents.StopParams{
 			LastAssistantMessage: conv.PtrValOr(payload.LastAssistantMessage, ""),
+			InputTokens:          0,
+			OutputTokens:         0,
 		}), nil
 	default:
 		return nil, nil

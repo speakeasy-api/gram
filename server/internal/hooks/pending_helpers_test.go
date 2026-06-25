@@ -270,7 +270,7 @@ func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing
 	assert.NotContains(t, attrs, attr.UserEmailKey)
 	assert.NotContains(t, attrs, attr.UserIDKey)
 	assert.Empty(t, metadata.UserID)
-	assert.Equal(t, userID, ti.service.telemetryWriter.resolveUserByEmail(ctx, userEmail, authCtx.ActiveOrganizationID))
+	assert.Equal(t, userID, ti.service.eventWriter.resolveUserByEmail(ctx, userEmail, authCtx.ActiveOrganizationID))
 }
 
 func TestPersistToolCallEvent_PreservesEmailWhenUserIDUnresolved(t *testing.T) {
@@ -298,7 +298,7 @@ func TestPersistToolCallEvent_PreservesEmailWhenUserIDUnresolved(t *testing.T) {
 		SessionID:     &sessionID,
 	}, time.Now())
 	require.NoError(t, err)
-	err = ti.service.telemetryWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: "", SkipChat: true})
+	err = ti.service.eventWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: "", SkipChat: true})
 	require.NoError(t, err)
 	require.Empty(t, metadata.UserID, "test email should not resolve to a connected user")
 

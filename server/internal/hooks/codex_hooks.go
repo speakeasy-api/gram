@@ -175,10 +175,10 @@ func (s *Service) recordCodexHook(ctx context.Context, hookEvent any, payload *g
 	if hookEvent == nil {
 		return
 	}
-	if s.telemetryWriter == nil {
+	if s.eventWriter == nil {
 		return
 	}
-	if err := s.telemetryWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: blockReason, SkipChat: false}); err != nil {
+	if err := s.eventWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: blockReason, SkipChat: false}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to persist Codex hook event", attr.SlogError(err))
 	}
 }

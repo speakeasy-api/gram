@@ -34,9 +34,9 @@ type WriteOptions struct {
 	SkipChat    bool
 }
 
-// TelemetryWriter is the hook-specific write boundary. It fans a canonical
+// EventWriter is the hook-specific write boundary. It fans a canonical
 // hook event into ClickHouse telemetry and chat storage from one type switch.
-type TelemetryWriter struct {
+type EventWriter struct {
 	logger             *slog.Logger
 	db                 *pgxpool.Pool
 	cache              cache.Cache
@@ -46,7 +46,7 @@ type TelemetryWriter struct {
 	chatTitleGenerator ChatTitleGenerator
 }
 
-func NewTelemetryWriter(
+func NewEventWriter(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	cacheAdapter cache.Cache,
@@ -54,9 +54,9 @@ func NewTelemetryWriter(
 	chatWriter *chat.ChatMessageWriter,
 	productFeatures ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
-) *TelemetryWriter {
-	return &TelemetryWriter{
-		logger:             logger.With(attr.SlogComponent("hook_telemetry_writer")),
+) *EventWriter {
+	return &EventWriter{
+		logger:             logger.With(attr.SlogComponent("hook_event_writer")),
 		db:                 db,
 		cache:              cacheAdapter,
 		telemetryLogger:    telemetryLogger,
@@ -66,7 +66,7 @@ func NewTelemetryWriter(
 	}
 }
 
-func (w *TelemetryWriter) Write(ctx context.Context, ev any, metadata *SessionMetadata, opts WriteOptions) error {
+func (w *EventWriter) Write(ctx context.Context, ev any, metadata *SessionMetadata, opts WriteOptions) error {
 	if ev == nil || metadata == nil {
 		return nil
 	}
@@ -92,10 +92,13 @@ func (w *TelemetryWriter) Write(ctx context.Context, ev any, metadata *SessionMe
 			return nil
 		})
 	}
-	return eg.Wait()
+	if err := eg.Wait(); err != nil {
+		return fmt.Errorf("write hook event: %w", err)
+	}
+	return nil
 }
 
-func (w *TelemetryWriter) writeTelemetry(ctx context.Context, ev any, metadata *SessionMetadata, blockReason string) error {
+func (w *EventWriter) writeTelemetry(ctx context.Context, ev any, metadata *SessionMetadata, blockReason string) error {
 	if w.telemetryLogger == nil {
 		return nil
 	}
@@ -110,7 +113,7 @@ func (w *TelemetryWriter) writeTelemetry(ctx context.Context, ev any, metadata *
 		return fmt.Errorf("parse project id: %w", err)
 	}
 
-	attrs, toolName := w.telemetryAttributes(ctx, ev, event, metadata, blockReason)
+	attrs, toolName := w.buildAttributes(ctx, ev, event, metadata, blockReason)
 	timestamp := event.Timestamp
 	if timestamp.IsZero() {
 		timestamp = time.Now()
@@ -133,16 +136,39 @@ func (w *TelemetryWriter) writeTelemetry(ctx context.Context, ev any, metadata *
 	return nil
 }
 
-func (w *TelemetryWriter) telemetryAttributes(ctx context.Context, ev any, event hookevents.Event, metadata *SessionMetadata, blockReason string) (map[attr.Key]any, string) {
+func (w *EventWriter) buildAttributes(ctx context.Context, ev any, event hookevents.Event, metadata *SessionMetadata, blockReason string) (map[attr.Key]any, string) {
+	attrs := baseSpanAttributes(event, metadata, blockReason)
+	defaultLogBody, _ := attrs[attr.LogBodyKey].(string)
+
+	if spanAttrs, ok := ev.(hookevents.SpanAttributer); ok {
+		spanAttrs.AppendSpanAttributes(attrs)
+	}
+	if event.Provider == hookevents.ProviderCodex && event.ConversationID != "" {
+		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(event.ConversationID)
+	}
+	if correlationID, ok := attrs[attr.GenAIToolCallIDKey].(string); ok && correlationID != "" {
+		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(correlationID)
+	}
+
+	w.enrichToolAttrs(ctx, attrs, event, metadata)
+	w.stringifyJSONAttributes(ctx, attrs)
+
+	toolName, _ := attrs[attr.ToolNameKey].(string)
+	if attrs[attr.LogBodyKey] == defaultLogBody {
+		attrs[attr.LogBodyKey] = hookLogBody(persistedHookEventName(event), toolName)
+	}
+	return attrs, toolName
+}
+
+func baseSpanAttributes(event hookevents.Event, metadata *SessionMetadata, blockReason string) map[attr.Key]any {
 	hookEventName := persistedHookEventName(event)
-	toolName := hookToolName(ev)
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey:    string(telemetry.EventSourceHook),
-		attr.ToolNameKey:       toolName,
+		attr.ToolNameKey:       "",
 		attr.HookEventKey:      hookEventName,
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        generateTraceID(),
-		attr.LogBodyKey:        hookLogBody(hookEventName, toolName),
+		attr.LogBodyKey:        hookLogBody(hookEventName, ""),
 		attr.ProjectIDKey:      metadata.ProjectID,
 		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     hookSource(event, metadata),
@@ -159,91 +185,28 @@ func (w *TelemetryWriter) telemetryAttributes(ctx context.Context, ev any, event
 	if event.HookHostname != "" {
 		attrs[attr.HookHostnameKey] = event.HookHostname
 	}
-	if correlationID := toolCorrelationID(ev, event); correlationID != "" {
-		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(correlationID)
-		attrs[attr.GenAIToolCallIDKey] = correlationID
-	}
-
-	w.applyTypedTelemetryAttrs(ctx, attrs, ev)
-	if event.Provider == hookevents.ProviderClaude {
-		w.applyClaudeToolAttrs(ctx, attrs, event, hookToolName(ev))
-	}
-	w.applyRawTelemetryAttrs(ctx, attrs, ev, event, metadata)
-
-	if storedToolName, ok := attrs[attr.ToolNameKey].(string); ok {
-		toolName = storedToolName
-	}
-	return attrs, toolName
+	return attrs
 }
 
-func (w *TelemetryWriter) applyTypedTelemetryAttrs(ctx context.Context, attrs map[attr.Key]any, ev any) {
-	switch ev := ev.(type) {
-	case *hookevents.BeforeToolUse:
-		setStringified(ctx, attrs, attr.GenAIToolCallArgumentsKey, ev.ToolInput, w.logger, "marshal hook tool input")
-	case *hookevents.BeforeMCPExecution:
-		setStringified(ctx, attrs, attr.GenAIToolCallArgumentsKey, ev.ToolInput, w.logger, "marshal hook mcp input")
-	case *hookevents.PermissionRequest:
-		setStringified(ctx, attrs, attr.GenAIToolCallArgumentsKey, ev.ToolInput, w.logger, "marshal hook permission input")
-	case *hookevents.AfterToolUse:
-		setStringified(ctx, attrs, attr.GenAIToolCallResultKey, ev.ToolOutput, w.logger, "marshal hook tool output")
-	case *hookevents.AfterMCPExecution:
-		setStringified(ctx, attrs, attr.GenAIToolCallResultKey, ev.ToolOutput, w.logger, "marshal hook mcp output")
-	case *hookevents.AfterToolUseFailure:
-		attrs[attr.HookErrorKey] = ev.Error
-		attrs[attr.HookIsInterruptKey] = ev.IsInterrupt
-		setStringified(ctx, attrs, attr.GenAIToolCallResultKey, ev.Error, w.logger, "marshal hook tool error")
-	case *hookevents.UserPromptSubmit:
-		if ev.Prompt != "" {
-			attrs[attr.LogBodyKey] = ev.Prompt
-		}
-	case *hookevents.AfterAgentResponse:
-		if ev.Text != "" {
-			attrs[attr.LogBodyKey] = ev.Text
-		}
-	case *hookevents.Stop:
-		if ev.LastAssistantMessage != "" {
-			attrs[attr.LogBodyKey] = ev.LastAssistantMessage
-		}
-	}
-}
-
-func (w *TelemetryWriter) applyRawTelemetryAttrs(ctx context.Context, attrs map[attr.Key]any, ev any, event hookevents.Event, metadata *SessionMetadata) {
-	switch payload := event.Raw.(type) {
-	case *gen.CursorPayload:
-		applyHookHostnameAttr(attrs, payload.HookHostname)
-		if payload.Model != nil && *payload.Model != "" {
-			attrs[attr.GenAIResponseModelKey] = *payload.Model
-		}
-		if payload.InputTokens != nil {
-			attrs[attr.GenAIUsageInputTokensKey] = *payload.InputTokens
-		}
-		if payload.OutputTokens != nil {
-			attrs[attr.GenAIUsageOutputTokensKey] = *payload.OutputTokens
-		}
-		if correlationID := cursorToolCorrelationID(payload); correlationID != "" {
-			attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(correlationID)
-			attrs[attr.GenAIToolCallIDKey] = correlationID
-		}
-		w.applyCursorToolAttrs(attrs, payload)
-	case *gen.CodexPayload:
-		if payload.Model != nil && *payload.Model != "" {
-			attrs[attr.GenAIResponseModelKey] = *payload.Model
-		}
-		if metadata.SessionID != "" {
-			attrs[attr.GenAIConversationIDKey] = metadata.SessionID
-			attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(metadata.SessionID)
-		}
-		w.applyCodexToolAttrs(ctx, attrs, payload, metadata)
-	default:
-		_ = ev
-	}
-}
-
-func (w *TelemetryWriter) applyClaudeToolAttrs(ctx context.Context, attrs map[attr.Key]any, event hookevents.Event, toolName string) {
+func (w *EventWriter) enrichToolAttrs(ctx context.Context, attrs map[attr.Key]any, event hookevents.Event, metadata *SessionMetadata) {
+	toolName, _ := attrs[attr.ToolNameKey].(string)
 	if server, fn, ok := toolref.AttributeTool(toolName); ok {
 		attrs[attr.ToolCallSourceKey] = server
 		attrs[attr.ToolNameKey] = fn
 	}
+
+	switch event.Provider {
+	case hookevents.ProviderClaude:
+		w.enrichClaudeMCPInventoryAttrs(ctx, attrs, event, toolName)
+	case hookevents.ProviderCodex:
+		w.enrichCodexMCPInventoryAttrs(ctx, attrs, metadata, toolName)
+	case hookevents.ProviderCursor:
+		// Cursor MCP events carry URL/command-derived source directly from normalization.
+	default:
+	}
+}
+
+func (w *EventWriter) enrichClaudeMCPInventoryAttrs(ctx context.Context, attrs map[attr.Key]any, event hookevents.Event, toolName string) {
 	if parsed := parseClaudeToolName(toolName); parsed.IsMCP && event.ConversationID != "" {
 		if entries, err := w.getCachedMCPList(ctx, event.ConversationID); err == nil {
 			matched := matchCachedMCPEntry(entries, parsed.Server)
@@ -255,61 +218,27 @@ func (w *TelemetryWriter) applyClaudeToolAttrs(ctx context.Context, attrs map[at
 	}
 }
 
-func (w *TelemetryWriter) applyCursorToolAttrs(attrs map[attr.Key]any, payload *gen.CursorPayload) {
-	toolName := conv.PtrValOr(payload.ToolName, "")
-	hookEvent, ok := parseCursorHookEvent(payload.HookEventName)
-	if strings.HasPrefix(toolName, "mcp__") {
-		if server, fn, ok := toolref.AttributeTool(toolName); ok {
-			attrs[attr.ToolCallSourceKey] = server
-			attrs[attr.ToolNameKey] = fn
-		}
+func (w *EventWriter) enrichCodexMCPInventoryAttrs(ctx context.Context, attrs map[attr.Key]any, metadata *SessionMetadata, toolName string) {
+	server, _, ok := toolref.AttributeTool(toolName)
+	if !ok || metadata.SessionID == "" {
+		return
 	}
-	if ok && (hookEvent == HookEventBeforeMCPExecution || hookEvent == HookEventAfterMCPExecution) {
-		if source := cursorMCPToolSource(payload); source != "" {
-			attrs[attr.ToolCallSourceKey] = source
-		}
-		if stripped, ok := strings.CutPrefix(toolName, "MCP:"); ok {
-			attrs[attr.ToolNameKey] = stripped
-		}
-		if payload.URL != nil && *payload.URL != "" {
-			attrs[attr.MCPServerURLKey] = *payload.URL
-		}
-	}
-	if payload.ResultJSON != nil && *payload.ResultJSON != "" {
-		attrs[attr.GenAIToolCallResultKey] = *payload.ResultJSON
-		var parsed struct {
-			IsError bool `json:"isError"`
-		}
-		if err := json.Unmarshal([]byte(*payload.ResultJSON), &parsed); err == nil && parsed.IsError {
-			attrs[attr.HookErrorKey] = *payload.ResultJSON
-		}
-	}
-}
-
-func (w *TelemetryWriter) applyCodexToolAttrs(ctx context.Context, attrs map[attr.Key]any, payload *gen.CodexPayload, metadata *SessionMetadata) {
-	toolName := conv.PtrValOr(payload.ToolName, "")
-	if server, fn, ok := toolref.AttributeTool(toolName); ok {
-		attrs[attr.ToolCallSourceKey] = server
-		attrs[attr.ToolNameKey] = fn
-		if metadata.SessionID != "" {
-			if entries, err := w.getCachedMCPList(ctx, metadata.SessionID); err == nil {
-				matched := matchCodexCachedMCPEntry(entries, toolName)
-				if matched != nil && matched.ToolPrefix != "" {
-					if rest, ok := strings.CutPrefix(toolName, "mcp__"+matched.ToolPrefix+"__"); ok {
-						attrs[attr.ToolCallSourceKey] = matched.ToolPrefix
-						attrs[attr.ToolNameKey] = rest
-					}
-				}
-				if v := resolvedMCPMatch(matched, server); v != "" {
-					attrs[attr.MCPMatchKey] = v
-				}
-				applyMCPInventoryAttrs(attrs, matched)
+	if entries, err := w.getCachedMCPList(ctx, metadata.SessionID); err == nil {
+		matched := matchCodexCachedMCPEntry(entries, toolName)
+		if matched != nil && matched.ToolPrefix != "" {
+			if rest, ok := strings.CutPrefix(toolName, "mcp__"+matched.ToolPrefix+"__"); ok {
+				attrs[attr.ToolCallSourceKey] = matched.ToolPrefix
+				attrs[attr.ToolNameKey] = rest
 			}
 		}
+		if v := resolvedMCPMatch(matched, server); v != "" {
+			attrs[attr.MCPMatchKey] = v
+		}
+		applyMCPInventoryAttrs(attrs, matched)
 	}
 }
 
-func (w *TelemetryWriter) writeChatProjection(ctx context.Context, ev any, metadata *SessionMetadata) error {
+func (w *EventWriter) writeChatProjection(ctx context.Context, ev any, metadata *SessionMetadata) error {
 	event, ok := canonicalEvent(ev)
 	if !ok {
 		return nil
@@ -355,7 +284,7 @@ func (w *TelemetryWriter) writeChatProjection(ctx context.Context, ev any, metad
 	}
 }
 
-func (w *TelemetryWriter) writeToolCallRequest(ctx context.Context, event hookevents.Event, metadata *SessionMetadata, chatID, projectID uuid.UUID, toolCallID, toolName string, toolInput any) error {
+func (w *EventWriter) writeToolCallRequest(ctx context.Context, event hookevents.Event, metadata *SessionMetadata, chatID, projectID uuid.UUID, toolCallID, toolName string, toolInput any) error {
 	toolCalls := []map[string]any{{
 		"id":   toolCallID,
 		"type": "function",
@@ -396,7 +325,7 @@ func (w *TelemetryWriter) writeToolCallRequest(ctx context.Context, event hookev
 	return w.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, w.defaultChatTitleForEvent(ctx, event))
 }
 
-func (w *TelemetryWriter) writeToolResult(ctx context.Context, event hookevents.Event, metadata *SessionMetadata, chatID, projectID uuid.UUID, toolCallID string, output any) error {
+func (w *EventWriter) writeToolResult(ctx context.Context, event hookevents.Event, metadata *SessionMetadata, chatID, projectID uuid.UUID, toolCallID string, output any) error {
 	content := marshalToJSON(output)
 	if content == "" {
 		return nil
@@ -429,7 +358,7 @@ func (w *TelemetryWriter) writeToolResult(ctx context.Context, event hookevents.
 	return w.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, w.defaultChatTitleForEvent(ctx, event))
 }
 
-func (w *TelemetryWriter) writeUserMessage(ctx context.Context, event hookevents.Event, metadata *SessionMetadata, chatID, projectID uuid.UUID, content string) error {
+func (w *EventWriter) writeUserMessage(ctx context.Context, event hookevents.Event, metadata *SessionMetadata, chatID, projectID uuid.UUID, content string) error {
 	if content == "" {
 		return nil
 	}
@@ -437,7 +366,7 @@ func (w *TelemetryWriter) writeUserMessage(ctx context.Context, event hookevents
 	return w.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, w.defaultChatTitleForEvent(ctx, event))
 }
 
-func (w *TelemetryWriter) writeAssistantMessage(ctx context.Context, event hookevents.Event, metadata *SessionMetadata, chatID, projectID uuid.UUID, content string) error {
+func (w *EventWriter) writeAssistantMessage(ctx context.Context, event hookevents.Event, metadata *SessionMetadata, chatID, projectID uuid.UUID, content string) error {
 	if content == "" {
 		return nil
 	}
@@ -458,7 +387,7 @@ func (w *TelemetryWriter) writeAssistantMessage(ctx context.Context, event hooke
 	return nil
 }
 
-func (w *TelemetryWriter) baseChatMessageParams(event hookevents.Event, metadata *SessionMetadata, chatID, projectID uuid.UUID, role, content string) chatRepo.CreateChatMessageParams {
+func (w *EventWriter) baseChatMessageParams(event hookevents.Event, metadata *SessionMetadata, chatID, projectID uuid.UUID, role, content string) chatRepo.CreateChatMessageParams {
 	return chatRepo.CreateChatMessageParams{
 		ChatID:           chatID,
 		ProjectID:        projectID,
@@ -486,7 +415,7 @@ func (w *TelemetryWriter) baseChatMessageParams(event hookevents.Event, metadata
 	}
 }
 
-func (w *TelemetryWriter) insertMessageWithFallbackUpsert(
+func (w *EventWriter) insertMessageWithFallbackUpsert(
 	ctx context.Context,
 	metadata *SessionMetadata,
 	chatID uuid.UUID,
@@ -538,7 +467,7 @@ func (w *TelemetryWriter) insertMessageWithFallbackUpsert(
 	return nil
 }
 
-func (w *TelemetryWriter) defaultChatTitleForEvent(ctx context.Context, event hookevents.Event) string {
+func (w *EventWriter) defaultChatTitleForEvent(ctx context.Context, event hookevents.Event) string {
 	switch event.Provider {
 	case hookevents.ProviderCursor:
 		return activities.DefaultCursorChatTitle
@@ -551,7 +480,7 @@ func (w *TelemetryWriter) defaultChatTitleForEvent(ctx context.Context, event ho
 	}
 }
 
-func (w *TelemetryWriter) defaultClaudeChatTitleForSession(ctx context.Context, sessionID string) string {
+func (w *EventWriter) defaultClaudeChatTitleForSession(ctx context.Context, sessionID string) string {
 	if sessionID == "" || w.cache == nil {
 		return activities.DefaultClaudeAmbiguous
 	}
@@ -569,7 +498,7 @@ func (w *TelemetryWriter) defaultClaudeChatTitleForSession(ctx context.Context, 
 	}
 }
 
-func (w *TelemetryWriter) backfillLastUserPromptID(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID, additionalData map[string]any) error {
+func (w *EventWriter) backfillLastUserPromptID(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID, additionalData map[string]any) error {
 	lastUserPromptID := claudeLastUserPromptIDFromAdditionalData(additionalData)
 	if lastUserPromptID == "" {
 		return nil
@@ -585,7 +514,7 @@ func (w *TelemetryWriter) backfillLastUserPromptID(ctx context.Context, chatID u
 	return nil
 }
 
-func (w *TelemetryWriter) resolveUserByEmail(ctx context.Context, email, orgID string) string {
+func (w *EventWriter) resolveUserByEmail(ctx context.Context, email, orgID string) string {
 	lookup := conv.NormalizeEmail(email)
 	if lookup == "" {
 		return ""
@@ -607,7 +536,7 @@ func (w *TelemetryWriter) resolveUserByEmail(ctx context.Context, email, orgID s
 	return ""
 }
 
-func (w *TelemetryWriter) getCachedMCPList(ctx context.Context, sessionID string) ([]MCPServerEntry, error) {
+func (w *EventWriter) getCachedMCPList(ctx context.Context, sessionID string) ([]MCPServerEntry, error) {
 	var entries []MCPServerEntry
 	if w.cache == nil {
 		return entries, errors.New("cache is not configured")
@@ -691,8 +620,17 @@ func hookLogBody(hookEventName, toolName string) string {
 	return fmt.Sprintf("Tool: %s, Hook: %s", toolName, hookEventName)
 }
 
+func (w *EventWriter) stringifyJSONAttributes(ctx context.Context, attrs map[attr.Key]any) {
+	setStringified(ctx, attrs, attr.GenAIToolCallArgumentsKey, attrs[attr.GenAIToolCallArgumentsKey], w.logger, "marshal hook tool input")
+	setStringified(ctx, attrs, attr.GenAIToolCallResultKey, attrs[attr.GenAIToolCallResultKey], w.logger, "marshal hook tool output")
+}
+
 func setStringified(ctx context.Context, attrs map[attr.Key]any, key attr.Key, value any, logger *slog.Logger, message string) {
 	if value == nil {
+		return
+	}
+	if raw, ok := value.(hookevents.JSONString); ok {
+		attrs[key] = string(raw)
 		return
 	}
 	jsonBytes, err := json.Marshal(value)
@@ -730,14 +668,10 @@ func toolCorrelationID(ev any, event hookevents.Event) string {
 			return ev.ToolCallID
 		}
 	}
-	switch payload := event.Raw.(type) {
-	case *gen.CursorPayload:
-		return cursorToolCorrelationID(payload)
-	case *gen.CodexPayload:
-		return conv.PtrValOr(payload.ToolName, "")
-	default:
-		return ""
+	if event.Provider == hookevents.ProviderCodex {
+		return hookToolName(ev)
 	}
+	return ""
 }
 
 func afterMCPExecutionOutput(ev *hookevents.AfterMCPExecution) any {

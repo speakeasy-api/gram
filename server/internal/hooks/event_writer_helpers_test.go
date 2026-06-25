@@ -21,7 +21,7 @@ func telemetryAttrsForEvent(t *testing.T, ctx context.Context, ti *testInstance,
 	t.Helper()
 	event, ok := canonicalEvent(ev)
 	require.True(t, ok)
-	attrs, _ := ti.service.telemetryWriter.telemetryAttributes(ctx, ev, event, metadata, "")
+	attrs, _ := ti.service.eventWriter.buildAttributes(ctx, ev, event, metadata, "")
 	return attrs
 }
 
@@ -51,7 +51,7 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 	if !ok {
 		return map[attr.Key]any{}
 	}
-	attrs, _ := s.telemetryWriter.telemetryAttributes(ctx, ev, event, metadata, "")
+	attrs, _ := s.eventWriter.buildAttributes(ctx, ev, event, metadata, "")
 	return attrs
 }
 
@@ -64,7 +64,7 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 	if !ok {
 		return map[attr.Key]any{}
 	}
-	attrs, _ := s.telemetryWriter.telemetryAttributes(ctx, ev, event, metadata, "")
+	attrs, _ := s.eventWriter.buildAttributes(ctx, ev, event, metadata, "")
 	return attrs
 }
 

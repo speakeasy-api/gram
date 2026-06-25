@@ -2,9 +2,6 @@ package hooks
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -228,8 +225,8 @@ func (s *Service) recordCursorHook(ctx context.Context, hookEvent any, payload *
 	// connection the moment the response lands). Run detached so the
 	// response returns promptly and the work completes in the background.
 	go func() {
-		if s.telemetryWriter != nil {
-			if err := s.telemetryWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: blockReason, SkipChat: false}); err != nil {
+		if s.eventWriter != nil {
+			if err := s.eventWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: blockReason, SkipChat: false}); err != nil {
 				s.logger.ErrorContext(ctx, "failed to persist Cursor hook event", attr.SlogError(err))
 			}
 		}
@@ -318,47 +315,6 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 	s.logger.DebugContext(ctx, "Wrote Cursor metrics to ClickHouse",
 		attr.SlogEvent("cursor_metrics_written"),
 	)
-}
-
-// cursorToolCorrelationID returns a stable identifier that links a tool call's
-// request and result events together. Cursor's beforeMCPExecution /
-// afterMCPExecution payloads do not include a tool_use_id, and even
-// preToolUse / postToolUse can omit one. We derive a deterministic ID from
-// (conversation_id, generation_id, tool_name, tool_input) — which is identical
-// for the request and result of the same call. A real tool_use_id is preferred
-// when present.
-//
-// Limitation: an agent that issues the *same* tool with *identical* inputs
-// twice within a single generation will collide into one correlation ID. If
-// that becomes a problem we can switch to a Redis-backed FIFO of correlation
-// IDs keyed by the same tuple.
-func cursorToolCorrelationID(payload *gen.CursorPayload) string {
-	if payload.ToolUseID != nil && *payload.ToolUseID != "" {
-		return *payload.ToolUseID
-	}
-
-	convID := conv.PtrValOr(payload.ConversationID, "")
-	genID := conv.PtrValOr(payload.GenerationID, "")
-	toolName := strings.TrimPrefix(conv.PtrValOr(payload.ToolName, ""), "MCP:")
-	if convID == "" && genID == "" && toolName == "" && payload.ToolInput == nil {
-		return ""
-	}
-
-	var b strings.Builder
-	b.WriteString(convID)
-	b.WriteByte('|')
-	b.WriteString(genID)
-	b.WriteByte('|')
-	b.WriteString(toolName)
-	b.WriteByte('|')
-	if payload.ToolInput != nil {
-		if jsonBytes, err := json.Marshal(payload.ToolInput); err == nil {
-			b.Write(jsonBytes)
-		}
-	}
-
-	sum := sha256.Sum256([]byte(b.String()))
-	return "cursor_synth_" + hex.EncodeToString(sum[:8])
 }
 
 // cursorMCPToolSource derives a tool_source string for beforeMCPExecution /

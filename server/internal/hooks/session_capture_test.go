@@ -23,7 +23,7 @@ func (alwaysEnabledFeatures) IsFeatureEnabled(_ context.Context, _ string, _ pro
 
 func enableSessionCapture(ti *testInstance) {
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.telemetryWriter.productFeatures = alwaysEnabledFeatures{}
+	ti.service.eventWriter.productFeatures = alwaysEnabledFeatures{}
 }
 
 func writeClaudeHookForTest(t *testing.T, ctx context.Context, ti *testInstance, payload *gen.ClaudePayload, metadata *SessionMetadata) {
@@ -31,7 +31,7 @@ func writeClaudeHookForTest(t *testing.T, ctx context.Context, ti *testInstance,
 	ev, err := ti.service.normalizeClaudeHookEvent(ctx, payload, time.Now())
 	require.NoError(t, err)
 	require.NotNil(t, ev)
-	require.NoError(t, ti.service.telemetryWriter.Write(ctx, ev, metadata, WriteOptions{BlockReason: "", SkipChat: false}))
+	require.NoError(t, ti.service.eventWriter.Write(ctx, ev, metadata, WriteOptions{BlockReason: "", SkipChat: false}))
 }
 
 // TestClaudeHookSource_ConsistentAcrossAllWrites asserts that every

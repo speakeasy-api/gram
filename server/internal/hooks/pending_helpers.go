@@ -111,15 +111,6 @@ func (s *Service) resolveUserByEmail(ctx context.Context, email, orgID string) s
 	return ""
 }
 
-func applyHookHostnameAttr(attrs map[attr.Key]any, hostname *string) {
-	if hostname == nil {
-		return
-	}
-	if value := strings.TrimSpace(*hostname); value != "" {
-		attrs[attr.HookHostnameKey] = value
-	}
-}
-
 // MetricDataPoint represents a single metric aggregated across all data points for a model+session
 type MetricDataPoint struct {
 	SessionID           string
