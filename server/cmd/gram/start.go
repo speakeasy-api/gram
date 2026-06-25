@@ -1030,6 +1030,7 @@ func newStartCommand() *cli.Command {
 				logger,
 				db,
 				tracerProvider,
+				meterProvider,
 				telemLogger,
 				sessionManager,
 				hooksCache,
