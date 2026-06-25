@@ -217,6 +217,81 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	require.Equal(t, chatID1, byDuration.Sessions[0].GramChatID)
 }
 
+func TestListSessions_CrossRowDirectoryAndHookFilters(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Now().UTC()
+	chatID := uuid.NewString()
+
+	// Usage row carries cost + hook_source but NOT the directory attribute
+	// (mirrors production: usage/OTEL rows aren't enriched with WorkOS attrs).
+	insertListSessionCompletionLog(t, ctx, listSessionLogParams{
+		projectID:    projectID,
+		timestamp:    now.Add(-10 * time.Minute),
+		chatID:       chatID,
+		email:        "sagar@example.com",
+		department:   "", // unset on the cost-bearing row
+		roles:        []string{"dev"},
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  100,
+		outputTokens: 50,
+		totalTokens:  150,
+		cost:         2.5,
+	})
+	// Tool row carries the directory attribute (department) but an empty
+	// hook_source — the inverse of the usage row, in the same chat.
+	insertListSessionToolLog(t, ctx, listSessionLogParams{
+		projectID:  projectID,
+		timestamp:  now.Add(-9 * time.Minute),
+		chatID:     chatID,
+		email:      "sagar@example.com",
+		department: "Executive",
+		roles:      []string{"dev"},
+		hookSource: "", // unset on the directory-enriched row
+		statusCode: 200,
+		toolURN:    "tools:http:petstore:listPets",
+	})
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// department_name lives on one row, hook_source on another. A per-row AND
+	// would return nothing; the per-chat HAVING must still match the chat.
+	res := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		From: from,
+		To:   to,
+		Filters: []*gen.QueryFilter{
+			{Dimension: "email", Values: []string{"sagar@example.com"}},
+			{Dimension: "department_name", Values: []string{"Executive"}},
+			{Dimension: "hook_source", Values: []string{"claude-code"}},
+		},
+		SortBy: "total_cost",
+		Limit:  10,
+	}, func(res *gen.ListSessionsResult) bool {
+		return len(res.Sessions) == 1 && res.Sessions[0].GramChatID == chatID
+	})
+
+	require.Len(t, res.Sessions, 1)
+	session := res.Sessions[0]
+	require.Equal(t, chatID, session.GramChatID)
+	// Full session cost is reported, not just the cost on rows matching a filter.
+	require.InDelta(t, 2.5, session.TotalCost, 1e-9)
+	require.Equal(t, int64(1), session.ToolCallCount)
+	require.Equal(t, int64(1), session.MessageCount)
+}
+
 func TestListSessions_CursorPagination(t *testing.T) {
 	t.Parallel()
 
