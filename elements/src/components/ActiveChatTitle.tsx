@@ -10,6 +10,11 @@ import {
 
 export interface ActiveChatTitleProps {
   className?: string;
+  /**
+   * Title text size. `sm` suits the compact dock header; `base` matches the
+   * larger full-screen conversation header. Defaults to `sm`.
+   */
+  size?: "sm" | "base";
 }
 
 /**
@@ -27,11 +32,13 @@ export interface ActiveChatTitleProps {
  */
 export function ActiveChatTitle({
   className,
+  size = "sm",
 }: ActiveChatTitleProps): React.JSX.Element {
   const api = useAssistantApi();
   const title = useAssistantState((s) => s.threadListItem.title);
   const remoteId = useAssistantState((s) => s.threadListItem.remoteId);
 
+  const textClass = size === "base" ? "text-base" : "text-sm";
   const persisted = Boolean(remoteId);
   const currentTitle = title?.trim() ?? "";
   const displayTitle = currentTitle || FALLBACK_TITLE;
@@ -101,7 +108,10 @@ export function ActiveChatTitle({
         }}
         aria-label="Chat title"
         className={cn(
-          "min-w-0 rounded border bg-transparent px-1.5 py-0.5 text-sm font-medium text-foreground outline-none focus-visible:ring-1",
+          // max-w-sm keeps the edit box a comfortable width instead of
+          // stretching across a wide header; the dock is narrower than this cap.
+          "max-w-sm min-w-0 rounded border bg-transparent px-1.5 py-0.5 font-medium text-foreground outline-none focus-visible:ring-1",
+          textClass,
           className,
         )}
       />
@@ -119,7 +129,10 @@ export function ActiveChatTitle({
         onClick={startEditing}
         disabled={!persisted}
         title={persisted ? "Rename conversation" : undefined}
-        className="min-w-0 truncate rounded px-1.5 py-0.5 text-left text-sm font-medium text-foreground hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent"
+        className={cn(
+          "min-w-0 truncate rounded px-1.5 py-0.5 text-left font-medium text-foreground hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent",
+          textClass,
+        )}
       >
         {displayTitle}
       </button>

@@ -9,7 +9,7 @@ import {
 import { Link, Outlet, useNavigate, useParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useAssistantRuntime, useAssistantState } from "@assistant-ui/react";
-import { Chat } from "@gram-ai/elements";
+import { ActiveChatTitle, Chat } from "@gram-ai/elements";
 import {
   ChevronLeft,
   Home,
@@ -645,9 +645,11 @@ export function ChatConversation(): ReactElement {
         >
           <ChevronLeft className="size-4" />
         </Link>
-        <div className="text-foreground min-w-0 flex-1 truncate text-left text-base font-medium">
-          {assistantReady && <ChatConversationTitle />}
-        </div>
+        {assistantReady ? (
+          <ActiveChatTitle size="base" className="min-w-0 flex-1" />
+        ) : (
+          <div className="min-w-0 flex-1" />
+        )}
         <button
           type="button"
           onClick={startNewChat}
@@ -666,17 +668,6 @@ export function ChatConversation(): ReactElement {
       </div>
     </div>
   );
-}
-
-/**
- * The active conversation's title for the header. Reads the runtime's thread
- * list item, which assistant-ui updates live when the backend `generateTitle`
- * stream lands — so it flips from "New chat" to the generated title on its own.
- * Must render inside the shared runtime (gated on assistantReady).
- */
-function ChatConversationTitle(): ReactElement {
-  const title = useAssistantState(({ threadListItem }) => threadListItem.title);
-  return <>{title || "New chat"}</>;
 }
 
 function ConversationBody({
