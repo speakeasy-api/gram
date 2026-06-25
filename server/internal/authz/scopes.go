@@ -36,6 +36,7 @@ const (
 	ScopeEnvironmentBlockedWrite Scope = "environment:blocked_write"
 	ScopeRiskPolicyEvaluate      Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass        Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
+	ScopeChatRead                Scope = "chat:read"
 )
 
 type scopeVisibility int
@@ -60,6 +61,7 @@ var adminScopes = []Scope{
 	ScopeMCPConnect,
 	ScopeEnvironmentRead,
 	ScopeEnvironmentWrite,
+	ScopeChatRead,
 }
 
 // scopeVisibilityByScope is the source of truth for whether a scope is exposed
@@ -87,6 +89,7 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeEnvironmentBlockedWrite: scopeVisibilityInternal,
 	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
 	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
+	ScopeChatRead:                scopeVisibilityUserVisible,
 }
 
 var memberScopes = []Scope{
@@ -160,6 +163,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeEnvironmentBlockedWrite: {ScopeEnvironmentBlockedRead},
 	ScopeRiskPolicyEvaluate:      nil,
 	ScopeRiskPolicyBypass:        nil,
+	ScopeChatRead:                nil,
 }
 
 // scopeExclusions maps a checked base scope to the direct blocklist scope that
@@ -187,6 +191,7 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeEnvironmentBlockedWrite: "",
 	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
 	ScopeRiskPolicyBypass:        "",
+	ScopeChatRead:                "",
 }
 
 // ExclusionScopeFor returns the scope that stores exception grants for the

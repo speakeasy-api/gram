@@ -22,6 +22,7 @@ const (
 	SelectorKeyProjectID      = "project_id"
 	SelectorKeyServerURL      = "server_url"
 	SelectorKeyServerIdentity = "server_identity"
+	SelectorKeyUserID         = "user_id"
 )
 
 // Matches reports whether this (grant) selector satisfies the given check
@@ -78,6 +79,8 @@ func ResourceKindForScope(scope Scope) string {
 		return ResourceKindEnvironment
 	case "risk_policy":
 		return ResourceKindRiskPolicy
+	case "chat":
+		return ResourceKindChat
 	default:
 		return ResourceKindWildcard
 	}
@@ -114,6 +117,9 @@ var allowedSelectorKeys = map[string]map[string]bool{
 	ResourceKindRiskPolicy: {
 		SelectorKeyServerURL:      true,
 		SelectorKeyServerIdentity: true,
+	},
+	ResourceKindChat: {
+		SelectorKeyUserID: true,
 	},
 }
 

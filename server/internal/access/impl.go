@@ -259,6 +259,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeEnvironmentBlockedWrite, description: "Store exceptions for environment write access.", resourceType: "environment"},
 		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
+		{scope: authz.ScopeChatRead, description: "Read agent session transcripts. Members can read their own sessions; admins can read all.", resourceType: "chat"},
 	}
 	result := make([]*gen.ScopeDefinition, 0, len(scopes))
 	for _, scope := range scopes {
@@ -486,6 +487,9 @@ func genSelectorToAuthz(s *gen.Selector) authz.Selector {
 	if s.ServerURL != nil {
 		sel["server_url"] = *s.ServerURL
 	}
+	if s.UserID != nil {
+		sel["user_id"] = *s.UserID
+	}
 	return sel
 }
 
@@ -497,6 +501,7 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 		Tool:         nil,
 		ProjectID:    nil,
 		ServerURL:    nil,
+		UserID:       nil,
 	}
 	if v, ok := sel["disposition"]; ok {
 		s.Disposition = &v
@@ -509,6 +514,9 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 	}
 	if v, ok := sel["server_url"]; ok {
 		s.ServerURL = &v
+	}
+	if v, ok := sel["user_id"]; ok {
+		s.UserID = &v
 	}
 	return s
 }
@@ -536,6 +544,7 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeEnvironmentWrite), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
+		{Scope: string(authz.ScopeChatRead), Selectors: nil},
 	}
 }
 

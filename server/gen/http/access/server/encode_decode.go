@@ -5116,6 +5116,7 @@ func marshalAccessSelectorToSelectorResponseBody(v *access.Selector) *SelectorRe
 		Tool:         v.Tool,
 		ProjectID:    v.ProjectID,
 		ServerURL:    v.ServerURL,
+		UserID:       v.UserID,
 	}
 
 	return res
@@ -5154,6 +5155,7 @@ func unmarshalSelectorRequestBodyToAccessSelector(v *SelectorRequestBody) *acces
 		Tool:         v.Tool,
 		ProjectID:    v.ProjectID,
 		ServerURL:    v.ServerURL,
+		UserID:       v.UserID,
 	}
 
 	return res

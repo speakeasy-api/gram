@@ -32,6 +32,7 @@ export const ResourceKind = {
   Org: "org",
   Environment: "environment",
   RiskPolicy: "risk_policy",
+  Chat: "chat",
   Wildcard: "*",
 } as const;
 /**
@@ -67,6 +68,10 @@ export type Selector = {
    * Specific tool name filter (MCP scopes only).
    */
   tool?: string | undefined;
+  /**
+   * Chat session owner filter (chat scopes only). Constrains a chat:read grant to sessions owned by this user; '*' or absent means any owner.
+   */
+  userId?: string | undefined;
 };
 
 /** @internal */
@@ -92,6 +97,7 @@ export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
     resource_kind: ResourceKind$inboundSchema,
     server_url: z.optional(z.string()),
     tool: z.optional(z.string()),
+    user_id: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -99,6 +105,7 @@ export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
       "resource_id": "resourceId",
       "resource_kind": "resourceKind",
       "server_url": "serverUrl",
+      "user_id": "userId",
     });
   }),
 );
@@ -110,6 +117,7 @@ export type Selector$Outbound = {
   resource_kind: string;
   server_url?: string | undefined;
   tool?: string | undefined;
+  user_id?: string | undefined;
 };
 
 /** @internal */
@@ -124,6 +132,7 @@ export const Selector$outboundSchema: z.ZodMiniType<
     resourceKind: ResourceKind$outboundSchema,
     serverUrl: z.optional(z.string()),
     tool: z.optional(z.string()),
+    userId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -131,6 +140,7 @@ export const Selector$outboundSchema: z.ZodMiniType<
       resourceId: "resource_id",
       resourceKind: "resource_kind",
       serverUrl: "server_url",
+      userId: "user_id",
     });
   }),
 );

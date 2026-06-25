@@ -104,15 +104,19 @@ func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
 	return ctx
 }
 
-// grantOrgAdmin returns a context carrying an org:admin RBAC grant for the
-// caller's active organization, with RBAC enforcement active (enterprise).
-// This is what a real customer org admin has — distinct from the platform-staff
-// users.admin flag the visibility gate used to read.
+// grantOrgAdmin returns a context carrying the grants a real customer org admin
+// holds, with RBAC enforcement active (enterprise): org:admin plus an
+// unrestricted chat:read (the admin system role includes both). chat:read is
+// what drives chat session visibility — org:admin alone no longer grants
+// see-all for chats.
 func grantOrgAdmin(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	return authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
+	return authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+	)
 }
 
 // externalUserCtx builds a context carrying an external-user AuthContext

@@ -17,6 +17,7 @@ import {
   useListChats,
 } from "@gram/client/react-query";
 import { Badge } from "@/components/ui/badge";
+import { Dialog } from "@/components/ui/dialog";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
@@ -501,6 +502,11 @@ function AgentSessionsPageContent({
   total: number;
   onDeleteChat: (chatId: string) => void;
 }) {
+  // Opening a session transcript is an audited access. Hold the clicked chat
+  // here and require explicit confirmation before launching the detail sheet so
+  // the reviewer acknowledges the access will be logged.
+  const [pendingChat, setPendingChat] = useState<ChatOverview | null>(null);
+
   if (isLogsDisabled) {
     return (
       <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
@@ -628,7 +634,7 @@ function AgentSessionsPageContent({
               <ChatLogsTable
                 chats={chats}
                 selectedChatId={selectedChat?.id}
-                onSelectChat={setSelectedChat}
+                onSelectChat={setPendingChat}
                 onDeleteChat={onDeleteChat}
                 isLoading={isLoading}
                 error={error}
@@ -657,6 +663,38 @@ function AgentSessionsPageContent({
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={pendingChat !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingChat(null);
+        }}
+      >
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Access agent session?</Dialog.Title>
+            <Dialog.Description>
+              Opening this session transcript is recorded in your
+              organization's audit log, including who accessed it and when.
+              Continue only if you need to review this session.
+            </Dialog.Description>
+          </Dialog.Header>
+          <Dialog.Footer>
+            <Dialog.Close asChild>
+              <Button variant="secondary">Cancel</Button>
+            </Dialog.Close>
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (pendingChat) setSelectedChat(pendingChat);
+                setPendingChat(null);
+              }}
+            >
+              Access session
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
 
       <ChatDetailSheet
         chatId={selectedChat?.id ?? null}

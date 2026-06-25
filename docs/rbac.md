@@ -80,8 +80,11 @@ const (
 	ScopeEnvironmentWrite   Scope = "environment:write"
 	ScopeRiskPolicyEvaluate Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass   Scope = "risk_policy:bypass"
+	ScopeChatRead           Scope = "chat:read"
 )
 ```
+
+`chat:read` protects agent session transcripts (`chat.load`). It carries a `user_id` selector dimension: a member holds a self-scoped grant (`chat:read` with `user_id=<their own id>`, injected per-request) that matches only sessions they own, while admins hold an unrestricted `chat:read` that matches any owner.
 
 That is deliberate. Adding a scope changes the product contract: it affects role management, the access API, generated SDK types, the dashboard, and tests. Prefer the small action vocabulary we already use: `read` for viewing or listing, `write` for mutation, and `connect` for runtime connection surfaces. New verbs should be rare. If an action needs multiple words, or describes a very specific operation, that is usually a sign that the behavior should be modeled with an existing scope plus selector dimensions instead of a new scope.
 
@@ -103,6 +106,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeEnvironmentWrite:   nil,
 	ScopeRiskPolicyEvaluate: nil,
 	ScopeRiskPolicyBypass:   nil,
+	ScopeChatRead:           nil,
 }
 ```
 
@@ -516,7 +520,8 @@ Selectors matter. A project-scoped feature needs the grant selector to match the
 | Open Environments list                                                              | `project:read` OR `project:write`           | Project ID                                                            | Creating a new environment is currently `project:write`; environment card clone actions are `environment:write`.                                                                                                 |
 | Open an Environment detail page                                                     | `project:read`                              | Project ID                                                            | Adding, editing, deleting, or filling variables is currently `project:write`. Environment-specific clone checks use `environment:read` for the source and `environment:write` for the destination.               |
 | Open Insights                                                                       | `project:read`                              | Project ID                                                            | Some nested insights routes accept `project:write` too, but `project:read` is the intended read grant.                                                                                                           |
-| Open Logs / Agent Sessions                                                          | `project:read`                              | Project ID                                                            | Project log tabs are read surfaces. Risk-event logs are `org:admin`.                                                                                                                                             |
+| Open Logs / Agent Sessions                                                          | `project:read`                              | Project ID                                                            | Project log tabs are read surfaces. Risk-event logs are `org:admin`. The list itself is `project:read`; which sessions are listed and which can be opened is further scoped by `chat:read` (next row).            |
+| Open an individual agent session transcript (`chat.load`)                           | `chat:read`                                 | Chat session, narrowed by `user_id`                                   | Members hold a self-scoped `chat:read` (matches only sessions they own); admins hold an unrestricted `chat:read` (any owner). Every open is recorded in the audit log (`chat_session:access`), and the dashboard shows an access-logged confirmation before launching the detail sheet. |
 | Open Project Settings                                                               | `project:write`                             | Project ID                                                            | Settings are treated as project mutation/admin surface.                                                                                                                                                          |
 | Open Secure pages: Risk Overview, Risk Policies, Approval Requests, Detection Rules | `org:admin`                                 | Organization ID                                                       | The dashboard pages are admin-only today. `risk_policy:evaluate` and `risk_policy:bypass` are policy runtime/request-flow scopes, not general dashboard page grants.                                             |
 

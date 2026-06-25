@@ -611,6 +611,9 @@ type Selector struct {
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.
 	ServerURL *string
+	// Chat session owner filter (chat scopes only). Constrains a chat:read grant
+	// to sessions owned by this user; '*' or absent means any owner.
+	UserID *string
 }
 
 // ShadowMCPAccessRule is the result type of the access service
