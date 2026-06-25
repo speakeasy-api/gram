@@ -67,6 +67,11 @@ func ListClientSessionsOrganizationRemoteSessionIssuersPath() string {
 	return "/rpc/organizationRemoteSessionIssuers.listClientSessions"
 }
 
+// CreateClientOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service createClient HTTP endpoint.
+func CreateClientOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.createClient"
+}
+
 // UpdateClientOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service updateClient HTTP endpoint.
 func UpdateClientOrganizationRemoteSessionIssuersPath() string {
 	return "/rpc/organizationRemoteSessionIssuers.updateClient"

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 3936bd1011d2a216cde459f28741da85
+  docChecksum: d60f318a772d62ba781e4c7a882cf861
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -190,6 +190,8 @@ trackedFiles:
     last_write_checksum: sha1:4e52065e876eb9f8819b59531abd9f03722b6b90
   docs/models/components/createmcpserverformvisibility.md:
     last_write_checksum: sha1:a75c05e8b8f0d0bd19a21755e3425a63cd4788fb
+  docs/models/components/createorganizationremotesessionclientform.md:
+    last_write_checksum: sha1:75dbd17a3eaf1fb199b3c96bb0fd12bae92df605
   docs/models/components/createpackageform.md:
     last_write_checksum: sha1:28dbea849b6af9ba006ab16afc9ed45fd96799e7
   docs/models/components/createpackageresult.md:
@@ -839,7 +841,9 @@ trackedFiles:
   docs/models/components/remotesession.md:
     last_write_checksum: sha1:f1dfcb231545e82b9ae388684bf6e90119799326
   docs/models/components/remotesessionclient.md:
-    last_write_checksum: sha1:9fde702cdc6dfff6a1fe92a559b424135225e4a5
+    last_write_checksum: sha1:58e1227cff6e4a2505bc4bac808629088c443b5b
+  docs/models/components/remotesessionclienttokenendpointauthmethod.md:
+    last_write_checksum: sha1:f52b7dfc2e0616ea489d5d1104a7de74b0c64f69
   docs/models/components/remotesessionissuer.md:
     last_write_checksum: sha1:c7c709fd0eb3b336a734f0459039dd63707c072c
   docs/models/components/remotesessionissuerdraft.md:
@@ -1109,7 +1113,7 @@ trackedFiles:
   docs/models/components/timeseriesbucket.md:
     last_write_checksum: sha1:0f9f31c7a4adb6abd079a9d1e46852e52bf5a942
   docs/models/components/tokenendpointauthmethod.md:
-    last_write_checksum: sha1:e67937fc02f219f4bd0de26448bb4aa2d3f2d9d2
+    last_write_checksum: sha1:5b0a99540ec9c2047766cc4bd6254e0d06ee539d
   docs/models/components/tokensundermanagement.md:
     last_write_checksum: sha1:9ef495d5be8bbaf753d373bc093a4ca1a92790c3
   docs/models/components/tool.md:
@@ -1572,6 +1576,10 @@ trackedFiles:
     last_write_checksum: sha1:6bc8a2701de24ae7ba8bea7fd689cb34a469ac7a
   docs/models/operations/createmcpserversecurityoption2.md:
     last_write_checksum: sha1:6499e94feb21fbf1b0cff01eee4163fce674fa88
+  docs/models/operations/createorganizationremotesessionclientrequest.md:
+    last_write_checksum: sha1:7e9230f6dd1f86da318cbfebee9ea612e07934e8
+  docs/models/operations/createorganizationremotesessionclientsecurity.md:
+    last_write_checksum: sha1:44639161c3e7ed21f2c06d7c40613a6ec7c35e7e
   docs/models/operations/createorganizationremotesessionissuerrequest.md:
     last_write_checksum: sha1:ad8612fe8edbcb51d5e8c0d82193d287fd5c99cf
   docs/models/operations/createorganizationremotesessionissuersecurity.md:
@@ -3503,7 +3511,7 @@ trackedFiles:
   docs/sdks/mcpservers/README.md:
     last_write_checksum: sha1:28eb584833ae3cbd82950f92292038055ff34b32
   docs/sdks/organizationremotesessionissuers/README.md:
-    last_write_checksum: sha1:ab97deacc7fc97f8689ad86c74383d059fabea3b
+    last_write_checksum: sha1:627a625174426cfc41d50371fa0cd124a2317cf1
   docs/sdks/organizations/README.md:
     last_write_checksum: sha1:d8eceef43b2a8f6f1511db17dc5a842435358c66
   docs/sdks/otelforwarding/README.md:
@@ -3842,6 +3850,8 @@ trackedFiles:
     last_write_checksum: sha1:4abc4cb95c5d3a93e5c2489246dd2543eae5df26
   src/funcs/mcpServersUpdate.ts:
     last_write_checksum: sha1:dabc64edc0ec1e51119fbb590f462d5e10c3162a
+  src/funcs/organizationRemoteSessionIssuersCreateClient.ts:
+    last_write_checksum: sha1:a7c7932419157d6a43d97ac95467626171e7ae58
   src/funcs/organizationRemoteSessionIssuersCreateIssuer.ts:
     last_write_checksum: sha1:54ffd8a313e7906e7a141f1d43a3fd52789e1516
   src/funcs/organizationRemoteSessionIssuersDeleteClient.ts:
@@ -4384,6 +4394,8 @@ trackedFiles:
     last_write_checksum: sha1:ea00ac9a2ec7800f2da800b94d7b30f4cad1993b
   src/models/components/createmcpserverform.ts:
     last_write_checksum: sha1:ac90ac88d40a5f285ae50741c5e2cf744c6f9544
+  src/models/components/createorganizationremotesessionclientform.ts:
+    last_write_checksum: sha1:8b3821efb61d38b863e474462549b3dd57fec680
   src/models/components/createpackageform.ts:
     last_write_checksum: sha1:7388e08e207a0244cd85e7152b8dd171e8023fc1
   src/models/components/createpackageresult.ts:
@@ -4597,7 +4609,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:03491273a226144cdb257c62f31bf97884ede5f6
+    last_write_checksum: sha1:3c0b6a2d329989521fba66be3fe7463abf2a7a89
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4943,7 +4955,7 @@ trackedFiles:
   src/models/components/remotesession.ts:
     last_write_checksum: sha1:93f1c9dba819d46dffc198584b6ab7999d032289
   src/models/components/remotesessionclient.ts:
-    last_write_checksum: sha1:1ba318e54bc5711aafc5d4a9c73a68956d0ca36e
+    last_write_checksum: sha1:689b6c88fcf930539a51414b707de4faa7ccaecf
   src/models/components/remotesessionissuer.ts:
     last_write_checksum: sha1:94298e5affa0bc72b1ba32a66a81b64d528bfe4c
   src/models/components/remotesessionissuerdraft.ts:
@@ -5386,6 +5398,8 @@ trackedFiles:
     last_write_checksum: sha1:7492f07bff1b823ebe04fdeef07f5a894f2f928f
   src/models/operations/createmcpserver.ts:
     last_write_checksum: sha1:5721f25dcb9e9f191ff322a4f540a6c20be09164
+  src/models/operations/createorganizationremotesessionclient.ts:
+    last_write_checksum: sha1:5096553b03d12091abc42d6b76387f1b62590490
   src/models/operations/createorganizationremotesessionissuer.ts:
     last_write_checksum: sha1:d8be7fdec38b09d544138ae43b0eefe60fc18826
   src/models/operations/createpackage.ts:
@@ -5650,7 +5664,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:67dea286cd4979b33e9782b38b2c4168bbe3aaf6
+    last_write_checksum: sha1:eac756e151e19ef977acd9c4c23de92fe4cb2466
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -6110,6 +6124,8 @@ trackedFiles:
     last_write_checksum: sha1:e845850829c623da603d46f97e4de3113c49a850
   src/react-query/createMcpServer.ts:
     last_write_checksum: sha1:fe7ef0a34561336267c4ac3e7c025a05723c8ab3
+  src/react-query/createOrganizationRemoteSessionClient.ts:
+    last_write_checksum: sha1:f396e747bb3a94b7127e37909d11683380bfd6f5
   src/react-query/createOrganizationRemoteSessionIssuer.ts:
     last_write_checksum: sha1:2753cd2c248f6727f52097554fe4918aab97130a
   src/react-query/createPackage.ts:
@@ -6336,7 +6352,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:10ad695634a87b8b9c4bb4dfc8e2aa6b02ab9019
+    last_write_checksum: sha1:4c07269b8101cdca3892ba5ba6e7b8866a553ff8
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -7021,7 +7037,7 @@ trackedFiles:
   src/sdk/mcpservers.ts:
     last_write_checksum: sha1:fd065545ec1b6e1d3f30779375f5ea4bfb0047e7
   src/sdk/organizationremotesessionissuers.ts:
-    last_write_checksum: sha1:df339353d4bb61965ce52597edd3f2d7623c8264
+    last_write_checksum: sha1:e6a750dbe0e4f551adb578c1ef2335bcbad8065a
   src/sdk/organizations.ts:
     last_write_checksum: sha1:52e6012bb229d10c24e26d655303bce57fb932a4
   src/sdk/otelforwarding.ts:
@@ -10686,6 +10702,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  createOrganizationRemoteSessionClient:
+    speakeasy-default-create-organization-remote-session-client:
+      requestBody:
+        application/json: {"client_id": "<id>", "remote_session_issuer_id": "61f009bc-53b7-4a1c-962d-e2f62f10f198"}
+      responses:
+        "200":
+          application/json: {"client_id": "<id>", "client_id_issued_at": "2026-08-22T03:26:47.526Z", "created_at": "2026-04-24T03:33:08.707Z", "id": "67dace45-f57e-404a-b23a-a4e1a403297b", "project_id": "acc8c9aa-e361-4543-943d-3945a1d58b4a", "remote_session_issuer_id": "d4a74053-aa70-4c0f-94e1-354d2007ca5e", "updated_at": "2025-05-23T19:39:03.554Z", "user_session_issuer_ids": ["b327ec4f-a78c-4e45-b756-d1a0ecdb08df", "16cfe5d4-d901-4acd-88f2-4bf3e6c1c091"]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getRiskBlock:
     speakeasy-default-get-risk-block:
       parameters:
