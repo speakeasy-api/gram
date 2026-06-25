@@ -1671,8 +1671,9 @@ def emit($tools_only; $agent_id; $agent_type):
 # Stop and SubagentStop carry the completed transcript. Conversation capture is
 # idempotent server-side (deduped by external_id), so these route to the batch
 # capture endpoint built from the transcript file rather than the per-event
-# path when jq is available. If extraction produces no batch, fall back to the
-# legacy per-event endpoint without the v2 header.
+# path when jq is available. If Stop extraction or delivery fails, fall back to
+# the legacy per-event endpoint without the v2 header. SubagentStop has no
+# legacy endpoint representation, so failed batch capture is best-effort.
 hook_event=""
 if command -v jq >/dev/null 2>&1; then
   hook_event=$(printf '%%s' "$payload" | jq -r '.hook_event_name // empty' 2>/dev/null || true)
@@ -1689,6 +1690,12 @@ if [ "$hook_event" = "Stop" ] || [ "$hook_event" = "SubagentStop" ]; then
         ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
         ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
         ${hook_version_header[@]+"${hook_version_header[@]}"}
+      http_code="$GRAM_HTTP_CODE"
+      if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 300 ] 2>/dev/null; then
+        exit 0
+      fi
+    fi
+    if [ "$hook_event" = "SubagentStop" ]; then
       exit 0
     fi
     hook_version_header=()
