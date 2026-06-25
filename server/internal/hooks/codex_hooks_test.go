@@ -181,6 +181,19 @@ func TestBuildCodexTelemetryAttributes_DerivesToolCallID(t *testing.T) {
 	require.True(t, ok)
 	require.NotEmpty(t, secondID)
 	require.NotEqual(t, firstID, secondID)
+
+	result := "ok"
+	post := ti.service.buildCodexTelemetryAttributes(t.Context(), &gen.CodexPayload{
+		HookEventName: "PostToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &email,
+		ToolName:      &toolName,
+		ToolInput:     map[string]any{"query": "urgent"},
+		ToolOutput:    map[string]any{"result": result},
+	}, metadata)
+	postID, ok := post[attr.GenAIToolCallIDKey].(string)
+	require.True(t, ok)
+	require.Equal(t, firstID, postID)
 }
 
 func TestCodex_SessionStart_CapturesMCPInventory(t *testing.T) {

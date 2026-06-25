@@ -95,12 +95,6 @@ func codexToolCorrelationID(payload *gen.CodexPayload) string {
 			b.Write(jsonBytes)
 		}
 	}
-	b.WriteByte('|')
-	if payload.ToolOutput != nil {
-		if jsonBytes, err := json.Marshal(payload.ToolOutput); err == nil {
-			b.Write(jsonBytes)
-		}
-	}
 
 	sum := sha256.Sum256([]byte(b.String()))
 	return "codex_synth_" + hex.EncodeToString(sum[:8])
