@@ -425,7 +425,15 @@ func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metad
 	}
 
 	for i := range payloads {
-		s.persistHook(ctx, &payloads[i], metadata)
+		hookEvent, err := s.normalizeClaudeHookEvent(ctx, &payloads[i], time.Now())
+		if err != nil {
+			s.logger.ErrorContext(ctx, "failed to normalize pending Claude hook for persistence", attr.SlogError(err))
+			continue
+		}
+		if hookEvent == nil {
+			continue
+		}
+		s.persistHook(ctx, hookEvent, metadata)
 	}
 
 	s.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending hooks", len(payloads)))

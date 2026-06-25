@@ -619,55 +619,12 @@ func (w *TelemetryWriter) getCachedMCPList(ctx context.Context, sessionID string
 }
 
 func canonicalEvent(ev any) (hookevents.Event, bool) {
-	switch ev := ev.(type) {
-	case *hookevents.SessionStart:
-		return ev.Event, true
-	case *hookevents.ConfigChange:
-		return ev.Event, true
-	case *hookevents.BeforeToolUse:
-		return ev.Event, true
-	case *hookevents.BeforeMCPExecution:
-		return ev.Event, true
-	case *hookevents.AfterToolUse:
-		return ev.Event, true
-	case *hookevents.AfterToolUseFailure:
-		return ev.Event, true
-	case *hookevents.AfterMCPExecution:
-		return ev.Event, true
-	case *hookevents.PermissionRequest:
-		return ev.Event, true
-	case *hookevents.UserPromptSubmit:
-		return ev.Event, true
-	case *hookevents.AfterAgentResponse:
-		return ev.Event, true
-	case *hookevents.AfterAgentThought:
-		return ev.Event, true
-	case *hookevents.Stop:
-		return ev.Event, true
-	case *hookevents.SessionEnd:
-		return ev.Event, true
-	case *hookevents.Notification:
-		return ev.Event, true
-	default:
-		return hookevents.Event{
-			BaseEvent: hookevents.BaseEvent{
-				Provider:     "",
-				Type:         "",
-				RawEventType: "",
-				Timestamp:    time.Time{},
-				AuthContext:  nil,
-				Context:      hookevents.EventContext{OrganizationID: "", ProjectID: uuid.Nil, User: hookevents.User{ID: "", Email: ""}},
-				Raw:          nil,
-			},
-			ConversationID: "",
-			TranscriptPath: "",
-			CWD:            "",
-			PermissionMode: "",
-			Model:          "",
-			HookHostname:   "",
-			AdditionalData: nil,
-		}, false
+	eventer, ok := ev.(hookevents.Eventer)
+	if !ok {
+		var event hookevents.Event
+		return event, false
 	}
+	return eventer.HookEvent(), true
 }
 
 func hookToolName(ev any) string {

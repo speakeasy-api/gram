@@ -277,8 +277,6 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 		ctx = withHookDuplicate(ctx)
 	}
 
-	s.recordHook(ctx, payload)
-
 	hookEvent, err := s.normalizeClaudeHookEvent(ctx, payload, time.Now())
 	if err != nil {
 		return nil, err
@@ -287,6 +285,8 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
 		return makeHookResult(payload.HookEventName), nil
 	}
+
+	s.recordHook(ctx, hookEvent)
 
 	// Route to appropriate handler based on hook type
 	var (
@@ -319,7 +319,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 	return result, err
 }
 
-func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.ClaudePayload, timestamp time.Time) (any, error) {
+func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.ClaudePayload, timestamp time.Time) (hookevents.Eventer, error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	eventContext := hookevents.EventContext{
 		OrganizationID: "",
@@ -343,7 +343,8 @@ func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.Cla
 		if err != nil {
 			return nil, fmt.Errorf("normalize claude hook event: %w", err)
 		}
-		return event, nil
+		eventer, _ := event.(hookevents.Eventer)
+		return eventer, nil
 	}
 
 	sessionID := conv.PtrValOr(payload.SessionID, "")
@@ -367,7 +368,11 @@ func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.Cla
 	if err != nil {
 		return nil, fmt.Errorf("normalize claude hook event: %w", err)
 	}
-	return event, nil
+	eventer, ok := event.(hookevents.Eventer)
+	if !ok {
+		return nil, nil
+	}
+	return eventer, nil
 }
 
 func claudePayloadFromEvent(ev hookevents.Event) *gen.ClaudePayload {
@@ -633,13 +638,18 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 	return ctx, nil
 }
 
-func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
+func (s *Service) recordHook(ctx context.Context, hookEvent hookevents.Eventer) {
+	event := hookEvent.HookEvent()
+	payload := claudePayloadFromEvent(event)
+	if payload == nil {
+		return
+	}
 	logger := s.withAuthContext(ctx, s.logger.With(
 		attr.SlogHookSource("claude"),
-		attr.SlogHookEvent(payload.HookEventName),
+		attr.SlogHookEvent(event.RawEventType),
 	))
 
-	if payload.SessionID == nil || *payload.SessionID == "" {
+	if event.ConversationID == "" {
 		logger.WarnContext(ctx, "Tool event called without session ID",
 			attr.SlogEvent("claude_hook_no_session"),
 		)
@@ -656,7 +666,7 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	// cancel the in-flight INSERT and drop the chat message.
 	ctx = context.WithoutCancel(ctx)
 
-	sessionID := *payload.SessionID
+	sessionID := event.ConversationID
 	logger = logger.With(attr.SlogGenAIConversationID(sessionID))
 
 	// Every hook event for this session is a heartbeat — extend the MCP
@@ -685,12 +695,12 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 		// response (Stop especially — the client closes the connection
 		// immediately on the response). Run it detached so the response
 		// returns promptly and the work completes in the background.
-		go s.persistHook(ctx, payload, &metadata)
+		go s.persistHook(ctx, hookEvent, &metadata)
 		return
 	}
 
 	if hasAuthMetadata && payloadUserEmail != "" {
-		go s.persistHook(ctx, payload, &authMetadata)
+		go s.persistHook(ctx, hookEvent, &authMetadata)
 		return
 	}
 
@@ -751,28 +761,21 @@ func (s *Service) resolveClaudeSessionMetadata(ctx context.Context, sessionID, u
 	return SessionMetadata{}, err
 }
 
-func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) {
+func (s *Service) persistHook(ctx context.Context, hookEvent hookevents.Eventer, metadata *SessionMetadata) {
+	event := hookEvent.HookEvent()
 	metadata.UserEmail = strings.TrimSpace(metadata.UserEmail)
 	if metadata.UserEmail == "" {
 		s.logger.WarnContext(ctx, "skipping claude hook persistence without user email",
 			attr.SlogEvent("claude_hook_persist_no_user_email"),
 			attr.SlogHookSource("claude"),
-			attr.SlogHookEvent(payload.HookEventName),
-			attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
+			attr.SlogHookEvent(event.RawEventType),
+			attr.SlogGenAIConversationID(event.ConversationID),
 		)
 		return
 	}
 
 	metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 
-	hookEvent, err := s.normalizeClaudeHookEvent(ctx, payload, time.Now())
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to normalize Claude hook for persistence", attr.SlogError(err))
-		return
-	}
-	if hookEvent == nil {
-		return
-	}
 	if s.telemetryWriter == nil {
 		return
 	}

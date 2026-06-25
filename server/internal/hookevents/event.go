@@ -67,6 +67,14 @@ type Event struct {
 	AdditionalData map[string]any
 }
 
+type Eventer interface {
+	HookEvent() Event
+}
+
+func (e Event) HookEvent() Event {
+	return e
+}
+
 type SessionStart struct {
 	Event
 }
