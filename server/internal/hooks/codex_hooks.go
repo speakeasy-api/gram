@@ -23,15 +23,20 @@ import (
 )
 
 func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.CodexHookResult, error) {
+	hookEventName := payload.HookEventName
+	if parsedEvent, ok := parseCodexHookEvent(payload.HookEventName); ok {
+		hookEventName = string(parsedEvent)
+	}
 	logger := s.logger.With(
 		attr.SlogHookSource("codex"),
-		attr.SlogHookEvent(payload.HookEventName),
+		attr.SlogHookEvent(hookEventName),
 		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
 		attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
 	)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		s.metrics.RecordHookEventReceived(ctx, "codex", hookEventName, hookMetricOutcomeUnauthorized, "")
 		logger.WarnContext(ctx, "rejected unauthorized codex hook request",
 			attr.SlogEvent("codex_hook_unauthorized"),
 		)
@@ -55,6 +60,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 	logger.InfoContext(ctx, "codex hook received",
 		attr.SlogEvent("codex_hook"),
 	)
+	s.metrics.RecordHookEventReceived(ctx, "codex", hookEventName, hookMetricOutcomeAccepted, authCtx.OrganizationSlug)
 
 	// Claim the per-invocation idempotency token before persistence. A retry
 	// re-sends the same token: the decision still re-runs so the user stays

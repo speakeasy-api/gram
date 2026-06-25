@@ -245,6 +245,10 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 	logger.InfoContext(ctx, "claude hook received",
 		attr.SlogEvent("claude_hook"),
 	)
+	hookEventName := payload.HookEventName
+	if parsedEvent, ok := parseClaudeHookEvent(payload.HookEventName); ok {
+		hookEventName = string(parsedEvent)
+	}
 
 	if hasPluginAuth {
 		// Auth is optional. Returning a 401 on failure deadlocks the client:
@@ -267,6 +271,11 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 			)
 		}
 	}
+	orgSlug := ""
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		orgSlug = authCtx.OrganizationSlug
+	}
+	s.metrics.RecordHookEventReceived(ctx, "claude", hookEventName, hookMetricOutcomeAccepted, orgSlug)
 
 	// Claim the per-invocation idempotency token once, before persistence and
 	// the block side-effects in the handlers below. A retry re-sends the same

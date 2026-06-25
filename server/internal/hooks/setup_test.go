@@ -69,6 +69,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
@@ -99,6 +100,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		logger,
 		conn,
 		tracerProvider,
+		meterProvider,
 		nil,
 		sessionManager,
 		cacheAdapter,

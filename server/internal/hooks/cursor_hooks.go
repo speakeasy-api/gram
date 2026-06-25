@@ -43,6 +43,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 
 	authCtx, authOK := contextvalues.GetAuthContext(ctx)
 	if !authOK || authCtx == nil || authCtx.ProjectID == nil {
+		s.metrics.RecordHookEventReceived(ctx, "cursor", logHookEventName, hookMetricOutcomeUnauthorized, "")
 		logger.WarnContext(ctx, "rejected unauthorized cursor hook request",
 			attr.SlogEvent("cursor_hook_unauthorized"),
 		)
@@ -69,6 +70,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	logger.InfoContext(ctx, "cursor hook received",
 		attr.SlogEvent("cursor_hook"),
 	)
+	s.metrics.RecordHookEventReceived(ctx, "cursor", logHookEventName, hookMetricOutcomeAccepted, authCtx.OrganizationSlug)
 
 	// Claim the per-invocation idempotency token before persistence. A retry
 	// re-sends the same token: the decision still re-runs so the user stays
