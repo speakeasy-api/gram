@@ -144,6 +144,9 @@ export function useFilterState(): UseFilterStateReturn {
         minUsers,
         updatedRange,
         minTools,
+        // The granular filters (incl. setup) flow through the unified filter
+        // system in Catalog.tsx; this legacy hook only supplies category/sort.
+        setupTypes: [],
       },
     };
   }, [searchParams]);

@@ -223,6 +223,8 @@ function CollectionDetailInner() {
   const installableServers: CatalogServer[] = rawServers.map((s) => ({
     ...s,
     meta: {},
+    // Collection-backed servers carry no Pulse DCR metadata.
+    supportsDcr: false,
     ...toolStats(s.tools),
   }));
 

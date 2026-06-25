@@ -4,6 +4,7 @@ import {
   type AuthType,
   type FilterValues as CatalogFilterValues,
   type PopularityThreshold,
+  type SetupType,
   type ToolBehavior,
   type ToolCountThreshold,
   type UpdatedRange,
@@ -25,6 +26,7 @@ import {
  */
 export const CATALOG_FILTERS = defineFilters([
   { id: "auth", label: "Auth type", kind: "multiselect" },
+  { id: "setup", label: "Setup", kind: "multiselect" },
   { id: "behavior", label: "Tool behavior", kind: "multiselect" },
   { id: "minUsers", label: "Popularity", kind: "select", allLabel: "All" },
   { id: "updated", label: "Last updated", kind: "select", allLabel: "All" },
@@ -38,6 +40,10 @@ export const CATALOG_FILTER_OPTIONS: OptionsById = {
     { value: "apikey", label: "API Key" },
     { value: "oauth", label: "OAuth 2.1" },
     { value: "other", label: "Other" },
+  ],
+  setup: [
+    { value: "auto", label: "Automatic (DCR)" },
+    { value: "manual", label: "Manual setup" },
   ],
   behavior: [
     { value: "readonly", label: "Read-only only" },
@@ -68,6 +74,7 @@ const VALID_AUTH_TYPES: readonly AuthType[] = [
   "oauth",
   "other",
 ];
+const VALID_SETUP_TYPES: readonly SetupType[] = ["auto", "manual"];
 const VALID_BEHAVIORS: readonly ToolBehavior[] = ["readonly", "write"];
 const VALID_MIN_USERS: readonly PopularityThreshold[] = [100, 1000, 10000];
 const VALID_UPDATED: readonly UpdatedRange[] = ["week", "month", "year"];
@@ -88,6 +95,9 @@ export function toCatalogFilterValues(
     authTypes: values.auth.filter((v): v is AuthType =>
       VALID_AUTH_TYPES.includes(v as AuthType),
     ),
+    setupTypes: values.setup.filter((v): v is SetupType =>
+      VALID_SETUP_TYPES.includes(v as SetupType),
+    ),
     toolBehaviors: values.behavior.filter((v): v is ToolBehavior =>
       VALID_BEHAVIORS.includes(v as ToolBehavior),
     ),
@@ -107,6 +117,7 @@ export function toCatalogFilterValues(
 export function hasActiveCatalogFilters(filters: CatalogFilterValues): boolean {
   return (
     filters.authTypes.length > 0 ||
+    filters.setupTypes.length > 0 ||
     filters.toolBehaviors.length > 0 ||
     filters.minUsers > 0 ||
     filters.updatedRange !== "any" ||

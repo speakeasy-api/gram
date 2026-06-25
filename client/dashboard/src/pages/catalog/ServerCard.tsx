@@ -11,6 +11,7 @@ import { Button } from "@speakeasy-api/moonshine";
 import { ArrowRight, Check } from "lucide-react";
 import { Link } from "react-router";
 import type { PulseMCPServer } from "./hooks";
+import { ManualSetupBadge } from "./ManualSetupBadge";
 
 interface ServerCardProps {
   server: PulseMCPServer;
@@ -119,6 +120,7 @@ export function ServerCard({
           </div>
           <div className="flex items-baseline gap-1">
             {isSpeakeasyServer && <PoweredBySpeakeasyBadge />}
+            <ManualSetupBadge server={server} className="mr-1" />
             <ToolCollectionBadge
               count={toolCount}
               emptyLabel={isRemoteOnly ? null : undefined}

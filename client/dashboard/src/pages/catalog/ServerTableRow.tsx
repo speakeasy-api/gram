@@ -10,6 +10,7 @@ import { useMemo } from "react";
 import { Link } from "react-router";
 import type { PulseMCPServer } from "./hooks";
 import { parseServerMetadata } from "./hooks/serverMetadata";
+import { ManualSetupBadge } from "./ManualSetupBadge";
 
 interface ServerTableRowProps {
   server: PulseMCPServer;
@@ -96,6 +97,7 @@ export function ServerTableRow({
               New
             </Badge>
           )}
+          <ManualSetupBadge server={server} />
         </div>
       </td>
 

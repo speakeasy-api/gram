@@ -42,6 +42,8 @@ export function CollectionCard({
       rawServers.map((server) => ({
         ...server,
         meta: {},
+        // Collection-backed servers carry no Pulse DCR metadata.
+        supportsDcr: false,
         ...toolStats(server.tools),
       })),
     [rawServers],
