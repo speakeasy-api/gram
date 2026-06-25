@@ -677,6 +677,33 @@ func TestRenderHookScriptClaudeUsesGramKeyAndProjectHeaders(t *testing.T) {
 	require.NotContains(t, script, "Authorization", "endpoint reads Gram-Key, not Authorization")
 }
 
+// The Claude hook.sh PreToolUse path must close the DNO-286 race rather than
+// merely narrow it: when the per-session inventory file is absent (the first
+// action of a new session is a tool call, before the async SessionStart write
+// lands) it sources the shared gatherer and gathers inline instead of
+// forwarding a payload the server cannot enforce against.
+func TestRenderHookScriptClaudeGathersInventoryInlineOnFileMiss(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "claude"))
+
+	// Sources the shared gatherer (guarded — cursor ships none).
+	require.Contains(t, script, `[ -f "$script_dir/mcp_gather.sh" ] && . "$script_dir/mcp_gather.sh"`)
+	// The replay block signals exit 3 when there is no file and no caller
+	// inventory, and the shell branches to an inline gather with a tighter cap.
+	require.Contains(t, script, "raise SystemExit(3)")
+	require.Contains(t, script, `enriched=$(gram_gather_mcp_inventory "$payload" 5)`)
+	require.Contains(t, script, "type gram_gather_mcp_inventory >/dev/null 2>&1")
+	// Caller-supplied inventory is detected by presence (mirroring the server),
+	// not truthiness, so an explicit empty cowork list is not re-gathered.
+	require.Contains(t, script, "cw_val is not None")
+	require.Contains(t, script, "isinstance(cc_val, str)")
+}
+
 func TestRenderHookScriptCursorUsesGramKeyAndProjectHeaders(t *testing.T) {
 	t.Parallel()
 	// Cursor's hook endpoint reads Gram-Key + Gram-Project per
@@ -1039,6 +1066,25 @@ func TestRenderClaudeMCPInventoryScriptCarriesAuthAndEnrichesPayload(t *testing.
 	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.Contains(t, script, "${server_url}/rpc/hooks.claude")
 	require.Contains(t, script, "https://app.getgram.ai", "server URL must appear as the env var default")
+	// The actual gathering now lives in the shared mcp_gather.sh, sourced here
+	// and reused by hook.sh's PreToolUse inline-gather fallback.
+	require.Contains(t, script, `. "$script_dir/mcp_gather.sh"`)
+	require.Contains(t, script, `enriched=$(gram_gather_mcp_inventory "$payload")`)
+	// Fire-and-forget: SessionStart has no allow/deny path, so exit 0
+	// regardless of HTTP outcome to keep the hook latency invisible.
+	require.Contains(t, script, "exit 0")
+	require.NotContains(t, script, "exit 2", "mcp_inventory.sh must never block — SessionStart/ConfigChange have no permission decision")
+}
+
+// The shared gatherer is sourced by both mcp_inventory.sh (async, SessionStart/
+// ConfigChange) and hook.sh (inline, PreToolUse on a missing per-session file).
+// It must detect both execution environments, stamp the live-gather freshness
+// marker the server keys off, and persist the per-session file safely.
+func TestRenderSharedMCPInventoryGatherScript(t *testing.T) {
+	t.Parallel()
+	script := string(renderSharedMCPInventoryGatherScript())
+
+	require.Contains(t, script, "gram_gather_mcp_inventory()", "must define the shared function")
 	// Server-side parsers key off these field names — see
 	// server/internal/hooks/claude_hooks.go and mcp_cowork_parser.go.
 	require.Contains(t, script, "mcp_inventory_claude_code")
@@ -1046,10 +1092,15 @@ func TestRenderClaudeMCPInventoryScriptCarriesAuthAndEnrichesPayload(t *testing.
 	// Cowork detection hinges on CLAUDE_PROJECT_DIR and local_<rid>.json.
 	require.Contains(t, script, "CLAUDE_PROJECT_DIR")
 	require.Contains(t, script, "local_run_json")
-	// Fire-and-forget: SessionStart has no allow/deny path, so exit 0
-	// regardless of HTTP outcome to keep the hook latency invisible.
-	require.Contains(t, script, "exit 0")
-	require.NotContains(t, script, "exit 2", "mcp_inventory.sh must never block — SessionStart/ConfigChange have no permission decision")
+	// Freshness marker distinguishes a live gather (authoritative) from a replay.
+	require.Contains(t, script, `ad["mcp_inventory_fresh"] = True`)
+	// It must NOT write the freshness marker into the persisted fragment, or a
+	// later replay of that file would masquerade as freshly gathered.
+	require.Contains(t, script, `frag["mcp_inventory_claude_code"] = cc`)
+	require.NotContains(t, script, `frag["mcp_inventory_fresh"]`)
+	// The /tmp squatting guard must survive the refactor.
+	require.Contains(t, script, "gram_safe_dir")
+	require.Contains(t, script, "tempfile.mkstemp")
 }
 
 func TestGenerateCodexObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t *testing.T) {

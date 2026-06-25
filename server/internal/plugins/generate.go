@@ -632,6 +632,9 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	files[path.Join(subdir, "hooks/http.sh")] = renderSharedHTTPScript()
 	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "claude")
 	files[path.Join(subdir, "hooks/mcp_inventory.sh")] = renderClaudeMCPInventoryScript(cfg)
+	// Sourced by both mcp_inventory.sh (SessionStart/ConfigChange) and hook.sh
+	// (PreToolUse inline-gather fallback). Only the Claude plugin ships it.
+	files[path.Join(subdir, "hooks/mcp_gather.sh")] = renderSharedMCPInventoryGatherScript()
 
 	return nil
 }
@@ -1429,6 +1432,87 @@ if type gram_enrich_identity_payload >/dev/null 2>&1; then
   payload=$(gram_enrich_identity_payload "$payload")
 fi
 
+# PreToolUse only: make sure the payload carries the MCP inventory the server
+# enforces shadow-MCP policy against. Fast path: replay the per-session file
+# written by mcp_inventory.sh at SessionStart. If that file is not there yet —
+# e.g. the very first action of a new session is a tool call, before the async
+# SessionStart write has landed — gather the inventory inline (exit 3 below) so
+# enforcement never races the snapshot (DNO-286). Other events never touch the
+# file, keeping them cheap. Cursor ships no gatherer, so it skips the inline
+# path and the server falls back to its cache.
+if command -v python3 >/dev/null 2>&1; then
+  # shellcheck source=/dev/null
+  [ -f "$script_dir/mcp_gather.sh" ] && . "$script_dir/mcp_gather.sh"
+  merged=$(printf '%%s' "$payload" | PAYLOAD_TMPDIR="${TMPDIR:-/tmp}" python3 -c '
+import json, os, re, stat, sys
+raw = sys.stdin.read()
+try:
+    data = json.loads(raw)
+except Exception:
+    sys.stdout.write(raw)
+    raise SystemExit
+def gram_trusted(path):
+    # Only trust a regular file we own with no group/world access, inside a
+    # directory we own with no group/world access. In a shared /tmp a planted
+    # file or symlink could otherwise inject a forged inventory into the guard;
+    # lstat rejects symlinks (no following) on both the file and its directory.
+    try:
+        dst = os.lstat(os.path.dirname(path))
+        fst = os.lstat(path)
+    except OSError:
+        return False
+    uid = os.geteuid()
+    return (stat.S_ISDIR(dst.st_mode) and dst.st_uid == uid and not (dst.st_mode & 0o077)
+            and stat.S_ISREG(fst.st_mode) and fst.st_uid == uid and not (fst.st_mode & 0o077))
+if data.get("hook_event_name") == "PreToolUse":
+    ad = data.get("additional_data")
+    # Mirror the server-side presence test (parseMCPInventoryFromPayload): a
+    # non-empty claude_code string OR a non-null cowork value (an empty list is
+    # a valid "no servers" inventory) counts as caller-supplied. Truthiness
+    # would misread that empty list as missing and trigger a needless gather.
+    cc_val = ad.get("mcp_inventory_claude_code") if isinstance(ad, dict) else None
+    cw_val = ad.get("mcp_inventory_cowork") if isinstance(ad, dict) else None
+    has_inventory = (isinstance(cc_val, str) and cc_val != "") or cw_val is not None
+    sid = re.sub(r"[^A-Za-z0-9_-]", "", str(data.get("session_id") or ""))[:128]
+    fp = os.path.join(os.environ.get("PAYLOAD_TMPDIR", "/tmp"), "gram-hooks", "mcp-" + sid + ".json") if sid else ""
+    frag = None
+    if fp and gram_trusted(fp):
+        try:
+            with open(fp, encoding="utf-8") as rf:
+                frag = json.load(rf)
+        except Exception:
+            frag = None
+    if isinstance(frag, dict):
+        if not isinstance(ad, dict):
+            ad = {}
+        # Do not clobber an inventory the caller already supplied.
+        for k, v in frag.items():
+            ad.setdefault(k, v)
+        data["additional_data"] = ad
+    elif not has_inventory:
+        # No per-session file to replay and the caller supplied none. Signal the
+        # shell (exit 3) to gather the inventory inline rather than forward a
+        # payload the server cannot enforce against on a brand-new session.
+        raise SystemExit(3)
+sys.stdout.write(json.dumps(data))
+')
+  case $? in
+    3)
+      # First PreToolUse of the session before the SessionStart file exists:
+      # gather inline. The gatherer is shipped only with the Claude plugin
+      # (mcp_gather.sh); cursor has none, so this is a no-op there. Cap wall time
+      # tighter than the async SessionStart path since this blocks the tool call.
+      if type gram_gather_mcp_inventory >/dev/null 2>&1; then
+        enriched=$(gram_gather_mcp_inventory "$payload" 5)
+        [ -n "$enriched" ] && payload="$enriched"
+      fi
+      ;;
+    *)
+      [ -n "$merged" ] && payload="$merged"
+      ;;
+  esac
+fi
+
 hook_hostname=$(hostname 2>/dev/null || true)
 hook_hostname_header=()
 if [ -n "$hook_hostname" ]; then
@@ -1494,6 +1578,233 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ) >/dev/null 2>&1 &
 
 exit 0
+`)
+}
+
+// renderSharedMCPInventoryGatherScript emits hooks/mcp_gather.sh: the shared
+// MCP-inventory gatherer sourced (never executed directly) by two callers in
+// the Claude plugin:
+//   - mcp_inventory.sh gathers asynchronously on SessionStart/ConfigChange.
+//   - hook.sh gathers inline on PreToolUse, but only when the per-session
+//     inventory file written at SessionStart does not exist yet (e.g. the very
+//     first action of a brand-new session is a tool call, before the async
+//     SessionStart write has landed). This closes the DNO-286 race rather than
+//     merely narrowing it: PreToolUse no longer depends on the async snapshot
+//     being cached in time, because it can produce a current inventory itself.
+//
+// gram_gather_mcp_inventory detects the execution environment, collects the
+// active MCP server list, persists it to the per-session file the PreToolUse
+// replay path reads, and echoes the payload enriched under additional_data. It
+// stamps additional_data.mcp_inventory_fresh=true so the server treats a
+// live-gathered inventory as authoritative over its cache, while a later replay
+// of the file (which omits the flag) is correctly treated as non-fresh. It must
+// stay byte-for-byte identical to the checked-in
+// hooks/plugin-claude/hooks/mcp_gather.sh used in local development.
+func renderSharedMCPInventoryGatherScript() []byte {
+	return []byte(`#!/usr/bin/env bash
+# Generated by Speakeasy. Do not edit — overwritten on every publish.
+#
+# Shared MCP-inventory gatherer. Sourced (never executed directly) by:
+#   - mcp_inventory.sh — SessionStart/ConfigChange, gathers asynchronously.
+#   - hook.sh          — PreToolUse, gathers inline ONLY when the per-session
+#                        inventory file written at SessionStart is not there yet
+#                        (e.g. the first action of a new session is a tool call,
+#                        before the async SessionStart write lands), so the
+#                        shadow-MCP guard never races that snapshot (DNO-286).
+#
+# gram_gather_mcp_inventory detects the execution environment, collects the
+# active MCP server list, persists it to the per-session file the PreToolUse
+# replay path reads, and echoes the payload enriched with the inventory under
+# additional_data. It also stamps additional_data.mcp_inventory_fresh=true so
+# the server knows this inventory was gathered live (and thus supersedes any
+# cached snapshot) rather than replayed from a possibly-stale file.
+#
+# Usage: enriched=$(gram_gather_mcp_inventory "$payload" [max_list_seconds])
+#   $1 = hook payload JSON
+#   $2 = wall-time cap for "claude mcp list" (default 15; PreToolUse passes a
+#        tighter cap since it blocks the tool call). Overridable per call via
+#        the GRAM_HOOKS_MCP_LIST_TIMEOUT environment variable.
+#
+# Set GRAM_HOOKS_DEBUG=1 to surface why an inventory came back empty.
+
+# Both callers (mcp_inventory.sh, hook.sh) already define debug() before
+# sourcing this file; define a self-contained fallback so the gatherer's
+# diagnostics still work if it is ever sourced on its own.
+if ! declare -f debug >/dev/null 2>&1; then
+  debug() {
+    if [ -n "${GRAM_HOOKS_DEBUG:-}" ]; then
+      printf 'gram-hooks(mcp-gather): %s\n' "$1" >&2
+    fi
+  }
+fi
+
+gram_gather_mcp_inventory() {
+  local payload="$1"
+  local list_timeout="${2:-${GRAM_HOOKS_MCP_LIST_TIMEOUT:-15}}"
+  local mcp_inventory_claude_code=""
+  local mcp_inventory_cowork="null"
+  local local_run_json="" candidate_local_dir candidate_local_json parent_dir sibling inv enriched
+
+  # Locate cmux's per-run config file. CLAUDE_PROJECT_DIR is
+  # .../local_<rid>/outputs; the config sits one directory up as
+  # .../local_<rid>.json and lists the remote MCP connectors with their
+  # connector UUIDs. That's the only spot on the host filesystem where the
+  # UUID <-> URL pairing exists, so when we find it we ship it verbatim.
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+    candidate_local_dir=$(dirname "$CLAUDE_PROJECT_DIR")
+    candidate_local_json="${candidate_local_dir}.json"
+    if [ -f "$candidate_local_json" ]; then
+      local_run_json="$candidate_local_json"
+    else
+      # SessionStart often fires before cmux writes the per-run config file.
+      # Fall back to the most-recent sibling local_*.json — the
+      # remoteMcpServersConfig block is account/org-scoped and identical across
+      # runs in the same subid directory, so any sibling is good enough for the
+      # UUID <-> URL mapping we care about.
+      parent_dir=$(dirname "$candidate_local_dir")
+      if [ -d "$parent_dir" ]; then
+        sibling=$(ls -t "$parent_dir"/local_*.json 2>/dev/null | head -1)
+        if [ -n "$sibling" ] && [ -f "$sibling" ]; then
+          local_run_json="$sibling"
+        fi
+      fi
+    fi
+  fi
+
+  if [ -n "$local_run_json" ] && command -v jq >/dev/null 2>&1; then
+    # Extract the connector UUID + URL pairs we care about. The "tools" array is
+    # dropped — it can be huge and we don't need it here. cmux's field naming has
+    # drifted across versions (snake_case vs camelCase, "uuid" vs "id" for the
+    # connector identifier) so we try multiple candidates per slot and keep the
+    # first non-null. This field becomes the mcp__<server>__tool prefix
+    # server-side, so getting it wrong silently shows users a UUID, not "Slack".
+    inv=$(jq -c '
+      [
+        (.remoteMcpServersConfig // [])[]
+        | {
+            connector_uuid: (.uuid // .connectorUuid // .connector_uuid // .id // .connectorId // .connector_id // null),
+            name:           (.name // .displayName // .display_name // null),
+            url:            (.url // .serverUrl // .server_url // null),
+            source:         "claude.ai"
+          }
+      ]
+    ' "$local_run_json" 2>/dev/null)
+    if [ -n "$inv" ]; then
+      mcp_inventory_cowork="$inv"
+    else
+      debug "jq found no remoteMcpServersConfig in $local_run_json (cowork inventory empty)"
+    fi
+  elif command -v claude >/dev/null 2>&1; then
+    # Claude Code: "claude mcp list" health-checks every server, which can take
+    # seconds for stdio servers. Hard-cap wall time so a misbehaving server
+    # can't keep this hook alive forever. macOS doesn't ship GNU timeout —
+    # prefer it, fall back to coreutils' gtimeout, then to no timeout at all
+    # rather than failing.
+    if command -v timeout >/dev/null 2>&1; then
+      mcp_inventory_claude_code=$(timeout "$list_timeout" claude mcp list 2>&1 || true)
+    elif command -v gtimeout >/dev/null 2>&1; then
+      mcp_inventory_claude_code=$(gtimeout "$list_timeout" claude mcp list 2>&1 || true)
+    else
+      mcp_inventory_claude_code=$(claude mcp list 2>&1 || true)
+    fi
+    [ -z "$mcp_inventory_claude_code" ] && debug "'claude mcp list' produced no output (timed out, errored, or no servers configured)"
+  else
+    debug "no MCP inventory source found: no cowork local_*.json reachable and no 'claude' binary on PATH"
+  fi
+
+  enriched=$(MCP_CC="$mcp_inventory_claude_code" \
+             MCP_CW="$mcp_inventory_cowork" \
+             PAYLOAD="$payload" \
+             PAYLOAD_TMPDIR="${TMPDIR:-/tmp}" \
+             python3 -c '
+import json, os, re, stat, sys, tempfile, time
+try:
+    p = json.loads(os.environ["PAYLOAD"])
+except Exception:
+    sys.exit(1)
+ad = p.get("additional_data") or {}
+frag = {}
+cc = os.environ.get("MCP_CC", "")
+if cc:
+    ad["mcp_inventory_claude_code"] = cc
+    frag["mcp_inventory_claude_code"] = cc
+try:
+    cw = json.loads(os.environ.get("MCP_CW", "null"))
+except Exception:
+    cw = None
+if cw is not None:
+    ad["mcp_inventory_cowork"] = cw
+    frag["mcp_inventory_cowork"] = cw
+# Tell the server this inventory was gathered live this call so the PreToolUse
+# guard treats it as authoritative over any cached snapshot. Only stamp it when
+# we actually gathered something — an empty result must not override a good
+# cache. The flag is deliberately NOT written to the per-session file below, so
+# a later replay of that file is correctly treated as non-fresh.
+if frag:
+    ad["mcp_inventory_fresh"] = True
+p["additional_data"] = ad
+# Persist the inventory fragment to a per-session file so the blocking
+# PreToolUse hook can replay it in its own payload, instead of depending on
+# the server having cached this async SessionStart snapshot in time (DNO-286).
+# The file holds exactly the additional_data keys the server already parses.
+def gram_safe_dir():
+    base = os.path.join(os.environ.get("PAYLOAD_TMPDIR", "/tmp"), "gram-hooks")
+    try:
+        os.makedirs(base, mode=0o700, exist_ok=True)
+        st = os.lstat(base)
+    except OSError:
+        return None
+    # Refuse a directory we do not own or that is group/world writable. In a
+    # shared /tmp an attacker could pre-create gram-hooks and plant a forged
+    # inventory the PreToolUse guard would trust; makedirs(exist_ok=True) does
+    # not reapply the mode to a pre-existing dir, so verify ownership and
+    # permissions explicitly (lstat also rejects a symlink planted in its place).
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.geteuid() or (st.st_mode & 0o077):
+        return None
+    return base
+sid = re.sub(r"[^A-Za-z0-9_-]", "", str(p.get("session_id") or ""))[:128]
+base = gram_safe_dir()
+# File persistence is strictly best-effort: it must never abort enrichment,
+# which also builds the POST body, or the freshly gathered inventory would be
+# lost for this very SessionStart/ConfigChange event. Swallow anything it
+# raises (e.g. os.listdir failing if the dir vanished after the safe check).
+if sid and frag and base:
+    try:
+        # Prune snapshots older than 24h so session files do not accumulate.
+        now = time.time()
+        for fn in os.listdir(base):
+            if not fn.startswith("mcp-"):
+                continue
+            stale = os.path.join(base, fn)
+            try:
+                if now - os.path.getmtime(stale) > 86400:
+                    os.remove(stale)
+            except OSError:
+                pass
+        dest = os.path.join(base, "mcp-" + sid + ".json")
+        # Unique temp name per writer (mkstemp uses O_EXCL, mode 0600) so concurrent
+        # SessionStart/ConfigChange runs for the same session cannot truncate each
+        # other mid-write; os.replace is atomic so the last writer wins cleanly.
+        fd, tmp = tempfile.mkstemp(dir=base, prefix="mcp-" + sid + ".", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as wf:
+                json.dump(frag, wf)
+            os.replace(tmp, dest)
+        except OSError:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+    except Exception:
+        pass
+print(json.dumps(p))
+') || {
+    debug "python3 enrichment failed (missing or payload not JSON); sending original payload without MCP inventory"
+    enriched="$payload"
+  }
+
+  printf '%s' "$enriched"
+}
 `)
 }
 
@@ -1568,105 +1879,15 @@ if type gram_enrich_identity_payload >/dev/null 2>&1; then
   payload=$(gram_enrich_identity_payload "$payload")
 fi
 
-mcp_inventory_claude_code=""
-mcp_inventory_cowork="null"
-
-# Locate cmux's per-run config file. CLAUDE_PROJECT_DIR is
-# .../local_<rid>/outputs; the config sits one directory up as
-# .../local_<rid>.json and lists the remote MCP connectors with their
-# connector UUIDs. That's the only spot on the host filesystem where the
-# UUID <-> URL pairing exists, so when we find it we ship it verbatim.
-local_run_json=""
-
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-  candidate_local_dir=$(dirname "$CLAUDE_PROJECT_DIR")
-  candidate_local_json="${candidate_local_dir}.json"
-  if [ -f "$candidate_local_json" ]; then
-    local_run_json="$candidate_local_json"
-  else
-    # SessionStart often fires before cmux writes the per-run config
-    # file. Fall back to the most-recent sibling local_*.json — the
-    # remoteMcpServersConfig block is account/org-scoped and identical
-    # across runs in the same subid directory, so any sibling is good
-    # enough for the UUID <-> URL mapping we care about.
-    parent_dir=$(dirname "$candidate_local_dir")
-    if [ -d "$parent_dir" ]; then
-      sibling=$(ls -t "$parent_dir"/local_*.json 2>/dev/null | head -1)
-      if [ -n "$sibling" ] && [ -f "$sibling" ]; then
-        local_run_json="$sibling"
-      fi
-    fi
-  fi
-fi
-
-if [ -n "$local_run_json" ] && command -v jq >/dev/null 2>&1; then
-  # Extract the connector UUID + URL pairs we actually care about.
-  # `+"`tools`"+` is dropped — it can be huge and we don't need it here.
-  # cmux's field naming has drifted across versions (snake_case vs
-  # camelCase, `+"`uuid`"+` vs `+"`id`"+` for the connector identifier) so we try
-  # multiple candidates per slot and keep the first non-null. This is
-  # the field that becomes the `+"`mcp__<server>__tool`"+` prefix server-side,
-  # so getting it wrong silently shows users a UUID instead of "Slack".
-  inv=$(jq -c '
-    [
-      (.remoteMcpServersConfig // [])[]
-      | {
-          connector_uuid: (.uuid // .connectorUuid // .connector_uuid // .id // .connectorId // .connector_id // null),
-          name:           (.name // .displayName // .display_name // null),
-          url:            (.url // .serverUrl // .server_url // null),
-          source:         "claude.ai"
-        }
-    ]
-  ' "$local_run_json" 2>/dev/null)
-  if [ -n "$inv" ]; then
-    mcp_inventory_cowork="$inv"
-  else
-    debug "jq found no remoteMcpServersConfig in $local_run_json (cowork inventory empty)"
-  fi
-elif command -v claude >/dev/null 2>&1; then
-  # Claude Code: `+"`claude mcp list`"+` health-checks every server, which can
-  # take seconds for stdio servers. Hard-cap wall time so a misbehaving
-  # server can't keep this hook alive forever; since the hook is async
-  # the latency is invisible to Claude anyway. macOS doesn't ship GNU
-  # `+"`timeout`"+` — prefer it, fall back to coreutils' `+"`gtimeout`"+`, then to
-  # no timeout at all rather than failing.
-  if command -v timeout >/dev/null 2>&1; then
-    mcp_inventory_claude_code=$(timeout 15 claude mcp list 2>&1 || true)
-  elif command -v gtimeout >/dev/null 2>&1; then
-    mcp_inventory_claude_code=$(gtimeout 15 claude mcp list 2>&1 || true)
-  else
-    mcp_inventory_claude_code=$(claude mcp list 2>&1 || true)
-  fi
-  [ -z "$mcp_inventory_claude_code" ] && debug "'claude mcp list' produced no output (timed out, errored, or no servers configured)"
-else
-  debug "no MCP inventory source found: no cowork local_*.json reachable and no 'claude' binary on PATH"
-fi
-
-enriched=$(MCP_CC="$mcp_inventory_claude_code" \
-           MCP_CW="$mcp_inventory_cowork" \
-           PAYLOAD="$payload" \
-           python3 -c '
-import json, os, sys
-try:
-    p = json.loads(os.environ["PAYLOAD"])
-except Exception:
-    sys.exit(1)
-ad = p.get("additional_data") or {}
-cc = os.environ.get("MCP_CC", "")
-if cc:
-    ad["mcp_inventory_claude_code"] = cc
-try:
-    cw = json.loads(os.environ.get("MCP_CW", "null"))
-except Exception:
-    cw = None
-if cw is not None:
-    ad["mcp_inventory_cowork"] = cw
-p["additional_data"] = ad
-print(json.dumps(p))
-') || {
-  debug "python3 enrichment failed (missing or payload not JSON); sending original payload without MCP inventory"
-  enriched="$payload"
-}
+# Gather the MCP inventory (cowork config or claude mcp list), persist it to the
+# per-session file the PreToolUse hook replays, and enrich the payload. This is
+# the same gatherer hook.sh falls back to inline on a brand-new session's first
+# tool call, so both paths produce identical inventory (mcp_gather.sh). The
+# gatherer emits its own GRAM_HOOKS_DEBUG diagnostics for why an inventory came
+# back empty.
+# shellcheck source=/dev/null
+. "$script_dir/mcp_gather.sh"
+enriched=$(gram_gather_mcp_inventory "$payload")
 
 # Fire-and-forget through the shared helper (http.sh) so a transient reset
 # retries instead of dropping the inventory. The hook never blocks, but we
