@@ -320,7 +320,10 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 }
 
 func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.ClaudePayload, timestamp time.Time) (hookevents.Eventer, error) {
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok {
+		authCtx = nil
+	}
 	eventContext := hookevents.EventContext{
 		OrganizationID: "",
 		ProjectID:      uuid.Nil,
@@ -343,7 +346,10 @@ func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.Cla
 		if err != nil {
 			return nil, fmt.Errorf("normalize claude hook event: %w", err)
 		}
-		eventer, _ := event.(hookevents.Eventer)
+		eventer, ok := event.(hookevents.Eventer)
+		if !ok {
+			return nil, nil
+		}
 		return eventer, nil
 	}
 
@@ -376,7 +382,10 @@ func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.Cla
 }
 
 func claudePayloadFromEvent(ev hookevents.Event) *gen.ClaudePayload {
-	payload, _ := ev.Raw.(*gen.ClaudePayload)
+	payload, ok := ev.Raw.(*gen.ClaudePayload)
+	if !ok {
+		return nil
+	}
 	return payload
 }
 
@@ -815,7 +824,10 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	allow := "allow"
 	deny := "deny"
 	result := makeHookResult(payload.HookEventName)
-	output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	if !ok {
+		output = nil
+	}
 	denyUnverifiedMCP := func(code string) (*gen.ClaudeHookResult, error) {
 		reason := fmt.Sprintf("%s (err code: %s)", claudeShadowMCPMetadataUnavailableReason, code)
 		result.SystemMessage = &reason

@@ -34,8 +34,8 @@ func withHookDuplicate(ctx context.Context) context.Context {
 
 // isHookDuplicate reports whether ctx was tagged as a redelivery.
 func (s *Service) isHookDuplicate(ctx context.Context) bool {
-	dup, _ := ctx.Value(hookDuplicateContextKey{}).(bool)
-	return dup
+	dup, ok := ctx.Value(hookDuplicateContextKey{}).(bool)
+	return ok && dup
 }
 
 // claimHookIdempotency reports whether this delivery should be persisted. The

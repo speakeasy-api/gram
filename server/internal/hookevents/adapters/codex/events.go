@@ -1,6 +1,9 @@
 package codex
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -39,19 +42,19 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CodexPayload, ev
 		return hookevents.NewSessionStart(base), nil
 	case "PreToolUse":
 		return hookevents.NewBeforeToolUse(base, hookevents.BeforeToolUseParams{
-			ToolCallID: "",
+			ToolCallID: codexToolCorrelationID(payload),
 			ToolName:   conv.PtrValOr(payload.ToolName, ""),
 			ToolInput:  payload.ToolInput,
 		}), nil
 	case "PostToolUse":
 		return hookevents.NewAfterToolUse(base, hookevents.AfterToolUseParams{
-			ToolCallID: "",
+			ToolCallID: codexToolCorrelationID(payload),
 			ToolName:   conv.PtrValOr(payload.ToolName, ""),
 			ToolOutput: payload.ToolOutput,
 		}), nil
 	case "PermissionRequest":
 		return hookevents.NewPermissionRequest(base, hookevents.PermissionRequestParams{
-			ToolCallID:     "",
+			ToolCallID:     codexToolCorrelationID(payload),
 			ToolName:       conv.PtrValOr(payload.ToolName, ""),
 			ToolInput:      payload.ToolInput,
 			PermissionType: conv.PtrValOr(payload.PermissionType, ""),
@@ -69,4 +72,36 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CodexPayload, ev
 	default:
 		return nil, nil
 	}
+}
+
+func codexToolCorrelationID(payload *gen.CodexPayload) string {
+	if payload.IdempotencyKey != nil && *payload.IdempotencyKey != "" {
+		return *payload.IdempotencyKey
+	}
+
+	sessionID := conv.PtrValOr(payload.SessionID, "")
+	toolName := conv.PtrValOr(payload.ToolName, "")
+	if sessionID == "" && toolName == "" && payload.ToolInput == nil && payload.ToolOutput == nil {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString(sessionID)
+	b.WriteByte('|')
+	b.WriteString(toolName)
+	b.WriteByte('|')
+	if payload.ToolInput != nil {
+		if jsonBytes, err := json.Marshal(payload.ToolInput); err == nil {
+			b.Write(jsonBytes)
+		}
+	}
+	b.WriteByte('|')
+	if payload.ToolOutput != nil {
+		if jsonBytes, err := json.Marshal(payload.ToolOutput); err == nil {
+			b.Write(jsonBytes)
+		}
+	}
+
+	sum := sha256.Sum256([]byte(b.String()))
+	return "codex_synth_" + hex.EncodeToString(sum[:8])
 }

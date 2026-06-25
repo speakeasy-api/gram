@@ -178,6 +178,7 @@ func (s *Service) recordCodexHook(ctx context.Context, hookEvent any, payload *g
 	if s.eventWriter == nil {
 		return
 	}
+	ctx = context.WithoutCancel(ctx)
 	if err := s.eventWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: blockReason, SkipChat: false}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to persist Codex hook event", attr.SlogError(err))
 	}

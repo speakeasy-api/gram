@@ -69,7 +69,10 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 }
 
 func authContext(ctx context.Context) *contextvalues.AuthContext {
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok {
+		return nil
+	}
 	return authCtx
 }
 
