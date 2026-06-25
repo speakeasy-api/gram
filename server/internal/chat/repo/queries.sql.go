@@ -694,6 +694,43 @@ func (q *Queries) GetChatSessionCount(ctx context.Context, arg GetChatSessionCou
 	return session_count, err
 }
 
+const getChatTitlesByIDs = `-- name: GetChatTitlesByIDs :many
+SELECT id, title FROM chats
+WHERE id = ANY($1::uuid[])
+  AND project_id = ANY($2::uuid[])
+  AND deleted IS FALSE
+`
+
+type GetChatTitlesByIDsParams struct {
+	Ids        []uuid.UUID
+	ProjectIds []uuid.UUID
+}
+
+type GetChatTitlesByIDsRow struct {
+	ID    uuid.UUID
+	Title pgtype.Text
+}
+
+func (q *Queries) GetChatTitlesByIDs(ctx context.Context, arg GetChatTitlesByIDsParams) ([]GetChatTitlesByIDsRow, error) {
+	rows, err := q.db.Query(ctx, getChatTitlesByIDs, arg.Ids, arg.ProjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetChatTitlesByIDsRow
+	for rows.Next() {
+		var i GetChatTitlesByIDsRow
+		if err := rows.Scan(&i.ID, &i.Title); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getFirstUserChatMessage = `-- name: GetFirstUserChatMessage :one
 SELECT content FROM chat_messages
 WHERE chat_id = $1
@@ -1971,6 +2008,34 @@ func (q *Queries) ListUserFeedbackForChat(ctx context.Context, chatID uuid.UUID)
 	return items, nil
 }
 
+const renameChat = `-- name: RenameChat :exec
+UPDATE chats
+SET title = $1,
+    title_manually_set = $2,
+    updated_at = NOW()
+WHERE id = $3 AND project_id = $4 AND deleted IS FALSE
+`
+
+type RenameChatParams struct {
+	Title            pgtype.Text
+	TitleManuallySet bool
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+}
+
+// Set or clear a chat's title and record whether a human chose it. Project-scoped
+// so a manual rename can never touch another project's chat. A NULL title resets
+// to auto-naming (paired with title_manually_set = false).
+func (q *Queries) RenameChat(ctx context.Context, arg RenameChatParams) error {
+	_, err := q.db.Exec(ctx, renameChat,
+		arg.Title,
+		arg.TitleManuallySet,
+		arg.ID,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const seedAssistant = `-- name: SeedAssistant :one
 INSERT INTO assistants (project_id, organization_id, name, model, instructions)
 VALUES ($1, $2, $3, 'anthropic/claude-opus-4.8', 'be helpful')
@@ -2226,7 +2291,8 @@ func (q *Queries) UpdateAIIntegrationConfigChatCursor(ctx context.Context, arg U
 }
 
 const updateChatTitle = `-- name: UpdateChatTitle :exec
-UPDATE chats SET title = $1, updated_at = NOW() WHERE id = $2
+UPDATE chats SET title = $1, updated_at = NOW()
+WHERE id = $2 AND title_manually_set IS FALSE
 `
 
 type UpdateChatTitleParams struct {
@@ -2234,6 +2300,9 @@ type UpdateChatTitleParams struct {
 	ID    uuid.UUID
 }
 
+// Auto-generated title write. Guarded on title_manually_set so a manual rename
+// landing during title generation (between the activity's read and this write)
+// is never clobbered: the row no longer matches and the update no-ops.
 func (q *Queries) UpdateChatTitle(ctx context.Context, arg UpdateChatTitleParams) error {
 	_, err := q.db.Exec(ctx, updateChatTitle, arg.Title, arg.ID)
 	return err

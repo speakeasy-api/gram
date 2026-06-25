@@ -6009,7 +6009,7 @@ paths:
       x-speakeasy-name-override: delete
   /rpc/chat.generateTitle:
     post:
-      description: Generate a title for a chat based on its messages
+      description: Read or set a chat's title. Omit `title` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `title` to set a manual title that auto-generation will never overwrite; provide an empty `title` to clear the manual title and re-enable auto-generation.
       operationId: generateTitle
       parameters:
         - allowEmptyValue: true
@@ -6037,7 +6037,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ServeImageForm'
+              $ref: '#/components/schemas/GenerateTitleRequestBody'
         required: true
       responses:
         "200":
@@ -13344,6 +13344,102 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateMcpServer
+  /rpc/organizationRemoteSessionIssuers.createClient:
+    post:
+      description: 'Register a standalone remote_session_client under an existing remote_session_issuer in the caller''s organization, with no user_session_issuer attachments. The client is project-scoped: it inherits a project-specific issuer''s project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.'
+      operationId: createOrganizationRemoteSessionClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationRemoteSessionClientForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: createClient organizationRemoteSessionIssuers
+      tags:
+        - organizationRemoteSessionIssuers
+      x-speakeasy-name-override: createClient
+      x-speakeasy-react-hook:
+        name: CreateOrganizationRemoteSessionClient
   /rpc/organizationRemoteSessionIssuers.createIssuer:
     post:
       description: Create a remote_session_issuer in the caller's organization. With no project_id the issuer is organization-level (project_id NULL, inherited by every project); with a project_id (which must belong to the organization) it is project-specific. Requires org:admin.
@@ -36072,6 +36168,46 @@ components:
       required:
         - name
         - visibility
+    CreateOrganizationRemoteSessionClientForm:
+      type: object
+      properties:
+        audience:
+          type: string
+          description: Optional upstream OAuth audience to send on the authorize redirect and token exchange.
+          pattern: ^[!-~]+$
+          maxLength: 512
+        client_id:
+          type: string
+          description: client_id supplied by the caller, e.g. from Dynamic Client Registration.
+        client_secret:
+          type: string
+          description: Optional client_secret supplied by the caller. Gram encrypts before persisting; the plaintext is never returned.
+        project_id:
+          type: string
+          description: Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project; required when the issuer is organization-level.
+          format: uuid
+        remote_session_issuer_id:
+          type: string
+          description: The owning remote_session_issuer id; must belong to the caller's organization.
+          format: uuid
+        scope:
+          type: array
+          items:
+            type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
+          description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+        token_endpoint_auth_method:
+          type: string
+          description: How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
+          enum:
+            - client_secret_basic
+            - client_secret_post
+            - none
+      description: Form for an org admin to register a standalone remote_session_client under an existing issuer, with no user_session_issuer attachments.
+      required:
+        - remote_session_issuer_id
+        - client_id
     CreatePackageForm:
       type: object
       properties:
@@ -38222,12 +38358,24 @@ components:
         - tool_urn
         - created_at
         - updated_at
+    GenerateTitleRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the chat
+        title:
+          type: string
+          description: When present, sets the chat's title manually (empty string resets to auto-generated). When omitted, the current title is returned without changes.
+          maxLength: 200
+      required:
+        - id
     GenerateTitleResponseBody:
       type: object
       properties:
         title:
           type: string
-          description: The generated title
+          description: The current title after the operation (empty when reset to auto-generated)
       required:
         - title
     GenerateWorkOSAdminPortalLinkRequestBody:
@@ -45327,6 +45475,9 @@ components:
           enum:
             - success
             - error
+        title:
+          type: string
+          description: Chat title, when the session resolves to a named chat
         tool_call_count:
           type: integer
           description: Number of tool calls in this chat session

@@ -343,6 +343,7 @@ run();
 
 ### [OrganizationRemoteSessionIssuers](docs/sdks/organizationremotesessionissuers/README.md)
 
+* [createClient](docs/sdks/organizationremotesessionissuers/README.md#createclient) - createClient organizationRemoteSessionIssuers
 * [createIssuer](docs/sdks/organizationremotesessionissuers/README.md#createissuer) - createIssuer organizationRemoteSessionIssuers
 * [deleteClient](docs/sdks/organizationremotesessionissuers/README.md#deleteclient) - deleteClient organizationRemoteSessionIssuers
 * [deleteIssuer](docs/sdks/organizationremotesessionissuers/README.md#deleteissuer) - deleteIssuer organizationRemoteSessionIssuers
@@ -782,6 +783,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpServersList`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`mcpServersListToolFilters`](docs/sdks/mcpservers/README.md#listtoolfilters) - listToolFilters mcpServers
 - [`mcpServersUpdate`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
+- [`organizationRemoteSessionIssuersCreateClient`](docs/sdks/organizationremotesessionissuers/README.md#createclient) - createClient organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersCreateIssuer`](docs/sdks/organizationremotesessionissuers/README.md#createissuer) - createIssuer organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersDeleteClient`](docs/sdks/organizationremotesessionissuers/README.md#deleteclient) - deleteClient organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersDeleteIssuer`](docs/sdks/organizationremotesessionissuers/README.md#deleteissuer) - deleteIssuer organizationRemoteSessionIssuers
@@ -1047,6 +1049,7 @@ To learn about this feature and how to get started, check
 - [`useCreateGlobalToolVariationGroupMutation`](docs/sdks/variations/README.md#createglobal) - createGlobal variations
 - [`useCreateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#create) - createMcpEndpoint mcpEndpoints
 - [`useCreateMcpServerMutation`](docs/sdks/mcpservers/README.md#create) - createMcpServer mcpServers
+- [`useCreateOrganizationRemoteSessionClientMutation`](docs/sdks/organizationremotesessionissuers/README.md#createclient) - createClient organizationRemoteSessionIssuers
 - [`useCreateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#createissuer) - createIssuer organizationRemoteSessionIssuers
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreatePluginMutation`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins

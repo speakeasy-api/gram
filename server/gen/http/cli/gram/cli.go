@@ -109,7 +109,7 @@ func UsageCommands() []string {
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server)",
 		"remote-session-clients (create-remote-session-client|clone-client-fromoauth-proxy-provider|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
-		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer|list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|list-client-sessions|update-client|delete-client|remove-client-from-mcp-server|revoke-session|refresh-session|revoke-all-client-sessions)",
+		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer|list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|list-client-sessions|create-client|update-client|delete-client|remove-client-from-mcp-server|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|test-detection-rule)",
@@ -1389,6 +1389,11 @@ func ParseEndpoint(
 		organizationRemoteSessionIssuersListClientSessionsSessionTokenFlag = organizationRemoteSessionIssuersListClientSessionsFlags.String("session-token", "", "")
 		organizationRemoteSessionIssuersListClientSessionsApikeyTokenFlag  = organizationRemoteSessionIssuersListClientSessionsFlags.String("apikey-token", "", "")
 
+		organizationRemoteSessionIssuersCreateClientFlags            = flag.NewFlagSet("create-client", flag.ExitOnError)
+		organizationRemoteSessionIssuersCreateClientBodyFlag         = organizationRemoteSessionIssuersCreateClientFlags.String("body", "REQUIRED", "")
+		organizationRemoteSessionIssuersCreateClientSessionTokenFlag = organizationRemoteSessionIssuersCreateClientFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersCreateClientApikeyTokenFlag  = organizationRemoteSessionIssuersCreateClientFlags.String("apikey-token", "", "")
+
 		organizationRemoteSessionIssuersUpdateClientFlags            = flag.NewFlagSet("update-client", flag.ExitOnError)
 		organizationRemoteSessionIssuersUpdateClientBodyFlag         = organizationRemoteSessionIssuersUpdateClientFlags.String("body", "REQUIRED", "")
 		organizationRemoteSessionIssuersUpdateClientSessionTokenFlag = organizationRemoteSessionIssuersUpdateClientFlags.String("session-token", "", "")
@@ -2435,6 +2440,7 @@ func ParseEndpoint(
 	organizationRemoteSessionIssuersGetClientDeletePreflightFlags.Usage = organizationRemoteSessionIssuersGetClientDeletePreflightUsage
 	organizationRemoteSessionIssuersListClientMcpServersFlags.Usage = organizationRemoteSessionIssuersListClientMcpServersUsage
 	organizationRemoteSessionIssuersListClientSessionsFlags.Usage = organizationRemoteSessionIssuersListClientSessionsUsage
+	organizationRemoteSessionIssuersCreateClientFlags.Usage = organizationRemoteSessionIssuersCreateClientUsage
 	organizationRemoteSessionIssuersUpdateClientFlags.Usage = organizationRemoteSessionIssuersUpdateClientUsage
 	organizationRemoteSessionIssuersDeleteClientFlags.Usage = organizationRemoteSessionIssuersDeleteClientUsage
 	organizationRemoteSessionIssuersRemoveClientFromMcpServerFlags.Usage = organizationRemoteSessionIssuersRemoveClientFromMcpServerUsage
@@ -3522,6 +3528,9 @@ func ParseEndpoint(
 
 			case "list-client-sessions":
 				epf = organizationRemoteSessionIssuersListClientSessionsFlags
+
+			case "create-client":
+				epf = organizationRemoteSessionIssuersCreateClientFlags
 
 			case "update-client":
 				epf = organizationRemoteSessionIssuersUpdateClientFlags
@@ -4785,6 +4794,9 @@ func ParseEndpoint(
 			case "list-client-sessions":
 				endpoint = c.ListClientSessions()
 				data, err = organizationremotesessionissuersc.BuildListClientSessionsPayload(*organizationRemoteSessionIssuersListClientSessionsClientIDFlag, *organizationRemoteSessionIssuersListClientSessionsCursorFlag, *organizationRemoteSessionIssuersListClientSessionsLimitFlag, *organizationRemoteSessionIssuersListClientSessionsSessionTokenFlag, *organizationRemoteSessionIssuersListClientSessionsApikeyTokenFlag)
+			case "create-client":
+				endpoint = c.CreateClient()
+				data, err = organizationremotesessionissuersc.BuildCreateClientPayload(*organizationRemoteSessionIssuersCreateClientBodyFlag, *organizationRemoteSessionIssuersCreateClientSessionTokenFlag, *organizationRemoteSessionIssuersCreateClientApikeyTokenFlag)
 			case "update-client":
 				endpoint = c.UpdateClient()
 				data, err = organizationremotesessionissuersc.BuildUpdateClientPayload(*organizationRemoteSessionIssuersUpdateClientBodyFlag, *organizationRemoteSessionIssuersUpdateClientSessionTokenFlag, *organizationRemoteSessionIssuersUpdateClientApikeyTokenFlag)
@@ -6926,7 +6938,7 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-chats: List all chats for a project`)
 	fmt.Fprintln(os.Stderr, `    load-chat: Load a chat by its ID. Messages within a generation are paginated by `+"`"+`seq`+"`"+` keyset: omit cursors to receive the newest page, pass `+"`"+`before_seq`+"`"+` to load older messages (scroll up) or `+"`"+`after_seq`+"`"+` to load newer ones (scroll down). Set `+"`"+`from_start`+"`"+` to receive the oldest page (the start of the thread) instead of the newest. Omit `+"`"+`generation`+"`"+` to receive the latest generation. Set `+"`"+`risk_only`+"`"+` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `+"`"+`query`+"`"+` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `+"`"+`risk_only`+"`"+`).`)
-	fmt.Fprintln(os.Stderr, `    generate-title: Generate a title for a chat based on its messages`)
+	fmt.Fprintln(os.Stderr, `    generate-title: Read or set a chat's title. Omit `+"`"+`title`+"`"+` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `+"`"+`title`+"`"+` to set a manual title that auto-generation will never overwrite; provide an empty `+"`"+`title`+"`"+` to clear the manual title and re-enable auto-generation.`)
 	fmt.Fprintln(os.Stderr, `    credit-usage: Get the total number of chat credits and usage for the current billing period`)
 	fmt.Fprintln(os.Stderr, `    delete-chat: Soft-delete a chat by its ID`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
@@ -7027,7 +7039,7 @@ func chatGenerateTitleUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Generate a title for a chat based on its messages`)
+	fmt.Fprintln(os.Stderr, `Read or set a chat's title. Omit `+"`"+`title`+"`"+` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `+"`"+`title`+"`"+` to set a manual title that auto-generation will never overwrite; provide an empty `+"`"+`title`+"`"+` to clear the manual title and re-enable auto-generation.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -7037,7 +7049,7 @@ func chatGenerateTitleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat generate-title --body '{\n      \"id\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat generate-title --body '{\n      \"id\": \"abc123\",\n      \"title\": \"aaa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 func chatCreditUsageUsage() {
@@ -10486,6 +10498,7 @@ func organizationRemoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    get-client-delete-preflight: Authoritative impact summary for deleting a remote_session_client: associated session count and affected MCP server names. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    list-client-mcp-servers: List the MCP servers a remote_session_client is attached to (resolved through user_session_issuers) in the caller's organization. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    list-client-sessions: List the remote_sessions minted against a remote_session_client in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    create-client: Register a standalone remote_session_client under an existing remote_session_issuer in the caller's organization, with no user_session_issuer attachments. The client is project-scoped: it inherits a project-specific issuer's project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    update-client: Update a remote_session_client's non-secret fields in the caller's organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-client: Soft-delete a remote_session_client in the caller's organization. Cascades to the remote_sessions minted against it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    remove-client-from-mcp-server: Detach a remote_session_client from an MCP server (clears the MCP server's user_session_issuer link) in the caller's organization. Requires org:admin.`)
@@ -10768,6 +10781,28 @@ func organizationRemoteSessionIssuersListClientSessionsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers list-client-sessions --client-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersCreateClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers create-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Register a standalone remote_session_client under an existing remote_session_issuer in the caller's organization, with no user_session_issuer attachments. The client is project-scoped: it inherits a project-specific issuer's project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers create-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersUpdateClientUsage() {

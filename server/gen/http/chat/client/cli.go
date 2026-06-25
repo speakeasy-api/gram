@@ -344,7 +344,15 @@ func BuildGenerateTitlePayload(chatGenerateTitleBody string, chatGenerateTitleSe
 	{
 		err = json.Unmarshal([]byte(chatGenerateTitleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"abc123\",\n      \"title\": \"aaa\"\n   }'")
+		}
+		if body.Title != nil {
+			if utf8.RuneCountInString(*body.Title) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.title", *body.Title, utf8.RuneCountInString(*body.Title), 200, false))
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
@@ -366,7 +374,8 @@ func BuildGenerateTitlePayload(chatGenerateTitleBody string, chatGenerateTitleSe
 		}
 	}
 	v := &chat.GenerateTitlePayload{
-		ID: body.ID,
+		ID:    body.ID,
+		Title: body.Title,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -4526,6 +4526,8 @@ type SessionSummaryResponseBody struct {
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 	// LLM model used in this chat session
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Chat title, when the session resolves to a named chat
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
 	StartTimeUnixNano string `form:"start_time_unix_nano" json:"start_time_unix_nano" xml:"start_time_unix_nano"`
 	// Latest log timestamp in Unix nanoseconds (string for JS int64 precision)

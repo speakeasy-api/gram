@@ -78,6 +78,7 @@
 
 ## Functions
 
+- [ActiveChatTitle](functions/ActiveChatTitle.md)
 - [Chat](functions/Chat.md)
 - [ChatHistory](functions/ChatHistory.md)
 - [Replay](functions/Replay.md)

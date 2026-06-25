@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -803,6 +804,139 @@ func (s *Service) ListClientSessions(ctx context.Context, payload *orgissuersgen
 		Items:      items,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// CreateClient registers a standalone remote_session_client under an existing
+// issuer in the caller's organization, with no user_session_issuer attachments.
+// A remote_session_client is always project-scoped (the API view requires a
+// non-null project_id): the client inherits a project-specific issuer's project,
+// or the caller names a project — downscoping the client — when the issuer is
+// organization-level. Gated on org:admin like the other org-admin client writes.
+// Standalone clients are intentionally not deduplicated by client_id, matching
+// the project-scoped create path.
+func (s *Service) CreateClient(ctx context.Context, payload *orgissuersgen.CreateClientPayload) (*types.RemoteSessionClient, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+
+	issuerID, err := uuid.Parse(payload.RemoteSessionIssuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_issuer_id").LogError(ctx, logger)
+	}
+
+	clientID := strings.TrimSpace(payload.ClientID)
+	if clientID == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "client_id is required").LogError(ctx, logger)
+	}
+
+	// Encrypt a supplied client secret before it touches the database; an absent
+	// secret leaves the stored ciphertext NULL.
+	var secretCiphertext pgtype.Text
+	if payload.ClientSecret != nil && *payload.ClientSecret != "" {
+		ciphertext, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
+		if encErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
+		}
+		secretCiphertext = conv.ToPGText(ciphertext)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	// Reject an issuer that isn't in the caller's organization so a client can't
+	// be registered against another tenant's issuer.
+	issuer, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
+		ID:             issuerID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
+	}
+
+	// Resolve the new client's owning project. A remote_session_client must be
+	// project-scoped, so a project-specific issuer's client inherits its project
+	// while an organization-level issuer requires the caller to name one. A
+	// supplied project_id (validated to belong to the org) downscopes a client
+	// under an organization-level issuer; for a project-specific issuer it must
+	// match the issuer's own project so the client stays reachable from it.
+	clientProjectID := issuer.ProjectID
+	if payload.ProjectID != nil && strings.TrimSpace(*payload.ProjectID) != "" {
+		pid, perr := uuid.Parse(*payload.ProjectID)
+		if perr != nil {
+			return nil, oops.E(oops.CodeBadRequest, perr, "invalid project id").LogError(ctx, logger)
+		}
+		if issuer.ProjectID.Valid && issuer.ProjectID.UUID != pid {
+			return nil, oops.E(oops.CodeBadRequest, nil, "project_id must match the issuer's project for a project-specific issuer").LogError(ctx, logger)
+		}
+		if _, perr := projectsrepo.New(dbtx).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
+			ID:             pid,
+			OrganizationID: authCtx.ActiveOrganizationID,
+		}); perr != nil {
+			if errors.Is(perr, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeBadRequest, perr, "project not found in organization").LogError(ctx, logger)
+			}
+			return nil, oops.E(oops.CodeUnexpected, perr, "validate project").LogError(ctx, logger)
+		}
+		clientProjectID = conv.ToNullUUID(pid)
+	}
+	if !clientProjectID.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, "project_id is required when the issuer is organization-level").LogError(ctx, logger)
+	}
+
+	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:               clientProjectID,
+		RemoteSessionIssuerID:   issuerID,
+		ClientID:                clientID,
+		ClientSecretEncrypted:   secretCiphertext,
+		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
+		Scope:                   payload.Scope,
+		Audience:                conv.PtrToPGText(payload.Audience),
+		LegacyCallbackUrl:       false,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "create organization admin remote session client").LogError(ctx, logger)
+	}
+
+	if err := s.auditLogger.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              orgProjectID(created.ProjectID),
+		Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:       authCtx.Email,
+		ActorSlug:              nil,
+		RemoteSessionClientURN: urn.NewRemoteSessionClient(created.ID),
+		ClientID:               created.ClientID,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log organization admin remote session client creation").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	// Standalone client: no user_session_issuer attachments.
+	view, err := mv.BuildRemoteSessionClientView(created, nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
+	}
+
+	return view, nil
 }
 
 // UpdateClient patches a client's non-secret fields in the caller's

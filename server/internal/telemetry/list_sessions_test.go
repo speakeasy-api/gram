@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/stretchr/testify/require"
@@ -121,6 +123,13 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 		model:      "opus",
 	})
 
+	// Chat titles live in Postgres; the session list stitches them onto the
+	// ClickHouse-derived rows. chatID1 + chatID2 get titled chats (chatID2 in a
+	// second project of the same org, exercising the org-wide title lookup);
+	// chatID3 deliberately has no chat row, so its title resolves to nil.
+	insertSessionChat(t, ctx, ti, chatID1, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "Fix flaky test")
+	insertSessionChat(t, ctx, ti, chatID2, otherProject.ID, authCtx.ActiveOrganizationID, "Quarterly sales report")
+
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
@@ -140,6 +149,14 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	require.Equal(t, chatID2, allSessions.Sessions[1].GramChatID)
 	require.Equal(t, otherProject.ID.String(), allSessions.Sessions[1].ProjectID)
 	require.Equal(t, chatID1, allSessions.Sessions[2].GramChatID)
+
+	// Titles are stitched from Postgres: chatID3 has no chat row (nil); chatID2
+	// (a different project, same org) and chatID1 resolve to their titles.
+	require.Nil(t, allSessions.Sessions[0].Title)
+	require.NotNil(t, allSessions.Sessions[1].Title)
+	require.Equal(t, "Quarterly sales report", *allSessions.Sessions[1].Title)
+	require.NotNil(t, allSessions.Sessions[2].Title)
+	require.Equal(t, "Fix flaky test", *allSessions.Sessions[2].Title)
 
 	filtered := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: from,
@@ -179,6 +196,8 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	require.NotEmpty(t, session.StartTimeUnixNano)
 	require.NotEmpty(t, session.EndTimeUnixNano)
 	require.Greater(t, session.DurationSeconds, 0.0)
+	require.NotNil(t, session.Title)
+	require.Equal(t, "Fix flaky test", *session.Title)
 
 	byToolCalls := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   from,
@@ -215,6 +234,81 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 			res.Sessions[0].DurationSeconds > 0
 	})
 	require.Equal(t, chatID1, byDuration.Sessions[0].GramChatID)
+}
+
+func TestListSessions_CrossRowDirectoryAndHookFilters(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Now().UTC()
+	chatID := uuid.NewString()
+
+	// Usage row carries cost + hook_source but NOT the directory attribute
+	// (mirrors production: usage/OTEL rows aren't enriched with WorkOS attrs).
+	insertListSessionCompletionLog(t, ctx, listSessionLogParams{
+		projectID:    projectID,
+		timestamp:    now.Add(-10 * time.Minute),
+		chatID:       chatID,
+		email:        "sagar@example.com",
+		department:   "", // unset on the cost-bearing row
+		roles:        []string{"dev"},
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  100,
+		outputTokens: 50,
+		totalTokens:  150,
+		cost:         2.5,
+	})
+	// Tool row carries the directory attribute (department) but an empty
+	// hook_source — the inverse of the usage row, in the same chat.
+	insertListSessionToolLog(t, ctx, listSessionLogParams{
+		projectID:  projectID,
+		timestamp:  now.Add(-9 * time.Minute),
+		chatID:     chatID,
+		email:      "sagar@example.com",
+		department: "Executive",
+		roles:      []string{"dev"},
+		hookSource: "", // unset on the directory-enriched row
+		statusCode: 200,
+		toolURN:    "tools:http:petstore:listPets",
+	})
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// department_name lives on one row, hook_source on another. A per-row AND
+	// would return nothing; the per-chat HAVING must still match the chat.
+	res := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		From: from,
+		To:   to,
+		Filters: []*gen.QueryFilter{
+			{Dimension: "email", Values: []string{"sagar@example.com"}},
+			{Dimension: "department_name", Values: []string{"Executive"}},
+			{Dimension: "hook_source", Values: []string{"claude-code"}},
+		},
+		SortBy: "total_cost",
+		Limit:  10,
+	}, func(res *gen.ListSessionsResult) bool {
+		return len(res.Sessions) == 1 && res.Sessions[0].GramChatID == chatID
+	})
+
+	require.Len(t, res.Sessions, 1)
+	session := res.Sessions[0]
+	require.Equal(t, chatID, session.GramChatID)
+	// Full session cost is reported, not just the cost on rows matching a filter.
+	require.InDelta(t, 2.5, session.TotalCost, 1e-9)
+	require.Equal(t, int64(1), session.ToolCallCount)
+	require.Equal(t, int64(1), session.MessageCount)
 }
 
 func TestListSessions_CursorPagination(t *testing.T) {
@@ -319,6 +413,22 @@ func waitForListSessions(
 	}, 10*time.Second, 200*time.Millisecond, "expected list sessions result to become query-ready, err: %v", errors.Unwrap(err))
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	return result
+}
+
+// insertSessionChat seeds a Postgres chats row so the session list can resolve a
+// title for the matching gram_chat_id.
+func insertSessionChat(t *testing.T, ctx context.Context, ti *testInstance, chatID string, projectID uuid.UUID, orgID, title string) {
+	t.Helper()
+
+	_, err := chatrepo.New(ti.conn).UpsertChat(ctx, chatrepo.UpsertChatParams{
+		ID:             uuid.MustParse(chatID),
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		UserID:         pgtype.Text{},
+		ExternalUserID: pgtype.Text{},
+		Title:          pgtype.Text{String: title, Valid: true},
+	})
+	require.NoError(t, err)
 }
 
 type listSessionLogParams struct {

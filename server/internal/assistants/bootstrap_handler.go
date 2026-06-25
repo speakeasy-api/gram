@@ -5,11 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
-	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/time/rate"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -28,54 +25,6 @@ const (
 
 type bootstrapRequest struct {
 	ThreadID string `json:"thread_id"`
-}
-
-type assistantRateLimiter struct {
-	mu        sync.Mutex
-	state     map[uuid.UUID]*rateLimiterEntry
-	limit     rate.Limit
-	burst     int
-	lastSweep time.Time
-}
-
-type rateLimiterEntry struct {
-	limiter  *rate.Limiter
-	lastSeen time.Time
-}
-
-func newAssistantRateLimiter() *assistantRateLimiter {
-	return &assistantRateLimiter{
-		mu:        sync.Mutex{},
-		state:     map[uuid.UUID]*rateLimiterEntry{},
-		limit:     rate.Limit(float64(bootstrapRatePerMin) / 60.0),
-		burst:     bootstrapRateBurst,
-		lastSweep: time.Now(),
-	}
-}
-
-func (l *assistantRateLimiter) allow(id uuid.UUID, now time.Time) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	// Lazy GC: every 5 minutes, drop limiters that have been idle long enough
-	// to have refilled to full. Bounded memory across many short-lived
-	// assistants without paying a goroutine.
-	if now.Sub(l.lastSweep) > 5*time.Minute {
-		for k, e := range l.state {
-			if now.Sub(e.lastSeen) > 5*time.Minute {
-				delete(l.state, k)
-			}
-		}
-		l.lastSweep = now
-	}
-
-	e, ok := l.state[id]
-	if !ok {
-		e = &rateLimiterEntry{limiter: rate.NewLimiter(l.limit, l.burst), lastSeen: now}
-		l.state[id] = e
-	}
-	e.lastSeen = now
-	return e.limiter.AllowN(now, 1)
 }
 
 func (s *Service) handleGetThreadBootstrap(w http.ResponseWriter, r *http.Request) error {
@@ -122,7 +71,14 @@ func (s *Service) handleGetThreadBootstrap(w http.ResponseWriter, r *http.Reques
 		return oops.E(oops.CodeForbidden, nil, "token thread does not match requested thread")
 	}
 
-	if !s.bootstrapLimiter.allow(principal.AssistantID, time.Now()) {
+	// A Store outage is not a throttle — fail open rather than wedge bootstrap.
+	switch res, err := s.bootstrapLimiter.Allow(ctx, principal.AssistantID.String()); {
+	case err != nil:
+		s.logger.WarnContext(ctx, "bootstrap rate limiter unavailable, allowing",
+			attr.SlogError(err),
+			attr.SlogAssistantID(principal.AssistantID.String()),
+		)
+	case !res.Allowed:
 		return oops.E(oops.CodeRateLimitExceeded, nil, "thread bootstrap rate limit exceeded")
 	}
 

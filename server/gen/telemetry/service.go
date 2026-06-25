@@ -1157,6 +1157,8 @@ type SessionSummary struct {
 	HookSource *string
 	// LLM model used in this chat session
 	Model *string
+	// Chat title, when the session resolves to a named chat
+	Title *string
 	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
 	StartTimeUnixNano string
 	// Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
