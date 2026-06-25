@@ -22,16 +22,31 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
-func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.CodexHookResult, error) {
+func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *gen.CodexHookResult, err error) {
+	start := time.Now()
+	hookEventName := payload.HookEventName
+	if parsedEvent, ok := parseCodexHookEvent(payload.HookEventName); ok {
+		hookEventName = string(parsedEvent)
+	}
+	orgSlug := ""
+	outcome := hookMetricOutcomeAccepted
+	defer func() {
+		if err != nil && outcome == hookMetricOutcomeAccepted {
+			outcome = hookMetricOutcomeFailure
+		}
+		s.metrics.RecordHookEventDuration(ctx, "codex", hookEventName, outcome, orgSlug, time.Since(start))
+	}()
+
 	logger := s.logger.With(
 		attr.SlogHookSource("codex"),
-		attr.SlogHookEvent(payload.HookEventName),
+		attr.SlogHookEvent(hookEventName),
 		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
 		attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
 	)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		outcome = hookMetricOutcomeUnauthorized
 		logger.WarnContext(ctx, "rejected unauthorized codex hook request",
 			attr.SlogEvent("codex_hook_unauthorized"),
 		)
@@ -42,6 +57,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 	}
 
 	orgID := authCtx.ActiveOrganizationID
+	orgSlug = authCtx.OrganizationSlug
 	projectID := authCtx.ProjectID.String()
 	metadata := s.codexSessionMetadata(ctx, payload, orgID, projectID)
 	if metadata.UserEmail == "" {

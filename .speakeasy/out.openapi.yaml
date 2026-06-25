@@ -38135,6 +38135,9 @@ components:
           items:
             $ref: '#/components/schemas/ExternalMCPRemote'
           description: Available remote endpoints for the server
+        supports_dcr:
+          type: boolean
+          description: Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).
         title:
           type: string
           description: Display name for the server
@@ -38157,6 +38160,7 @@ components:
         - description
         - tool_count
         - is_read_only
+        - supports_dcr
     ExternalMCPTool:
       type: object
       properties:

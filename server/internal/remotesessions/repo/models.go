@@ -29,6 +29,7 @@ type RemoteSession struct {
 type RemoteSessionClient struct {
 	ID                      uuid.UUID
 	ProjectID               uuid.NullUUID
+	OrganizationID          pgtype.Text
 	RemoteSessionIssuerID   uuid.UUID
 	ClientID                string
 	ClientSecretEncrypted   pgtype.Text

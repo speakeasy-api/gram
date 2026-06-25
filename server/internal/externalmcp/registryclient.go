@@ -166,7 +166,20 @@ type serverRemoteMeta struct {
 }
 
 type serverRemoteMetaAuthOptions struct {
-	Type string `json:"type"`
+	Type   string                     `json:"type"`
+	Detail serverRemoteMetaAuthDetail `json:"detail"`
+}
+
+type serverRemoteMetaAuthDetail struct {
+	// AuthorizationServerMetadata is PulseMCP's embedded RFC 8414 discovery
+	// result for OAuth remotes. A non-empty registration_endpoint means the
+	// upstream authorization server supports dynamic client registration (DCR).
+	// Note: we deliberately read registration_endpoint here rather than
+	// clientRegistration.dynamic.supported, which PulseMCP reports
+	// optimistically (true even when the AS exposes no registration endpoint).
+	AuthorizationServerMetadata struct {
+		RegistrationEndpoint string `json:"registration_endpoint"`
+	} `json:"authorizationServerMetadata"`
 }
 
 // serverDetailsEntry represents the response from the server details endpoint
@@ -296,6 +309,10 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			}
 		}
 
+		// A server supports DCR when any remote's OAuth auth option carries a
+		// non-empty registration endpoint in PulseMCP's embedded discovery
+		// result. Computed in the same pass that strips per-remote tools.
+		supportsDCR := false
 		for _, remote := range []*serverRemoteMeta{
 			&s.Meta.Version.FirstRemote,
 			&s.Meta.Version.SecondRemote,
@@ -303,6 +320,12 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			&s.Meta.Version.FourthRemote,
 			&s.Meta.Version.FifthRemote,
 		} {
+			for _, auth := range remote.AuthOptions {
+				if auth.Detail.AuthorizationServerMetadata.RegistrationEndpoint != "" {
+					supportsDCR = true
+					break
+				}
+			}
 			remote.Tools = nil
 		}
 
@@ -334,6 +357,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			Meta:                                meta,
 			ToolCount:                           toolCount,
 			IsReadOnly:                          isReadOnly,
+			SupportsDcr:                         supportsDCR,
 			Remotes:                             remotes,
 		})
 	}
@@ -397,13 +421,13 @@ func toExternalMCPRemoteVariables(variables map[string]RemoteVariable) map[strin
 // ClearCache removes all cached entries for the given registry URL.
 func (c *RegistryClient) ClearCache(ctx context.Context, registryURL string) error {
 	if c.listCache != nil {
-		prefix := fmt.Sprintf("registry:list:%s", registryURL)
+		prefix := fmt.Sprintf("registry:list:%s:%s", registryCacheSchemaVersion, registryURL)
 		if err := c.listCache.DeleteByPrefix(ctx, prefix); err != nil {
 			return fmt.Errorf("clear list cache for registry %s: %w", registryURL, err)
 		}
 	}
 	if c.detailsCache != nil {
-		prefix := fmt.Sprintf("registry:details:%s", registryURL)
+		prefix := fmt.Sprintf("registry:details:%s:%s", registryCacheSchemaVersion, registryURL)
 		if err := c.detailsCache.DeleteByPrefix(ctx, prefix); err != nil {
 			return fmt.Errorf("clear details cache for registry %s: %w", registryURL, err)
 		}
