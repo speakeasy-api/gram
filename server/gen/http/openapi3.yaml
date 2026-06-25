@@ -45772,6 +45772,9 @@ components:
                     enum:
                         - success
                         - error
+                title:
+                    type: string
+                    description: Chat title, when the session resolves to a named chat
                 tool_call_count:
                     type: integer
                     description: Number of tool calls in this chat session

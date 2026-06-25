@@ -5130,6 +5130,7 @@ func marshalTelemetrySessionSummaryToSessionSummaryResponseBody(v *telemetry.Ses
 		UserEmail:         v.UserEmail,
 		HookSource:        v.HookSource,
 		Model:             v.Model,
+		Title:             v.Title,
 		StartTimeUnixNano: v.StartTimeUnixNano,
 		EndTimeUnixNano:   v.EndTimeUnixNano,
 		DurationSeconds:   v.DurationSeconds,

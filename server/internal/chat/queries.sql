@@ -394,6 +394,12 @@ FROM limited_chats lc;
 -- name: GetChat :one
 SELECT * FROM chats WHERE id = @id AND deleted IS FALSE;
 
+-- name: GetChatTitlesByIDs :many
+SELECT id, title FROM chats
+WHERE id = ANY(@ids::uuid[])
+  AND project_id = ANY(@project_ids::uuid[])
+  AND deleted IS FALSE;
+
 -- name: ListChatMessages :many
 SELECT * FROM chat_messages 
 WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid) 
