@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/stretchr/testify/require"
@@ -121,6 +123,13 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 		model:      "opus",
 	})
 
+	// Chat titles live in Postgres; the session list stitches them onto the
+	// ClickHouse-derived rows. chatID1 + chatID2 get titled chats (chatID2 in a
+	// second project of the same org, exercising the org-wide title lookup);
+	// chatID3 deliberately has no chat row, so its title resolves to nil.
+	insertSessionChat(t, ctx, ti, chatID1, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "Fix flaky test")
+	insertSessionChat(t, ctx, ti, chatID2, otherProject.ID, authCtx.ActiveOrganizationID, "Quarterly sales report")
+
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
@@ -140,6 +149,14 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	require.Equal(t, chatID2, allSessions.Sessions[1].GramChatID)
 	require.Equal(t, otherProject.ID.String(), allSessions.Sessions[1].ProjectID)
 	require.Equal(t, chatID1, allSessions.Sessions[2].GramChatID)
+
+	// Titles are stitched from Postgres: chatID3 has no chat row (nil); chatID2
+	// (a different project, same org) and chatID1 resolve to their titles.
+	require.Nil(t, allSessions.Sessions[0].Title)
+	require.NotNil(t, allSessions.Sessions[1].Title)
+	require.Equal(t, "Quarterly sales report", *allSessions.Sessions[1].Title)
+	require.NotNil(t, allSessions.Sessions[2].Title)
+	require.Equal(t, "Fix flaky test", *allSessions.Sessions[2].Title)
 
 	filtered := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: from,
@@ -179,6 +196,8 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	require.NotEmpty(t, session.StartTimeUnixNano)
 	require.NotEmpty(t, session.EndTimeUnixNano)
 	require.Greater(t, session.DurationSeconds, 0.0)
+	require.NotNil(t, session.Title)
+	require.Equal(t, "Fix flaky test", *session.Title)
 
 	byToolCalls := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   from,
@@ -394,6 +413,22 @@ func waitForListSessions(
 	}, 10*time.Second, 200*time.Millisecond, "expected list sessions result to become query-ready, err: %v", errors.Unwrap(err))
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	return result
+}
+
+// insertSessionChat seeds a Postgres chats row so the session list can resolve a
+// title for the matching gram_chat_id.
+func insertSessionChat(t *testing.T, ctx context.Context, ti *testInstance, chatID string, projectID uuid.UUID, orgID, title string) {
+	t.Helper()
+
+	_, err := chatrepo.New(ti.conn).UpsertChat(ctx, chatrepo.UpsertChatParams{
+		ID:             uuid.MustParse(chatID),
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		UserID:         pgtype.Text{},
+		ExternalUserID: pgtype.Text{},
+		Title:          pgtype.Text{String: title, Valid: true},
+	})
+	require.NoError(t, err)
 }
 
 type listSessionLogParams struct {

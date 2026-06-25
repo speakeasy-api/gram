@@ -872,6 +872,7 @@ var SessionSummaryType = Type("SessionSummary", func() {
 	Attribute("user_email", String, "User email associated with this chat session")
 	Attribute("hook_source", String, "Client or agent surface associated with this chat session")
 	Attribute("model", String, "LLM model used in this chat session")
+	Attribute("title", String, "Chat title, when the session resolves to a named chat")
 	Attribute("start_time_unix_nano", String, "Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)")
 	Attribute("end_time_unix_nano", String, "Latest log timestamp in Unix nanoseconds (string for JS int64 precision)")
 	Attribute("duration_seconds", Float64, "Chat session duration in seconds")

@@ -107,7 +107,7 @@ function isDrillableValue(groupValue: string): boolean {
 }
 
 // The provider logo for a model value (claude-* → Claude, gpt-* → OpenAI, …).
-export function ModelIcon({
+function ModelIcon({
   model,
   className,
 }: {

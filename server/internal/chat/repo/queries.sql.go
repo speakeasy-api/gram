@@ -694,6 +694,43 @@ func (q *Queries) GetChatSessionCount(ctx context.Context, arg GetChatSessionCou
 	return session_count, err
 }
 
+const getChatTitlesByIDs = `-- name: GetChatTitlesByIDs :many
+SELECT id, title FROM chats
+WHERE id = ANY($1::uuid[])
+  AND project_id = ANY($2::uuid[])
+  AND deleted IS FALSE
+`
+
+type GetChatTitlesByIDsParams struct {
+	Ids        []uuid.UUID
+	ProjectIds []uuid.UUID
+}
+
+type GetChatTitlesByIDsRow struct {
+	ID    uuid.UUID
+	Title pgtype.Text
+}
+
+func (q *Queries) GetChatTitlesByIDs(ctx context.Context, arg GetChatTitlesByIDsParams) ([]GetChatTitlesByIDsRow, error) {
+	rows, err := q.db.Query(ctx, getChatTitlesByIDs, arg.Ids, arg.ProjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetChatTitlesByIDsRow
+	for rows.Next() {
+		var i GetChatTitlesByIDsRow
+		if err := rows.Scan(&i.ID, &i.Title); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getFirstUserChatMessage = `-- name: GetFirstUserChatMessage :one
 SELECT content FROM chat_messages
 WHERE chat_id = $1

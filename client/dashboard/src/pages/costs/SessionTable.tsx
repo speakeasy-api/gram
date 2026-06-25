@@ -6,8 +6,6 @@ import { formatDistanceToNow } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { formatDurationFromNanos } from "../chatLogs/claudeUsage";
-import { HookSourceIcon } from "../hooks/HookSourceIcon";
-import { ModelIcon } from "./CostTable";
 import {
   Gutter,
   type SortDir,
@@ -117,18 +115,26 @@ const SESSION_COLUMNS: SessionColumn[] = [
   {
     id: "session",
     header: "Session",
-    track: "minmax(max-content,1fr)",
+    // Titles can be long; cap the track so they truncate instead of dominating.
+    track: "minmax(160px,28rem)",
     sortKey: "session",
-    render: (s) => (
-      <div className="flex min-w-0 flex-col">
-        <span className="truncate font-mono text-xs font-medium">
-          {s.gramChatId.slice(0, 8)}
-        </span>
-        <span className="text-muted-foreground text-xs">
-          {relativeTime(s.startTimeUnixNano)}
-        </span>
-      </div>
-    ),
+    render: (s) => {
+      const title = s.title?.trim();
+      return (
+        <div className="flex min-w-0 flex-col">
+          {title ? (
+            <span className="line-clamp-2 text-sm font-medium">{title}</span>
+          ) : (
+            <span className="truncate font-mono text-xs font-medium">
+              {s.gramChatId.slice(0, 8)}
+            </span>
+          )}
+          <span className="text-muted-foreground text-xs">
+            {relativeTime(s.startTimeUnixNano)}
+          </span>
+        </div>
+      );
+    },
   },
   {
     id: "user",
@@ -145,10 +151,7 @@ const SESSION_COLUMNS: SessionColumn[] = [
     header: "Agent",
     track: "minmax(max-content,1fr)",
     render: (s) => (
-      <div className="flex min-w-0 items-center gap-2">
-        {s.hookSource && (
-          <HookSourceIcon source={s.hookSource} className="size-4 shrink-0" />
-        )}
+      <div className="flex min-w-0 items-center">
         <span className="truncate">{displayOrDash(s.hookSource)}</span>
       </div>
     ),
@@ -158,8 +161,7 @@ const SESSION_COLUMNS: SessionColumn[] = [
     header: "Model",
     track: "minmax(max-content,1fr)",
     render: (s) => (
-      <div className="flex min-w-0 items-center gap-2">
-        {s.model && <ModelIcon model={s.model} className="size-4 shrink-0" />}
+      <div className="flex min-w-0 items-center">
         <span className="truncate">{displayOrDash(s.model)}</span>
       </div>
     ),
@@ -339,7 +341,7 @@ export function SessionTable({
             type="button"
             onClick={() => onOpen(s.gramChatId)}
             className={cn(
-              "hover:bg-muted grid w-full cursor-pointer items-center py-4 text-left text-sm transition-colors",
+              "hover:bg-muted grid w-full cursor-pointer items-start py-4 text-left text-sm transition-colors",
               SUBGRID_ROW_CLASS,
               (safePage * PAGE_SIZE + i) % 2 === 1 && "bg-muted/25",
             )}
