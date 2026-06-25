@@ -462,6 +462,11 @@ run();
 
 * [list](docs/sdks/resources/README.md#list) - listResources resources
 
+### [Risk.Blocks](docs/sdks/blocks/README.md)
+
+* [get](docs/sdks/blocks/README.md#get) - getRiskBlock risk
+* [submitFeedback](docs/sdks/blocks/README.md#submitfeedback) - submitRiskBlockFeedback risk
+
 ### [Risk.Categories](docs/sdks/categories/README.md)
 
 * [list](docs/sdks/categories/README.md#list) - listRiskCategories risk
@@ -870,6 +875,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`remoteSessionsList`](docs/sdks/remotesessions/README.md#list) - listRemoteSessions remoteSessions
 - [`remoteSessionsRevoke`](docs/sdks/remotesessions/README.md#revoke) - revokeRemoteSession remoteSessions
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
+- [`riskBlocksGet`](docs/sdks/blocks/README.md#get) - getRiskBlock risk
+- [`riskBlocksSubmitFeedback`](docs/sdks/blocks/README.md#submitfeedback) - submitRiskBlockFeedback risk
 - [`riskCategoriesList`](docs/sdks/categories/README.md#list) - listRiskCategories risk
 - [`riskCustomRulesCreate`](docs/sdks/customrules/README.md#create) - createCustomDetectionRule risk
 - [`riskCustomRulesDelete`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
@@ -1236,6 +1243,7 @@ To learn about this feature and how to get started, check
 - [`useRiskDeleteCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
 - [`useRiskDeleteExclusionMutation`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`useRiskDenyPolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
+- [`useRiskGetBlock`](docs/sdks/blocks/README.md#get) - getRiskBlock risk
 - [`useRiskGetCustomDetectionRule`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
 - [`useRiskListCustomDetectionRules`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`useRiskListExclusions`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
@@ -1252,6 +1260,7 @@ To learn about this feature and how to get started, check
 - [`useRiskPoliciesUpdateMutation`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
 - [`useRiskRevokePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
 - [`useRiskRuleBreakdown`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
+- [`useRiskSubmitBlockFeedbackMutation`](docs/sdks/blocks/README.md#submitfeedback) - submitRiskBlockFeedback risk
 - [`useRiskSuggestCustomRuleMutation`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 - [`useRiskTestDetectionRuleMutation`](docs/sdks/rules/README.md#test) - testDetectionRule risk
 - [`useRiskUpdateCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk

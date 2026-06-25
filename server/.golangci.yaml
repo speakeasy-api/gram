@@ -334,6 +334,10 @@ linters:
         # pattern.
         - '^github\.com/speakeasy-api/gram/server/internal/risk/categories\.Definition$'
         - '^github\.com/speakeasy-api/gram/server/internal/risk/categories\.Filter$'
+        # Tool call block enrichment: every call sets reason + tenancy, but the
+        # risk_result / chat / policy links are intentionally optional and set
+        # only where known synchronously at the deny site.
+        - '^github\.com/speakeasy-api/gram/server/internal/hooks\.toolCallBlockParams$'
         - '^github\.com/speakeasy-api/gram/infra/gen/gram/.+'
     exhaustive:
       check:

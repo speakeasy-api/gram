@@ -118,8 +118,22 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
+			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+				Provider:       "cursor",
+				OrganizationID: orgID,
+				ProjectID:      *authCtx.ProjectID,
+				Reason:         auditReason,
+				ToolName:       strings.TrimPrefix(ev.ToolName, "MCP:"),
+				RiskPolicyID:   nullableUUIDFromString(scanResult.PolicyID),
+			}); bURL != "" {
+				userReason = appendBlockURL(userReason, bURL)
+			}
 			result.Permission = new("deny")
 			result.UserMessage = &userReason
+			// Surface the reason to the agent (not just the user) so it can
+			// self-correct instead of treating the deny as an opaque sandbox
+			// rejection.
+			result.AgentMessage = &userReason
 			break
 		}
 		policy := s.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, actorUserID)
@@ -149,6 +163,16 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 				RiskPolicyID:    policy.ID,
 			})
 			blockReason = auditReason
+			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+				Provider:       "cursor",
+				OrganizationID: orgID,
+				ProjectID:      *authCtx.ProjectID,
+				Reason:         auditReason,
+				ToolName:       toolName,
+				RiskPolicyID:   nullableUUIDFromString(policy.ID),
+			}); bURL != "" {
+				userReason = appendBlockURL(userReason, bURL)
+			}
 			result.Permission = new("deny")
 			result.UserMessage = &userReason
 			result.AgentMessage = &userReason
@@ -171,8 +195,19 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
+			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+				Provider:       "cursor",
+				OrganizationID: orgID,
+				ProjectID:      *authCtx.ProjectID,
+				Reason:         auditReason,
+				ToolName:       toolName,
+				RiskPolicyID:   nullableUUIDFromString(scanResult.PolicyID),
+			}); bURL != "" {
+				userReason = appendBlockURL(userReason, bURL)
+			}
 			result.Permission = new("deny")
 			result.UserMessage = &userReason
+			result.AgentMessage = &userReason
 		} else {
 			result.Permission = new("allow")
 		}
@@ -183,6 +218,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			blockReason = auditReason
 			result.Permission = new("deny")
 			result.UserMessage = &userReason
+			result.AgentMessage = &userReason
 		}
 	default:
 		// nothing to do

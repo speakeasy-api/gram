@@ -801,6 +801,17 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
+			if blockID, err := uuid.NewV7(); err == nil {
+				userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+				go s.insertToolCallBlock(context.WithoutCancel(ctx), blockID, toolCallBlockParams{
+					Provider:       "claude",
+					OrganizationID: ev.Context.OrganizationID,
+					ProjectID:      ev.Context.ProjectID,
+					Reason:         auditReason,
+					ToolName:       ev.ToolName,
+					RiskPolicyID:   nullableUUIDFromString(scanResult.PolicyID),
+				})
+			}
 			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}
 	}
@@ -1023,8 +1034,33 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	// Surface the block in the Recent Findings table (risk_results)
 	// alongside batch-scanner findings, with the URL in the match
 	// column so the dashboard can filter and offer "Exclude from
-	// policy" actions against the URL itself.
-	s.recordShadowMCPBlockFinding(ctx, payload, &metadata, policy, matched, serverPrefix, detail)
+	// policy" actions against the URL itself. The persisted row also
+	// backs the durable block page: when it is written we append a
+	// signed link to that page so the agent (and user) can open the
+	// block, read the reason, and leave feedback.
+	// Pre-mint the durable block id so its URL goes in the deny response
+	// immediately, then persist the Recent Findings row and the block row off
+	// the hot path. The page becomes valid within moments — well before a human
+	// opens the link.
+	if blockID, err := uuid.NewV7(); err == nil {
+		userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+		projectUUID, _ := uuid.Parse(metadata.ProjectID)
+		asyncCtx := context.WithoutCancel(ctx)
+		metaCopy := metadata
+		go func() {
+			resultID, msgID, _ := s.recordShadowMCPBlockFinding(asyncCtx, payload, &metaCopy, policy, matched, serverPrefix, detail)
+			s.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
+				Provider:       "claude",
+				OrganizationID: metaCopy.GramOrgID,
+				ProjectID:      projectUUID,
+				Reason:         auditReason,
+				ToolName:       mcpToolName,
+				RiskPolicyID:   nullableUUIDFromString(policy.ID),
+				RiskResultID:   nullableUUID(resultID),
+				ChatMessageID:  nullableUUID(msgID),
+			})
+		}()
+	}
 
 	return constructBlockResponse(payload.HookEventName, userReason), nil
 }
@@ -1060,22 +1096,22 @@ func (s *Service) recordShadowMCPBlockFinding(
 	matched *MCPServerEntry,
 	serverPrefix string,
 	detail string,
-) {
+) (uuid.UUID, uuid.UUID, bool) {
 	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) {
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: invalid project id",
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 	policyID, err := uuid.Parse(policy.ID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: invalid policy id",
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 
 	chatID := sessionIDToUUID(*payload.SessionID)
@@ -1093,7 +1129,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 			attr.SlogEvent("claude_hook_block_finding_no_message"),
 			attr.SlogError(err),
 		)
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 
 	// match identifies the server in the dashboard's Recent Findings row and
@@ -1130,7 +1166,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 	if err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: failed to generate uuidv7",
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 	insertParams := repo.InsertShadowMCPBlockResultParams{
 		ID:                resultID,
@@ -1148,7 +1184,9 @@ func (s *Service) recordShadowMCPBlockFinding(
 			attr.SlogEvent("claude_hook_block_finding_insert_failed"),
 			attr.SlogError(err),
 		)
+		return uuid.Nil, uuid.Nil, false
 	}
+	return resultID, msgID, true
 }
 
 // writeClaudeBlockToClickHouse writes a companion ClickHouse log entry for a

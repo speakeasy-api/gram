@@ -722,7 +722,8 @@ SELECT
     sub.risk_policy_version, sub.chat_message_id, sub.source, sub.found,
     sub.rule_id, sub.description, sub.match, sub.start_pos, sub.end_pos,
     sub.confidence, sub.tags, sub.spans, sub.dead_letter_reason, sub.created_at,
-    sub.chat_id, sub.message_created_at, sub.chat_title, sub.chat_user_id
+    sub.chat_id, sub.message_created_at, sub.chat_title, sub.chat_user_id,
+    sub.block_id
 FROM (
   SELECT
       rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id,
@@ -731,6 +732,7 @@ FROM (
       rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.created_at,
       cm.chat_id, cm.created_at AS message_created_at,
       c.title AS chat_title, c.external_user_id AS chat_user_id,
+      COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id,
       CASE
         WHEN @unique_match::boolean THEN ROW_NUMBER() OVER (
           PARTITION BY rr.risk_policy_id, rr.rule_id, rr.match
@@ -742,6 +744,13 @@ FROM (
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
   JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  LEFT JOIN LATERAL (
+    SELECT tcb.id AS block_id FROM tool_call_blocks tcb
+    WHERE tcb.project_id = rr.project_id
+      AND tcb.chat_message_id = rr.chat_message_id
+      AND tcb.deleted IS FALSE
+    ORDER BY tcb.created_at DESC LIMIT 1
+  ) blk ON TRUE
   WHERE rr.project_id = @project_id
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND (sqlc.narg(from_time)::timestamptz IS NULL OR cm.created_at >= sqlc.narg(from_time)::timestamptz)
@@ -805,11 +814,18 @@ ORDER BY sub.message_created_at DESC, sub.id DESC
 LIMIT @page_limit;
 
 -- name: ListRiskResultsByProjectAndPolicy :many
-SELECT rr.*, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.*, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+LEFT JOIN LATERAL (
+  SELECT tcb.id AS block_id FROM tool_call_blocks tcb
+  WHERE tcb.project_id = rr.project_id
+    AND tcb.chat_message_id = rr.chat_message_id
+    AND tcb.deleted IS FALSE
+  ORDER BY tcb.created_at DESC LIMIT 1
+) blk ON TRUE
 WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
@@ -821,11 +837,18 @@ ORDER BY cm.created_at DESC, rr.id DESC
 LIMIT @page_limit;
 
 -- name: ListRiskResultsByChatFound :many
-SELECT rr.*, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.*, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+LEFT JOIN LATERAL (
+  SELECT tcb.id AS block_id FROM tool_call_blocks tcb
+  WHERE tcb.project_id = rr.project_id
+    AND tcb.chat_message_id = rr.chat_message_id
+    AND tcb.deleted IS FALSE
+  ORDER BY tcb.created_at DESC LIMIT 1
+) blk ON TRUE
 WHERE cm.chat_id = @chat_id
   AND rr.project_id = @project_id
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
@@ -1094,3 +1117,36 @@ WHERE id IN (
   LIMIT @batch_limit
 )
 RETURNING id;
+
+-- name: GetToolCallBlock :one
+-- Loads a durable tool call block for the block page. Scoped to the viewer's
+-- organization (the page is org-admin gated, like Risk Events); the policy name
+-- is joined for display when the policy still exists.
+SELECT
+    b.id,
+    b.project_id,
+    b.reason,
+    b.tool_name,
+    b.feedback,
+    b.created_at,
+    rp.name AS policy_name
+FROM tool_call_blocks b
+LEFT JOIN risk_policies rp ON rp.id = b.risk_policy_id
+WHERE b.id = @id
+  AND b.organization_id = @organization_id
+  AND b.deleted IS FALSE;
+
+-- name: UpdateToolCallBlockFeedback :one
+-- Records the latest thumbs feedback on a block and returns the refreshed row.
+UPDATE tool_call_blocks
+SET feedback = sqlc.arg(feedback),
+    feedback_user_id = sqlc.narg(feedback_user_id),
+    feedback_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE tool_call_blocks.id = sqlc.arg(id)
+  AND tool_call_blocks.organization_id = sqlc.arg(organization_id)
+  AND tool_call_blocks.deleted IS FALSE
+RETURNING tool_call_blocks.id, tool_call_blocks.project_id, tool_call_blocks.reason, tool_call_blocks.tool_name,
+  tool_call_blocks.feedback, tool_call_blocks.created_at,
+  COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id), '')::text AS policy_name;
+

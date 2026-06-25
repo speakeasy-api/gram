@@ -552,6 +552,62 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCreatePolicyBypassRequest", "type": "mutation"}`)
 	})
 
+	Method("getRiskBlock", func() {
+		Description("Get a tool call block by its risk result ID for the durable block page.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("id", String, "The block ID (the underlying risk result ID).", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(RiskBlock)
+
+		HTTP(func() {
+			GET("/rpc/risk.getBlock")
+			security.SessionHeader()
+			Param("id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskBlock")
+		Meta("openapi:extension:x-speakeasy-group", "risk.blocks")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskGetBlock", "type": "query"}`)
+	})
+
+	Method("submitRiskBlockFeedback", func() {
+		Description("Record thumbs-up/thumbs-down feedback for a tool call block from the block page.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("id", String, "The block ID (the underlying risk result ID).", func() {
+				Format(FormatUUID)
+			})
+			Attribute("sentiment", String, "Feedback sentiment.", func() {
+				Enum("up", "down")
+			})
+			Required("id", "sentiment")
+		})
+
+		Result(RiskBlock)
+
+		HTTP(func() {
+			POST("/rpc/risk.submitBlockFeedback")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "submitRiskBlockFeedback")
+		Meta("openapi:extension:x-speakeasy-group", "risk.blocks")
+		Meta("openapi:extension:x-speakeasy-name-override", "submitFeedback")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSubmitBlockFeedback", "type": "mutation"}`)
+	})
+
 	Method("listRiskPolicyBypassRequests", func() {
 		Description("List current risk policy bypass request workflow records.")
 
@@ -1270,6 +1326,25 @@ var RiskPolicyBypassRequest = Type("RiskPolicyBypassRequest", func() {
 		Format(FormatDateTime)
 	})
 	Required("id", "policy_id", "target_dimensions", "requester_user_id", "status", "granted_principal_urns", "created_at", "updated_at")
+})
+
+var RiskBlock = Type("RiskBlock", func() {
+	Attribute("id", String, "The block ID (the underlying risk result ID).", func() {
+		Format(FormatUUID)
+	})
+	Attribute("project_id", String, "The project the block belongs to.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("reason", String, "Human-readable reason the tool call was blocked.")
+	Attribute("policy_name", String, "Name of the risk policy that blocked the call.")
+	Attribute("tool_name", String, "Name of the tool that was blocked, when known.")
+	Attribute("created_at", String, "When the block occurred.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("feedback", String, "Existing feedback sentiment recorded for this block, when any.", func() {
+		Enum("up", "down")
+	})
+	Required("id", "project_id", "reason", "policy_name", "created_at")
 })
 
 var RiskIDRequestBody = Type("RiskIDRequestBody", func() {

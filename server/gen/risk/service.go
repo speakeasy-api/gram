@@ -63,6 +63,11 @@ type Service interface {
 	// Create or refresh a risk policy bypass request from a signed request URL
 	// token.
 	CreateRiskPolicyBypassRequest(context.Context, *CreateRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
+	// Get a tool call block by its risk result ID for the durable block page.
+	GetRiskBlock(context.Context, *GetRiskBlockPayload) (res *RiskBlock, err error)
+	// Record thumbs-up/thumbs-down feedback for a tool call block from the block
+	// page.
+	SubmitRiskBlockFeedback(context.Context, *SubmitRiskBlockFeedbackPayload) (res *RiskBlock, err error)
 	// List current risk policy bypass request workflow records.
 	ListRiskPolicyBypassRequests(context.Context, *ListRiskPolicyBypassRequestsPayload) (res *ListRiskPolicyBypassRequestsResult, err error)
 	// Approve a risk policy bypass request for the requested policy target.
@@ -127,7 +132,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [31]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [33]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
 
 // ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
 // service approveRiskPolicyBypassRequest method.
@@ -312,6 +317,14 @@ type GetCustomDetectionRulePayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The custom detection rule ID.
+	ID string
+}
+
+// GetRiskBlockPayload is the payload type of the risk service getRiskBlock
+// method.
+type GetRiskBlockPayload struct {
+	SessionToken *string
+	// The block ID (the underlying risk result ID).
 	ID string
 }
 
@@ -570,6 +583,24 @@ type RevokeRiskPolicyBypassRequestPayload struct {
 	ID string
 }
 
+// RiskBlock is the result type of the risk service getRiskBlock method.
+type RiskBlock struct {
+	// The block ID (the underlying risk result ID).
+	ID string
+	// The project the block belongs to.
+	ProjectID string
+	// Human-readable reason the tool call was blocked.
+	Reason string
+	// Name of the risk policy that blocked the call.
+	PolicyName string
+	// Name of the tool that was blocked, when known.
+	ToolName *string
+	// When the block occurred.
+	CreatedAt string
+	// Existing feedback sentiment recorded for this block, when any.
+	Feedback *string
+}
+
 // RiskCategoriesResult is the result type of the risk service
 // listRiskCategories method.
 type RiskCategoriesResult struct {
@@ -726,6 +757,16 @@ type RiskUserBreakdownResult struct {
 	Categories []*RiskOverviewCategory
 	// Rule_id breakdown for this user, ordered by finding count descending.
 	Rules []*RiskRuleBreakdownEntry
+}
+
+// SubmitRiskBlockFeedbackPayload is the payload type of the risk service
+// submitRiskBlockFeedback method.
+type SubmitRiskBlockFeedbackPayload struct {
+	SessionToken *string
+	// The block ID (the underlying risk result ID).
+	ID string
+	// Feedback sentiment.
+	Sentiment string
 }
 
 // SuggestCustomDetectionRulePayload is the payload type of the risk service
