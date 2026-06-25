@@ -46,22 +46,25 @@ type EventContext struct {
 	User           User
 }
 
+type BaseEvent struct {
+	Provider     Provider
+	Type         EventType
+	RawEventType string
+	Timestamp    time.Time
+	AuthContext  *contextvalues.AuthContext
+	Context      EventContext
+	Raw          any
+}
+
 type Event struct {
-	Provider       Provider
-	Type           EventType
-	RawEventType   string
-	Timestamp      time.Time
-	AuthContext    *contextvalues.AuthContext
-	Context        EventContext
+	BaseEvent
 	ConversationID string
 	TranscriptPath string
 	CWD            string
 	PermissionMode string
 	Model          string
-	ToolCallID     string
 	HookHostname   string
 	AdditionalData map[string]any
-	Raw            any
 }
 
 type SessionStart struct {
@@ -84,51 +87,59 @@ func NewConfigChange(event Event) *ConfigChange {
 
 type BeforeToolUse struct {
 	Event
-	ToolName  string
-	ToolInput any
+	ToolCallID string
+	ToolName   string
+	ToolInput  any
 }
 
 type BeforeToolUseParams struct {
-	ToolName  string
-	ToolInput any
+	ToolCallID string
+	ToolName   string
+	ToolInput  any
 }
 
 func NewBeforeToolUse(event Event, params BeforeToolUseParams) *BeforeToolUse {
 	event.Type = EventTypeBeforeToolUse
 	return &BeforeToolUse{
-		Event:     event,
-		ToolName:  params.ToolName,
-		ToolInput: params.ToolInput,
+		Event:      event,
+		ToolCallID: params.ToolCallID,
+		ToolName:   params.ToolName,
+		ToolInput:  params.ToolInput,
 	}
 }
 
 type BeforeMCPExecution struct {
 	Event
-	ToolName  string
-	ToolInput any
+	ToolCallID string
+	ToolName   string
+	ToolInput  any
 }
 
 type BeforeMCPExecutionParams struct {
-	ToolName  string
-	ToolInput any
+	ToolCallID string
+	ToolName   string
+	ToolInput  any
 }
 
 func NewBeforeMCPExecution(event Event, params BeforeMCPExecutionParams) *BeforeMCPExecution {
 	event.Type = EventTypeBeforeMCPExecution
 	return &BeforeMCPExecution{
-		Event:     event,
-		ToolName:  params.ToolName,
-		ToolInput: params.ToolInput,
+		Event:      event,
+		ToolCallID: params.ToolCallID,
+		ToolName:   params.ToolName,
+		ToolInput:  params.ToolInput,
 	}
 }
 
 type AfterToolUse struct {
 	Event
+	ToolCallID string
 	ToolName   string
 	ToolOutput any
 }
 
 type AfterToolUseParams struct {
+	ToolCallID string
 	ToolName   string
 	ToolOutput any
 }
@@ -137,6 +148,7 @@ func NewAfterToolUse(event Event, params AfterToolUseParams) *AfterToolUse {
 	event.Type = EventTypeAfterToolUse
 	return &AfterToolUse{
 		Event:      event,
+		ToolCallID: params.ToolCallID,
 		ToolName:   params.ToolName,
 		ToolOutput: params.ToolOutput,
 	}
@@ -144,12 +156,14 @@ func NewAfterToolUse(event Event, params AfterToolUseParams) *AfterToolUse {
 
 type AfterToolUseFailure struct {
 	Event
+	ToolCallID  string
 	ToolName    string
 	Error       any
 	IsInterrupt bool
 }
 
 type AfterToolUseFailureParams struct {
+	ToolCallID  string
 	ToolName    string
 	Error       any
 	IsInterrupt bool
@@ -158,6 +172,7 @@ type AfterToolUseFailureParams struct {
 func NewAfterToolUseFailure(event Event, params AfterToolUseFailureParams) *AfterToolUseFailure {
 	event.Type = EventTypeAfterToolUseFailure
 	return &AfterToolUseFailure{
+		ToolCallID:  params.ToolCallID,
 		Event:       event,
 		ToolName:    params.ToolName,
 		Error:       params.Error,
@@ -167,11 +182,13 @@ func NewAfterToolUseFailure(event Event, params AfterToolUseFailureParams) *Afte
 
 type AfterMCPExecution struct {
 	Event
+	ToolCallID string
 	ToolName   string
 	ToolOutput any
 }
 
 type AfterMCPExecutionParams struct {
+	ToolCallID string
 	ToolName   string
 	ToolOutput any
 }
@@ -180,6 +197,7 @@ func NewAfterMCPExecution(event Event, params AfterMCPExecutionParams) *AfterMCP
 	event.Type = EventTypeAfterMCPExecution
 	return &AfterMCPExecution{
 		Event:      event,
+		ToolCallID: params.ToolCallID,
 		ToolName:   params.ToolName,
 		ToolOutput: params.ToolOutput,
 	}
@@ -187,12 +205,14 @@ func NewAfterMCPExecution(event Event, params AfterMCPExecutionParams) *AfterMCP
 
 type PermissionRequest struct {
 	Event
+	ToolCallID     string
 	ToolName       string
 	ToolInput      any
 	PermissionType string
 }
 
 type PermissionRequestParams struct {
+	ToolCallID     string
 	ToolName       string
 	ToolInput      any
 	PermissionType string
@@ -202,6 +222,7 @@ func NewPermissionRequest(event Event, params PermissionRequestParams) *Permissi
 	event.Type = EventTypePermissionRequest
 	return &PermissionRequest{
 		Event:          event,
+		ToolCallID:     params.ToolCallID,
 		ToolName:       params.ToolName,
 		ToolInput:      params.ToolInput,
 		PermissionType: params.PermissionType,

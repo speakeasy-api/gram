@@ -153,9 +153,9 @@ func (w *TelemetryWriter) telemetryAttributes(ctx context.Context, ev any, event
 	if event.HookHostname != "" {
 		attrs[attr.HookHostnameKey] = event.HookHostname
 	}
-	if event.ToolCallID != "" {
-		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(event.ToolCallID)
-		attrs[attr.GenAIToolCallIDKey] = event.ToolCallID
+	if correlationID := toolCorrelationID(ev, event); correlationID != "" {
+		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(correlationID)
+		attrs[attr.GenAIToolCallIDKey] = correlationID
 	}
 
 	w.applyTypedTelemetryAttrs(ctx, attrs, ev)
@@ -320,15 +320,15 @@ func (w *TelemetryWriter) writeChatProjection(ctx context.Context, ev any, metad
 
 	switch ev := ev.(type) {
 	case *hookevents.BeforeToolUse:
-		return w.writeToolCallRequest(ctx, event, metadata, chatID, projectID, ev.ToolName, ev.ToolInput)
+		return w.writeToolCallRequest(ctx, event, metadata, chatID, projectID, toolCorrelationID(ev, event), ev.ToolName, ev.ToolInput)
 	case *hookevents.BeforeMCPExecution:
-		return w.writeToolCallRequest(ctx, event, metadata, chatID, projectID, ev.ToolName, ev.ToolInput)
+		return w.writeToolCallRequest(ctx, event, metadata, chatID, projectID, toolCorrelationID(ev, event), ev.ToolName, ev.ToolInput)
 	case *hookevents.AfterToolUse:
-		return w.writeToolResult(ctx, event, metadata, chatID, projectID, ev.ToolOutput)
+		return w.writeToolResult(ctx, event, metadata, chatID, projectID, toolCorrelationID(ev, event), ev.ToolOutput)
 	case *hookevents.AfterMCPExecution:
-		return w.writeToolResult(ctx, event, metadata, chatID, projectID, afterMCPExecutionOutput(ev))
+		return w.writeToolResult(ctx, event, metadata, chatID, projectID, toolCorrelationID(ev, event), afterMCPExecutionOutput(ev))
 	case *hookevents.AfterToolUseFailure:
-		return w.writeToolResult(ctx, event, metadata, chatID, projectID, ev.Error)
+		return w.writeToolResult(ctx, event, metadata, chatID, projectID, toolCorrelationID(ev, event), ev.Error)
 	case *hookevents.UserPromptSubmit:
 		return w.writeUserMessage(ctx, event, metadata, chatID, projectID, ev.Prompt)
 	case *hookevents.AfterAgentResponse:
@@ -349,9 +349,9 @@ func (w *TelemetryWriter) writeChatProjection(ctx context.Context, ev any, metad
 	}
 }
 
-func (w *TelemetryWriter) writeToolCallRequest(ctx context.Context, event hookevents.Event, metadata *SessionMetadata, chatID, projectID uuid.UUID, toolName string, toolInput any) error {
+func (w *TelemetryWriter) writeToolCallRequest(ctx context.Context, event hookevents.Event, metadata *SessionMetadata, chatID, projectID uuid.UUID, toolCallID, toolName string, toolInput any) error {
 	toolCalls := []map[string]any{{
-		"id":   toolCorrelationID(event),
+		"id":   toolCallID,
 		"type": "function",
 		"function": map[string]any{
 			"name":      toolName,
@@ -390,7 +390,7 @@ func (w *TelemetryWriter) writeToolCallRequest(ctx context.Context, event hookev
 	return w.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, w.defaultChatTitleForEvent(ctx, event))
 }
 
-func (w *TelemetryWriter) writeToolResult(ctx context.Context, event hookevents.Event, metadata *SessionMetadata, chatID, projectID uuid.UUID, output any) error {
+func (w *TelemetryWriter) writeToolResult(ctx context.Context, event hookevents.Event, metadata *SessionMetadata, chatID, projectID uuid.UUID, toolCallID string, output any) error {
 	content := marshalToJSON(output)
 	if content == "" {
 		return nil
@@ -410,7 +410,7 @@ func (w *TelemetryWriter) writeToolResult(ctx context.Context, event hookevents.
 		ContentAssetUrl:  conv.ToPGTextEmpty(""),
 		StorageError:     conv.ToPGTextEmpty(""),
 		MessageID:        conv.ToPGTextEmpty(""),
-		ToolCallID:       conv.ToPGTextEmpty(toolCorrelationID(event)),
+		ToolCallID:       conv.ToPGTextEmpty(toolCallID),
 		ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
 		FinishReason:     conv.ToPGTextEmpty(""),
 		ToolCalls:        nil,
@@ -644,21 +644,22 @@ func canonicalEvent(ev any) (hookevents.Event, bool) {
 		return ev.Event, true
 	default:
 		return hookevents.Event{
-			Provider:       "",
-			Type:           "",
-			RawEventType:   "",
-			Timestamp:      time.Time{},
-			AuthContext:    nil,
-			Context:        hookevents.EventContext{OrganizationID: "", ProjectID: uuid.Nil, User: hookevents.User{ID: "", Email: ""}},
+			BaseEvent: hookevents.BaseEvent{
+				Provider:     "",
+				Type:         "",
+				RawEventType: "",
+				Timestamp:    time.Time{},
+				AuthContext:  nil,
+				Context:      hookevents.EventContext{OrganizationID: "", ProjectID: uuid.Nil, User: hookevents.User{ID: "", Email: ""}},
+				Raw:          nil,
+			},
 			ConversationID: "",
 			TranscriptPath: "",
 			CWD:            "",
 			PermissionMode: "",
 			Model:          "",
-			ToolCallID:     "",
 			HookHostname:   "",
 			AdditionalData: nil,
-			Raw:            nil,
 		}, false
 	}
 }
@@ -739,9 +740,32 @@ func setStringified(ctx context.Context, attrs map[attr.Key]any, key attr.Key, v
 	attrs[key] = string(jsonBytes)
 }
 
-func toolCorrelationID(event hookevents.Event) string {
-	if event.ToolCallID != "" {
-		return event.ToolCallID
+func toolCorrelationID(ev any, event hookevents.Event) string {
+	switch ev := ev.(type) {
+	case *hookevents.BeforeToolUse:
+		if ev.ToolCallID != "" {
+			return ev.ToolCallID
+		}
+	case *hookevents.BeforeMCPExecution:
+		if ev.ToolCallID != "" {
+			return ev.ToolCallID
+		}
+	case *hookevents.AfterToolUse:
+		if ev.ToolCallID != "" {
+			return ev.ToolCallID
+		}
+	case *hookevents.AfterToolUseFailure:
+		if ev.ToolCallID != "" {
+			return ev.ToolCallID
+		}
+	case *hookevents.AfterMCPExecution:
+		if ev.ToolCallID != "" {
+			return ev.ToolCallID
+		}
+	case *hookevents.PermissionRequest:
+		if ev.ToolCallID != "" {
+			return ev.ToolCallID
+		}
 	}
 	switch payload := event.Raw.(type) {
 	case *gen.CursorPayload:

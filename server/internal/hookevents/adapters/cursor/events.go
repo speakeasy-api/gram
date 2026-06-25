@@ -16,21 +16,22 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CursorPayload, e
 	}
 
 	base := hookevents.Event{
-		Provider:       hookevents.ProviderCursor,
-		Type:           "",
-		RawEventType:   payload.HookEventName,
-		Timestamp:      timestamp,
-		AuthContext:    authCtx,
-		Context:        eventContext,
+		BaseEvent: hookevents.BaseEvent{
+			Provider:     hookevents.ProviderCursor,
+			Type:         "",
+			RawEventType: payload.HookEventName,
+			Timestamp:    timestamp,
+			AuthContext:  authCtx,
+			Context:      eventContext,
+			Raw:          payload,
+		},
 		ConversationID: conv.PtrValOr(payload.ConversationID, ""),
 		TranscriptPath: conv.PtrValOr(payload.TranscriptPath, ""),
 		CWD:            "",
 		PermissionMode: "",
 		Model:          conv.PtrValOr(payload.Model, ""),
-		ToolCallID:     conv.PtrValOr(payload.ToolUseID, ""),
 		HookHostname:   strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")),
 		AdditionalData: payload.AdditionalData,
-		Raw:            payload,
 	}
 
 	switch payload.HookEventName {
@@ -49,27 +50,32 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CursorPayload, e
 		}), nil
 	case "preToolUse":
 		return hookevents.NewBeforeToolUse(base, hookevents.BeforeToolUseParams{
-			ToolName:  conv.PtrValOr(payload.ToolName, ""),
-			ToolInput: payload.ToolInput,
+			ToolCallID: conv.PtrValOr(payload.ToolUseID, ""),
+			ToolName:   conv.PtrValOr(payload.ToolName, ""),
+			ToolInput:  payload.ToolInput,
 		}), nil
 	case "postToolUse":
 		return hookevents.NewAfterToolUse(base, hookevents.AfterToolUseParams{
+			ToolCallID: conv.PtrValOr(payload.ToolUseID, ""),
 			ToolName:   conv.PtrValOr(payload.ToolName, ""),
 			ToolOutput: payload.ToolResponse,
 		}), nil
 	case "postToolUseFailure":
 		return hookevents.NewAfterToolUseFailure(base, hookevents.AfterToolUseFailureParams{
+			ToolCallID:  conv.PtrValOr(payload.ToolUseID, ""),
 			ToolName:    conv.PtrValOr(payload.ToolName, ""),
 			Error:       payload.Error,
 			IsInterrupt: conv.PtrValOr(payload.IsInterrupt, false),
 		}), nil
 	case "beforeMCPExecution":
 		return hookevents.NewBeforeMCPExecution(base, hookevents.BeforeMCPExecutionParams{
-			ToolName:  conv.PtrValOr(payload.ToolName, ""),
-			ToolInput: payload.ToolInput,
+			ToolCallID: conv.PtrValOr(payload.ToolUseID, ""),
+			ToolName:   conv.PtrValOr(payload.ToolName, ""),
+			ToolInput:  payload.ToolInput,
 		}), nil
 	case "afterMCPExecution":
 		return hookevents.NewAfterMCPExecution(base, hookevents.AfterMCPExecutionParams{
+			ToolCallID: conv.PtrValOr(payload.ToolUseID, ""),
 			ToolName:   conv.PtrValOr(payload.ToolName, ""),
 			ToolOutput: payload.ToolResponse,
 		}), nil

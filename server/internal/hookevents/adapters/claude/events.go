@@ -16,21 +16,22 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.ClaudePayload, e
 	}
 
 	base := hookevents.Event{
-		Provider:       hookevents.ProviderClaude,
-		Type:           "",
-		RawEventType:   payload.HookEventName,
-		Timestamp:      timestamp,
-		AuthContext:    authCtx,
-		Context:        eventContext,
+		BaseEvent: hookevents.BaseEvent{
+			Provider:     hookevents.ProviderClaude,
+			Type:         "",
+			RawEventType: payload.HookEventName,
+			Timestamp:    timestamp,
+			AuthContext:  authCtx,
+			Context:      eventContext,
+			Raw:          payload,
+		},
 		ConversationID: conv.PtrValOr(payload.SessionID, ""),
 		TranscriptPath: conv.PtrValOr(payload.TranscriptPath, ""),
 		CWD:            conv.PtrValOr(payload.Cwd, ""),
 		PermissionMode: "",
 		Model:          conv.PtrValOr(payload.Model, ""),
-		ToolCallID:     conv.PtrValOr(payload.ToolUseID, ""),
 		HookHostname:   strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")),
 		AdditionalData: payload.AdditionalData,
-		Raw:            payload,
 	}
 
 	switch payload.HookEventName {
@@ -40,16 +41,19 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.ClaudePayload, e
 		return hookevents.NewConfigChange(base), nil
 	case "PreToolUse":
 		return hookevents.NewBeforeToolUse(base, hookevents.BeforeToolUseParams{
-			ToolName:  conv.PtrValOr(payload.ToolName, ""),
-			ToolInput: payload.ToolInput,
+			ToolCallID: conv.PtrValOr(payload.ToolUseID, ""),
+			ToolName:   conv.PtrValOr(payload.ToolName, ""),
+			ToolInput:  payload.ToolInput,
 		}), nil
 	case "PostToolUse":
 		return hookevents.NewAfterToolUse(base, hookevents.AfterToolUseParams{
+			ToolCallID: conv.PtrValOr(payload.ToolUseID, ""),
 			ToolName:   conv.PtrValOr(payload.ToolName, ""),
 			ToolOutput: payload.ToolResponse,
 		}), nil
 	case "PostToolUseFailure":
 		return hookevents.NewAfterToolUseFailure(base, hookevents.AfterToolUseFailureParams{
+			ToolCallID:  conv.PtrValOr(payload.ToolUseID, ""),
 			ToolName:    conv.PtrValOr(payload.ToolName, ""),
 			Error:       payload.Error,
 			IsInterrupt: conv.PtrValOr(payload.IsInterrupt, false),

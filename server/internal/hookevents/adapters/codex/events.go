@@ -16,21 +16,22 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CodexPayload, ev
 	}
 
 	base := hookevents.Event{
-		Provider:       hookevents.ProviderCodex,
-		Type:           "",
-		RawEventType:   payload.HookEventName,
-		Timestamp:      timestamp,
-		AuthContext:    authCtx,
-		Context:        eventContext,
+		BaseEvent: hookevents.BaseEvent{
+			Provider:     hookevents.ProviderCodex,
+			Type:         "",
+			RawEventType: payload.HookEventName,
+			Timestamp:    timestamp,
+			AuthContext:  authCtx,
+			Context:      eventContext,
+			Raw:          payload,
+		},
 		ConversationID: conv.PtrValOr(payload.SessionID, ""),
 		TranscriptPath: conv.PtrValOr(payload.TranscriptPath, ""),
 		CWD:            conv.PtrValOr(payload.Cwd, ""),
 		PermissionMode: "",
 		Model:          conv.PtrValOr(payload.Model, ""),
-		ToolCallID:     "",
 		HookHostname:   strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")),
 		AdditionalData: payload.AdditionalData,
-		Raw:            payload,
 	}
 
 	switch payload.HookEventName {
@@ -38,16 +39,19 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CodexPayload, ev
 		return hookevents.NewSessionStart(base), nil
 	case "PreToolUse":
 		return hookevents.NewBeforeToolUse(base, hookevents.BeforeToolUseParams{
-			ToolName:  conv.PtrValOr(payload.ToolName, ""),
-			ToolInput: payload.ToolInput,
+			ToolCallID: "",
+			ToolName:   conv.PtrValOr(payload.ToolName, ""),
+			ToolInput:  payload.ToolInput,
 		}), nil
 	case "PostToolUse":
 		return hookevents.NewAfterToolUse(base, hookevents.AfterToolUseParams{
+			ToolCallID: "",
 			ToolName:   conv.PtrValOr(payload.ToolName, ""),
 			ToolOutput: payload.ToolOutput,
 		}), nil
 	case "PermissionRequest":
 		return hookevents.NewPermissionRequest(base, hookevents.PermissionRequestParams{
+			ToolCallID:     "",
 			ToolName:       conv.PtrValOr(payload.ToolName, ""),
 			ToolInput:      payload.ToolInput,
 			PermissionType: conv.PtrValOr(payload.PermissionType, ""),
