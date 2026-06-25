@@ -125,65 +125,130 @@ function truncateMiddle(value: string, start = 18, end = 16) {
   return `${value.slice(0, start)}...${value.slice(-end)}`;
 }
 
+const SUBJECT_MONO_CLASS = "font-mono text-xs text-muted-foreground";
+
+// A subject rendered as a link to its detail page. Centralizes the mono styling
+// and hover affordance so every linked subject looks identical.
+function SubjectLink({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Link to={to} className={cn(SUBJECT_MONO_CLASS, "hover:underline")}>
+      {children}
+    </Link>
+  );
+}
+
 function renderSubject(log: AuditLog, orgSlug: string) {
-  const monoClass = "font-mono text-xs text-muted-foreground";
+  const monoClass = SUBJECT_MONO_CLASS;
+  // Project-scoped subjects (mcp_server, risk_policy, environment, assistant,
+  // deployment, …) live under `/{org}/projects/{project}/…` and therefore need
+  // the entry's own projectSlug — which may differ from the project currently in
+  // the URL, so we interpolate it rather than using the URL-bound route helpers.
+  const projectBase = log.projectSlug
+    ? `/${orgSlug}/projects/${log.projectSlug}`
+    : null;
 
   if (log.subjectType === "organization_invitation") {
     return renderInviteSubject(log, monoClass);
   }
 
-  if (log.subjectType === "deployment" && log.projectSlug) {
+  if (log.subjectType === "deployment" && projectBase) {
     return (
-      <Link
-        to={`/${orgSlug}/projects/${log.projectSlug}/deployments/${log.subjectId}`}
-        className={cn(monoClass, "hover:underline")}
-      >
+      <SubjectLink to={`${projectBase}/deployments/${log.subjectId}`}>
         {log.subjectId}
-      </Link>
+      </SubjectLink>
     );
   }
 
-  if (log.subjectType === "toolset" && log.projectSlug && log.subjectSlug) {
+  if (log.subjectType === "toolset" && projectBase && log.subjectSlug) {
     return (
-      <Link
-        to={`/${orgSlug}/projects/${log.projectSlug}/mcp/${log.subjectSlug}`}
-        className={cn(monoClass, "hover:underline")}
-      >
+      <SubjectLink to={`${projectBase}/mcp/${log.subjectSlug}`}>
         {log.subjectSlug}
-      </Link>
+      </SubjectLink>
+    );
+  }
+
+  if (log.subjectType === "mcp_server" && projectBase && log.subjectSlug) {
+    return (
+      <SubjectLink to={`${projectBase}/mcp/x/${log.subjectSlug}`}>
+        {log.subjectSlug}
+      </SubjectLink>
+    );
+  }
+
+  if (log.subjectType === "environment" && projectBase && log.subjectSlug) {
+    return (
+      <SubjectLink to={`${projectBase}/environments/${log.subjectSlug}`}>
+        {log.subjectSlug}
+      </SubjectLink>
+    );
+  }
+
+  if (log.subjectType === "assistant" && projectBase) {
+    return (
+      <SubjectLink to={`${projectBase}/assistants/${log.subjectId}`}>
+        {getSubjectLabel(log)}
+      </SubjectLink>
+    );
+  }
+
+  if (log.subjectType === "risk_policy" && projectBase) {
+    // Risk policies have no per-item route; PolicyCenter opens a specific policy
+    // via the `?policy=<id>` deep-link.
+    return (
+      <SubjectLink to={`${projectBase}/risk-policies?policy=${log.subjectId}`}>
+        {getSubjectLabel(log)}
+      </SubjectLink>
     );
   }
 
   if (log.subjectType === "project" && log.subjectSlug) {
     return (
-      <Link
-        to={`/${orgSlug}/projects/${log.subjectSlug}`}
-        className={cn(monoClass, "hover:underline")}
-      >
+      <SubjectLink to={`/${orgSlug}/projects/${log.subjectSlug}`}>
         {log.subjectSlug}
-      </Link>
+      </SubjectLink>
     );
   }
 
-  if (log.subjectType === "plugin" && log.projectSlug) {
+  if (log.subjectType === "plugin" && projectBase) {
     return (
-      <Link
-        to={`/${orgSlug}/projects/${log.projectSlug}/plugins/${log.subjectId}`}
-        className={cn(monoClass, "hover:underline")}
-      >
+      <SubjectLink to={`${projectBase}/plugins/${log.subjectId}`}>
         {log.subjectSlug || log.subjectId}
-      </Link>
+      </SubjectLink>
+    );
+  }
+
+  // access_role and access_member are org-scoped (no project), so they route
+  // under `/{org}/access/…` rather than the project tree.
+  if (log.subjectType === "access_role") {
+    // RolesTab opens a specific role's editor via the `?editRole=<id>` param.
+    return (
+      <SubjectLink to={`/${orgSlug}/access/roles?editRole=${log.subjectId}`}>
+        {getSubjectLabel(log)}
+      </SubjectLink>
+    );
+  }
+
+  if (log.subjectType === "access_member") {
+    return (
+      <SubjectLink to={`/${orgSlug}/access/members`}>
+        {getSubjectLabel(log)}
+      </SubjectLink>
+    );
+  }
+
+  if (log.subjectType === "mcp_collection" && log.subjectSlug) {
+    return (
+      <SubjectLink to={`/${orgSlug}/collections/${log.subjectSlug}`}>
+        {log.subjectSlug}
+      </SubjectLink>
     );
   }
 
   if (log.subjectType === "api_key") {
     return (
-      <Link
-        to={`/${orgSlug}/api-keys`}
-        className={cn(monoClass, "hover:underline")}
-      >
+      <SubjectLink to={`/${orgSlug}/api-keys`}>
         {getSubjectLabel(log)}
-      </Link>
+      </SubjectLink>
     );
   }
 
