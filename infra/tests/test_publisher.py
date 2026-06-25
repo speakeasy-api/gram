@@ -13,7 +13,7 @@ from opentelemetry import context, propagate, trace
 
 from gram_infra.pubsub.publisher import CONTENT_TYPE, _message_attributes
 
-SCHEMA = "gram.ping.v1.Message"
+SCHEMA = "gram.ping.v2.Message"
 
 
 def test_message_attributes_always_carries_content_type_and_schema() -> None:

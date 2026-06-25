@@ -92,7 +92,7 @@ function remoteSessionClient(id = "rsc-1"): RemoteSessionClient {
     id,
     projectId: "project-1",
     remoteSessionIssuerId: "rsi-1",
-    userSessionIssuerId: "usi-1",
+    userSessionIssuerIds: ["usi-1"],
     clientId: "client-id",
     clientIdIssuedAt: new Date(0),
     createdAt: new Date(0),

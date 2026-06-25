@@ -15,7 +15,7 @@ import uuid
 
 import pytest
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
-from gram.ping.v1 import ping_pb2, processor_pb2
+from gram.ping.v2 import ping_pb2, processor_pb2
 
 from gram_infra.pubsub import (
     EmulatedPubSubBroker,
@@ -101,4 +101,4 @@ async def test_publish_subscribe_roundtrip() -> None:
     message, meta = received[0]
     assert message.payload == payload
     assert meta.attributes.get("content-type") == "application/x-protobuf"
-    assert meta.attributes.get("schema") == "gram.ping.v1.Message"
+    assert meta.attributes.get("schema") == "gram.ping.v2.Message"

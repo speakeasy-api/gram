@@ -23,7 +23,7 @@ export type CloneClientFromOAuthProxyProviderFormTokenEndpointAuthMethod =
   >;
 
 /**
- * Form for cloning an oauth_proxy_provider's client credentials into a new remote_session_client. The caller supplies the existing oauth_proxy_provider, plus the remote_session_issuer and user_session_issuer to pair the new client with.
+ * Form for cloning an oauth_proxy_provider's client credentials into a new remote_session_client. The caller supplies the existing oauth_proxy_provider and the remote_session_issuer to register the new client with, plus zero or more user_session_issuers to attach it to.
  */
 export type CloneClientFromOAuthProxyProviderForm = {
   /**
@@ -49,9 +49,9 @@ export type CloneClientFromOAuthProxyProviderForm = {
     | CloneClientFromOAuthProxyProviderFormTokenEndpointAuthMethod
     | undefined;
   /**
-   * The user_session_issuer the new client is paired with.
+   * The user_session_issuers to attach the new client to via the join table. Omit or pass an empty array to clone a standalone client with no attachments.
    */
-  userSessionIssuerId: string;
+  userSessionIssuerIds?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -67,7 +67,7 @@ export type CloneClientFromOAuthProxyProviderForm$Outbound = {
   remote_session_issuer_id: string;
   scope?: Array<string> | undefined;
   token_endpoint_auth_method?: string | undefined;
-  user_session_issuer_id: string;
+  user_session_issuer_ids?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -84,14 +84,14 @@ export const CloneClientFromOAuthProxyProviderForm$outboundSchema:
       tokenEndpointAuthMethod: z.optional(
         CloneClientFromOAuthProxyProviderFormTokenEndpointAuthMethod$outboundSchema,
       ),
-      userSessionIssuerId: z.string(),
+      userSessionIssuerIds: z.optional(z.array(z.string())),
     }),
     z.transform((v) => {
       return remap$(v, {
         oauthProxyProviderId: "oauth_proxy_provider_id",
         remoteSessionIssuerId: "remote_session_issuer_id",
         tokenEndpointAuthMethod: "token_endpoint_auth_method",
-        userSessionIssuerId: "user_session_issuer_id",
+        userSessionIssuerIds: "user_session_issuer_ids",
       });
     }),
   );

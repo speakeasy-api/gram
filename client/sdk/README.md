@@ -435,9 +435,11 @@ run();
 
 ### [RemoteSessionClients](docs/sdks/remotesessionclients/README.md)
 
+* [attachUserSessionIssuer](docs/sdks/remotesessionclients/README.md#attachusersessionissuer) - attachUserSessionIssuer remoteSessionClients
 * [cloneClientFromOAuthProxyProvider](docs/sdks/remotesessionclients/README.md#cloneclientfromoauthproxyprovider) - cloneClientFromOAuthProxyProvider remoteSessionClients
 * [create](docs/sdks/remotesessionclients/README.md#create) - createRemoteSessionClient remoteSessionClients
 * [delete](docs/sdks/remotesessionclients/README.md#delete) - deleteRemoteSessionClient remoteSessionClients
+* [detachUserSessionIssuer](docs/sdks/remotesessionclients/README.md#detachusersessionissuer) - detachUserSessionIssuer remoteSessionClients
 * [get](docs/sdks/remotesessionclients/README.md#get) - getRemoteSessionClient remoteSessionClients
 * [list](docs/sdks/remotesessionclients/README.md#list) - listRemoteSessionClients remoteSessionClients
 * [update](docs/sdks/remotesessionclients/README.md#update) - updateRemoteSessionClient remoteSessionClients
@@ -479,6 +481,10 @@ run();
 * [delete](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 * [list](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
 * [update](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
+
+### [Risk.Expr](docs/sdks/expr/README.md)
+
+* [compile](docs/sdks/expr/README.md#compile) - compileExpr risk
 
 ### [Risk.Overview](docs/sdks/overview/README.md)
 
@@ -847,9 +853,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`remoteMcpListServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
 - [`remoteMcpUpdateServer`](docs/sdks/remotemcp/README.md#updateserver) - updateServer remoteMcp
 - [`remoteMcpVerifyURL`](docs/sdks/remotemcp/README.md#verifyurl) - verifyURL remoteMcp
+- [`remoteSessionClientsAttachUserSessionIssuer`](docs/sdks/remotesessionclients/README.md#attachusersessionissuer) - attachUserSessionIssuer remoteSessionClients
 - [`remoteSessionClientsCloneClientFromOAuthProxyProvider`](docs/sdks/remotesessionclients/README.md#cloneclientfromoauthproxyprovider) - cloneClientFromOAuthProxyProvider remoteSessionClients
 - [`remoteSessionClientsCreate`](docs/sdks/remotesessionclients/README.md#create) - createRemoteSessionClient remoteSessionClients
 - [`remoteSessionClientsDelete`](docs/sdks/remotesessionclients/README.md#delete) - deleteRemoteSessionClient remoteSessionClients
+- [`remoteSessionClientsDetachUserSessionIssuer`](docs/sdks/remotesessionclients/README.md#detachusersessionissuer) - detachUserSessionIssuer remoteSessionClients
 - [`remoteSessionClientsGet`](docs/sdks/remotesessionclients/README.md#get) - getRemoteSessionClient remoteSessionClients
 - [`remoteSessionClientsList`](docs/sdks/remotesessionclients/README.md#list) - listRemoteSessionClients remoteSessionClients
 - [`remoteSessionClientsUpdate`](docs/sdks/remotesessionclients/README.md#update) - updateRemoteSessionClient remoteSessionClients
@@ -873,6 +881,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskExclusionsDelete`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`riskExclusionsList`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
 - [`riskExclusionsUpdate`](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
+- [`riskExprCompile`](docs/sdks/expr/README.md#compile) - compileExpr risk
 - [`riskOverviewGet`](docs/sdks/overview/README.md#get) - getRiskOverview risk
 - [`riskOverviewRules`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
 - [`riskOverviewUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
@@ -1009,6 +1018,7 @@ To learn about this feature and how to get started, check
 - [`useAssistantsGetManaged`](docs/sdks/assistants/README.md#getmanaged) - getManagedAssistant assistants
 - [`useAssistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
 - [`useAssistantsUpdateMutation`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
+- [`useAttachUserSessionIssuerMutation`](docs/sdks/remotesessionclients/README.md#attachusersessionissuer) - attachUserSessionIssuer remoteSessionClients
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`useAuditLogs`](docs/sdks/auditlogs/README.md#list) - list auditlogs
 - [`useChallengeBuckets`](docs/sdks/access/README.md#listchallengebuckets) - listChallengeBuckets access
@@ -1080,6 +1090,7 @@ To learn about this feature and how to get started, check
 - [`useDenyShadowMCPApprovalRequestMutation`](docs/sdks/access/README.md#denyshadowmcpapprovalrequest) - denyShadowMCPApprovalRequest access
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
+- [`useDetachUserSessionIssuerMutation`](docs/sdks/remotesessionclients/README.md#detachusersessionissuer) - detachUserSessionIssuer remoteSessionClients
 - [`useDisableRBACMutation`](docs/sdks/access/README.md#disablerbac) - disableRBAC access
 - [`useDisableWebhooksMutation`](docs/sdks/organizations/README.md#disablewebhooks) - disableWebhooks organizations
 - [`useDiscoverRemoteMcpProtectedResourceMetadataMutation`](docs/sdks/remotemcp/README.md#discoverprotectedresourcemetadata) - discoverProtectedResourceMetadata remoteMcp
@@ -1217,6 +1228,7 @@ To learn about this feature and how to get started, check
 - [`useRevokeUserSessionMutation`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
 - [`useRiskApprovePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
 - [`useRiskCategories`](docs/sdks/categories/README.md#list) - listRiskCategories risk
+- [`useRiskCompileExpr`](docs/sdks/expr/README.md#compile) - compileExpr risk
 - [`useRiskCreateCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#create) - createCustomDetectionRule risk
 - [`useRiskCreateExclusionMutation`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 - [`useRiskCreatePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk

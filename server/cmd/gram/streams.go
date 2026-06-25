@@ -19,7 +19,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/infra/gen"
-	pingv1 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v1"
+	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -228,7 +228,7 @@ func newStreamsCommand() *cli.Command {
 
 			// Start subscription receivers in this block
 			{
-				mustReceive(rg, &pingv1.Message{}, &pingv1.Processor{}, ping.NewHandler(logger, pingLogLevel))
+				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, pingLogLevel))
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
 			}
 

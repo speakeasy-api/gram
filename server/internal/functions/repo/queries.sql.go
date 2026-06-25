@@ -326,7 +326,20 @@ INSERT INTO fly_apps (
   , $9
   , $10
   , 'pending'
-) RETURNING id
+)
+ON CONFLICT (project_id, deployment_id, function_id) WHERE reaped_at IS NULL
+DO UPDATE SET
+    access_id = EXCLUDED.access_id
+  , fly_org_id = EXCLUDED.fly_org_id
+  , fly_org_slug = EXCLUDED.fly_org_slug
+  , app_name = EXCLUDED.app_name
+  , app_url = EXCLUDED.app_url
+  , runner_version = EXCLUDED.runner_version
+  , primary_region = EXCLUDED.primary_region
+  , status = 'pending'
+  , reap_error = NULL
+  , updated_at = clock_timestamp()
+RETURNING id
 `
 
 type InitFlyAppParams struct {
@@ -342,6 +355,8 @@ type InitFlyAppParams struct {
 	PrimaryRegion string
 }
 
+// Self-heal: if a prior deploy leaked an active row (cleanup never reaped it),
+// reclaim it instead of colliding on fly_apps_project_deployment_function_active_key.
 func (q *Queries) InitFlyApp(ctx context.Context, arg InitFlyAppParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, initFlyApp,
 		arg.ProjectID,

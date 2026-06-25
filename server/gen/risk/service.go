@@ -46,6 +46,11 @@ type Service interface {
 	// rule_id prefix) used to bucket findings. Dashboards and CLIs should call
 	// this instead of maintaining their own copy of the mapping.
 	ListRiskCategories(context.Context, *ListRiskCategoriesPayload) (res *RiskCategoriesResult, err error)
+	// Compile a single CEL expression (a detection predicate or a policy scope
+	// predicate) without evaluating it, so the editor can validate as the author
+	// types. Returns ok=true when it compiles, otherwise ok=false with the
+	// compiler error message. An empty expression is valid (ok=true).
+	CompileExpr(context.Context, *CompileExprPayload) (res *ExprCompileResult, err error)
 	// Per-user breakdowns of findings by category and by rule_id within a time
 	// window. Powers the user drill-down on /risk-overview.
 	GetRiskUserBreakdown(context.Context, *GetRiskUserBreakdownPayload) (res *RiskUserBreakdownResult, err error)
@@ -122,7 +127,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [30]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [31]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
 
 // ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
 // service approveRiskPolicyBypassRequest method.
@@ -137,6 +142,16 @@ type ApproveRiskPolicyBypassRequestPayload struct {
 	GrantedPrincipalUrns []string
 }
 
+// CompileExprPayload is the payload type of the risk service compileExpr
+// method.
+type CompileExprPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The CEL expression to compile. Empty is valid and compiles to ok=true.
+	Expr string
+}
+
 // CreateCustomDetectionRulePayload is the payload type of the risk service
 // createCustomDetectionRule method.
 type CreateCustomDetectionRulePayload struct {
@@ -149,8 +164,12 @@ type CreateCustomDetectionRulePayload struct {
 	Title string
 	// Description of what the rule detects.
 	Description *string
-	// RE2-compatible regex pattern.
-	Regex string
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionExpr *string
+	// Deprecated legacy RE2 regex pattern; superseded by detection_expr. Accepted
+	// for backward compatibility.
+	Regex *string
 	// Severity level for findings produced by this rule.
 	Severity string
 }
@@ -205,11 +224,18 @@ type CreateRiskPolicyPayload struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
-	// Custom detection rule ids to enable for this policy.
+	// Custom detection rule ids to attach as detectors: a match produces a finding.
 	CustomRuleIds []string
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
 	MessageTypes []string
+	// CEL scope predicate: the policy evaluates a message only when this boolean
+	// expression is true (in addition to message_types). Omit/empty means all
+	// messages are in scope.
+	ScopeInclude *string
+	// CEL exemption predicate: the policy is skipped for a message when this
+	// boolean expression is true. Omit/empty means no inline exemption.
+	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
@@ -269,6 +295,14 @@ type DenyRiskPolicyBypassRequestPayload struct {
 	ProjectSlugInput *string
 	// The bypass request ID.
 	ID string
+}
+
+// ExprCompileResult is the result type of the risk service compileExpr method.
+type ExprCompileResult struct {
+	// True when the expression compiled successfully.
+	OK bool
+	// Compiler error message when ok is false; empty otherwise.
+	Error string
 }
 
 // GetCustomDetectionRulePayload is the payload type of the risk service
@@ -716,7 +750,10 @@ type SuggestCustomDetectionRuleResult struct {
 	Title string
 	// Description of what the rule detects and why it matters.
 	Description string
-	// RE2-compatible regex pattern the rule should match against.
+	// Suggested CEL detection predicate.
+	DetectionExpr *string
+	// Deprecated legacy regex suggestion; superseded by detection_expr. Present
+	// for backward compatibility.
 	Regex string
 	// Suggested severity level.
 	Severity string
@@ -753,9 +790,9 @@ type TestDetectionRulePayload struct {
 	RuleID string
 	// Sample text to scan.
 	Text string
-	// Regex pattern. Required for `custom.*` rule ids since the server doesn't
-	// persist custom rules yet; ignored for built-in rules.
-	Regex *string
+	// CEL detection predicate for `custom.*` rule ids, evaluated against the
+	// sample message.
+	DetectionExpr *string
 }
 
 // TestDetectionRuleResult is the result type of the risk service
@@ -796,8 +833,12 @@ type UpdateCustomDetectionRulePayload struct {
 	Title string
 	// Description of what the rule detects.
 	Description *string
-	// RE2-compatible regex pattern.
-	Regex string
+	// CEL detection predicate: a boolean expression over message fields whose true
+	// verdict produces a finding.
+	DetectionExpr *string
+	// Deprecated legacy RE2 regex pattern; superseded by detection_expr. Accepted
+	// for backward compatibility.
+	Regex *string
 	// Severity level for findings produced by this rule.
 	Severity string
 }
@@ -845,12 +886,18 @@ type UpdateRiskPolicyPayload struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
-	// Custom detection rule ids to enable for this policy. Omit to preserve the
-	// current selection.
+	// Custom detection rule ids to attach as detectors: a match produces a
+	// finding. Omit to preserve the current selection.
 	CustomRuleIds []string
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
 	MessageTypes []string
+	// CEL scope predicate (in addition to message_types). Omit to preserve the
+	// current value; send empty to clear.
+	ScopeInclude *string
+	// CEL exemption predicate. Omit to preserve the current value; send empty to
+	// clear.
+	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.

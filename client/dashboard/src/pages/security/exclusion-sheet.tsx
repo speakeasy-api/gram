@@ -19,6 +19,7 @@ import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { Button } from "@speakeasy-api/moonshine";
 import {
+  invalidateAllListChats,
   invalidateAllRiskListExclusions,
   invalidateAllRiskListResults,
   invalidateAllRiskListResultsByChat,
@@ -47,17 +48,17 @@ export type ExclusionSheetState =
   | { mode: "edit"; exclusion: RiskExclusion };
 
 /**
- * Reusable create/edit exclusion sheet. Owns its own policy list, mutations,
- * and cache invalidation so it can be dropped into any surface (the Exclusions
- * tab or a trace/session entry's "Create exclusion" action) by passing a
- * `state` and an `onOpenChange` handler.
+ * The create/edit exclusion form together with its policy list, mutations and
+ * cache invalidation — but no surrounding chrome. Render it inside a Sheet (see
+ * `ExclusionSheet`) or inline as a sub-view (the chat detail panel). `onDone`
+ * fires after a successful save; the host uses it to close or navigate back.
  */
-export function ExclusionSheet({
+export function ExclusionEditor({
   state,
-  onOpenChange,
+  onDone,
 }: {
-  state: ExclusionSheetState | null;
-  onOpenChange: (open: boolean) => void;
+  state: ExclusionSheetState;
+  onDone: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const { data: policyData } = useRiskListPolicies();
@@ -69,7 +70,10 @@ export function ExclusionSheet({
 
   // Saving an exclusion suppresses/restores findings retroactively, so refresh
   // the exclusion list AND every risk-results surface (chat detail, agent,
-  // overview) so stale findings disappear without a manual reload.
+  // overview) so stale findings disappear without a manual reload. Note the
+  // server applies the exclusion asynchronously (Temporal reconcile), so the
+  // refetched results lag; hosts that need instant feedback hide the originating
+  // finding optimistically on `onDone`.
   const invalidate = () =>
     Promise.all([
       invalidateAllRiskListExclusions(queryClient),
@@ -77,36 +81,92 @@ export function ExclusionSheet({
       invalidateAllRiskListResultsByChat(queryClient),
       invalidateAllRiskListResultsForAgent(queryClient),
       invalidateAllRiskOverview(queryClient),
+      // The Agent Sessions list shows per-session risk counts, so refresh it too
+      // (lags the async reconcile like the other surfaces).
+      invalidateAllListChats(queryClient),
     ]);
 
   const createMutation = useRiskCreateExclusionMutation({
     onSuccess: () => {
       void invalidate();
-      onOpenChange(false);
       toast.success(
         "Exclusion created. Matching findings will update shortly.",
       );
+      onDone();
     },
     onError: () => toast.error("Failed to create exclusion."),
   });
   const updateMutation = useRiskUpdateExclusionMutation({
     onSuccess: () => {
       void invalidate();
-      onOpenChange(false);
       toast.success("Exclusion updated. Findings will update shortly.");
+      onDone();
     },
     onError: () => toast.error("Failed to update exclusion."),
   });
 
-  const editing = state?.mode === "edit" ? state.exclusion : null;
+  const editing = state.mode === "edit" ? state.exclusion : null;
   const submitting = createMutation.isPending || updateMutation.isPending;
 
-  const formKey = (() => {
-    if (!state) return "closed";
-    if (state.mode === "edit") return `edit-${state.exclusion.id}`;
-    return `create-${state.initialExpression ?? ""}-${state.initialScope ?? ""}`;
-  })();
+  const formKey =
+    state.mode === "edit"
+      ? `edit-${state.exclusion.id}`
+      : `create-${state.initialExpression ?? ""}-${state.initialScope ?? ""}`;
 
+  return (
+    <ExclusionForm
+      key={formKey}
+      policies={policies}
+      state={state}
+      submitting={submitting}
+      onSubmit={({ fields, scope, enabled }) => {
+        const riskPolicyId = scope === GLOBAL_SCOPE ? undefined : scope;
+        if (editing) {
+          updateMutation.mutate({
+            request: {
+              updateRiskExclusionRequestBody: {
+                id: editing.id,
+                matchType: fields.matchType,
+                matchValue: fields.matchValue,
+                ruleIdFilter: fields.ruleIdFilter,
+                sourceFilter: fields.sourceFilter,
+                riskPolicyId,
+                enabled,
+              },
+            },
+          });
+        } else {
+          createMutation.mutate({
+            request: {
+              createRiskExclusionRequestBody: {
+                matchType: fields.matchType,
+                matchValue: fields.matchValue,
+                ruleIdFilter: fields.ruleIdFilter,
+                sourceFilter: fields.sourceFilter,
+                riskPolicyId,
+                enabled,
+              },
+            },
+          });
+        }
+      }}
+    />
+  );
+}
+
+/**
+ * Reusable create/edit exclusion sheet. Drops the {@link ExclusionEditor} into a
+ * Sheet so it can be used from any surface (the Exclusions tab, a trace entry)
+ * by passing a `state` and an `onOpenChange` handler.
+ */
+export function ExclusionSheet({
+  state,
+  onOpenChange,
+}: {
+  state: ExclusionSheetState | null;
+  onOpenChange: (open: boolean) => void;
+}): JSX.Element {
+  const editing = state?.mode === "edit";
   return (
     <Sheet open={state !== null} onOpenChange={onOpenChange}>
       <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">
@@ -121,43 +181,7 @@ export function ExclusionSheet({
           </SheetDescription>
         </SheetHeader>
         {state && (
-          <ExclusionForm
-            key={formKey}
-            policies={policies}
-            state={state}
-            submitting={submitting}
-            onSubmit={({ fields, scope, enabled }) => {
-              const riskPolicyId = scope === GLOBAL_SCOPE ? undefined : scope;
-              if (editing) {
-                updateMutation.mutate({
-                  request: {
-                    updateRiskExclusionRequestBody: {
-                      id: editing.id,
-                      matchType: fields.matchType,
-                      matchValue: fields.matchValue,
-                      ruleIdFilter: fields.ruleIdFilter,
-                      sourceFilter: fields.sourceFilter,
-                      riskPolicyId,
-                      enabled,
-                    },
-                  },
-                });
-              } else {
-                createMutation.mutate({
-                  request: {
-                    createRiskExclusionRequestBody: {
-                      matchType: fields.matchType,
-                      matchValue: fields.matchValue,
-                      ruleIdFilter: fields.ruleIdFilter,
-                      sourceFilter: fields.sourceFilter,
-                      riskPolicyId,
-                      enabled,
-                    },
-                  },
-                });
-              }
-            }}
-          />
+          <ExclusionEditor state={state} onDone={() => onOpenChange(false)} />
         )}
       </SheetContent>
     </Sheet>
@@ -282,7 +306,7 @@ function ExclusionExamples() {
     ['match == "value"', "exact literal match"],
     ['match ~= "regex"', "regex (RE2 syntax, ≤ 512 chars)"],
     ['rule_id == "pii.email_address"', "suppress a specific rule"],
-    ['source == "presidio"', "suppress a source"],
+    ['source == "prompt_injection"', "suppress a source"],
     ['entity_type == "EMAIL_ADDRESS"', "suppress by entity type"],
   ];
   return (

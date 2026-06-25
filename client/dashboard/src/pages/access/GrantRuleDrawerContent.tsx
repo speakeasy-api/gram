@@ -41,12 +41,12 @@ interface GrantRuleDrawerContentProps {
   /** Selected annotation hints for auto-group matching */
   annotations?: AnnotationHint[];
   onChangeAnnotations?: (annotations: AnnotationHint[]) => void;
-  /** Whether this picker is editing a deny rule (hides "All" option, affects descriptions). */
+  /** Whether this picker is editing an exception rule (hides "All" option, affects descriptions). */
   isDeny?: boolean;
-  /** Restrict which scope-level panels are visible (e.g. ["projects"] for deny rules).
+  /** Restrict which scope-level panels are visible (e.g. ["projects"] for exception rules).
    *  When set, auto-switches to the first allowed panel if current panel isn't in the list. */
   allowedPanels?: ActivePanel[];
-  /** When editing a deny rule, pass the allow rule's selectors here.
+  /** When editing an exception rule, pass the allow rule's selectors here.
    *  The picker will filter projects/servers/tools to only those covered by the allow. */
   allowSelectors?: Selector[] | null;
 }
@@ -180,7 +180,7 @@ export function GrantRuleDrawerContent({
   // jump back to "servers" when the user deselects all items.
 
   // Auto-switch to first allowed panel when current panel isn't permitted.
-  // Fires on mount when allowedPanels constrains the picker (e.g. deny rules).
+  // Fires on mount when allowedPanels constrains the picker (e.g. exception rules).
   useEffect(() => {
     if (!allowedPanels || allowedPanels.length === 0) return;
     if (allowedPanels.includes(activePanel)) return;
@@ -189,7 +189,7 @@ export function GrantRuleDrawerContent({
   }, [allowedPanels?.join(",")]);
 
   // Derive allowed project/server IDs from the allow rule's selectors.
-  // When deny picker is open, only show resources the allow rule covers.
+  // When an exception picker is open, only show resources the allow rule covers.
   const allowFilter = useMemo(() => {
     // null or undefined = no filtering (allow covers everything)
     if (allowSelectors === null || allowSelectors === undefined) return null;
@@ -838,7 +838,7 @@ function ToolSelectionPanel({
             </div>
             <div className="text-muted-foreground/70 mt-1.5 text-xs leading-snug">
               {isDeny
-                ? "Select specific tools to deny. Expand a server to choose which tools this role should not access."
+                ? "Select specific tools to exclude. Expand a server to choose which tools this role should not access."
                 : "Select specific tools to allow. Expand a server to choose which tools this role can access."}
             </div>
           </div>

@@ -408,6 +408,47 @@ func TestListChats_Filter_HasRisk_False(t *testing.T) {
 	require.Equal(t, safe.String(), result.Chats[0].ID)
 }
 
+// TestListChats_Filter_MinRiskScore verifies that min_risk_score keeps only chats whose active
+// risk-finding count is at least the threshold (inclusive), and that the reported
+// risk_findings_count matches.
+func TestListChats_Filter_MinRiskScore(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-minrisk")
+
+	high := seedChat(t, ctx, ti, "", "ext-minrisk", "high risk chat")
+	low := seedChat(t, ctx, ti, "", "ext-minrisk", "low risk chat")
+	_ = seedChat(t, ctx, ti, "", "ext-minrisk", "safe chat")
+
+	// high accrues 3 findings, low accrues 1, safe none.
+	seedRiskOnChat(t, ctx, ti, high, true)
+	seedRiskOnChat(t, ctx, ti, high, true)
+	seedRiskOnChat(t, ctx, ti, high, true)
+	seedRiskOnChat(t, ctx, ti, low, true)
+
+	// Threshold 3 is inclusive: only the chat with exactly 3 findings qualifies.
+	min3 := 3
+	payload := defaultPayload()
+	payload.MinRiskScore = &min3
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, high.String(), result.Chats[0].ID)
+	require.NotNil(t, result.Chats[0].RiskFindingsCount)
+	require.Equal(t, 3, *result.Chats[0].RiskFindingsCount)
+
+	// Threshold 1 keeps both chats with findings but excludes the safe chat.
+	min1 := 1
+	payload = defaultPayload()
+	payload.MinRiskScore = &min1
+
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+}
+
 // TestListChats_Filter_DateRange verifies that from/to filters include only chats created within
 // the specified window and exclude those outside it.
 func TestListChats_Filter_DateRange(t *testing.T) {

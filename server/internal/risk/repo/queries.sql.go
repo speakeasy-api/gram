@@ -421,7 +421,7 @@ INSERT INTO risk_custom_detection_rules (
   , rule_id
   , title
   , description
-  , regex
+  , detection_expr
   , severity
 )
 VALUES (
@@ -430,7 +430,7 @@ VALUES (
   , $3
   , $4
   , $5
-  , $6
+  , $6::text
   , $7
 )
 RETURNING id, project_id, organization_id, rule_id, title, description, regex, match_config, detection_expr, severity, created_at, updated_at, deleted_at, deleted
@@ -442,7 +442,7 @@ type CreateCustomDetectionRuleParams struct {
 	RuleID         string
 	Title          string
 	Description    string
-	Regex          pgtype.Text
+	DetectionExpr  pgtype.Text
 	Severity       string
 }
 
@@ -453,7 +453,7 @@ func (q *Queries) CreateCustomDetectionRule(ctx context.Context, arg CreateCusto
 		arg.RuleID,
 		arg.Title,
 		arg.Description,
-		arg.Regex,
+		arg.DetectionExpr,
 		arg.Severity,
 	)
 	var i RiskCustomDetectionRule
@@ -558,6 +558,8 @@ INSERT INTO risk_policies (
   , disabled_rules
   , custom_rule_ids
   , message_types
+  , scope_include
+  , scope_exempt
   , enabled
   , action
   , audience_type
@@ -579,13 +581,15 @@ VALUES (
   , $9
   , COALESCE($10::text[], '{}'::text[])
   , $11::text[]
-  , $12
-  , $13
+  , $12::text
+  , $13::text
   , $14
   , $15
   , $16
-  , $17::text
-  , $18::jsonb
+  , $17
+  , $18
+  , $19::text
+  , $20::jsonb
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
@@ -603,6 +607,8 @@ type CreateRiskPolicyParams struct {
 	DisabledRules        []string
 	CustomRuleIds        []string
 	MessageTypes         []string
+	ScopeInclude         pgtype.Text
+	ScopeExempt          pgtype.Text
 	Enabled              bool
 	Action               string
 	AudienceType         string
@@ -625,6 +631,8 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.DisabledRules,
 		arg.CustomRuleIds,
 		arg.MessageTypes,
+		arg.ScopeInclude,
+		arg.ScopeExempt,
 		arg.Enabled,
 		arg.Action,
 		arg.AudienceType,
@@ -1239,6 +1247,7 @@ type InsertRiskResultsParams struct {
 	EndPos            pgtype.Int4
 	Confidence        pgtype.Float8
 	Tags              []string
+	Spans             []byte
 	DeadLetterReason  pgtype.Text
 }
 
@@ -2179,14 +2188,14 @@ SELECT
     sub.id, sub.project_id, sub.organization_id, sub.risk_policy_id,
     sub.risk_policy_version, sub.chat_message_id, sub.source, sub.found,
     sub.rule_id, sub.description, sub.match, sub.start_pos, sub.end_pos,
-    sub.confidence, sub.tags, sub.dead_letter_reason, sub.created_at,
+    sub.confidence, sub.tags, sub.spans, sub.dead_letter_reason, sub.created_at,
     sub.chat_id, sub.message_created_at, sub.chat_title, sub.chat_user_id
 FROM (
   SELECT
       rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id,
       rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found,
       rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos,
-      rr.confidence, rr.tags, rr.dead_letter_reason, rr.created_at,
+      rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.created_at,
       cm.chat_id, cm.created_at AS message_created_at,
       c.title AS chat_title, c.external_user_id AS chat_user_id,
       CASE
@@ -2292,6 +2301,7 @@ type ListRiskResultsByProjectFoundRow struct {
 	EndPos            pgtype.Int4
 	Confidence        pgtype.Float8
 	Tags              []string
+	Spans             []byte
 	DeadLetterReason  pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	ChatID            uuid.UUID
@@ -2350,6 +2360,7 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
+			&i.Spans,
 			&i.DeadLetterReason,
 			&i.CreatedAt,
 			&i.ChatID,
@@ -2757,7 +2768,7 @@ const updateCustomDetectionRule = `-- name: UpdateCustomDetectionRule :one
 UPDATE risk_custom_detection_rules
 SET title = $1
   , description = $2
-  , regex = $3
+  , detection_expr = $3::text
   , severity = $4
   , updated_at = clock_timestamp()
 WHERE id = $5
@@ -2767,19 +2778,19 @@ RETURNING id, project_id, organization_id, rule_id, title, description, regex, m
 `
 
 type UpdateCustomDetectionRuleParams struct {
-	Title       string
-	Description string
-	Regex       pgtype.Text
-	Severity    string
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
+	Title         string
+	Description   string
+	DetectionExpr pgtype.Text
+	Severity      string
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
 }
 
 func (q *Queries) UpdateCustomDetectionRule(ctx context.Context, arg UpdateCustomDetectionRuleParams) (RiskCustomDetectionRule, error) {
 	row := q.db.QueryRow(ctx, updateCustomDetectionRule,
 		arg.Title,
 		arg.Description,
-		arg.Regex,
+		arg.DetectionExpr,
 		arg.Severity,
 		arg.ID,
 		arg.ProjectID,
@@ -2869,13 +2880,15 @@ SET name = $1
   , disabled_rules = $5
   , custom_rule_ids = COALESCE($6::text[], '{}'::text[])
   , message_types = $7::text[]
-  , enabled = $8
-  , action = $9
-  , audience_type = $10
-  , auto_name = $11
-  , user_message = $12
-  , prompt = $13::text
-  , model_config = $14::jsonb
+  , scope_include = $8::text
+  , scope_exempt = $9::text
+  , enabled = $10
+  , action = $11
+  , audience_type = $12
+  , auto_name = $13
+  , user_message = $14
+  , prompt = $15::text
+  , model_config = $16::jsonb
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -2883,17 +2896,19 @@ SET name = $1
         OR disabled_rules IS DISTINCT FROM $5
         OR custom_rule_ids IS DISTINCT FROM COALESCE($6::text[], '{}'::text[])
         OR message_types IS DISTINCT FROM $7::text[]
-        OR enabled IS DISTINCT FROM $8
-        OR action IS DISTINCT FROM $9
-        OR prompt IS DISTINCT FROM $13::text
-        OR model_config IS DISTINCT FROM $14::jsonb
-        OR audience_type IS DISTINCT FROM $10
+        OR scope_include IS DISTINCT FROM $8::text
+        OR scope_exempt IS DISTINCT FROM $9::text
+        OR enabled IS DISTINCT FROM $10
+        OR action IS DISTINCT FROM $11
+        OR prompt IS DISTINCT FROM $15::text
+        OR model_config IS DISTINCT FROM $16::jsonb
+        OR audience_type IS DISTINCT FROM $12
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $15
-  AND project_id = $16
+WHERE id = $17
+  AND project_id = $18
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
 `
@@ -2906,6 +2921,8 @@ type UpdateRiskPolicyParams struct {
 	DisabledRules        []string
 	CustomRuleIds        []string
 	MessageTypes         []string
+	ScopeInclude         pgtype.Text
+	ScopeExempt          pgtype.Text
 	Enabled              bool
 	Action               string
 	AudienceType         string
@@ -2926,6 +2943,8 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.DisabledRules,
 		arg.CustomRuleIds,
 		arg.MessageTypes,
+		arg.ScopeInclude,
+		arg.ScopeExempt,
 		arg.Enabled,
 		arg.Action,
 		arg.AudienceType,

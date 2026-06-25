@@ -49,9 +49,20 @@ func (q *Queries) CountChatMessages(ctx context.Context, arg CountChatMessagesPa
 }
 
 const countChats = `-- name: CountChats :one
-WITH candidate_chats AS (
+WITH risk_counts AS (
+  SELECT cm.chat_id, COUNT(*)::integer AS cnt
+  FROM risk_results rr
+  JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  WHERE rr.project_id = $3
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+  GROUP BY cm.chat_id
+),
+candidate_chats AS (
   SELECT c.id, c.created_at
   FROM chats c
+  LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   WHERE c.project_id = $3
     AND c.deleted IS FALSE
     AND ($4 = '' OR c.external_user_id = $4)
@@ -73,28 +84,12 @@ WITH candidate_chats AS (
     )
     AND (
       $8::text = ''
-      OR (
-        $8::text = 'true' AND EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = $3
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
-      OR (
-        $8::text = 'false' AND NOT EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = $3
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
+      OR ($8::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR ($8::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+    )
+    AND (
+      $9::int < 0
+      OR COALESCE(rc.cnt, 0) >= $9::int
     )
 ),
 chat_activity AS (
@@ -120,8 +115,12 @@ type CountChatsParams struct {
 	Search         interface{}
 	AssistantID    interface{}
 	HasRiskFilter  string
+	MinRiskScore   int32
 }
 
+// risk_counts pre-aggregates active findings per chat once for the whole
+// project (one pass over risk_results), so the risk presence + threshold
+// filters become a cheap join instead of a correlated subquery per chat.
 func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countChats,
 		arg.FromTime,
@@ -132,6 +131,7 @@ func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, 
 		arg.Search,
 		arg.AssistantID,
 		arg.HasRiskFilter,
+		arg.MinRiskScore,
 	)
 	var total int64
 	err := row.Scan(&total)
@@ -487,7 +487,7 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, project_id, organization_id, user_id, external_user_id, external_chat_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1 AND deleted IS FALSE
+SELECT id, project_id, organization_id, user_id, external_user_id, external_chat_id, title, title_manually_set, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1 AND deleted IS FALSE
 `
 
 func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
@@ -501,6 +501,7 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 		&i.ExternalUserID,
 		&i.ExternalChatID,
 		&i.Title,
+		&i.TitleManuallySet,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1083,7 +1084,7 @@ SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = $3::integer
-  AND cm.seq > $4::bigint
+  AND ($4::bigint IS NULL OR cm.seq > $4::bigint)
 ORDER BY cm.seq ASC
 LIMIT $5::integer
 `
@@ -1092,13 +1093,14 @@ type ListChatMessagesAfterPageParams struct {
 	ChatID     uuid.UUID
 	ProjectID  uuid.UUID
 	Generation int32
-	AfterSeq   int64
+	AfterSeq   pgtype.Int8
 	Lim        int32
 }
 
 // Keyset page within a generation, oldest first. Returns messages with seq
-// strictly greater than @after_seq. Fetch @lim = pageSize+1 to detect whether
-// more newer rows remain.
+// strictly greater than @after_seq, or the oldest page (start of the thread)
+// when @after_seq is NULL. Fetch @lim = pageSize+1 to detect whether more newer
+// rows remain.
 func (q *Queries) ListChatMessagesAfterPage(ctx context.Context, arg ListChatMessagesAfterPageParams) ([]ChatMessage, error) {
 	rows, err := q.db.Query(ctx, listChatMessagesAfterPage,
 		arg.ChatID,
@@ -1389,15 +1391,27 @@ func (q *Queries) ListChatResolutions(ctx context.Context, chatID uuid.UUID) ([]
 }
 
 const listChats = `-- name: ListChats :many
-WITH candidate_chats AS (
+WITH risk_counts AS (
+  SELECT cm.chat_id, COUNT(*)::integer AS cnt
+  FROM risk_results rr
+  JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  WHERE rr.project_id = $1
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+  GROUP BY cm.chat_id
+),
+candidate_chats AS (
   SELECT
     c.id,
     c.title,
     c.user_id,
     c.external_user_id,
     c.created_at,
-    c.updated_at
+    c.updated_at,
+    COALESCE(rc.cnt, 0) AS risk_findings_count
   FROM chats c
+  LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   WHERE c.project_id = $1
     AND c.deleted IS FALSE
     AND ($2 = '' OR c.external_user_id = $2)
@@ -1419,28 +1433,12 @@ WITH candidate_chats AS (
     )
     AND (
       $6::text = ''
-      OR (
-        $6::text = 'true' AND EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = $1
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
-      OR (
-        $6::text = 'false' AND NOT EXISTS (
-          SELECT 1 FROM risk_results rr
-          JOIN chat_messages cm ON cm.id = rr.chat_message_id
-          WHERE cm.chat_id = c.id
-            AND rr.project_id = $1
-            AND rr.found IS TRUE
-            AND rr.excluded_at IS NULL
-            AND rr.false_positive_at IS NULL
-        )
-      )
+      OR ($6::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR ($6::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+    )
+    AND (
+      $7::int < 0
+      OR COALESCE(rc.cnt, 0) >= $7::int
     )
 ),
 chat_stats AS (
@@ -1462,20 +1460,11 @@ filtered_chats AS (
     cc.updated_at,
     cs.num_messages,
     cs.last_message_timestamp,
-    (
-      SELECT COUNT(*)::integer
-      FROM risk_results rr
-      JOIN chat_messages cm ON cm.id = rr.chat_message_id
-      WHERE cm.chat_id = cc.id
-        AND rr.project_id = $1
-        AND rr.found IS TRUE
-        AND rr.excluded_at IS NULL
-        AND rr.false_positive_at IS NULL
-    ) AS risk_findings_count
+    cc.risk_findings_count
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
-  WHERE ($7::timestamptz IS NULL OR cs.last_message_timestamp >= $7)
-    AND ($8::timestamptz IS NULL OR cs.last_message_timestamp <= $8)
+  WHERE ($8::timestamptz IS NULL OR cs.last_message_timestamp >= $8)
+    AND ($9::timestamptz IS NULL OR cs.last_message_timestamp <= $9)
 ),
 limited_chats AS (
   SELECT
@@ -1491,14 +1480,14 @@ limited_chats AS (
     fc.risk_findings_count
   FROM filtered_chats fc
   ORDER BY
-    CASE WHEN $9 = 'last_message_timestamp' AND $10 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-    CASE WHEN $9 = 'last_message_timestamp' AND $10 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
-    CASE WHEN $9 = 'num_messages' AND $10 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
-    CASE WHEN $9 = 'num_messages' AND $10 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
+    CASE WHEN $10 = 'last_message_timestamp' AND $11 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+    CASE WHEN $10 = 'last_message_timestamp' AND $11 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+    CASE WHEN $10 = 'num_messages' AND $11 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
+    CASE WHEN $10 = 'num_messages' AND $11 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
     fc.last_message_timestamp DESC,
     fc.id DESC
-  LIMIT $12
-  OFFSET $11
+  LIMIT $13
+  OFFSET $12
 )
 SELECT
   lc.id,
@@ -1521,6 +1510,7 @@ type ListChatsParams struct {
 	Search         interface{}
 	AssistantID    interface{}
 	HasRiskFilter  string
+	MinRiskScore   int32
 	FromTime       pgtype.Timestamptz
 	ToTime         pgtype.Timestamptz
 	SortBy         interface{}
@@ -1542,6 +1532,10 @@ type ListChatsRow struct {
 	RiskFindingsCount    int32
 }
 
+// risk_counts pre-aggregates active findings per chat once for the whole
+// project (one pass over risk_results). It feeds both the risk presence +
+// threshold filters and the risk_findings_count column below, replacing what
+// were two correlated subqueries per candidate chat.
 func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListChatsRow, error) {
 	rows, err := q.db.Query(ctx, listChats,
 		arg.ProjectID,
@@ -1550,6 +1544,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.Search,
 		arg.AssistantID,
 		arg.HasRiskFilter,
+		arg.MinRiskScore,
 		arg.FromTime,
 		arg.ToTime,
 		arg.SortBy,
@@ -1792,6 +1787,154 @@ func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWind
 	return items, nil
 }
 
+const listSearchWindowedMessages = `-- name: ListSearchWindowedMessages :many
+WITH ordered AS (
+  SELECT
+    cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at,
+    row_number() OVER (ORDER BY cm.seq) AS rn,
+    count(*) OVER () AS total
+  FROM chat_messages cm
+  WHERE cm.chat_id = $2
+    AND (cm.project_id IS NULL OR cm.project_id = $3::uuid)
+    AND cm.generation = $4::integer
+),
+match_rns AS (
+  SELECT o.rn FROM ordered o
+  WHERE o.content ILIKE '%' || $5::text || '%'
+     OR (o.tool_calls IS NOT NULL AND o.tool_calls::text ILIKE '%' || $5::text || '%')
+     OR (o.content_raw IS NOT NULL AND o.content_raw::text ILIKE '%' || $5::text || '%')
+  ORDER BY o.rn
+  LIMIT $6::integer
+)
+SELECT
+  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.created_at, o.risk_analyzed_at, o.rn, o.total,
+  EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn) AS is_match
+FROM ordered o
+WHERE EXISTS (
+  SELECT 1 FROM match_rns m
+  WHERE o.rn BETWEEN m.rn - $1::bigint AND m.rn + $1::bigint
+)
+ORDER BY o.seq ASC
+`
+
+type ListSearchWindowedMessagesParams struct {
+	ContextSize int64
+	ChatID      uuid.UUID
+	ProjectID   uuid.UUID
+	Generation  int32
+	Query       string
+	MatchLimit  int32
+}
+
+type ListSearchWindowedMessagesRow struct {
+	ID                uuid.UUID
+	Seq               int64
+	ChatID            uuid.UUID
+	ProjectID         uuid.NullUUID
+	Role              string
+	Content           string
+	ContentRaw        []byte
+	ContentAssetUrl   pgtype.Text
+	Model             pgtype.Text
+	MessageID         pgtype.Text
+	FinishReason      pgtype.Text
+	ToolCalls         []byte
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	StorageError      pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	Origin            pgtype.Text
+	UserAgent         pgtype.Text
+	IpAddress         pgtype.Text
+	Source            pgtype.Text
+	ToolCallID        pgtype.Text
+	ToolUrn           pgtype.Text
+	ToolOutcome       pgtype.Text
+	ToolOutcomeNotes  pgtype.Text
+	ContentHash       []byte
+	Generation        int32
+	CreatedAt         pgtype.Timestamptz
+	RiskAnalyzedAt    pgtype.Timestamptz
+	Rn                int64
+	Total             int64
+	IsMatch           bool
+}
+
+// Query-search view: same windowing as ListRiskWindowedMessages, but the seed
+// rows are messages whose searchable text matches @query (case-insensitive
+// substring over the narrative content, the tool-call name/arguments JSON, and
+// any structured/multimodal content) instead of messages with a risk finding.
+// Each match is padded with +/- @context_size ordinal positions. rn/total drive
+// segment folding and the has_more flags; is_match flags the seed rows so the
+// caller can return the explicit jump-to-match seq list (context rows are
+// is_match = false). Seed matches are capped at @match_limit (earliest first by
+// ordinal) to bound the response on broad queries. Asset-offloaded content (too
+// large to store inline) is not searchable here.
+func (q *Queries) ListSearchWindowedMessages(ctx context.Context, arg ListSearchWindowedMessagesParams) ([]ListSearchWindowedMessagesRow, error) {
+	rows, err := q.db.Query(ctx, listSearchWindowedMessages,
+		arg.ContextSize,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Generation,
+		arg.Query,
+		arg.MatchLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSearchWindowedMessagesRow
+	for rows.Next() {
+		var i ListSearchWindowedMessagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.Model,
+			&i.MessageID,
+			&i.FinishReason,
+			&i.ToolCalls,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.TotalTokens,
+			&i.StorageError,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.ExternalMessageID,
+			&i.Origin,
+			&i.UserAgent,
+			&i.IpAddress,
+			&i.Source,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.ToolOutcome,
+			&i.ToolOutcomeNotes,
+			&i.ContentHash,
+			&i.Generation,
+			&i.CreatedAt,
+			&i.RiskAnalyzedAt,
+			&i.Rn,
+			&i.Total,
+			&i.IsMatch,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserFeedbackForChat = `-- name: ListUserFeedbackForChat :many
 SELECT id, project_id, chat_id, message_id, user_resolution, user_resolution_notes, chat_resolution_id, created_at
 FROM chat_user_feedback
@@ -1921,6 +2064,27 @@ type SeedChatMessageParams struct {
 // instead of relying on wall-clock gaps between inserts.
 func (q *Queries) SeedChatMessage(ctx context.Context, arg SeedChatMessageParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, seedChatMessage, arg.ChatID, arg.ProjectID, arg.CreatedAt)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedChatMessageContent = `-- name: SeedChatMessageContent :one
+INSERT INTO chat_messages (chat_id, project_id, role, content)
+VALUES ($1, $2, 'user', $3)
+RETURNING id
+`
+
+type SeedChatMessageContentParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.NullUUID
+	Content   string
+}
+
+// Test fixture: insert a user chat message with explicit content and return its
+// id, for exercising the text-search windowed view.
+func (q *Queries) SeedChatMessageContent(ctx context.Context, arg SeedChatMessageContentParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedChatMessageContent, arg.ChatID, arg.ProjectID, arg.Content)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err

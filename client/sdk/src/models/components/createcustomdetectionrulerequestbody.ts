@@ -27,9 +27,13 @@ export type CreateCustomDetectionRuleRequestBody = {
    */
   description?: string | undefined;
   /**
-   * RE2-compatible regex pattern.
+   * CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.
    */
-  regex: string;
+  detectionExpr?: string | undefined;
+  /**
+   * Deprecated legacy RE2 regex pattern; superseded by detection_expr. Accepted for backward compatibility.
+   */
+  regex?: string | undefined;
   /**
    * Stable rule identifier, prefixed with `custom.`.
    */
@@ -52,7 +56,8 @@ export const Severity$outboundSchema: z.ZodMiniEnum<typeof Severity> = z.enum(
 /** @internal */
 export type CreateCustomDetectionRuleRequestBody$Outbound = {
   description?: string | undefined;
-  regex: string;
+  detection_expr?: string | undefined;
+  regex?: string | undefined;
   rule_id: string;
   severity: string;
   title: string;
@@ -65,13 +70,15 @@ export const CreateCustomDetectionRuleRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     description: z.optional(z.string()),
-    regex: z.string(),
+    detectionExpr: z.optional(z.string()),
+    regex: z.optional(z.string()),
     ruleId: z.string(),
     severity: z._default(Severity$outboundSchema, "medium"),
     title: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      detectionExpr: "detection_expr",
       ruleId: "rule_id",
     });
   }),

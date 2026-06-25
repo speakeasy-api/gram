@@ -188,7 +188,6 @@ func createRemoteSessionResolverFixture(
 	remoteClient, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		RemoteSessionIssuerID: remoteIssuer.ID,
-		UserSessionIssuerID:   conv.ToNullUUID(userIssuer.ID),
 		ClientID:              "resolver-client-" + suffix,
 		ClientSecretEncrypted: pgtype.Text{String: "", Valid: false},
 		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},

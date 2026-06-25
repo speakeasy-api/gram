@@ -31,6 +31,26 @@ func userIdentifierExpr(col string) string {
 	return "if(telemetry_logs." + col + " != '', telemetry_logs." + col + ", telemetry_logs.user_email)"
 }
 
+// SearchUsers powers employee enrollment lists, so internal users are grouped by
+// email first to collapse rows that mix email-only and opaque user.id identity.
+func searchUsersGroupExpr(groupBy string) string {
+	if groupBy == "external_user_id" {
+		return userIdentifierExpr("external_user_id")
+	}
+	return "if(telemetry_logs.user_email != '', telemetry_logs.user_email, telemetry_logs.user_id)"
+}
+
+// totalTokensExpr is a grouped-aggregate expression that yields a reliable total
+// token count. AI-coding providers like Claude Code report
+// gen_ai.usage.input_tokens and gen_ai.usage.output_tokens but never emit
+// gen_ai.usage.total_tokens, so rows that lack an explicit total fall back to
+// input + output. Rows that do carry an explicit total keep using it (our native
+// chat completions already set total = input + output), so the two row shapes
+// stay consistent. Without the fallback, Claude Code sessions surface "0 tokens"
+// in the costs/session views (DNO-323).
+const totalTokensExpr = "sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') + " +
+	"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.total_tokens) = '')"
+
 // AttributeFilter represents a filter on an arbitrary JSON attribute path.
 // Paths prefixed with @ target user-defined attributes (translated to app.<path> in ClickHouse).
 // Bare paths target system/OTel attributes directly.
@@ -608,6 +628,7 @@ type GetTimeSeriesMetricsParams struct {
 	APIKeyID          string // Optional filter
 	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
 	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
 }
@@ -668,6 +689,9 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
 	}
+	if arg.MCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
+	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
 	}
@@ -719,6 +743,7 @@ type GetToolMetricsBreakdownParams struct {
 	APIKeyID          string // Optional filter
 	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
 	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
 	Limit             int
@@ -758,6 +783,9 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	}
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
+	}
+	if arg.MCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
 	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
@@ -814,6 +842,7 @@ type GetOverviewSummaryParams struct {
 	APIKeyID          string // Optional filter
 	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
 	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
 }
@@ -824,7 +853,7 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.EventSource != "" || arg.HookSource != ""
+	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != ""
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -937,6 +966,9 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
 	}
+	if arg.MCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
+	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
 	}
@@ -987,7 +1019,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 		"anyIf(toString(attributes.gen_ai.response.model), toString(attributes.gen_ai.response.model) != '') as model",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') as total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') as total_tokens",
+		totalTokensExpr+" as total_tokens",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -1075,7 +1107,7 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 		"gram_chat_id",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') as total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') as total_tokens",
+		totalTokensExpr+" as total_tokens",
 		"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') as total_cost",
 	).
 		From("telemetry_logs").
@@ -1366,8 +1398,8 @@ type SearchUsersParams struct {
 
 // SearchUsers retrieves aggregated usage metrics grouped by user identifier.
 //
-// Groups telemetry logs by user_id or external_user_id and computes per-user
-// metrics including tokens, chats, and tool call breakdowns.
+// Groups telemetry logs by internal email/user_id or external_user_id and
+// computes per-user metrics including tokens, chats, and tool call breakdowns.
 // Pagination uses last_seen_unix_nano + the group column for stable cursor ordering.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
@@ -1376,12 +1408,13 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	if arg.GroupBy == "external_user_id" {
 		groupCol = "external_user_id"
 	}
-	groupExpr := userIdentifierExpr(groupCol)
+	groupExpr := searchUsersGroupExpr(arg.GroupBy)
 
 	tc := toolCallExprsFor(arg.EventSource)
 
 	sb := sq.Select(
 		groupExpr+" AS user_id",
+		"anyIf(user_email, user_email != '') AS user_email",
 
 		// Activity timestamps
 		"min(time_unix_nano) AS first_seen_unix_nano",
@@ -1394,7 +1427,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		// Token metrics (from any event with gen_ai usage data)
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens",
+		totalTokensExpr+" AS total_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
@@ -1430,7 +1463,14 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		sb = sb.Where("hook_source = ?", arg.HookSource)
 	}
 	if len(arg.UserIDs) > 0 {
-		sb = sb.Where(squirrel.Eq{groupExpr: arg.UserIDs})
+		if arg.GroupBy == "external_user_id" {
+			sb = sb.Where(squirrel.Eq{groupExpr: arg.UserIDs})
+		} else {
+			sb = sb.Where(squirrel.Or{
+				squirrel.Eq{groupExpr: arg.UserIDs},
+				squirrel.Eq{userIdentifierExpr(groupCol): arg.UserIDs},
+			})
+		}
 	}
 
 	sb = sb.GroupBy(groupExpr)
@@ -1501,7 +1541,7 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		// Token metrics (from any event with gen_ai usage data)
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens",
+		totalTokensExpr+" AS total_tokens",
 		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
 
 		// Chat request metrics

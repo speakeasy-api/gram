@@ -101,8 +101,6 @@ type UpdateClientRequestBody struct {
 	// Rotate the client secret. Gram re-encrypts before persisting; the plaintext
 	// is never returned.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
-	// Re-pair with a different user_session_issuer.
-	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
 	// Replace the explicit upstream OAuth scopes for this client.
@@ -332,8 +330,9 @@ type GetClientResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
-	// The user_session_issuer this client is paired with.
-	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID         *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
@@ -389,8 +388,9 @@ type UpdateClientResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
-	// The user_session_issuer this client is paired with.
-	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID         *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
@@ -3941,8 +3941,9 @@ type RemoteSessionClientResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
-	// The user_session_issuer this client is paired with.
-	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID         *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
@@ -4115,7 +4116,6 @@ func NewUpdateClientRequestBody(p *organizationremotesessionissuers.UpdateClient
 	body := &UpdateClientRequestBody{
 		ID:                      p.ID,
 		ClientSecret:            p.ClientSecret,
-		UserSessionIssuerID:     p.UserSessionIssuerID,
 		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
 		Audience:                p.Audience,
 	}
@@ -5635,7 +5635,6 @@ func NewGetClientRemoteSessionClientOK(body *GetClientResponseBody) *types.Remot
 		ID:                      *body.ID,
 		ProjectID:               *body.ProjectID,
 		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		UserSessionIssuerID:     *body.UserSessionIssuerID,
 		ClientID:                *body.ClientID,
 		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
@@ -5643,6 +5642,10 @@ func NewGetClientRemoteSessionClientOK(body *GetClientResponseBody) *types.Remot
 		Audience:                body.Audience,
 		CreatedAt:               *body.CreatedAt,
 		UpdatedAt:               *body.UpdatedAt,
+	}
+	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+	for i, val := range body.UserSessionIssuerIds {
+		v.UserSessionIssuerIds[i] = val
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))
@@ -6328,7 +6331,6 @@ func NewUpdateClientRemoteSessionClientOK(body *UpdateClientResponseBody) *types
 		ID:                      *body.ID,
 		ProjectID:               *body.ProjectID,
 		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		UserSessionIssuerID:     *body.UserSessionIssuerID,
 		ClientID:                *body.ClientID,
 		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
@@ -6336,6 +6338,10 @@ func NewUpdateClientRemoteSessionClientOK(body *UpdateClientResponseBody) *types
 		Audience:                body.Audience,
 		CreatedAt:               *body.CreatedAt,
 		UpdatedAt:               *body.UpdatedAt,
+	}
+	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
+	for i, val := range body.UserSessionIssuerIds {
+		v.UserSessionIssuerIds[i] = val
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))
@@ -7536,8 +7542,8 @@ func ValidateGetClientResponseBody(body *GetClientResponseBody) (err error) {
 	if body.RemoteSessionIssuerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
 	}
-	if body.UserSessionIssuerID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	if body.UserSessionIssuerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_ids", "body"))
 	}
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
@@ -7560,8 +7566,8 @@ func ValidateGetClientResponseBody(body *GetClientResponseBody) (err error) {
 	if body.RemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
 	}
-	if body.UserSessionIssuerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	for _, e := range body.UserSessionIssuerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
 	}
 	if body.ClientIDIssuedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
@@ -7639,8 +7645,8 @@ func ValidateUpdateClientResponseBody(body *UpdateClientResponseBody) (err error
 	if body.RemoteSessionIssuerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
 	}
-	if body.UserSessionIssuerID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	if body.UserSessionIssuerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_ids", "body"))
 	}
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
@@ -7663,8 +7669,8 @@ func ValidateUpdateClientResponseBody(body *UpdateClientResponseBody) (err error
 	if body.RemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
 	}
-	if body.UserSessionIssuerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	for _, e := range body.UserSessionIssuerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
 	}
 	if body.ClientIDIssuedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
@@ -12171,8 +12177,8 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	if body.RemoteSessionIssuerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
 	}
-	if body.UserSessionIssuerID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	if body.UserSessionIssuerIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_ids", "body"))
 	}
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
@@ -12195,8 +12201,8 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	if body.RemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
 	}
-	if body.UserSessionIssuerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	for _, e := range body.UserSessionIssuerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
 	}
 	if body.ClientIDIssuedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))

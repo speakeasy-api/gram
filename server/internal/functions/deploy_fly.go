@@ -484,8 +484,16 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 	ms, err := f.launchN(ctx, logger, appName, flapsc, region, machineConfig, minSecretVersion, scale)
 	if err != nil {
 		if len(ms) > 0 {
+			// Partial success is tolerated: the app still serves traffic on the
+			// machines that came up, so this is a warning, not a failure. The
+			// joined err carries each per-machine cause; include the
+			// succeeded/requested counts so it reads as partial rather than as
+			// a hard failure. Only an all-zero result (below) is user-facing.
 			span.RecordError(err)
-			logger.WarnContext(ctx, "failed to spin up some function runner machines", attr.SlogError(err))
+			logger.WarnContext(ctx,
+				fmt.Sprintf("function runner deploy came up partially: %d/%d machines started", len(ms), scale),
+				attr.SlogError(err),
+			)
 		} else {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to spin up function runner machines").LogError(ctx, logger)
 		}
@@ -695,13 +703,23 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 
 // isFlyAppReady reports whether the error does NOT indicate a transient Fly.io
 // propagation failure where the Machines API hasn't seen the newly-created app
-// yet. Returns true when err is nil or is an unrelated error.
+// yet. Returns true when err is nil or is an unrelated (non-retryable) error.
 func isFlyAppReady(err error) bool {
 	if err == nil {
 		return true
 	}
+
+	// The Machines API answers 404 ("app not found") while an app created via
+	// the GraphQL API is still propagating. Match the typed Flaps status code
+	// rather than relying solely on substrings.
+	if errors.Is(err, flaps.FlapsErrorNotFound) {
+		return false
+	}
+
 	msg := err.Error()
-	return !strings.Contains(msg, "no rows in result set") && !strings.Contains(msg, "failed to get app")
+	return !strings.Contains(msg, "no rows in result set") &&
+		!strings.Contains(msg, "failed to get app") &&
+		!strings.Contains(msg, "app not found")
 }
 
 func (f *FlyRunner) launchN(ctx context.Context, logger *slog.Logger, appName string, flapsc *flaps.Client, region string, config *fly.MachineConfig, minSecretVersion *uint64, n uint8) ([]*fly.Machine, error) {
@@ -749,7 +767,10 @@ func (f *FlyRunner) launchN(ctx context.Context, logger *slog.Logger, appName st
 				return
 			}
 
-			if err := flapsc.Wait(ctx, appName, m, "started", 30*time.Second); err != nil {
+			// Every deploy creates a brand-new app, so the runner image (tagged
+			// per server version) is always a cold pull on the first machine.
+			// 30s was too tight and misread cold pulls as failures.
+			if err := flapsc.Wait(ctx, appName, m, "started", 60*time.Second); err != nil {
 				errCh <- fmt.Errorf("waiting for machine %s to start: %w", m.ID, err)
 				return
 			}
@@ -954,6 +975,15 @@ func (f *FlyRunner) tryMarkDeployFailed(
 	req RunnerDeployRequest,
 	state partialDeploy,
 ) {
+	// Cleanup usually runs precisely because the parent ctx was cancelled (the
+	// deploy was torn down mid-flight). Detach from that cancellation with a
+	// fresh deadline so we can still delete the Fly app and reconcile the DB
+	// row. Otherwise the leaked fly_apps row stays active (reaped_at IS NULL)
+	// and poisons later retries with a duplicate-key collision on
+	// fly_apps_project_deployment_function_active_key.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+
 	var reapedAt time.Time
 	if state.appName != "" {
 		if err := f.client.DeleteApp(ctx, state.appName); err != nil {
@@ -969,6 +999,9 @@ func (f *FlyRunner) tryMarkDeployFailed(
 			reapedAt = time.Now().UTC()
 		}
 	}
+
+	ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
 
 	if state.internalAppID != uuid.Nil {
 		reapColumn := pgtype.Timestamptz{

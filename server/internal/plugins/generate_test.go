@@ -775,6 +775,9 @@ printf '{}\n200'
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GRAM_CAPTURE_PAYLOAD="+capturePath,
 		"GRAM_DEVICE_AGENT_COMMANDS=fake-agent",
+		// Pin a generous timeout so CI scheduling jitter can't trip the
+		// device-agent wall-clock timeout (default 1.5s) and flake the test.
+		"GRAM_DEVICE_AGENT_TIMEOUT_TENTHS=600",
 	)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
@@ -785,6 +788,49 @@ printf '{}\n200'
 	require.Equal(t, "agent@example.com", posted["user_email"])
 	require.NotContains(t, postedPayload, `cursor@example.com`)
 	require.Equal(t, 1, strings.Count(postedPayload, `"user_email"`), "identity enrichment must replace user_email, not append a duplicate key")
+}
+
+// Cursor blocks via the JSON body on stdout, not the exit code. When the Gram
+// server is unreachable, errors, or returns a 3xx (an unfollowed redirect
+// carries no decision body), there is no decision to relay, so the hook must
+// fail CLOSED — emit a synthetic deny — rather than allow the call and silently
+// bypass blocking policies.
+func TestRenderCursorHookFailsClosedOnNon2xx(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	// status is what the fake curl reports; a 3xx must fail closed just like a
+	// 5xx, since curl does not follow redirects and the body is not a decision.
+	for _, status := range []string{"500", "302"} {
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			hookPath := filepath.Join(dir, "hook.sh")
+			require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(
+				"#!/usr/bin/env bash\nprintf 'not a decision\\n"+status+"'\n"), 0o755))
+
+			cmd := exec.Command("bash", hookPath)
+			cmd.Stdin = strings.NewReader(`{"hook_event_name":"beforeMCPExecution"}`)
+			cmd.Env = append(os.Environ(),
+				"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"GRAM_DEVICE_AGENT_COMMANDS=missing-agent",
+			)
+			output, err := cmd.Output()
+			require.NoError(t, err, "hook must exit 0 so Cursor reads the stdout decision")
+
+			var decision map[string]any
+			require.NoError(t, json.Unmarshal(output, &decision), "stdout must be a single valid JSON object: %q", string(output))
+			require.Equal(t, "deny", decision["permission"], "must fail closed on HTTP %s", status)
+			require.NotEmpty(t, decision["user_message"], "deny must carry a human-readable reason")
+		})
+	}
 }
 
 func TestRenderHookScriptFallsBackWhenDeviceAgentMissing(t *testing.T) {
@@ -841,6 +887,9 @@ exit 1
 	cmd.Env = append(os.Environ(),
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GRAM_DEVICE_AGENT_COMMANDS=fake-agent",
+		// Pin a generous timeout so CI scheduling jitter can't trip the
+		// device-agent wall-clock timeout (default 1.5s) and flake the test.
+		"GRAM_DEVICE_AGENT_TIMEOUT_TENTHS=600",
 	)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderDeviceAgentIdentityScript(), 0o755))
 	output, err := cmd.CombinedOutput()

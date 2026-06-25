@@ -89,7 +89,7 @@ type ListCatalogPayload struct {
 // listCatalog method.
 type ListCatalogResult struct {
 	// List of available MCP servers
-	Servers []*types.ExternalMCPServer
+	Servers []*types.ExternalMCPServerEntry
 	// Pagination cursor for the next page
 	NextCursor *string
 }

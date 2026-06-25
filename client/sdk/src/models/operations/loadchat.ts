@@ -41,9 +41,17 @@ export type LoadChatRequest = {
    */
   afterSeq?: number | undefined;
   /**
-   * When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request.
+   * When true, return the oldest page of the generation (the start of the thread), ordered oldest to newest, with `has_more_before=false`. Page forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`, or `risk_only` is set.
+   */
+  fromStart?: boolean | undefined;
+  /**
+   * When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.
    */
   riskOnly?: boolean | undefined;
+  /**
+   * When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). The seqs that actually matched are listed in `match_seqs`. Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
+   */
+  query?: string | undefined;
   /**
    * Session header
    */
@@ -156,7 +164,9 @@ export type LoadChatRequest$Outbound = {
   limit: number;
   before_seq?: number | undefined;
   after_seq?: number | undefined;
+  from_start: boolean;
   risk_only: boolean;
+  query?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
@@ -173,7 +183,9 @@ export const LoadChatRequest$outboundSchema: z.ZodMiniType<
     limit: z._default(z.int(), 50),
     beforeSeq: z.optional(z.int()),
     afterSeq: z.optional(z.int()),
+    fromStart: z._default(z.boolean(), false),
     riskOnly: z._default(z.boolean(), false),
+    query: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
@@ -182,6 +194,7 @@ export const LoadChatRequest$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       beforeSeq: "before_seq",
       afterSeq: "after_seq",
+      fromStart: "from_start",
       riskOnly: "risk_only",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",

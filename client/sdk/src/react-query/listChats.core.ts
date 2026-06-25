@@ -48,6 +48,7 @@ export function buildListChatsQuery(
       externalUserId: request?.externalUserId,
       assistantId: request?.assistantId,
       hasRisk: request?.hasRisk,
+      minRiskScore: request?.minRiskScore,
       from: request?.from,
       to: request?.to,
       limit: request?.limit,
@@ -86,6 +87,7 @@ export function queryKeyListChats(
     externalUserId?: string | undefined;
     assistantId?: string | undefined;
     hasRisk?: operations.HasRisk | undefined;
+    minRiskScore?: number | undefined;
     from?: Date | undefined;
     to?: Date | undefined;
     limit?: number | undefined;

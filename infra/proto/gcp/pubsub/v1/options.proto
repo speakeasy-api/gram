@@ -8,6 +8,12 @@ import "google/protobuf/duration.proto";
 option go_package = "github.com/speakeasy-api/gram/infra/gen/gcp/pubsub/v1;pubsubv1";
 
 message TopicOptions {
+  // Optional. Defaults to the kebab-cased proto full name of the topic-declaring
+  // message (e.g. message gram.outbox.v1.Event → "gram-outbox-v1-event"). Set
+  // this to route publishing to a shared, externally-owned topic so several
+  // messages can map onto a single topic ID. This overrides the topic ID only:
+  // a message's generated PubSubSchema is always named after the message, never
+  // after this field, because the schema describes that one message's shape.
   string name = 1;
   google.protobuf.Duration retention_hint = 2;
   map<string, string> labels = 3;

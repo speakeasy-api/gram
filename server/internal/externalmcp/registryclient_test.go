@@ -100,6 +100,93 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 	require.Equal(t, "another-active", result.Servers[1].RegistrySpecifier)
 }
 
+func TestListServers_OmitsToolsAndComputesScalars(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	inputSchema := json.RawMessage(`{"type":"object","properties":{"q":{"type":"string"}}}`)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := listResponse{
+			Servers: []serverEntry{
+				{
+					Server: serverJSON{
+						Name:        "readonly-server",
+						Description: "Every tool is read-only",
+						Version:     "1.0.0",
+					},
+					Meta: pulseMCPServerMeta{
+						Version: serverMetaVersion{
+							Status: "active",
+							FirstRemote: serverRemoteMeta{
+								Tools: []serverTool{
+									{Name: "search", Description: "Search things", InputSchema: inputSchema, Annotations: map[string]any{"readOnlyHint": true}},
+									{Name: "list", Description: "List things", InputSchema: inputSchema, Annotations: map[string]any{"readOnlyHint": true}},
+								},
+							},
+						},
+					},
+				},
+				{
+					Server: serverJSON{
+						Name:        "writer-server",
+						Description: "Has a write tool",
+						Version:     "1.0.0",
+					},
+					Meta: pulseMCPServerMeta{
+						Version: serverMetaVersion{
+							Status: "active",
+							FirstRemote: serverRemoteMeta{
+								Tools: []serverTool{
+									{Name: "read", InputSchema: inputSchema, Annotations: map[string]any{"readOnlyHint": true}},
+									{Name: "write", InputSchema: inputSchema},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		err := json.NewEncoder(w).Encode(response)
+		assert.NoError(t, err)
+	}))
+	defer srv.Close()
+
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, nil)
+	client.httpClient = srv.Client()
+	registry := Registry{
+		ID:  uuid.New(),
+		URL: srv.URL,
+	}
+
+	result, err := client.ListServers(ctx, registry, ListServersParams{})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 2)
+
+	// Scalars are precomputed; all tools read-only -> is_read_only true.
+	readonly := result.Servers[0]
+	require.Equal(t, 2, readonly.ToolCount)
+	require.True(t, readonly.IsReadOnly)
+
+	// One non-read-only tool -> is_read_only false.
+	writer := result.Servers[1]
+	require.Equal(t, 2, writer.ToolCount)
+	require.False(t, writer.IsReadOnly)
+
+	// The _meta blob must not carry tool definitions (schemas/descriptions).
+	metaJSON, err := json.Marshal(readonly.Meta)
+	require.NoError(t, err)
+	require.NotContains(t, string(metaJSON), "properties")
+	require.NotContains(t, string(metaJSON), "Search things")
+}
+
 func TestListServers_PreservesRemoteHeadersAndVariables(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

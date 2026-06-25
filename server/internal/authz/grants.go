@@ -226,6 +226,9 @@ func flattenRoleGrants(grants []*RoleGrant) ([]roleGrantRow, error) {
 		if err := validatePolicyEffect(effect); err != nil {
 			return nil, err
 		}
+		if effect == PolicyEffectDeny {
+			return nil, fmt.Errorf("policy effect %q is deprecated; use exclusion scopes", effect)
+		}
 
 		selectors := grant.Selectors
 		// nil selectors = unrestricted wildcard access.
@@ -441,6 +444,52 @@ func evaluateGrants(grants []Grant, checks []Check) (allowGrant *Grant, allowChe
 	return allowGrant, allowCheck, false
 }
 
+type grantCheckEvaluation struct {
+	Grant  *Grant
+	Check  *Check
+	Denied bool
+}
+
+func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, error) {
+	allowGrant, allowCheck, denied := evaluateGrants(grants, check.expand())
+	if allowGrant == nil {
+		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: denied}, nil
+	}
+
+	expression := expressionForCheck(check)
+	if expression == nil {
+		return grantCheckEvaluation{Grant: allowGrant, Check: allowCheck, Denied: false}, nil
+	}
+
+	// Legacy deny effects are handled by evaluateGrants above. Grant
+	// expressions model exclusions as allow-only set subtraction, so do not pass
+	// legacy deny rows into the expression evaluator from the engine path.
+	result, err := expression.Evaluate(allowGrants(grants))
+	if err != nil {
+		return grantCheckEvaluation{}, fmt.Errorf("evaluate exclusion expression: %w", err)
+	}
+	if !result.Satisfied {
+		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: result.Reason == GrantExpressionReasonExclusionMatched}, nil
+	}
+
+	return grantCheckEvaluation{Grant: allowGrant, Check: allowCheck, Denied: false}, nil
+}
+
+func allowGrants(grants []Grant) []Grant {
+	for _, grant := range grants {
+		if grant.Effect == PolicyEffectDeny {
+			allowOnly := make([]Grant, 0, len(grants))
+			for _, grant := range grants {
+				if grant.Effect == PolicyEffectAllow {
+					allowOnly = append(allowOnly, grant)
+				}
+			}
+			return allowOnly
+		}
+	}
+	return grants
+}
+
 func hasMatchingDenyGrant(grants []Grant, checks []Check) bool {
 	for i := range grants {
 		grant := &grants[i]
@@ -490,11 +539,15 @@ func matchingAllowGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 	return nil, nil
 }
 
-// allScopeGrants returns wildcard grants for every defined scope. Used to give
-// superadmins (e.g. during org impersonation) unrestricted access.
+// allScopeGrants returns wildcard grants for every user-visible scope. Used to
+// give superadmins (e.g. during org impersonation) unrestricted access without
+// exposing internal blocklist storage scopes as standalone permissions.
 func allScopeGrants() []Grant {
-	grants := make([]Grant, 0, len(allScopes))
-	for _, s := range allScopes {
+	grants := make([]Grant, 0, len(scopeVisibilityByScope))
+	for s, visibility := range scopeVisibilityByScope {
+		if visibility != scopeVisibilityUserVisible {
+			continue
+		}
 		grants = append(grants, NewGrant(s, WildcardResource))
 	}
 	return grants

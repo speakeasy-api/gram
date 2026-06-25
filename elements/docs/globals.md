@@ -1,17 +1,22 @@
-[**@gram-ai/elements v1.37.1**](README.md)
+[**@gram-ai/elements v1.38.0**](README.md)
 
 ***
 
-# @gram-ai/elements v1.37.1
+# @gram-ai/elements v1.38.0
 
 ## Interfaces
 
+- [MarkdownProps](interfaces/MarkdownProps.md)
 - [MessageContentProps](interfaces/MessageContentProps.md)
 - [ShareButtonProps](interfaces/ShareButtonProps.md)
 - [CalendarProps](interfaces/CalendarProps.md)
 - [TimeRange](interfaces/TimeRange.md)
 - [TimeRangePreset](interfaces/TimeRangePreset.md)
 - [TimeRangePickerProps](interfaces/TimeRangePickerProps.md)
+- [SectionMatch](interfaces/SectionMatch.md)
+- [SectionHighlight](interfaces/SectionHighlight.md)
+- [ToolUIProps](interfaces/ToolUIProps.md)
+- [ToolUISectionProps](interfaces/ToolUISectionProps.md)
 - [CassetteMessage](interfaces/CassetteMessage.md)
 - [Cassette](interfaces/Cassette.md)
 - [ReplayOptions](interfaces/ReplayOptions.md)
@@ -42,6 +47,8 @@
 ## Type Aliases
 
 - [DateRangePreset](type-aliases/DateRangePreset.md)
+- [ToolStatus](type-aliases/ToolStatus.md)
+- [ContentItem](type-aliases/ContentItem.md)
 - [CassettePart](type-aliases/CassettePart.md)
 - [FrontendTool](type-aliases/FrontendTool.md)
 - [GetSessionFn](type-aliases/GetSessionFn.md)
@@ -62,6 +69,7 @@
 
 ## Variables
 
+- [Markdown](variables/Markdown.md)
 - [MessageContent](variables/MessageContent.md)
 - [ToolFallback](variables/ToolFallback.md)
 - [PRESETS](variables/PRESETS.md)
@@ -77,6 +85,9 @@
 - [Calendar](functions/Calendar.md)
 - [getPresetRange](functions/getPresetRange.md)
 - [TimeRangePicker](functions/TimeRangePicker.md)
+- [SyntaxHighlightedCode](functions/SyntaxHighlightedCode.md)
+- [ToolUISection](functions/ToolUISection.md)
+- [ToolUI](functions/ToolUI.md)
 - [useChatId](functions/useChatId.md)
 - [GramElementsProvider](functions/GramElementsProvider.md)
 - [useRecordCassette](functions/useRecordCassette.md)

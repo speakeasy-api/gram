@@ -34,16 +34,13 @@ export function ServerTableRow({
   );
   const isAdded = !!existingMcp;
 
-  const toolNames = useMemo(() => {
-    const tools = server.tools ?? [];
-    return tools.map((t) => t.name || "Unknown tool");
-  }, [server.tools]);
+  // The catalog list carries a precomputed tool count, not the tool defs.
+  const toolCount = server.toolCount;
 
   // Remote-only servers (auth-gated proxies like GitHub, Make) can't enumerate
   // tools until a user authenticates, so the "No Tools" badge would be
   // misleading. Hide it for them.
-  const isRemoteOnly =
-    (server.remotes?.length ?? 0) > 0 && toolNames.length === 0;
+  const isRemoteOnly = (server.remotes?.length ?? 0) > 0 && toolCount === 0;
 
   const handleRowClick = (e: React.MouseEvent<HTMLTableRowElement>) => {
     e.stopPropagation();
@@ -119,7 +116,7 @@ export function ServerTableRow({
       {/* Tools */}
       <td className="px-3 py-3">
         <ToolCollectionBadge
-          toolNames={toolNames}
+          count={toolCount}
           emptyLabel={isRemoteOnly ? null : undefined}
         />
       </td>

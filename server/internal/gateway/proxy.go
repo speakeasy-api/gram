@@ -9,16 +9,13 @@ import (
 	"io"
 	"log/slog"
 	"mime"
-	"net"
 	"net/http"
 	"net/url"
 	"reflect"
 	"regexp"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -469,6 +466,7 @@ func (tp *ToolProxy) doFunction(
 			}
 			return nil
 		},
+		RetryConfig:      functionRunnerRetryConfig(),
 		ID:               descriptor.ID,
 		Name:             descriptor.Name,
 		DeploymentID:     descriptor.DeploymentID,
@@ -737,6 +735,7 @@ func (tp *ToolProxy) doHTTP(
 		ResponseStatusCodeCapture: &responseStatusCode,
 		Attributes:                attrRecorder,
 		VerifyResponse:            func(resp *http.Response) error { return nil },
+		RetryConfig:               httpToolRetryConfig(),
 		ID:                        descriptor.ID,
 		Name:                      descriptor.Name,
 		DeploymentID:              descriptor.DeploymentID,
@@ -831,118 +830,6 @@ func (tp *ToolProxy) doExternalMCP(
 	return nil
 }
 
-type retryConfig struct {
-	initialInterval time.Duration
-	maxInterval     time.Duration
-	maxAttempts     int
-	backoffFactor   float64
-	statusCodes     []int
-	methods         []string
-}
-
-func retryWithBackoff(
-	ctx context.Context,
-	retryBackoff retryConfig,
-	doRequest func() (*http.Response, error),
-) (*http.Response, error) {
-	var resp *http.Response
-	var err error
-	delayInterval := retryBackoff.initialInterval
-	for attempt := 0; attempt < retryBackoff.maxAttempts; attempt++ {
-		if attempt > 0 {
-			select {
-			case <-time.After(delayInterval):
-			case <-ctx.Done():
-				return nil, fmt.Errorf("retry context done: %w", ctx.Err())
-			}
-
-			delayInterval = min(time.Duration(float64(delayInterval)*retryBackoff.backoffFactor), retryBackoff.maxInterval)
-		}
-		resp, err = doRequest()
-		if err != nil {
-			// Only retry connection-level failures that happened before the
-			// upstream processed the request, so non-idempotent requests (e.g.
-			// function tool-call POSTs) are never re-executed.
-			if isRetryableTransportError(err) {
-				continue
-			}
-
-			return nil, err
-		}
-		if !slices.Contains(retryBackoff.methods, resp.Request.Method) || !slices.Contains(retryBackoff.statusCodes, resp.StatusCode) {
-			return resp, err
-		}
-
-		if retryAfter := resp.Header.Get("retry-after"); retryAfter != "" {
-			if parsedNumber, err := strconv.ParseInt(retryAfter, 10, 64); err == nil && parsedNumber > 0 {
-				retryAfterDuration := time.Duration(parsedNumber) * time.Second
-				delayInterval = min(retryAfterDuration, retryBackoff.maxInterval)
-				continue
-			}
-
-			if parsedDate, err := time.Parse(time.RFC1123, retryAfter); err == nil {
-				retryAfterDuration := time.Until(parsedDate)
-				if retryAfterDuration > 0 {
-					delayInterval = min(retryAfterDuration, retryBackoff.maxInterval)
-				}
-			}
-		}
-	}
-	return resp, err
-}
-
-// isRetryableTransportError reports whether err returned from http.Client.Do is a
-// connection-level failure that happened before the upstream processed the
-// request. Retrying these is safe even for non-idempotent methods (e.g. function
-// tool-call POSTs) because the request was not acted on. Caller cancellation and
-// deadlines are excluded: the request may already be in flight, so retrying only
-// wastes work.
-func isRetryableTransportError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	// The caller gave up (timeout or cancellation); the request may already be in
-	// flight, so do not retry.
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return false
-	}
-
-	// A bare io.EOF from client.Do means the connection closed during the
-	// request/response-header exchange, before any response was received. For
-	// Fly-hosted function runners this is overwhelmingly the edge closing the
-	// connection before it can route to a machine that is stopped, stopping, or
-	// not yet recognized as started, so the request was not processed. From the
-	// error alone we cannot distinguish that from the rarer case where the runner
-	// processed the request and then the connection dropped before responding;
-	// retrying io.EOF accepts that residual double-execution risk. It is the best
-	// achievable without per-tool idempotency keys, and the observed EOF traffic
-	// is dominated by idempotent reads. io.ErrUnexpectedEOF stays excluded: a
-	// partial response means the request was processed.
-	if errors.Is(err, io.EOF) {
-		return true
-	}
-
-	// Connection refused is always a failed connect: the request was never
-	// delivered.
-	if errors.Is(err, syscall.ECONNREFUSED) {
-		return true
-	}
-
-	// Failures while establishing the connection (dial/connect), including a reset
-	// or timeout before the request is written, are safe to retry. Resets while
-	// reading or writing an in-flight request are intentionally NOT retried here,
-	// to avoid re-executing a request the upstream may have already processed.
-	if netErr, ok := errors.AsType[*net.OpError](err); ok {
-		switch netErr.Op {
-		case "dial", "connect":
-			return true
-		}
-	}
-
-	return false
-}
-
 type ReverseProxyOptions struct {
 	Logger                    *slog.Logger
 	Tracer                    trace.Tracer
@@ -955,6 +842,11 @@ type ReverseProxyOptions struct {
 	ResponseStatusCodeCapture *int
 	VerifyResponse            func(*http.Response) error
 	Attributes                tm.HTTPLogAttributes
+	// RetryConfig is the retry policy applied to the proxied request. Callers
+	// pass functionRunnerRetryConfig (POST retries on the pre-execution-safe
+	// 429/503 set) for function-runner calls and httpToolRetryConfig (GET-only
+	// broad preset) for outbound HTTP tool calls.
+	RetryConfig retryConfig
 	// Descriptor fields
 	ID               string
 	Name             string
@@ -1027,32 +919,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 
 		return client.Do(retryReq)
 	}
-	resp, err := retryWithBackoff(ctx, retryConfig{
-		// Space retries so the later attempts land after a Fly machine cold start
-		// (~2s) has had time to complete, without adding more attempts (which would
-		// only pile load onto an already-saturated runner). With backoffFactor 2
-		// the waits are 1s then 2s.
-		initialInterval: 1 * time.Second,
-		maxInterval:     5 * time.Second,
-		maxAttempts:     3,
-		backoffFactor:   2,
-		statusCodes: []int{ // reasonable status code presets
-			408, // Request Timeout
-			429, // Rate Limit Exceeded
-			500, // Internal Server Error
-			502, // Bad Gateway
-			503, // Service Unavailable
-			504, // Gateway Timeout
-			509, // Bandwidth Limit Exceeded
-			521, // Web Server Is Down (Cloudflare)
-			522, // Connection Timed Out (Cloudflare)
-			523, // Origin Is Unreachable (Cloudflare)
-			524, // A Timeout Occurred (Cloudflare)
-		},
-		methods: []string{
-			http.MethodGet,
-		},
-	}, executeRequest)
+	resp, err := retryWithBackoff(ctx, opts.RetryConfig, executeRequest)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return oops.E(oops.CodeGatewayError, err, "failed to execute request").LogError(ctx, opts.Logger)

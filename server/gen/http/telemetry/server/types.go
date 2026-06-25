@@ -144,6 +144,9 @@ type GetObservabilityOverviewRequestBody struct {
 	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
 	// Optional Remote MCP server ID filter
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	// Optional MCP server ID filter (fronting server; spans both remote-backed and
+	// toolset-backed activity)
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// Optional event source filter (e.g. 'hook')
 	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')
@@ -4145,6 +4148,8 @@ type ChatSummaryResponseBody struct {
 type UserSummaryResponseBody struct {
 	// User identifier (user_id or external_user_id depending on group_by)
 	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// User email associated with this usage, when present
+	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
 	// Earliest activity timestamp in Unix nanoseconds
 	FirstSeenUnixNano string `form:"first_seen_unix_nano" json:"first_seen_unix_nano" xml:"first_seen_unix_nano"`
 	// Latest activity timestamp in Unix nanoseconds
@@ -8560,6 +8565,7 @@ func NewGetObservabilityOverviewPayload(body *GetObservabilityOverviewRequestBod
 		APIKeyID:          body.APIKeyID,
 		ToolsetSlug:       body.ToolsetSlug,
 		RemoteMcpServerID: body.RemoteMcpServerID,
+		McpServerID:       body.McpServerID,
 		EventSource:       body.EventSource,
 		HookSource:        body.HookSource,
 	}
@@ -9126,6 +9132,9 @@ func ValidateGetObservabilityOverviewRequestBody(body *GetObservabilityOverviewR
 	}
 	if body.RemoteMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	return
 }

@@ -1,0 +1,16 @@
+edition = "2024";
+
+package test.schema.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "example.com/gen/test/schema/v1;schemav1";
+
+// LegacyEvent is deprecated; the message-level option is kept after scrubbing.
+message LegacyEvent {
+  option deprecated = true;
+
+  string id = 1;
+
+  option (gcp.pubsub.v1.topic) = {};
+}

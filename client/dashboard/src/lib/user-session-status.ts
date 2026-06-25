@@ -1,12 +1,17 @@
-import type { ComponentProps } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 
-import type { Badge } from "@/components/ui/badge";
 import type { UserSession } from "@gram/client/models/components";
 
 export type SessionStatus = "active" | "expired" | "revoked";
 
-type BadgeVariant = ComponentProps<typeof Badge>["variant"];
+// Moonshine Badge semantic variants ("our brand badges"). The names are hooks
+// onto the brand palette, not literal alert semantics.
+type BadgeVariant =
+  | "neutral"
+  | "success"
+  | "information"
+  | "warning"
+  | "destructive";
 
 export function sessionStatus(session: UserSession): SessionStatus {
   if (session.revokedAt) return "revoked";
@@ -20,12 +25,12 @@ export const STATUS_PRESENTATION: Record<
 > = {
   active: {
     label: "Active",
-    badgeVariant: "default",
+    badgeVariant: "success",
     dotClass: "bg-emerald-500",
   },
   expired: {
     label: "Expired",
-    badgeVariant: "secondary",
+    badgeVariant: "neutral",
     dotClass: "bg-muted-foreground",
   },
   revoked: {

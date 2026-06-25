@@ -71,7 +71,7 @@ export type RiskPolicy = {
    */
   createdAt: Date;
   /**
-   * Custom detection rule ids enabled for this policy.
+   * Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.
    */
   customRuleIds?: Array<string> | undefined;
   /**
@@ -119,6 +119,14 @@ export type RiskPolicy = {
    * Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.
    */
   promptInjectionRules?: Array<string> | undefined;
+  /**
+   * CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.
+   */
+  scopeExempt?: string | undefined;
+  /**
+   * CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.
+   */
+  scopeInclude?: string | undefined;
   /**
    * Detection sources enabled for this policy.
    */
@@ -184,6 +192,8 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       project_id: z.string(),
       prompt: z.optional(z.string()),
       prompt_injection_rules: z.optional(z.array(z.string())),
+      scope_exempt: z.optional(z.string()),
+      scope_include: z.optional(z.string()),
       sources: z.array(z.string()),
       total_messages: z.int(),
       updated_at: z.pipe(
@@ -208,6 +218,8 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "presidio_entities": "presidioEntities",
         "project_id": "projectId",
         "prompt_injection_rules": "promptInjectionRules",
+        "scope_exempt": "scopeExempt",
+        "scope_include": "scopeInclude",
         "total_messages": "totalMessages",
         "updated_at": "updatedAt",
         "user_message": "userMessage",
