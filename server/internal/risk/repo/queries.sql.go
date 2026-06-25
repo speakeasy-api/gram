@@ -1229,7 +1229,7 @@ SELECT
     b.created_at,
     rp.name AS policy_name
 FROM tool_call_blocks b
-LEFT JOIN risk_policies rp ON rp.id = b.risk_policy_id
+LEFT JOIN risk_policies rp ON rp.id = b.risk_policy_id AND rp.deleted IS FALSE
 WHERE b.id = $1
   AND b.organization_id = $2
   AND b.deleted IS FALSE
@@ -3129,7 +3129,7 @@ WHERE tool_call_blocks.id = $3
   AND tool_call_blocks.deleted IS FALSE
 RETURNING tool_call_blocks.id, tool_call_blocks.project_id, tool_call_blocks.reason, tool_call_blocks.tool_name,
   tool_call_blocks.feedback, tool_call_blocks.created_at,
-  COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id), '')::text AS policy_name
+  COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id AND rp.deleted IS FALSE), '')::text AS policy_name
 `
 
 type UpdateToolCallBlockFeedbackParams struct {

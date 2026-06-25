@@ -115,7 +115,7 @@ function BlockBody({ id }: { id: string | undefined }) {
             <Button
               variant={block.feedback === "up" ? "secondary" : "tertiary"}
               disabled={isSubmitting}
-              onClick={() => onVote("up")}
+              onClick={() => void onVote("up")}
             >
               <Button.LeftIcon>
                 <ThumbsUp className="h-4 w-4" />
@@ -125,7 +125,7 @@ function BlockBody({ id }: { id: string | undefined }) {
             <Button
               variant={block.feedback === "down" ? "secondary" : "tertiary"}
               disabled={isSubmitting}
-              onClick={() => onVote("down")}
+              onClick={() => void onVote("down")}
             >
               <Button.LeftIcon>
                 <ThumbsDown className="h-4 w-4" />
