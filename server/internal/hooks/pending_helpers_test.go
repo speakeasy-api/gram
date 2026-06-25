@@ -48,7 +48,7 @@ func TestBuildTelemetryAttributesWithMetadata_SetsMCPMatchFromCachedList(t *test
 		GramOrgID: authCtx.ActiveOrganizationID,
 		ProjectID: authCtx.ProjectID.String(),
 	}
-	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+	attrs := claudeTelemetryAttrs(t, ctx, ti, &hooks.ClaudePayload{
 		HookEventName: "PreToolUse",
 		ToolName:      &mcpToolName,
 		ToolUseID:     &toolUse,
@@ -76,7 +76,7 @@ func TestBuildTelemetryAttributesWithMetadata_NoMCPMatchForNativeTool(t *testing
 		GramOrgID: authCtx.ActiveOrganizationID,
 		ProjectID: authCtx.ProjectID.String(),
 	}
-	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+	attrs := claudeTelemetryAttrs(t, ctx, ti, &hooks.ClaudePayload{
 		HookEventName: "PreToolUse",
 		ToolName:      &bashTool,
 		ToolUseID:     &toolUse,
@@ -116,7 +116,7 @@ func TestBuildTelemetryAttributesWithMetadata_CoworkOverridesSourceWithName(t *t
 		GramOrgID: authCtx.ActiveOrganizationID,
 		ProjectID: authCtx.ProjectID.String(),
 	}
-	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+	attrs := claudeTelemetryAttrs(t, ctx, ti, &hooks.ClaudePayload{
 		HookEventName: "PreToolUse",
 		ToolName:      &mcpToolName,
 		ToolUseID:     &toolUse,
@@ -155,7 +155,7 @@ func TestBuildTelemetryAttributesWithMetadata_CoworkFallsBackToUUIDWhenNoName(t 
 		GramOrgID: authCtx.ActiveOrganizationID,
 		ProjectID: authCtx.ProjectID.String(),
 	}
-	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+	attrs := claudeTelemetryAttrs(t, ctx, ti, &hooks.ClaudePayload{
 		HookEventName: "PreToolUse",
 		ToolName:      &mcpToolName,
 		ToolUseID:     &toolUse,
@@ -193,7 +193,7 @@ func TestBuildTelemetryAttributesWithMetadata_ClaudeCodeReplacesSanitizedSourceW
 		GramOrgID: authCtx.ActiveOrganizationID,
 		ProjectID: authCtx.ProjectID.String(),
 	}
-	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+	attrs := claudeTelemetryAttrs(t, ctx, ti, &hooks.ClaudePayload{
 		HookEventName: "PreToolUse",
 		ToolName:      &mcpToolName,
 		ToolUseID:     &toolUse,
@@ -228,7 +228,7 @@ func TestBuildTelemetryAttributesWithMetadata_FallsBackToServerPrefix(t *testing
 		GramOrgID: authCtx.ActiveOrganizationID,
 		ProjectID: authCtx.ProjectID.String(),
 	}
-	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+	attrs := claudeTelemetryAttrs(t, ctx, ti, &hooks.ClaudePayload{
 		HookEventName: "PreToolUse",
 		ToolName:      &mcpToolName,
 		ToolUseID:     &toolUse,
@@ -258,7 +258,7 @@ func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing
 		GramOrgID:   authCtx.ActiveOrganizationID,
 		ProjectID:   authCtx.ProjectID.String(),
 	}
-	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+	attrs := claudeTelemetryAttrs(t, ctx, ti, &hooks.ClaudePayload{
 		HookEventName: "PreToolUse",
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
@@ -266,10 +266,11 @@ func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing
 	}, metadata)
 
 	// User identity travels on LogParams.UserInfo, not the attributes map;
-	// the build call's job is to resolve the user ID onto the metadata.
+	// extraction no longer mutates the caller's metadata.
 	assert.NotContains(t, attrs, attr.UserEmailKey)
 	assert.NotContains(t, attrs, attr.UserIDKey)
-	assert.Equal(t, userID, metadata.UserID)
+	assert.Empty(t, metadata.UserID)
+	assert.Equal(t, userID, ti.service.telemetryWriter.resolveUserByEmail(ctx, userEmail, authCtx.ActiveOrganizationID))
 }
 
 func TestPersistToolCallEvent_PreservesEmailWhenUserIDUnresolved(t *testing.T) {
@@ -290,12 +291,14 @@ func TestPersistToolCallEvent_PreservesEmailWhenUserIDUnresolved(t *testing.T) {
 	}
 	start := time.Now().UTC()
 
-	err := ti.service.persistToolCallEvent(ctx, &hooks.ClaudePayload{
-		HookEventName: "ToolEvent",
+	hookEvent, err := ti.service.normalizeClaudeHookEvent(ctx, &hooks.ClaudePayload{
+		HookEventName: "PreToolUse",
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
 		SessionID:     &sessionID,
-	}, metadata)
+	}, time.Now())
+	require.NoError(t, err)
+	err = ti.service.telemetryWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: "", SkipChat: true})
 	require.NoError(t, err)
 	require.Empty(t, metadata.UserID, "test email should not resolve to a connected user")
 
@@ -331,7 +334,7 @@ func TestBuildTelemetryAttributesWithMetadata_SetsHookHostname(t *testing.T) {
 		ProjectID: authCtx.ProjectID.String(),
 	}
 	hostname := " subomi-mbp "
-	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
+	attrs := claudeTelemetryAttrs(t, ctx, ti, &hooks.ClaudePayload{
 		HookEventName: "PreToolUse",
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,

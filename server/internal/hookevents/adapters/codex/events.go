@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"strings"
 	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -22,6 +23,13 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CodexPayload, ev
 		AuthContext:    authCtx,
 		Context:        eventContext,
 		ConversationID: conv.PtrValOr(payload.SessionID, ""),
+		TranscriptPath: conv.PtrValOr(payload.TranscriptPath, ""),
+		CWD:            conv.PtrValOr(payload.Cwd, ""),
+		PermissionMode: "",
+		Model:          conv.PtrValOr(payload.Model, ""),
+		ToolCallID:     "",
+		HookHostname:   strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")),
+		AdditionalData: payload.AdditionalData,
 		Raw:            payload,
 	}
 

@@ -31,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
-	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
 // decodeBodySampleLimit caps how many bytes of a failing request body get
@@ -766,14 +765,19 @@ func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, m
 
 	metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 
-	if isConversationEvent(payload.HookEventName) {
-		if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist conversation event", attr.SlogError(err))
-		}
-	} else {
-		if err := s.persistToolCallEvent(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist tool call event", attr.SlogError(err))
-		}
+	hookEvent, err := s.normalizeClaudeHookEvent(ctx, payload, time.Now())
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to normalize Claude hook for persistence", attr.SlogError(err))
+		return
+	}
+	if hookEvent == nil {
+		return
+	}
+	if s.telemetryWriter == nil {
+		return
+	}
+	if err := s.telemetryWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: "", SkipChat: false}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to persist Claude hook event", attr.SlogError(err))
 	}
 }
 
@@ -1158,34 +1162,21 @@ func (s *Service) recordShadowMCPBlockFinding(
 // gram.hook.block_reason. trace_summaries_mv aggregates with max(), so the
 // trace will surface as blocked regardless of which row arrives first.
 func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, reason string) {
-	if s.telemetryLogger == nil || reason == "" || s.isHookDuplicate(ctx) {
+	if reason == "" || s.isHookDuplicate(ctx) {
 		return
 	}
 
-	attrs := s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata)
-	attrs[attr.HookBlockReasonKey] = reason
-	toolName, _ := attrs[attr.ToolNameKey].(string)
-
-	projectID, err := uuid.Parse(metadata.ProjectID)
+	hookEvent, err := s.normalizeClaudeHookEvent(ctx, payload, time.Now())
 	if err != nil {
-		s.logger.WarnContext(ctx, "invalid project ID for Claude block log", attr.SlogError(err))
+		s.logger.WarnContext(ctx, "failed to normalize Claude block hook for telemetry", attr.SlogError(err))
 		return
 	}
-
-	s.telemetryLogger.Log(ctx, telemetry.LogParams{
-		Timestamp: time.Now(),
-		ToolInfo: telemetry.ToolInfo{
-			Name:           toolName,
-			OrganizationID: metadata.GramOrgID,
-			ProjectID:      projectID.String(),
-			ID:             "",
-			URN:            "",
-			DeploymentID:   "",
-			FunctionID:     nil,
-		},
-		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
-		Attributes: attrs,
-	})
+	if s.telemetryWriter == nil {
+		return
+	}
+	if err := s.telemetryWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: reason, SkipChat: true}); err != nil {
+		s.logger.WarnContext(ctx, "failed to write Claude block telemetry", attr.SlogError(err))
+	}
 }
 
 func (s *Service) handlePostToolUseFailure(ctx context.Context, ev *hookevents.AfterToolUseFailure) (*gen.ClaudeHookResult, error) {

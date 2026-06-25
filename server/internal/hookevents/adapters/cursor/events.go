@@ -1,6 +1,7 @@
 package cursor
 
 import (
+	"strings"
 	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -22,6 +23,13 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CursorPayload, e
 		AuthContext:    authCtx,
 		Context:        eventContext,
 		ConversationID: conv.PtrValOr(payload.ConversationID, ""),
+		TranscriptPath: conv.PtrValOr(payload.TranscriptPath, ""),
+		CWD:            "",
+		PermissionMode: "",
+		Model:          conv.PtrValOr(payload.Model, ""),
+		ToolCallID:     conv.PtrValOr(payload.ToolUseID, ""),
+		HookHostname:   strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")),
+		AdditionalData: payload.AdditionalData,
 		Raw:            payload,
 	}
 

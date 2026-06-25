@@ -54,6 +54,13 @@ type Event struct {
 	AuthContext    *contextvalues.AuthContext
 	Context        EventContext
 	ConversationID string
+	TranscriptPath string
+	CWD            string
+	PermissionMode string
+	Model          string
+	ToolCallID     string
+	HookHostname   string
+	AdditionalData map[string]any
 	Raw            any
 }
 
