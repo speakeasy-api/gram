@@ -88,7 +88,89 @@ func TestClaudeMessages_DeliveredTwiceStoredOnce(t *testing.T) {
 		return err == nil && len(got) != 2
 	}, 500*time.Millisecond, 50*time.Millisecond, "re-delivery must dedup on external_message_id")
 
-	require.True(t, msgs[0].ExternalMessageID.Valid, "captured messages must carry external_message_id for dedup")
+	for _, msg := range msgs {
+		require.True(t, msg.ExternalMessageID.Valid, "captured messages must carry external_message_id for dedup")
+	}
+}
+
+func TestClaudeMessages_BufferedUntilSessionMetadataResolves(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	userContent := "captured after metadata arrives"
+	payload := &gen.ClaudeMessagesPayload{
+		SessionID: sessionID,
+		Messages: []*gen.ClaudeCapturedMessage{
+			{ExternalID: uuid.NewString(), Role: "user", Content: &userContent},
+		},
+	}
+
+	require.NoError(t, ti.service.ClaudeMessages(otelOnlyCtx(ctx), payload))
+
+	var buffered []gen.ClaudeMessagesPayload
+	require.NoError(t, ti.service.cache.ListRange(ctx, claudeMessagesPendingCacheKey(sessionID), 0, -1, &buffered))
+	require.Len(t, buffered, 1, "batch should be buffered while metadata is unavailable")
+
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "buffered-capture-user", "buffered-capture@example.com")
+	metadata := SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		UserEmail:   "buffered-capture@example.com",
+		UserID:      "buffered-capture-user",
+		ClaudeOrgID: authCtx.ActiveOrganizationID,
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), metadata, time.Hour))
+
+	ti.service.flushPendingHooks(ctx, sessionID, &metadata)
+
+	require.Eventually(t, func() bool {
+		got, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+			ChatID:    chatID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		return err == nil && len(got) == 1 && got[0].Content == userContent
+	}, 2*time.Second, 25*time.Millisecond, "buffered batch should persist after metadata is cached")
+
+	var after []gen.ClaudeMessagesPayload
+	require.NoError(t, ti.service.cache.ListRange(ctx, claudeMessagesPendingCacheKey(sessionID), 0, -1, &after))
+	require.Empty(t, after, "buffer should be deleted after flush")
+}
+
+func TestClaudeMessages_SkipsToolMessageWithoutToolCallID(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	seedCaptureSession(t, ctx, ti, sessionID, "tool-user", "tool@example.com")
+
+	content := "orphaned tool result"
+	require.NoError(t, ti.service.ClaudeMessages(ctx, &gen.ClaudeMessagesPayload{
+		SessionID: sessionID,
+		Messages: []*gen.ClaudeCapturedMessage{
+			{ExternalID: uuid.NewString(), Role: "tool", Content: &content},
+		},
+	}))
+
+	require.Never(t, func() bool {
+		got, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+			ChatID:    chatID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		return err == nil && len(got) > 0
+	}, 500*time.Millisecond, 50*time.Millisecond, "tool messages without tool_call_id must be skipped")
 }
 
 // TestClaudeHookVersion_StopCollectionSkipsPerEventPersist verifies the version

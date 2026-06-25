@@ -3,6 +3,7 @@
  */
 
 import { hooksHooksNumberClaude } from "../funcs/hooksHooksNumberClaude.js";
+import { hooksHooksNumberClaudeMessages } from "../funcs/hooksHooksNumberClaudeMessages.js";
 import { hooksHooksNumberCodex } from "../funcs/hooksHooksNumberCodex.js";
 import { hooksHooksNumberCursor } from "../funcs/hooksHooksNumberCursor.js";
 import { hooksHooksNumberLogs } from "../funcs/hooksHooksNumberLogs.js";
@@ -24,6 +25,23 @@ export class Hooks extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ClaudeHookResult> {
     return unwrapAsync(hooksHooksNumberClaude(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * claudeMessages hooks
+   *
+   * @remarks
+   * Idempotent batch capture of Claude Code transcript messages emitted on Stop and SubagentStop. Each message carries a stable external_id; the server stores it as external_message_id and deduplicates per chat, so re-delivery from multiple plugin installations persists each message exactly once. Same optional plugin-auth + session-metadata fallback as Method("claude").
+   */
+  async hooksNumberClaudeMessages(
+    request: operations.HooksNumberClaudeMessagesRequest,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(hooksHooksNumberClaudeMessages(
       this,
       request,
       options,

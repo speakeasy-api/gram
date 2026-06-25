@@ -10,7 +10,6 @@ import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { pathToFunc } from "../lib/url.js";
-import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -27,18 +26,18 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * claude hooks
+ * claudeMessages hooks
  *
  * @remarks
- * Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.
+ * Idempotent batch capture of Claude Code transcript messages emitted on Stop and SubagentStop. Each message carries a stable external_id; the server stores it as external_message_id and deduplicates per chat, so re-delivery from multiple plugin installations persists each message exactly once. Same optional plugin-auth + session-metadata fallback as Method("claude").
  */
-export function hooksHooksNumberClaude(
+export function hooksHooksNumberClaudeMessages(
   client: GramCore,
-  request: operations.HooksNumberClaudeRequest,
+  request: operations.HooksNumberClaudeMessagesRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ClaudeHookResult,
+    void,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -59,12 +58,12 @@ export function hooksHooksNumberClaude(
 
 async function $do(
   client: GramCore,
-  request: operations.HooksNumberClaudeRequest,
+  request: operations.HooksNumberClaudeMessagesRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.ClaudeHookResult,
+      void,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -81,16 +80,21 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(operations.HooksNumberClaudeRequest$outboundSchema, value),
+      z.parse(
+        operations.HooksNumberClaudeMessagesRequest$outboundSchema,
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.ClaudeHookPayload, { explode: true });
+  const body = encodeJSON("body", payload.ClaudeMessagesRequestBody, {
+    explode: true,
+  });
 
-  const path = pathToFunc("/rpc/hooks.claude")();
+  const path = pathToFunc("/rpc/hooks.claudeMessages")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -103,19 +107,9 @@ async function $do(
       explode: false,
       charEncoding: "none",
     }),
-    "Idempotency-Key": encodeSimple(
-      "Idempotency-Key",
-      payload["Idempotency-Key"],
-      { explode: false, charEncoding: "none" },
-    ),
     "X-Gram-Hook-Hostname": encodeSimple(
       "X-Gram-Hook-Hostname",
       payload["X-Gram-Hook-Hostname"],
-      { explode: false, charEncoding: "none" },
-    ),
-    "X-Gram-Hook-Version": encodeSimple(
-      "X-Gram-Hook-Version",
-      payload["X-Gram-Hook-Version"],
       { explode: false, charEncoding: "none" },
     ),
   }));
@@ -123,7 +117,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "hooks#claude",
+    operationID: "hooks#claudeMessages",
     oAuth2Scopes: null,
 
     resolvedSecurity: null,
@@ -177,7 +171,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ClaudeHookResult,
+    void,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -188,7 +182,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.ClaudeHookResult$inboundSchema),
+    M.nil(202, z.void()),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

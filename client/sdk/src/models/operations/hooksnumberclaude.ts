@@ -23,6 +23,10 @@ export type HooksNumberClaudeRequest = {
    * Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
    */
   idempotencyKey?: string | undefined;
+  /**
+   * Plugin hook protocol version. At or above the Stop-collection version the per-event handlers skip persistence (blocking only) — conversation capture instead arrives idempotently via Method("claudeMessages"). Absent/older versions persist on the per-event handlers as before.
+   */
+  xGramHookVersion?: number | undefined;
   claudeHookPayload: components.ClaudeHookPayload;
 };
 
@@ -32,6 +36,7 @@ export type HooksNumberClaudeRequest$Outbound = {
   "Gram-Project"?: string | undefined;
   "X-Gram-Hook-Hostname"?: string | undefined;
   "Idempotency-Key"?: string | undefined;
+  "X-Gram-Hook-Version"?: number | undefined;
   ClaudeHookPayload: components.ClaudeHookPayload$Outbound;
 };
 
@@ -45,6 +50,7 @@ export const HooksNumberClaudeRequest$outboundSchema: z.ZodMiniType<
     gramProject: z.optional(z.string()),
     xGramHookHostname: z.optional(z.string()),
     idempotencyKey: z.optional(z.string()),
+    xGramHookVersion: z.optional(z.int()),
     claudeHookPayload: components.ClaudeHookPayload$outboundSchema,
   }),
   z.transform((v) => {
@@ -53,6 +59,7 @@ export const HooksNumberClaudeRequest$outboundSchema: z.ZodMiniType<
       gramProject: "Gram-Project",
       xGramHookHostname: "X-Gram-Hook-Hostname",
       idempotencyKey: "Idempotency-Key",
+      xGramHookVersion: "X-Gram-Hook-Version",
       claudeHookPayload: "ClaudeHookPayload",
     });
   }),

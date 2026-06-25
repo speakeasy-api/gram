@@ -15,6 +15,12 @@ func hookPendingCacheKey(sessionID string) string {
 	return fmt.Sprintf("hook:pending:%s", sessionID)
 }
 
+// claudeMessagesPendingCacheKey returns the Redis key for buffered Stop batch
+// captures for a session.
+func claudeMessagesPendingCacheKey(sessionID string) string {
+	return fmt.Sprintf("hook:pending:claude-messages:%s", sessionID)
+}
+
 // sessionMCPListCacheKey returns the Redis key for the parsed `claude mcp list`
 // snapshot of a session. Stored on SessionStart, TTL refreshed on every
 // subsequent hook for the same session so we don't lose the mapping while

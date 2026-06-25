@@ -8180,7 +8180,7 @@ func hooksUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] hooks COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    claude: Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.`)
-	fmt.Fprintln(os.Stderr, `    claude-messages: Idempotent batch capture of Claude Code transcript messages emitted on Stop and SubagentStop. Each message carries its transcript UUID as external_id; the server stores it as external_message_id and deduplicates per chat, so re-delivery from multiple plugin installations persists each message exactly once. Same optional plugin-auth + session-metadata fallback as Method("claude").`)
+	fmt.Fprintln(os.Stderr, `    claude-messages: Idempotent batch capture of Claude Code transcript messages emitted on Stop and SubagentStop. Each message carries a stable external_id; the server stores it as external_message_id and deduplicates per chat, so re-delivery from multiple plugin installations persists each message exactly once. Same optional plugin-auth + session-metadata fallback as Method("claude").`)
 	fmt.Fprintln(os.Stderr, `    cursor: Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure, beforeMCPExecution, and afterMCPExecution.`)
 	fmt.Fprintln(os.Stderr, `    codex: Endpoint for Codex hook events. Handles SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.`)
 	fmt.Fprintln(os.Stderr, `    logs: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.`)
@@ -8228,7 +8228,7 @@ func hooksClaudeMessagesUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Idempotent batch capture of Claude Code transcript messages emitted on Stop and SubagentStop. Each message carries its transcript UUID as external_id; the server stores it as external_message_id and deduplicates per chat, so re-delivery from multiple plugin installations persists each message exactly once. Same optional plugin-auth + session-metadata fallback as Method("claude").`)
+	fmt.Fprintln(os.Stderr, `Idempotent batch capture of Claude Code transcript messages emitted on Stop and SubagentStop. Each message carries a stable external_id; the server stores it as external_message_id and deduplicates per chat, so re-delivery from multiple plugin installations persists each message exactly once. Same optional plugin-auth + session-metadata fallback as Method("claude").`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

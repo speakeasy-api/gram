@@ -1313,8 +1313,8 @@ type MetricsGatewayErrorResponseBody struct {
 // ClaudeCapturedMessageRequestBody is used to define fields on request body
 // types.
 type ClaudeCapturedMessageRequestBody struct {
-	// Transcript line UUID; stored as external_message_id and used as the per-chat
-	// dedup key.
+	// Stable message identifier; stored as external_message_id and used as the
+	// per-chat dedup key.
 	ExternalID string `form:"external_id" json:"external_id" xml:"external_id"`
 	// Message role
 	Role string `form:"role" json:"role" xml:"role"`
@@ -4011,8 +4011,8 @@ func ValidateMetricsGatewayErrorResponseBody(body *MetricsGatewayErrorResponseBo
 // ValidateClaudeCapturedMessageRequestBody runs the validations defined on
 // ClaudeCapturedMessageRequestBody
 func ValidateClaudeCapturedMessageRequestBody(body *ClaudeCapturedMessageRequestBody) (err error) {
-	if !(body.Role == "user" || body.Role == "assistant" || body.Role == "tool") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.role", body.Role, []any{"user", "assistant", "tool"}))
+	if !(body.Role == "user" || body.Role == "assistant" || body.Role == "system" || body.Role == "tool") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.role", body.Role, []any{"user", "assistant", "system", "tool"}))
 	}
 	return
 }

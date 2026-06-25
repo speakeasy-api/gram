@@ -10594,7 +10594,7 @@ paths:
             tags:
                 - hooks
             summary: claudeMessages hooks
-            description: Idempotent batch capture of Claude Code transcript messages emitted on Stop and SubagentStop. Each message carries its transcript UUID as external_id; the server stores it as external_message_id and deduplicates per chat, so re-delivery from multiple plugin installations persists each message exactly once. Same optional plugin-auth + session-metadata fallback as Method("claude").
+            description: Idempotent batch capture of Claude Code transcript messages emitted on Stop and SubagentStop. Each message carries a stable external_id; the server stores it as external_message_id and deduplicates per chat, so re-delivery from multiple plugin installations persists each message exactly once. Same optional plugin-auth + session-metadata fallback as Method("claude").
             operationId: hooks#claudeMessages
             parameters:
                 - name: Gram-Key
@@ -36064,7 +36064,7 @@ components:
                     description: Message text content
                 external_id:
                     type: string
-                    description: Transcript line UUID; stored as external_message_id and used as the per-chat dedup key.
+                    description: Stable message identifier; stored as external_message_id and used as the per-chat dedup key.
                 model:
                     type: string
                     description: Model identifier (assistant messages)
@@ -36078,6 +36078,7 @@ components:
                     enum:
                         - user
                         - assistant
+                        - system
                         - tool
                 timestamp:
                     type: string

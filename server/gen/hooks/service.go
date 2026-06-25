@@ -20,11 +20,10 @@ type Service interface {
 	// PreToolUse, PostToolUse, and PostToolUseFailure.
 	Claude(context.Context, *ClaudePayload) (res *ClaudeHookResult, err error)
 	// Idempotent batch capture of Claude Code transcript messages emitted on Stop
-	// and SubagentStop. Each message carries its transcript UUID as external_id;
-	// the server stores it as external_message_id and deduplicates per chat, so
-	// re-delivery from multiple plugin installations persists each message exactly
-	// once. Same optional plugin-auth + session-metadata fallback as
-	// Method("claude").
+	// and SubagentStop. Each message carries a stable external_id; the server
+	// stores it as external_message_id and deduplicates per chat, so re-delivery
+	// from multiple plugin installations persists each message exactly once. Same
+	// optional plugin-auth + session-metadata fallback as Method("claude").
 	ClaudeMessages(context.Context, *ClaudeMessagesPayload) (err error)
 	// Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop,
 	// afterAgentResponse, afterAgentThought, preToolUse, postToolUse,
@@ -66,8 +65,8 @@ var MethodNames = [6]string{"claude", "claudeMessages", "cursor", "codex", "logs
 // A captured Claude Code transcript message, deduplicated per chat by
 // external_id.
 type ClaudeCapturedMessage struct {
-	// Transcript line UUID; stored as external_message_id and used as the per-chat
-	// dedup key.
+	// Stable message identifier; stored as external_message_id and used as the
+	// per-chat dedup key.
 	ExternalID string
 	// Message role
 	Role string

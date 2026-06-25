@@ -573,6 +573,8 @@ func isDeltaTemporality(v any) bool {
 // flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse.
 // Conversation events (UserPromptSubmit, Stop) are written to PostgreSQL.
 func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metadata *SessionMetadata) {
+	defer s.flushPendingClaudeMessages(ctx, sessionID, metadata)
+
 	// Use LRANGE to get all payloads from the list atomically
 	var payloads []gen.ClaudePayload
 	key := hookPendingCacheKey(sessionID)
@@ -595,5 +597,36 @@ func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metad
 	// Delete the list after successful processing
 	if err := s.cache.Delete(ctx, key); err != nil {
 		s.logger.ErrorContext(ctx, "Failed to delete hook buffer", attr.SlogError(err))
+	}
+}
+
+func (s *Service) flushPendingClaudeMessages(ctx context.Context, sessionID string, metadata *SessionMetadata) {
+	var payloads []gen.ClaudeMessagesPayload
+	key := claudeMessagesPendingCacheKey(sessionID)
+
+	if err := s.cache.ListRange(ctx, key, 0, -1, &payloads); err != nil {
+		s.logger.DebugContext(ctx, "No pending claude message captures to flush or error reading list", attr.SlogError(err))
+		return
+	}
+
+	if len(payloads) == 0 {
+		return
+	}
+
+	logger := s.logger.With(
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent("ClaudeMessages"),
+		attr.SlogGenAIConversationID(sessionID),
+	)
+	for i := range payloads {
+		if err := s.persistClaudeMessages(ctx, &payloads[i], *metadata, logger); err != nil {
+			logger.ErrorContext(ctx, "Failed to persist pending claude message capture", attr.SlogError(err))
+		}
+	}
+
+	s.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending claude message captures", len(payloads)))
+
+	if err := s.cache.Delete(ctx, key); err != nil {
+		s.logger.ErrorContext(ctx, "Failed to delete claude message capture buffer", attr.SlogError(err))
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -19,10 +20,10 @@ import (
 )
 
 // ClaudeMessages performs idempotent batch capture of Claude Code transcript
-// messages emitted on Stop / SubagentStop. Each message carries its transcript
-// UUID as external_id; persistence keys on external_message_id with
-// ON CONFLICT DO NOTHING, so re-delivery from multiple plugin installations (or
-// a re-sent Stop) stores each message exactly once.
+// messages emitted on Stop / SubagentStop. Each message carries a stable
+// external_id; persistence keys on external_message_id with ON CONFLICT
+// DO NOTHING, so re-delivery from multiple plugin installations (or a re-sent
+// Stop) stores each message exactly once.
 func (s *Service) ClaudeMessages(ctx context.Context, payload *gen.ClaudeMessagesPayload) error {
 	sessionID := strings.TrimSpace(payload.SessionID)
 	logger := s.logger.With(
@@ -37,8 +38,8 @@ func (s *Service) ClaudeMessages(ctx context.Context, payload *gen.ClaudeMessage
 
 	// Optional plugin auth, same posture as Method("claude"): on failure we fall
 	// through unauthenticated rather than 401 (a 401 would block the client with
-	// no way to recover). Without resolvable attribution we drop the batch — it
-	// is idempotent telemetry, not a request that must succeed.
+	// no way to recover). Without resolvable attribution we buffer the batch for
+	// replay once OTEL session metadata arrives.
 	if payload.ApikeyToken != nil && *payload.ApikeyToken != "" {
 		if authedCtx, err := s.authorizePluginRequest(ctx, *payload.ApikeyToken, conv.PtrValOr(payload.ProjectSlugInput, "")); err != nil {
 			logger.WarnContext(ctx, "plugin auth failed on claude messages; attempting session-metadata fallback",
@@ -52,12 +53,33 @@ func (s *Service) ClaudeMessages(ctx context.Context, payload *gen.ClaudeMessage
 
 	metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, conv.PtrValOr(payload.UserEmail, ""))
 	if err != nil {
-		logger.WarnContext(ctx, "skipping claude message capture; no resolvable session attribution",
-			attr.SlogEvent("claude_messages_unattributed"),
+		if bErr := s.bufferClaudeMessages(ctx, sessionID, payload); bErr != nil {
+			logger.ErrorContext(ctx, "failed to buffer claude message capture",
+				attr.SlogEvent("claude_messages_buffer_failed"),
+				attr.SlogError(bErr),
+			)
+			return nil
+		}
+		logger.DebugContext(ctx, "buffered claude message capture pending session attribution",
+			attr.SlogEvent("claude_messages_buffered"),
 			attr.SlogError(err),
 		)
 		return nil
 	}
+
+	return s.persistClaudeMessages(ctx, payload, metadata, logger)
+}
+
+func (s *Service) bufferClaudeMessages(ctx context.Context, sessionID string, payload *gen.ClaudeMessagesPayload) error {
+	ttl := 5 * time.Minute
+	if err := s.cache.ListAppend(context.WithoutCancel(ctx), claudeMessagesPendingCacheKey(sessionID), payload, ttl); err != nil {
+		return fmt.Errorf("append claude messages to list: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) persistClaudeMessages(ctx context.Context, payload *gen.ClaudeMessagesPayload, metadata SessionMetadata, logger *slog.Logger) error {
+	sessionID := strings.TrimSpace(payload.SessionID)
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
@@ -99,6 +121,14 @@ func (s *Service) ClaudeMessages(ctx context.Context, payload *gen.ClaudeMessage
 		if msg == nil || strings.TrimSpace(msg.ExternalID) == "" {
 			continue
 		}
+		toolCallID := strings.TrimSpace(conv.PtrValOr(msg.ToolCallID, ""))
+		if msg.Role == "tool" && toolCallID == "" {
+			logger.DebugContext(ctx, "skipping claude tool message without tool_call_id",
+				attr.SlogEvent("claude_messages_tool_call_id_missing"),
+				attr.SlogGenAIConversationID(sessionID),
+			)
+			continue
+		}
 
 		var toolCalls []byte
 		finishReason := ""
@@ -130,7 +160,7 @@ func (s *Service) ClaudeMessages(ctx context.Context, payload *gen.ClaudeMessage
 			StorageError:      conv.ToPGTextEmpty(""),
 			Model:             conv.ToPGTextEmpty(conv.PtrValOr(msg.Model, "")),
 			MessageID:         conv.ToPGTextEmpty(""),
-			ToolCallID:        conv.ToPGTextEmpty(conv.PtrValOr(msg.ToolCallID, "")),
+			ToolCallID:        conv.ToPGTextEmpty(toolCallID),
 			UserID:            conv.ToPGTextEmpty(metadata.UserID),
 			ExternalUserID:    conv.ToPGTextEmpty(metadata.UserEmail),
 			ExternalMessageID: conv.ToPGText(strings.TrimSpace(msg.ExternalID)),

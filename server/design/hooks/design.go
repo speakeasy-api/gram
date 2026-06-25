@@ -59,14 +59,14 @@ var ClaudeHookResult = Type("ClaudeHookResult", func() {
 })
 
 // A single captured Claude Code transcript message for idempotent conversation
-// capture (Stop / SubagentStop). external_id is the transcript line UUID and is
-// the per-chat dedup key (stored as external_message_id).
+// capture (Stop / SubagentStop). external_id is the per-chat dedup key (stored
+// as external_message_id).
 var ClaudeCapturedMessage = Type("ClaudeCapturedMessage", func() {
 	Description("A captured Claude Code transcript message, deduplicated per chat by external_id.")
 	Required("external_id", "role")
-	Attribute("external_id", String, "Transcript line UUID; stored as external_message_id and used as the per-chat dedup key.")
+	Attribute("external_id", String, "Stable message identifier; stored as external_message_id and used as the per-chat dedup key.")
 	Attribute("role", String, "Message role", func() {
-		Enum("user", "assistant", "tool")
+		Enum("user", "assistant", "system", "tool")
 	})
 	Attribute("content", String, "Message text content")
 	Attribute("model", String, "Model identifier (assistant messages)")
@@ -205,7 +205,7 @@ var _ = Service("hooks", func() {
 	})
 
 	Method("claudeMessages", func() {
-		Description("Idempotent batch capture of Claude Code transcript messages emitted on Stop and SubagentStop. Each message carries its transcript UUID as external_id; the server stores it as external_message_id and deduplicates per chat, so re-delivery from multiple plugin installations persists each message exactly once. Same optional plugin-auth + session-metadata fallback as Method(\"claude\").")
+		Description("Idempotent batch capture of Claude Code transcript messages emitted on Stop and SubagentStop. Each message carries a stable external_id; the server stores it as external_message_id and deduplicates per chat, so re-delivery from multiple plugin installations persists each message exactly once. Same optional plugin-auth + session-metadata fallback as Method(\"claude\").")
 
 		Payload(func() {
 			Attribute("session_id", String, "The Claude Code session ID")

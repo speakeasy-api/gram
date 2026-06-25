@@ -128,6 +128,7 @@ export * from "./getUserMetricsSummary.js";
 export * from "./globalVariations.js";
 export * from "./grants.js";
 export * from "./hooksHooksNumberClaude.js";
+export * from "./hooksHooksNumberClaudeMessages.js";
 export * from "./hooksHooksNumberCodex.js";
 export * from "./hooksHooksNumberCursor.js";
 export * from "./hooksHooksNumberLogs.js";

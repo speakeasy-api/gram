@@ -158,6 +158,7 @@ export * from "./getusermetricssummary.js";
 export * from "./getusersessionclient.js";
 export * from "./getusersessionissuer.js";
 export * from "./hooksnumberclaude.js";
+export * from "./hooksnumberclaudemessages.js";
 export * from "./hooksnumbercodex.js";
 export * from "./hooksnumbercursor.js";
 export * from "./hooksnumberlogs.js";
