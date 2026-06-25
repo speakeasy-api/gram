@@ -2,12 +2,11 @@ import {
   PoweredBySpeakeasyBadge,
   ToolCollectionBadge,
 } from "@/components/tool-collection-badge";
-import { Badge } from "@/components/ui/badge";
 import { DotCard } from "@/components/ui/dot-card";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { DeploymentExternalMCP } from "@gram/client/models/components";
-import { Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@speakeasy-api/moonshine";
 import { ArrowRight, Check } from "lucide-react";
 import { Link } from "react-router";
 import type { PulseMCPServer } from "./hooks";
@@ -91,11 +90,8 @@ export function ServerCard({
         overlay={
           isAdded ? (
             <div className="absolute top-3.5 left-3.5 z-10">
-              <Badge
-                variant="outline"
-                className="border-success/50 bg-success/10 text-success backdrop-blur-sm"
-              >
-                Added
+              <Badge variant="success">
+                <Badge.Text>Added</Badge.Text>
               </Badge>
             </div>
           ) : undefined
