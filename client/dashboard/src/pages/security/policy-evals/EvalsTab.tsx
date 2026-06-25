@@ -52,7 +52,7 @@ import type {
   PolicyEvalRun,
   PolicyEvalRunStatus,
 } from "@gram/client/models/components/policyevalrun.js";
-import type { EvalSource } from "../policy-form/use-policy-form";
+import type { EvalSource, usePolicyForm } from "../policy-form/use-policy-form";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import {
   ConfidenceCell,
@@ -63,6 +63,7 @@ import {
 } from "../finding-cells";
 import { RevealAllProvider, RevealAllToggle } from "../risk-ui";
 import { NewRunSheet } from "./NewRunSheet";
+import { RunInsights } from "./RunInsights";
 import {
   describeSample,
   formatCount,
@@ -101,6 +102,7 @@ export function EvalsTab({
   policyType,
   isDirty = false,
   canRun = true,
+  form,
 }: {
   /** What to evaluate: a saved policy_id (clean) or an inline candidate
    *  (create mode, or a saved policy with unsaved edits). */
@@ -119,6 +121,8 @@ export function EvalsTab({
   isDirty?: boolean;
   /** False when the config has nothing to evaluate; gates new eval runs. */
   canRun?: boolean;
+  /** The shared policy form; powers the Insights apply actions in RunDetail. */
+  form: ReturnType<typeof usePolicyForm>;
 }): JSX.Element {
   // Only a saved policy has a run history; in create/draft mode the list query
   // is disabled and we show the create-mode empty state.
@@ -145,6 +149,7 @@ export function EvalsTab({
         policyType={policyType}
         isDirty={isDirty}
         canRun={canRun}
+        form={form}
         onBack={() => void setSelectedRunId(null)}
         onSelectRun={(id) => void setSelectedRunId(id)}
       />
@@ -344,6 +349,7 @@ function RunDetail({
   policyType,
   isDirty = false,
   canRun = true,
+  form,
   onBack,
   onSelectRun,
 }: {
@@ -355,6 +361,7 @@ function RunDetail({
   policyType?: "standard" | "prompt_based";
   isDirty?: boolean;
   canRun?: boolean;
+  form: ReturnType<typeof usePolicyForm>;
   onBack: () => void;
   onSelectRun: (id: string) => void;
 }) {
@@ -511,6 +518,12 @@ function RunDetail({
               currentVersion={currentVersion}
               isDirty={isDirty}
             />
+          )}
+          {/* Insights only make sense for a real, non-empty pass: completed,
+              with findings, where the judge actually ran and something was in
+              scope. */}
+          {run.findingsCount > 0 && !judgeDidNotRun && !noMessagesInScope && (
+            <RunInsights runId={runId} policyType={policyType} form={form} />
           )}
           <FindingsSection
             run={run}

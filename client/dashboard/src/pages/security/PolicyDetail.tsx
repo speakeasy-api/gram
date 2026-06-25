@@ -191,6 +191,7 @@ function PolicyDetailContent(): JSX.Element {
                   policyType={policyType}
                   isDirty={form.derived.isDirty}
                   canRun={form.derived.hasDetection}
+                  form={form}
                 />
               )}
             </TabsContent>
