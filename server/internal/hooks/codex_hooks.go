@@ -31,7 +31,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	orgSlug := ""
 	outcome := hookMetricOutcomeAccepted
 	defer func() {
-		if err != nil {
+		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
 		s.metrics.RecordHookEventDuration(ctx, "codex", hookEventName, outcome, orgSlug, time.Since(start))
