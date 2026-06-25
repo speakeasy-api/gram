@@ -137,119 +137,90 @@ function SubjectLink({ to, children }: { to: string; children: ReactNode }) {
   );
 }
 
-function renderSubject(log: AuditLog, orgSlug: string) {
-  const monoClass = SUBJECT_MONO_CLASS;
-  // Project-scoped subjects (mcp_server, risk_policy, environment, assistant,
-  // deployment, …) live under `/{org}/projects/{project}/…` and therefore need
-  // the entry's own projectSlug — which may differ from the project currently in
-  // the URL, so we interpolate it rather than using the URL-bound route helpers.
+// Builds the dashboard path to an audit subject's detail page, or null when the
+// subject has no navigable page (or is missing the slug/id needed to route to
+// one). Single source of truth shared by the inline subject link and the
+// row-level "open" affordance, so the two can never point to different places.
+function subjectHref(log: AuditLog, orgSlug: string): string | null {
+  // Project-scoped subjects live under `/{org}/projects/{project}/…` and use the
+  // entry's own projectSlug — which may differ from the project currently in the
+  // URL, so we interpolate it rather than using the URL-bound route helpers.
   const projectBase = log.projectSlug
     ? `/${orgSlug}/projects/${log.projectSlug}`
     : null;
+
+  switch (log.subjectType) {
+    case "deployment":
+      return projectBase ? `${projectBase}/deployments/${log.subjectId}` : null;
+    case "toolset":
+      return projectBase && log.subjectSlug
+        ? `${projectBase}/mcp/${log.subjectSlug}`
+        : null;
+    case "mcp_server":
+      return projectBase && log.subjectSlug
+        ? `${projectBase}/mcp/x/${log.subjectSlug}`
+        : null;
+    case "environment":
+      return projectBase && log.subjectSlug
+        ? `${projectBase}/environments/${log.subjectSlug}`
+        : null;
+    case "assistant":
+      return projectBase ? `${projectBase}/assistants/${log.subjectId}` : null;
+    case "risk_policy":
+      // PolicyCenter has no per-item route; `?policy=<id>` opens the policy.
+      return projectBase
+        ? `${projectBase}/risk-policies?policy=${log.subjectId}`
+        : null;
+    case "project":
+      return log.subjectSlug ? `/${orgSlug}/projects/${log.subjectSlug}` : null;
+    case "plugin":
+      return projectBase ? `${projectBase}/plugins/${log.subjectId}` : null;
+    // access_role and access_member are org-scoped (no project), so they route
+    // under `/{org}/access/…` rather than the project tree.
+    case "access_role":
+      // RolesTab opens a specific role's editor via the `?editRole=<id>` param.
+      return `/${orgSlug}/access/roles?editRole=${log.subjectId}`;
+    case "access_member":
+      return `/${orgSlug}/access/members`;
+    case "mcp_collection":
+      return log.subjectSlug
+        ? `/${orgSlug}/collections/${log.subjectSlug}`
+        : null;
+    case "api_key":
+      return `/${orgSlug}/api-keys`;
+    default:
+      return null;
+  }
+}
+
+// The text shown for a linked subject. Mirrors the identifier each subject type
+// is keyed on — slug where one exists, otherwise id or display name.
+function subjectLinkText(log: AuditLog): string {
+  switch (log.subjectType) {
+    case "deployment":
+      return log.subjectId;
+    case "toolset":
+    case "mcp_server":
+    case "environment":
+    case "project":
+    case "plugin":
+    case "mcp_collection":
+      return log.subjectSlug || log.subjectId;
+    default:
+      return getSubjectLabel(log);
+  }
+}
+
+function renderSubject(log: AuditLog, orgSlug: string) {
+  const monoClass = SUBJECT_MONO_CLASS;
 
   if (log.subjectType === "organization_invitation") {
     return renderInviteSubject(log, monoClass);
   }
 
-  if (log.subjectType === "deployment" && projectBase) {
-    return (
-      <SubjectLink to={`${projectBase}/deployments/${log.subjectId}`}>
-        {log.subjectId}
-      </SubjectLink>
-    );
-  }
-
-  if (log.subjectType === "toolset" && projectBase && log.subjectSlug) {
-    return (
-      <SubjectLink to={`${projectBase}/mcp/${log.subjectSlug}`}>
-        {log.subjectSlug}
-      </SubjectLink>
-    );
-  }
-
-  if (log.subjectType === "mcp_server" && projectBase && log.subjectSlug) {
-    return (
-      <SubjectLink to={`${projectBase}/mcp/x/${log.subjectSlug}`}>
-        {log.subjectSlug}
-      </SubjectLink>
-    );
-  }
-
-  if (log.subjectType === "environment" && projectBase && log.subjectSlug) {
-    return (
-      <SubjectLink to={`${projectBase}/environments/${log.subjectSlug}`}>
-        {log.subjectSlug}
-      </SubjectLink>
-    );
-  }
-
-  if (log.subjectType === "assistant" && projectBase) {
-    return (
-      <SubjectLink to={`${projectBase}/assistants/${log.subjectId}`}>
-        {getSubjectLabel(log)}
-      </SubjectLink>
-    );
-  }
-
-  if (log.subjectType === "risk_policy" && projectBase) {
-    // Risk policies have no per-item route; PolicyCenter opens a specific policy
-    // via the `?policy=<id>` deep-link.
-    return (
-      <SubjectLink to={`${projectBase}/risk-policies?policy=${log.subjectId}`}>
-        {getSubjectLabel(log)}
-      </SubjectLink>
-    );
-  }
-
-  if (log.subjectType === "project" && log.subjectSlug) {
-    return (
-      <SubjectLink to={`/${orgSlug}/projects/${log.subjectSlug}`}>
-        {log.subjectSlug}
-      </SubjectLink>
-    );
-  }
-
-  if (log.subjectType === "plugin" && projectBase) {
-    return (
-      <SubjectLink to={`${projectBase}/plugins/${log.subjectId}`}>
-        {log.subjectSlug || log.subjectId}
-      </SubjectLink>
-    );
-  }
-
-  // access_role and access_member are org-scoped (no project), so they route
-  // under `/{org}/access/…` rather than the project tree.
-  if (log.subjectType === "access_role") {
-    // RolesTab opens a specific role's editor via the `?editRole=<id>` param.
-    return (
-      <SubjectLink to={`/${orgSlug}/access/roles?editRole=${log.subjectId}`}>
-        {getSubjectLabel(log)}
-      </SubjectLink>
-    );
-  }
-
-  if (log.subjectType === "access_member") {
-    return (
-      <SubjectLink to={`/${orgSlug}/access/members`}>
-        {getSubjectLabel(log)}
-      </SubjectLink>
-    );
-  }
-
-  if (log.subjectType === "mcp_collection" && log.subjectSlug) {
-    return (
-      <SubjectLink to={`/${orgSlug}/collections/${log.subjectSlug}`}>
-        {log.subjectSlug}
-      </SubjectLink>
-    );
-  }
-
-  if (log.subjectType === "api_key") {
-    return (
-      <SubjectLink to={`/${orgSlug}/api-keys`}>
-        {getSubjectLabel(log)}
-      </SubjectLink>
-    );
+  const href = subjectHref(log, orgSlug);
+  if (href) {
+    return <SubjectLink to={href}>{subjectLinkText(log)}</SubjectLink>;
   }
 
   if (log.subjectType === "asset") {
@@ -314,9 +285,10 @@ function AuditLogRow({
 
   const actorLabel = getActorLabel(log);
   const verbText = renderVerb(log);
+  const subjectLink = subjectHref(log, orgSlug);
 
   const rowContent = (
-    <div className="flex items-start gap-3.5 px-4 py-2.5">
+    <div className="group flex items-start gap-3.5 px-4 py-2.5">
       <ActionDot action={log.action} />
       <ActionBadge action={log.action} />
       <div className="min-w-0 flex-1 text-sm leading-5">
@@ -342,6 +314,15 @@ function AuditLogRow({
       <span className="text-muted-foreground shrink-0 font-mono text-xs">
         {formatTimeOnly(log.createdAt, timestampMode)}
       </span>
+      {subjectLink && (
+        <Link
+          to={subjectLink}
+          aria-label={`Open ${getSubjectLabel(log)}`}
+          className="text-muted-foreground hover:text-foreground focus-visible:text-foreground shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+        >
+          <Icon name="arrow-right" className="size-4" />
+        </Link>
+      )}
     </div>
   );
 
