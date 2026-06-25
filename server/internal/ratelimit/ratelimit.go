@@ -8,9 +8,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // keyPrefix namespaces every bucket so rate-limit state can never collide with
@@ -117,17 +114,6 @@ func (l *Limiter) AllowN(ctx context.Context, key string, n int) (Result, error)
 	res, err := l.store.take(ctx, keyPrefix+l.name+":"+key, l.rate, n)
 	if err != nil {
 		return res, fmt.Errorf("ratelimit %q: %w", l.name, err)
-	}
-
-	// Annotate the caller's span, which carries the org/project attribution, so
-	// rate-limit decisions are queryable per org without this generic package
-	// having to know the key's meaning.
-	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		span.SetAttributes(
-			attribute.String("ratelimit.name", l.name),
-			attribute.Bool("ratelimit.allowed", res.Allowed),
-			attribute.Int("ratelimit.remaining", res.Remaining),
-		)
 	}
 
 	if l.metrics != nil {
