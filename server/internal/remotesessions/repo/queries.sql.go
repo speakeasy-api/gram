@@ -104,7 +104,7 @@ VALUES (
     $9,
     $10
 )
-RETURNING id, project_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRemoteSessionClientParams struct {
@@ -137,6 +137,7 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.OrganizationID,
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
@@ -276,7 +277,7 @@ WHERE c.id = $1
   AND i.organization_id = $2
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
-RETURNING c.id, c.project_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted
+RETURNING c.id, c.project_id, c.organization_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted
 `
 
 type DeleteOrganizationRemoteSessionClientParams struct {
@@ -292,6 +293,7 @@ func (q *Queries) DeleteOrganizationRemoteSessionClient(ctx context.Context, arg
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.OrganizationID,
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
@@ -357,7 +359,7 @@ const deleteRemoteSessionClient = `-- name: DeleteRemoteSessionClient :one
 UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteRemoteSessionClientParams struct {
@@ -371,6 +373,7 @@ func (q *Queries) DeleteRemoteSessionClient(ctx context.Context, arg DeleteRemot
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.OrganizationID,
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
@@ -610,7 +613,7 @@ func (q *Queries) GetOrganizationRemoteSessionByID(ctx context.Context, arg GetO
 
 const getOrganizationRemoteSessionClientByID = `-- name: GetOrganizationRemoteSessionClientByID :one
 SELECT
-    c.id, c.project_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
@@ -641,6 +644,7 @@ func (q *Queries) GetOrganizationRemoteSessionClientByID(ctx context.Context, ar
 	err := row.Scan(
 		&i.RemoteSessionClient.ID,
 		&i.RemoteSessionClient.ProjectID,
+		&i.RemoteSessionClient.OrganizationID,
 		&i.RemoteSessionClient.RemoteSessionIssuerID,
 		&i.RemoteSessionClient.ClientID,
 		&i.RemoteSessionClient.ClientSecretEncrypted,
@@ -739,7 +743,7 @@ func (q *Queries) GetRemoteSessionByID(ctx context.Context, arg GetRemoteSession
 
 const getRemoteSessionClientByID = `-- name: GetRemoteSessionClientByID :one
 SELECT
-    c.id, c.project_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
@@ -765,6 +769,7 @@ func (q *Queries) GetRemoteSessionClientByID(ctx context.Context, arg GetRemoteS
 	err := row.Scan(
 		&i.RemoteSessionClient.ID,
 		&i.RemoteSessionClient.ProjectID,
+		&i.RemoteSessionClient.OrganizationID,
 		&i.RemoteSessionClient.RemoteSessionIssuerID,
 		&i.RemoteSessionClient.ClientID,
 		&i.RemoteSessionClient.ClientSecretEncrypted,
@@ -1121,7 +1126,7 @@ func (q *Queries) ListOrganizationMcpServersForClient(ctx context.Context, remot
 
 const listOrganizationRemoteSessionClientsByIssuerID = `-- name: ListOrganizationRemoteSessionClientsByIssuerID :many
 SELECT
-    c.id, c.project_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
@@ -1192,6 +1197,7 @@ func (q *Queries) ListOrganizationRemoteSessionClientsByIssuerID(ctx context.Con
 		if err := rows.Scan(
 			&i.RemoteSessionClient.ID,
 			&i.RemoteSessionClient.ProjectID,
+			&i.RemoteSessionClient.OrganizationID,
 			&i.RemoteSessionClient.RemoteSessionIssuerID,
 			&i.RemoteSessionClient.ClientID,
 			&i.RemoteSessionClient.ClientSecretEncrypted,
@@ -1381,7 +1387,7 @@ func (q *Queries) ListOrganizationRemoteSessionsByClientID(ctx context.Context, 
 
 const listRemoteSessionClientsByProjectID = `-- name: ListRemoteSessionClientsByProjectID :many
 SELECT
-    c.id, c.project_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
@@ -1425,6 +1431,7 @@ func (q *Queries) ListRemoteSessionClientsByProjectID(ctx context.Context, arg L
 		if err := rows.Scan(
 			&i.RemoteSessionClient.ID,
 			&i.RemoteSessionClient.ProjectID,
+			&i.RemoteSessionClient.OrganizationID,
 			&i.RemoteSessionClient.RemoteSessionIssuerID,
 			&i.RemoteSessionClient.ClientID,
 			&i.RemoteSessionClient.ClientSecretEncrypted,
@@ -1453,7 +1460,7 @@ func (q *Queries) ListRemoteSessionClientsByProjectID(ctx context.Context, arg L
 
 const listRemoteSessionClientsByProjectIDForUserSessionIssuer = `-- name: ListRemoteSessionClientsByProjectIDForUserSessionIssuer :many
 SELECT
-    c.id, c.project_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    c.id, c.project_id, c.organization_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
         SELECT COALESCE(array_agg(all_link.user_session_issuer_id ORDER BY all_link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS all_link
@@ -1507,6 +1514,7 @@ func (q *Queries) ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx co
 		if err := rows.Scan(
 			&i.RemoteSessionClient.ID,
 			&i.RemoteSessionClient.ProjectID,
+			&i.RemoteSessionClient.OrganizationID,
 			&i.RemoteSessionClient.RemoteSessionIssuerID,
 			&i.RemoteSessionClient.ClientID,
 			&i.RemoteSessionClient.ClientSecretEncrypted,
@@ -2127,7 +2135,7 @@ WHERE c.id = $5
   AND i.organization_id = $6
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
-RETURNING c.id, c.project_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted
+RETURNING c.id, c.project_id, c.organization_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted
 `
 
 type UpdateOrganizationRemoteSessionClientParams struct {
@@ -2155,6 +2163,7 @@ func (q *Queries) UpdateOrganizationRemoteSessionClient(ctx context.Context, arg
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.OrganizationID,
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
@@ -2288,7 +2297,7 @@ SET
     audience = COALESCE($5, audience),
     updated_at = clock_timestamp()
 WHERE id = $6 AND project_id = $7 AND deleted IS FALSE
-RETURNING id, project_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRemoteSessionClientParams struct {
@@ -2315,6 +2324,7 @@ func (q *Queries) UpdateRemoteSessionClient(ctx context.Context, arg UpdateRemot
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
+		&i.OrganizationID,
 		&i.RemoteSessionIssuerID,
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
