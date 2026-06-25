@@ -1445,6 +1445,29 @@ type SourceEnvironment struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+// Durable record of a blocked tool call or prompt. One row per hook-time block decision, carrying the exact reason shown to the agent. Backs the durable /blocks/:id page and its thumbs feedback. The risk_results / risk_policies foreign keys are nullable enrichment links — the page renders from this row alone.
+type ToolCallBlock struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Provider       string
+	// The exact agent-facing reason captured at block time, independent of any later risk_results mutation.
+	Reason       string
+	ToolName     pgtype.Text
+	RiskPolicyID uuid.NullUUID
+	// Optional link to the risk_results finding for this block, backfilled when one is recorded.
+	RiskResultID   uuid.NullUUID
+	ChatID         uuid.NullUUID
+	ChatMessageID  uuid.NullUUID
+	Feedback       pgtype.Text
+	FeedbackUserID pgtype.Text
+	FeedbackAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type ToolVariation struct {
 	ID              uuid.UUID
 	GroupID         uuid.UUID
