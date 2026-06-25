@@ -2,10 +2,13 @@ package mcp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -23,15 +26,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 // ServeMCPEndpoint resolves the given mcp_endpoint slug to its mcp_server,
 // optionally runs the issuer gate, and dispatches to the appropriate
-// backend (remote_mcp_servers via the remotemcp proxy, or toolsets via
-// ServeToolsetResolved). It is the unified runtime entry point used by
-// both /mcp and /x/mcp.
+// backend (remote_mcp_servers via the remotemcp proxy, tunnelled_mcp_servers
+// once the tunnel gateway exists, or toolsets via ServeToolsetResolved). It is
+// the unified runtime entry point used by both /mcp and /x/mcp.
 //
 // mcpRouteBase is the URL route segment the request arrived under ("mcp"
 // or "x/mcp"), without leading or trailing slashes. It propagates into
@@ -146,6 +151,12 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for remote MCP backend").LogError(ctx, logger)
 		}
 		return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken)
+	case mcpServer.TunnelledMcpServerID.Valid:
+		upstreamToken, err := singleUpstreamToken(upstreamTokens)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for tunnelled MCP backend").LogError(ctx, logger)
+		}
+		return s.serveTunnelledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken)
 	case mcpServer.ToolsetID.Valid:
 		// AGE-1902: toolset-backed branch still reads runtime config from the
 		// toolsets row (visibility, OAuth, default environment). Once
@@ -343,6 +354,153 @@ func (s *Service) serveRemoteBackend(
 	ctx := r.Context()
 	logger = logger.With(attr.SlogRemoteMCPServerID(mcpServer.RemoteMcpServerID.UUID.String()))
 
+	var err error
+	ctx, err = s.prepareProxyBackendContext(ctx, w, r, logger, endpoint, mcpServer)
+	if err != nil {
+		return err
+	}
+
+	server, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
+		ID:        mcpServer.RemoteMcpServerID.UUID,
+		ProjectID: endpoint.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, err, "remote mcp server not found").LogError(ctx, logger)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "load remote mcp server").LogError(ctx, logger)
+	}
+
+	headers, err := remotemcp.NewHeaders(s.logger, s.db, s.enc).ListHeaders(ctx, server.ID, false)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load remote mcp server headers").LogError(ctx, logger)
+	}
+
+	if s.remoteProxyManager == nil {
+		return oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
+	}
+
+	p := s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth)
+
+	return serveProxyBackend(w, r.WithContext(ctx), p)
+}
+
+func serveProxyBackend(w http.ResponseWriter, r *http.Request, p *proxy.Proxy) error {
+	switch r.Method {
+	case http.MethodDelete:
+		if err := p.Delete(w, r); err != nil {
+			return fmt.Errorf("proxy delete: %w", err)
+		}
+		return nil
+	case http.MethodGet:
+		if err := p.Get(w, r); err != nil {
+			return fmt.Errorf("proxy get: %w", err)
+		}
+		return nil
+	case http.MethodPost:
+		if err := p.Post(w, r); err != nil {
+			return fmt.Errorf("proxy post: %w", err)
+		}
+		return nil
+	default:
+		// The mux only registers the three supported methods, so this is
+		// defensive.
+		return oops.E(oops.CodeBadRequest, nil, "unsupported method %s", r.Method)
+	}
+}
+
+// serveTunnelledBackend handles an mcp_server backed by a
+// tunnelled_mcp_server. It resolves the live route from Redis and then reuses
+// the remotemcp proxy interceptor stack so tunnel traffic is logged, metered,
+// and authorized like remote MCP traffic. The tunnel id header is injected
+// here server-side and overrides any caller-supplied value.
+func (s *Service) serveTunnelledBackend(
+	w http.ResponseWriter,
+	r *http.Request,
+	logger *slog.Logger,
+	endpoint *mcpendpointsrepo.McpEndpoint,
+	mcpServer *mcpserversrepo.McpServer,
+	upstreamAuth string,
+) error {
+	ctx := r.Context()
+	tunnelID := mcpServer.TunnelledMcpServerID.UUID.String()
+	logger = logger.With(attr.SlogResourceID(tunnelID))
+
+	var err error
+	ctx, err = s.prepareProxyBackendContext(ctx, w, r, logger, endpoint, mcpServer)
+	if err != nil {
+		return err
+	}
+
+	if s.remoteProxyManager == nil {
+		return oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
+	}
+	if s.tunnelRoutes == nil {
+		w.Header().Set("X-Gram-Tunnel-Error", "route-store-unavailable")
+		return oops.E(oops.CodeGatewayError, nil, "tunnel route store unavailable").LogError(ctx, logger)
+	}
+
+	addr, ok, err := s.tunnelRoutes.Lookup(ctx, tunnelID)
+	if err != nil {
+		w.Header().Set("X-Gram-Tunnel-Error", "route-lookup-failed")
+		return oops.E(oops.CodeGatewayError, err, "lookup tunnel route").LogError(ctx, logger)
+	}
+	if !ok {
+		w.Header().Set("X-Gram-Tunnel-Error", "no-route")
+		return oops.E(oops.CodeGatewayError, nil, "tunnel has no live route").LogError(ctx, logger)
+	}
+
+	gatewayURL := (&url.URL{Scheme: "http", Host: addr}).String()
+	headers := []proxy.ConfiguredHeader{
+		{
+			IsRequired:             true,
+			Name:                   wire.HeaderTunnelID,
+			StaticValue:            tunnelID,
+			ValueFromRequestHeader: "",
+		},
+	}
+	if consumerSession := tunnelConsumerSessionKey(r); consumerSession != "" {
+		headers = append(headers, proxy.ConfiguredHeader{
+			IsRequired:             false,
+			Name:                   wire.HeaderTunnelConsumerSession,
+			StaticValue:            consumerSession,
+			ValueFromRequestHeader: "",
+		})
+	}
+	p := s.remoteProxyManager.BuildTarget(logger, tunnelID, gatewayURL, mcpServer.ID.String(), headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth)
+
+	return serveProxyBackend(w, r.WithContext(ctx), p)
+}
+
+func tunnelConsumerSessionKey(r *http.Request) string {
+	if value := strings.TrimSpace(r.Header.Get(proxy.McpSessionIDHeader)); value != "" {
+		return hashedTunnelConsumerSession("mcp", value)
+	}
+	if value := AuthorizationOrChatSessionToken(r); value != "" {
+		return hashedTunnelConsumerSession("auth", value)
+	}
+	if value := strings.TrimSpace(r.Header.Get("User-Agent")); value != "" && r.RemoteAddr != "" {
+		return hashedTunnelConsumerSession("anon", r.RemoteAddr+"|"+value)
+	}
+	if r.RemoteAddr != "" {
+		return hashedTunnelConsumerSession("anon", r.RemoteAddr)
+	}
+	return ""
+}
+
+func hashedTunnelConsumerSession(prefix, value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return prefix + ":" + hex.EncodeToString(sum[:])
+}
+
+func (s *Service) prepareProxyBackendContext(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	logger *slog.Logger,
+	endpoint *mcpendpointsrepo.McpEndpoint,
+	mcpServer *mcpserversrepo.McpServer,
+) (context.Context, error) {
 	// Identity auth + access checks, mirroring the relevant cases of
 	// mcp.ServeToolsetResolved. Unrecognised visibility values fail closed
 	// in the default branch — disabled was already filtered upstream in
@@ -368,17 +526,18 @@ func (s *Service) serveRemoteBackend(
 			var err error
 			ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, false, mcpServer.ID, "")
 			if err != nil {
-				return fmt.Errorf("private identity auth: %w", err)
+				return nil, fmt.Errorf("private identity auth: %w", err)
 			}
 
 			project, err := projectsrepo.New(s.db).GetProjectByID(ctx, endpoint.ProjectID)
 			if err != nil {
-				return oops.E(oops.CodeUnexpected, err, "load mcp server project").LogError(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "load mcp server project").LogError(ctx, logger)
 			}
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			if !ok || authCtx == nil || project.OrganizationID != authCtx.ActiveOrganizationID {
-				return oops.C(oops.CodeUnauthorized)
+				return nil, oops.C(oops.CodeUnauthorized)
 			}
+			ctx = setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug)
 		}
 
 		// Prepare RBAC grants for both the issuer-gated and non-issuer-gated
@@ -394,7 +553,7 @@ func (s *Service) serveRemoteBackend(
 		var prepErr error
 		ctx, prepErr = s.authz.PrepareContext(ctx)
 		if prepErr != nil {
-			return oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
 		}
 
 		// Non-issuer-gated callers get an upfront mcp:connect fail-fast before
@@ -403,7 +562,7 @@ func (s *Service) serveRemoteBackend(
 		// audience/issuer is already bound to the endpoint's project.
 		if !issuerGated {
 			if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceKind: "", ResourceID: mcpServer.ID.String(), Dimensions: nil}); err != nil {
-				return err
+				return nil, err
 			}
 		}
 	case mcpservers.VisibilityPublic:
@@ -415,52 +574,49 @@ func (s *Service) serveRemoteBackend(
 			var err error
 			ctx, err = s.TryPublicIdentityAuth(ctx, r, false, mcpServer.ID)
 			if err != nil {
-				return fmt.Errorf("public identity auth: %w", err)
+				return nil, fmt.Errorf("public identity auth: %w", err)
+			}
+			ctx, err = s.setProxyBackendProjectContextIfOwner(ctx, logger, endpoint.ProjectID)
+			if err != nil {
+				return nil, err
 			}
 		}
 	default:
-		return oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", mcpServer.Visibility).LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", mcpServer.Visibility).LogError(ctx, logger)
 	}
 
-	server, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
-		ID:        mcpServer.RemoteMcpServerID.UUID,
-		ProjectID: endpoint.ProjectID,
-	})
+	return ctx, nil
+}
+
+func setProxyBackendProjectContext(ctx context.Context, authCtx *contextvalues.AuthContext, projectID uuid.UUID, projectSlug string) context.Context {
+	if authCtx.ProjectID == nil {
+		id := projectID
+		authCtx.ProjectID = &id
+	}
+	if authCtx.ProjectSlug == nil || *authCtx.ProjectSlug == "" {
+		slug := projectSlug
+		authCtx.ProjectSlug = &slug
+	}
+	return contextvalues.SetAuthContext(ctx, authCtx)
+}
+
+func (s *Service) setProxyBackendProjectContextIfOwner(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) (context.Context, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID != nil {
+		return ctx, nil
+	}
+
+	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, err, "remote mcp server not found").LogError(ctx, logger)
+		return ctx, oops.E(oops.CodeNotFound, err, "project not found")
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load remote mcp server").LogError(ctx, logger)
+		return ctx, oops.E(oops.CodeUnexpected, err, "load mcp server project").LogError(ctx, logger)
 	}
 
-	headers, err := remotemcp.NewHeaders(s.logger, s.db, s.enc).ListHeaders(ctx, server.ID, false)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load remote mcp server headers").LogError(ctx, logger)
+	if project.OrganizationID != authCtx.ActiveOrganizationID {
+		return ctx, nil
 	}
 
-	p := s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth)
-
-	r = r.WithContext(ctx)
-
-	switch r.Method {
-	case http.MethodDelete:
-		if err := p.Delete(w, r); err != nil {
-			return fmt.Errorf("proxy delete: %w", err)
-		}
-		return nil
-	case http.MethodGet:
-		if err := p.Get(w, r); err != nil {
-			return fmt.Errorf("proxy get: %w", err)
-		}
-		return nil
-	case http.MethodPost:
-		if err := p.Post(w, r); err != nil {
-			return fmt.Errorf("proxy post: %w", err)
-		}
-		return nil
-	default:
-		// The mux only registers the three supported methods, so this is
-		// defensive.
-		return oops.E(oops.CodeBadRequest, nil, "unsupported method %s", r.Method)
-	}
+	return setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug), nil
 }

@@ -25,6 +25,8 @@ type McpServer struct {
 	UserSessionIssuerID *string
 	// The ID of the remote MCP server used as the backend
 	RemoteMcpServerID *string
+	// The ID of the tunnelled MCP server used as the backend
+	TunnelledMcpServerID *string
 	// The ID of the toolset used as the backend
 	ToolsetID *string
 	// The ID of the tool variations group enabling MCP tool filtering for this

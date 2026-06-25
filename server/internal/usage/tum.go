@@ -56,6 +56,10 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 	if payload.MonthlyTokenLimit != nil {
 		tokenLimit = pgtype.Int8{Int64: *payload.MonthlyTokenLimit, Valid: true}
 	}
+	tunnelledMcpServerLimit := pgtype.Int4{Int32: 0, Valid: false}
+	if payload.TunnelledMcpServerLimit != nil {
+		tunnelledMcpServerLimit = pgtype.Int4{Int32: conv.SafeInt32(*payload.TunnelledMcpServerLimit), Valid: true}
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -75,10 +79,11 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 	}
 
 	row, err := qtx.UpsertBillingMetadata(ctx, repo.UpsertBillingMetadataParams{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		TumMonthlyTokenLimit:  tokenLimit,
-		AlertEmail:            conv.PtrToPGText(payload.AlertEmail),
-		BillingCycleAnchorDay: conv.SafeInt32(payload.BillingCycleAnchorDay),
+		OrganizationID:          authCtx.ActiveOrganizationID,
+		TumMonthlyTokenLimit:    tokenLimit,
+		AlertEmail:              conv.PtrToPGText(payload.AlertEmail),
+		BillingCycleAnchorDay:   conv.SafeInt32(payload.BillingCycleAnchorDay),
+		TunnelledMcpServerLimit: tunnelledMcpServerLimit,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert billing metadata").LogError(ctx, s.logger)
@@ -170,13 +175,14 @@ func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *conte
 	}
 
 	return &gen.TokensUnderManagement{
-		PeriodStart:           current.PeriodStart,
-		PeriodEnd:             current.PeriodEnd,
-		Tokens:                current.Tokens,
-		MonthlyTokenLimit:     tokenLimit,
-		BillingCycleAnchorDay: int(max(meta.BillingCycleAnchorDay, 1)),
-		AlertEmail:            alertEmail,
-		History:               history,
+		PeriodStart:             current.PeriodStart,
+		PeriodEnd:               current.PeriodEnd,
+		Tokens:                  current.Tokens,
+		MonthlyTokenLimit:       tokenLimit,
+		TunnelledMcpServerLimit: conv.PtrInt32ToInt(conv.FromPGInt4(meta.TunnelledMcpServerLimit)),
+		BillingCycleAnchorDay:   int(max(meta.BillingCycleAnchorDay, 1)),
+		AlertEmail:              alertEmail,
+		History:                 history,
 	}, nil
 }
 
@@ -189,8 +195,9 @@ func billingMetadataSnapshot(row repo.BillingMetadatum) *audit.BillingMetadataSn
 	}
 
 	return &audit.BillingMetadataSnapshot{
-		TumMonthlyTokenLimit:  tokenLimit,
-		AlertEmail:            conv.FromPGText[string](row.AlertEmail),
-		BillingCycleAnchorDay: int(row.BillingCycleAnchorDay),
+		TumMonthlyTokenLimit:    tokenLimit,
+		TunnelledMcpServerLimit: conv.PtrInt32ToInt(conv.FromPGInt4(row.TunnelledMcpServerLimit)),
+		AlertEmail:              conv.FromPGText[string](row.AlertEmail),
+		BillingCycleAnchorDay:   int(row.BillingCycleAnchorDay),
 	}
 }

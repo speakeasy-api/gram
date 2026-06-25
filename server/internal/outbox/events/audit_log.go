@@ -51,6 +51,7 @@ var (
 	ShadowMCPApprovalV1    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.shadow_mcp_approval_event_v1", "Deprecated: use audit_log.access_request_event_v1.")
 	TemplateV1             = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.template_event_v1", "Emitted when changes to prompt templates are made")
 	ToolsetV1              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.toolset_event_v1", "Emitted when changes to toolsets used by MCP servers are made")
+	TunnelledMcpServerV1   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.tunnelled_mcp_server_event_v1", "Emitted when changes to tunnelled MCP servers are made")
 	TriggerInstanceV1      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.trigger_instance_event_v1", "Emitted when changes to assistant triggers are made")
 	UserSessionClientV1    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_client_event_v1", "Emitted when changes to user session clients are made")
 	UserSessionConsentV1   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_consent_event_v1", "Emitted when changes to user session consents are made")
