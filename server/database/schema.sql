@@ -922,7 +922,6 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid,
   remote_session_issuer_id uuid NOT NULL,
-  user_session_issuer_id uuid,
 
   client_id TEXT NOT NULL,
   client_secret_encrypted TEXT,
@@ -958,7 +957,6 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   CONSTRAINT remote_session_clients_pkey PRIMARY KEY (id),
   CONSTRAINT remote_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT remote_session_clients_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE,
-  CONSTRAINT remote_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
   -- CIMD spec forbids symmetric secrets, so a row that publishes a CIMD
   -- document must not have an encrypted secret on file. The spec also
   -- requires the client_id value in the metadata document to equal the
