@@ -257,7 +257,9 @@ export function TokenEndpointAuthMethodField({
 // ClientCredentialsFields is used by both Add (editable client_id) and
 // Modify (client_id read-only — the API has no rotate path; create a fresh
 // remote_session_client if you need a new one). clientSecret stays an input
-// in both — empty means "leave existing in place" in Modify.
+// in both — empty means "leave existing in place" in Modify. Callers that
+// render their own section header (e.g. above a client-type selector) pass
+// showHeading={false} to suppress the built-in "OAuth Client Credentials" block.
 export function ClientCredentialsFields({
   clientId,
   clientSecret,
@@ -265,6 +267,7 @@ export function ClientCredentialsFields({
   clientIdEditable = true,
   clientSecretLabel = "Client Secret (optional)",
   clientSecretPlaceholder = "••••••••",
+  showHeading = true,
   onClientIdChange,
   onClientSecretChange,
   onTokenEndpointAuthMethodChange,
@@ -277,6 +280,7 @@ export function ClientCredentialsFields({
   clientIdEditable?: boolean;
   clientSecretLabel?: string;
   clientSecretPlaceholder?: string;
+  showHeading?: boolean;
   onClientIdChange: (value: string) => void;
   onClientSecretChange: (value: string) => void;
   onTokenEndpointAuthMethodChange: (
@@ -284,15 +288,19 @@ export function ClientCredentialsFields({
   ) => void;
 }): JSX.Element {
   return (
-    <Stack gap={4} className="border-t pt-6">
-      <Stack gap={1}>
-        <Label className="text-sm font-medium">OAuth Client Credentials</Label>
-        <Type muted small>
-          The platform acts as an OAuth client against the upstream issuer.
-          Register a client with the issuer out-of-band and paste the
-          credentials here.
-        </Type>
-      </Stack>
+    <Stack gap={4} className={showHeading ? "border-t pt-6" : undefined}>
+      {showHeading && (
+        <Stack gap={1}>
+          <Label className="text-sm font-medium">
+            OAuth Client Credentials
+          </Label>
+          <Type muted small>
+            The platform acts as an OAuth client against the upstream issuer.
+            Register a client with the issuer out-of-band and paste the
+            credentials here.
+          </Type>
+        </Stack>
+      )}
 
       <Stack gap={2}>
         <Label className="text-muted-foreground text-xs">Client ID</Label>

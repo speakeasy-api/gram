@@ -65,6 +65,13 @@ type Service interface {
 	// caller's organization. access_token_encrypted and refresh_token_encrypted
 	// are never returned. Requires org:read.
 	ListClientSessions(context.Context, *ListClientSessionsPayload) (res *ListOrganizationRemoteSessionsResult, err error)
+	// Register a standalone remote_session_client under an existing
+	// remote_session_issuer in the caller's organization, with no
+	// user_session_issuer attachments. The client is project-scoped: it inherits a
+	// project-specific issuer's project, or the caller names a project (which must
+	// belong to the organization) when the issuer is organization-level. Requires
+	// org:admin.
+	CreateClient(context.Context, *CreateClientPayload) (res *types.RemoteSessionClient, err error)
 	// Update a remote_session_client's non-secret fields in the caller's
 	// organization. Requires org:admin.
 	UpdateClient(context.Context, *UpdateClientPayload) (res *types.RemoteSessionClient, err error)
@@ -108,7 +115,35 @@ const ServiceName = "organizationRemoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [18]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "listClients", "getClient", "getClientDeletePreflight", "listClientMcpServers", "listClientSessions", "updateClient", "deleteClient", "removeClientFromMcpServer", "revokeSession", "refreshSession", "revokeAllClientSessions"}
+var MethodNames = [19]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "listClients", "getClient", "getClientDeletePreflight", "listClientMcpServers", "listClientSessions", "createClient", "updateClient", "deleteClient", "removeClientFromMcpServer", "revokeSession", "refreshSession", "revokeAllClientSessions"}
+
+// CreateClientPayload is the payload type of the
+// organizationRemoteSessionIssuers service createClient method.
+type CreateClientPayload struct {
+	SessionToken *string
+	ApikeyToken  *string
+	// The owning remote_session_issuer id; must belong to the caller's
+	// organization.
+	RemoteSessionIssuerID string
+	// Owning project id for the new client; the project must belong to the
+	// caller's organization. Omit to inherit a project-specific issuer's project;
+	// required when the issuer is organization-level.
+	ProjectID *string
+	// client_id supplied by the caller, e.g. from Dynamic Client Registration.
+	ClientID string
+	// Optional client_secret supplied by the caller. Gram encrypts before
+	// persisting; the plaintext is never returned.
+	ClientSecret *string
+	// How the client authenticates at the issuer's token endpoint. Omit to default
+	// to client_secret_basic.
+	TokenEndpointAuthMethod *string
+	// Explicit upstream OAuth scopes the dance should request for this client.
+	// Omit to fall back to the issuer's scopes_supported.
+	Scope []string
+	// Optional upstream OAuth audience to send on the authorize redirect and token
+	// exchange.
+	Audience *string
+}
 
 // CreateIssuerPayload is the payload type of the
 // organizationRemoteSessionIssuers service createIssuer method.

@@ -48,6 +48,7 @@ export * from "./createEnvironment.js";
 export * from "./createGlobalToolVariationGroup.js";
 export * from "./createMcpEndpoint.js";
 export * from "./createMcpServer.js";
+export * from "./createOrganizationRemoteSessionClient.js";
 export * from "./createOrganizationRemoteSessionIssuer.js";
 export * from "./createPackage.js";
 export * from "./createPlugin.js";

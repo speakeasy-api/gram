@@ -849,3 +849,183 @@ func TestMoveIssuer_RBACForbidden(t *testing.T) {
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+// newCreateClientPayload builds a standalone client-create payload (no
+// user_session_issuer attachments) under the given issuer, optionally
+// downscoped to projectID and with an optional client secret.
+func newCreateClientPayload(issuerID string, projectID, clientSecret *string) *orggen.CreateClientPayload {
+	return &orggen.CreateClientPayload{
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+		RemoteSessionIssuerID:   issuerID,
+		ProjectID:               projectID,
+		ClientID:                "admin-create-client-" + uuid.NewString(),
+		ClientSecret:            clientSecret,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	}
+}
+
+// TestCreateClient_ProjectSpecificIssuerInheritsProject creates a standalone
+// client under a project-specific issuer: the client inherits the issuer's
+// project, carries no user_session_issuer attachments, and records a create
+// audit event.
+func TestCreateClient_ProjectSpecificIssuerInheritsProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-cc-inherit-issuer", "")
+
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
+	require.NoError(t, err)
+
+	payload := newCreateClientPayload(issuerID, nil, nil)
+	created, err := ti.service.CreateClient(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, payload.ClientID, created.ClientID)
+	require.Equal(t, issuerID, created.RemoteSessionIssuerID)
+	require.Equal(t, authCtx.ProjectID.String(), created.ProjectID)
+	require.Empty(t, created.UserSessionIssuerIds, "standalone client has no attachments")
+
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
+}
+
+// TestCreateClient_OrganizationalIssuerRequiresProject rejects a standalone
+// client under an organization-level issuer when no project is named: a
+// remote_session_client must be project-scoped, and there is no project to
+// inherit.
+func TestCreateClient_OrganizationalIssuerRequiresProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	orgIssuer, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("admin-cc-org-issuer", nil))
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateClient(ctx, newCreateClientPayload(orgIssuer.ID, nil, nil))
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// TestCreateClient_OrganizationalIssuerDownscope creates a standalone client
+// under an organization-level issuer downscoped to a project in the org.
+func TestCreateClient_OrganizationalIssuerDownscope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	pid := authCtx.ProjectID.String()
+
+	orgIssuer, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("admin-cc-downscope-issuer", nil))
+	require.NoError(t, err)
+
+	created, err := ti.service.CreateClient(ctx, newCreateClientPayload(orgIssuer.ID, &pid, nil))
+	require.NoError(t, err)
+	require.Equal(t, pid, created.ProjectID)
+	require.Equal(t, orgIssuer.ID, created.RemoteSessionIssuerID)
+}
+
+// TestCreateClient_ProjectMismatchForProjectIssuer rejects downscoping a client
+// to a different project than the project-specific issuer's own, which would
+// leave the client referencing an issuer unreachable from its project.
+func TestCreateClient_ProjectMismatchForProjectIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-cc-mismatch-issuer", "")
+	otherProject := createProject(t, ctx, ti.conn, "admin-cc-other-project").String()
+
+	_, err := ti.service.CreateClient(ctx, newCreateClientPayload(issuerID, &otherProject, nil))
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// TestCreateClient_ProjectNotInOrg rejects a project_id that does not belong to
+// the caller's organization.
+func TestCreateClient_ProjectNotInOrg(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	orgIssuer, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("admin-cc-badproj-issuer", nil))
+	require.NoError(t, err)
+
+	bogus := uuid.NewString()
+	_, err = ti.service.CreateClient(ctx, newCreateClientPayload(orgIssuer.ID, &bogus, nil))
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// TestCreateClient_IssuerNotFound rejects a client registered against an issuer
+// that is not in the caller's organization.
+func TestCreateClient_IssuerNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	_, err := ti.service.CreateClient(ctx, newCreateClientPayload(uuid.NewString(), nil, nil))
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// TestCreateClient_RBACForbidden proves client creation requires org:admin; an
+// org:read principal is rejected.
+func TestCreateClient_RBACForbidden(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-cc-rbac-issuer", "")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	_, err := ti.service.CreateClient(ctx, newCreateClientPayload(issuerID, nil, nil))
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// TestCreateClient_EncryptsSecret proves a supplied client secret is stored
+// encrypted, never as the plaintext.
+func TestCreateClient_EncryptsSecret(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-cc-secret-issuer", "")
+
+	secret := "create-secret-value"
+	created, err := ti.service.CreateClient(ctx, newCreateClientPayload(issuerID, nil, &secret))
+	require.NoError(t, err)
+
+	clientUUID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+
+	stored, err := repo.New(ti.conn).GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
+		ID:             clientUUID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+	})
+	require.NoError(t, err)
+	require.True(t, stored.RemoteSessionClient.ClientSecretEncrypted.Valid)
+	require.NotEmpty(t, stored.RemoteSessionClient.ClientSecretEncrypted.String)
+	require.NotEqual(t, secret, stored.RemoteSessionClient.ClientSecretEncrypted.String)
+}

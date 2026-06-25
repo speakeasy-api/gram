@@ -31,6 +31,7 @@ export * from "./createenvironment.js";
 export * from "./createglobaltoolvariationgroup.js";
 export * from "./createmcpendpoint.js";
 export * from "./createmcpserver.js";
+export * from "./createorganizationremotesessionclient.js";
 export * from "./createorganizationremotesessionissuer.js";
 export * from "./createpackage.js";
 export * from "./createplugin.js";
