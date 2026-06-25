@@ -14,6 +14,15 @@ import (
 
 const registryCacheTTL = 24 * time.Hour
 
+// registryCacheSchemaVersion is baked into every registry cache key. Bump it
+// whenever the cached shape changes (e.g. a new field on ExternalMCPServerEntry)
+// so a deploy can't read blobs written by an older binary. The cache serializes
+// structs as field-name-keyed msgpack maps, so a missing field silently decodes
+// to its zero value rather than erroring — without this version, adding
+// `supports_dcr` made every cached server read back as supports_dcr=false (i.e.
+// "manual") for up to the 24h TTL.
+const registryCacheSchemaVersion = "v2"
+
 // CachedListServersResponse wraps a list of external MCP server summaries for caching.
 type CachedListServersResponse struct {
 	Key        string
@@ -57,5 +66,5 @@ func registryCacheKey(prefix string, req *http.Request) string {
 		_, _ = fmt.Fprintf(h, "%s=%s\n", k, strings.Join(vals, ","))
 	}
 
-	return fmt.Sprintf("registry:%s:%s:%x", prefix, req.URL.String(), h.Sum(nil))
+	return fmt.Sprintf("registry:%s:%s:%s:%x", prefix, registryCacheSchemaVersion, req.URL.String(), h.Sum(nil))
 }

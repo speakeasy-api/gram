@@ -421,13 +421,13 @@ func toExternalMCPRemoteVariables(variables map[string]RemoteVariable) map[strin
 // ClearCache removes all cached entries for the given registry URL.
 func (c *RegistryClient) ClearCache(ctx context.Context, registryURL string) error {
 	if c.listCache != nil {
-		prefix := fmt.Sprintf("registry:list:%s", registryURL)
+		prefix := fmt.Sprintf("registry:list:%s:%s", registryCacheSchemaVersion, registryURL)
 		if err := c.listCache.DeleteByPrefix(ctx, prefix); err != nil {
 			return fmt.Errorf("clear list cache for registry %s: %w", registryURL, err)
 		}
 	}
 	if c.detailsCache != nil {
-		prefix := fmt.Sprintf("registry:details:%s", registryURL)
+		prefix := fmt.Sprintf("registry:details:%s:%s", registryCacheSchemaVersion, registryURL)
 		if err := c.detailsCache.DeleteByPrefix(ctx, prefix); err != nil {
 			return fmt.Errorf("clear details cache for registry %s: %w", registryURL, err)
 		}
