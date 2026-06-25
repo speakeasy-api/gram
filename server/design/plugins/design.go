@@ -591,6 +591,11 @@ var PublishStatusResult = Type("PublishStatusResult", func() {
 	Attribute("repo_name", String, "GitHub repo name, if connected.")
 	Attribute("repo_url", String, "Full GitHub repository URL, if connected.")
 	Attribute("marketplace_url", String, "Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.")
+	Attribute("up_to_date", Boolean, "Whether the project's current plugin state matches what was last published to GitHub. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).")
+	Attribute("last_published_at", String, func() {
+		Description("When the project was last published to GitHub. Absent when the project is not connected.")
+		Format(FormatDateTime)
+	})
 })
 
 var PublishPluginsResult = Type("PublishPluginsResult", func() {
