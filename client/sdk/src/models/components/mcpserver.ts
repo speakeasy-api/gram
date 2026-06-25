@@ -63,6 +63,10 @@ export type McpServer = {
    */
   toolsetId?: string | undefined;
   /**
+   * The ID of the tunnelled MCP server used as the backend
+   */
+  tunnelledMcpServerId?: string | undefined;
+  /**
    * When the MCP server was last updated
    */
   updatedAt: Date;
@@ -97,6 +101,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       slug: z.optional(z.string()),
       tool_variations_group_id: z.optional(z.string()),
       toolset_id: z.optional(z.string()),
+      tunnelled_mcp_server_id: z.optional(z.string()),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -112,6 +117,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         "remote_mcp_server_id": "remoteMcpServerId",
         "tool_variations_group_id": "toolVariationsGroupId",
         "toolset_id": "toolsetId",
+        "tunnelled_mcp_server_id": "tunnelledMcpServerId",
         "updated_at": "updatedAt",
         "user_session_issuer_id": "userSessionIssuerId",
       });

@@ -75,7 +75,7 @@ export class McpServers extends ClientSDK {
    * listMcpServers mcpServers
    *
    * @remarks
-   * List MCP servers for a project. Accepts optional remote_mcp_server_id or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the two backends are mutually exclusive.
+   * List MCP servers for a project. Accepts optional remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
    */
   async list(
     request?: operations.ListMcpServersRequest | undefined,
@@ -113,7 +113,7 @@ export class McpServers extends ClientSDK {
    * updateMcpServer mcpServers
    *
    * @remarks
-   * Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.
+   * Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be provided.
    */
   async update(
     request: operations.UpdateMcpServerRequest,

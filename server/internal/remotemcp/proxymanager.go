@@ -122,14 +122,30 @@ func (f *ProxyManager) Build(
 		})
 	}
 
-	serverID := server.ID.String()
+	return f.BuildTarget(logger, server.ID.String(), server.Url, mcpServerID, configured, visibility, projectID, upstreamAuth)
+}
 
+// BuildTarget constructs a configured [*proxy.Proxy] for a single request
+// against an MCP-compatible upstream URL. The upstream identity is normally
+// a remote_mcp_servers id, but tunnel-backed MCP servers reuse the same
+// interceptor stack with their tunnelled_mcp_servers id so logs and usage are
+// still correlated to the source row behind the fronting mcp_servers id.
+func (f *ProxyManager) BuildTarget(
+	logger *slog.Logger,
+	upstreamID string,
+	upstreamURL string,
+	mcpServerID string,
+	headers []proxy.ConfiguredHeader,
+	visibility string,
+	projectID string,
+	upstreamAuth string,
+) *proxy.Proxy {
 	// Telemetry interceptors are keyed by both correlation ids: the
 	// remote_mcp_servers id (the upstream) and the fronting mcp_servers id
 	// (the server users manage). server.ID still drives the synthetic tool
 	// URN and the remote-server slog/metric dimension; mcpServerID lets the
 	// same activity be sliced from the fronting-server perspective.
-	identity := proxy.ServerIdentity{RemoteMCPServerID: serverID, McpServerID: mcpServerID}
+	identity := proxy.ServerIdentity{RemoteMCPServerID: upstreamID, McpServerID: mcpServerID}
 
 	// Per-request instance: the interceptor holds a single nilable start
 	// timestamp set by the request side and consumed by the response side.
@@ -163,7 +179,7 @@ func (f *ProxyManager) Build(
 	toolsCallReqInterceptors := []proxy.ToolsCallRequestInterceptor{
 		NewToolsCallOTELCounterInterceptor(f.mcpMetrics, identity, logger),
 		f.toolsCallUsageLimitsInterceptor,
-		NewToolsCallShadowMCPValidateAndStripInterceptor(f.shadowmcpClient, serverID, projectID, logger),
+		NewToolsCallShadowMCPValidateAndStripInterceptor(f.shadowmcpClient, upstreamID, projectID, logger),
 		clickHouseLogInterceptor,
 	}
 	if visibility == mcpservers.VisibilityPrivate {
@@ -184,7 +200,7 @@ func (f *ProxyManager) Build(
 		)
 	}
 	toolsListRespInterceptors = append(toolsListRespInterceptors,
-		NewToolsListShadowMCPInjectInterceptor(f.shadowmcpClient, serverID, projectID, logger),
+		NewToolsListShadowMCPInjectInterceptor(f.shadowmcpClient, upstreamID, projectID, logger),
 	)
 
 	// Resources request chain: free-tier ToolCalls usage limits apply to
@@ -201,8 +217,8 @@ func (f *ProxyManager) Build(
 		Metrics:                 f.proxyMetrics,
 		MaxBufferedBodyBytes:    proxy.DefaultMaxBufferedBodyBytes,
 		Identity:                identity,
-		RemoteURL:               server.Url,
-		Headers:                 configured,
+		RemoteURL:               upstreamURL,
+		Headers:                 headers,
 		AuthorizationOverride:   upstreamAuth,
 		UserRequestInterceptors: nil,
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
