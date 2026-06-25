@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/Masterminds/squirrel"
 )
@@ -70,6 +71,15 @@ type SessionSummary struct {
 	SortValue         float64 `ch:"sort_value"`
 }
 
+// applySessionFilters restricts the session aggregation to chats matching the
+// requested dimension filters. project_id stays a row-level WHERE because it is
+// present on every row and prunes partitions. Every other dimension is matched
+// per-chat via HAVING: a chat qualifies when ANY of its rows carries the
+// requested value. This is required because the attributes are stamped on
+// different physical rows within the same chat — user-directory attributes
+// (department_name, email, job_title, …) live on gateway-enriched rows, while
+// cost/hook_source/model live on the usage rows — so a row-level AND of those
+// filters would wrongly return nothing even when each filter matches data.
 func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFilter) (squirrel.SelectBuilder, error) {
 	for _, f := range filters {
 		if len(f.Values) == 0 {
@@ -80,15 +90,53 @@ func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFi
 			return sb, fmt.Errorf("unknown filter dimension %q", f.Dimension)
 		}
 		switch dim.kind {
-		case attributeDimArray:
-			sb = sb.Where(arrayDimFilter(dim.column, f.Values))
-		case attributeDimScalar, attributeDimProject:
+		case attributeDimProject:
 			sb = sb.Where(squirrel.Eq{dim.column: f.Values})
+		case attributeDimScalar:
+			sb = sb.Having(sessionScalarHaving(dim.column, f.Values))
+		case attributeDimArray:
+			inner, args, err := arrayDimFilter(dim.column, f.Values).ToSql()
+			if err != nil {
+				return sb, fmt.Errorf("building array filter for %q: %w", f.Dimension, err)
+			}
+			sb = sb.Having(squirrel.Expr("countIf("+inner+") > 0", args...))
 		default:
 			return sb, fmt.Errorf("unhandled dimension kind for filter %q", f.Dimension)
 		}
 	}
 	return sb, nil
+}
+
+// sessionScalarHaving matches a chat when any of its rows carries one of the
+// requested scalar values. A requested "" (the "(unset)" bucket) matches chats
+// that have no non-empty value for the dimension on any row, mirroring how the
+// session's effective value is computed with anyIf(col, col != '').
+func sessionScalarHaving(expr string, values []string) squirrel.Sqlizer {
+	hasEmpty := false
+	nonEmpty := make([]string, 0, len(values))
+	for _, v := range values {
+		if v == "" {
+			hasEmpty = true
+			continue
+		}
+		nonEmpty = append(nonEmpty, v)
+	}
+
+	emptyPred := squirrel.Expr("countIf(" + expr + " != '') = 0")
+	if len(nonEmpty) == 0 {
+		return emptyPred
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(nonEmpty)), ",")
+	args := make([]any, len(nonEmpty))
+	for i, v := range nonEmpty {
+		args[i] = v
+	}
+	nonEmptyPred := squirrel.Expr("countIf("+expr+" IN ("+placeholders+")) > 0", args...)
+	if !hasEmpty {
+		return nonEmptyPred
+	}
+	return squirrel.Or{nonEmptyPred, emptyPred}
 }
 
 // ListSessions retrieves org-scoped session summaries grouped by chat_id from
