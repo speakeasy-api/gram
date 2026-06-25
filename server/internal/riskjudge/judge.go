@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -20,13 +19,13 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/time/rate"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -61,14 +60,6 @@ const (
 	// unusual number of calls. Excess calls are dropped and flagged via
 	// tool_calls_truncated.
 	maxRenderedToolCalls = 50
-	// judgeRatePerMin and judgeRateBurst cap how many judge calls a single org
-	// can drive per process. Judge calls are billable OpenRouter requests, so
-	// this is a cost/abuse guardrail against a thrashing session or runaway
-	// batch — tuned generously so only pathological runaway trips it, not normal
-	// heavy use (the batch analyzer alone fans out judgeConcurrency=8). These are
-	// per-process backstop values: the effective org cap is value × replica count.
-	judgeRatePerMin = 600
-	judgeRateBurst  = 120
 )
 
 // SystemPrompt is the judge's system message. It frames the policy and message
@@ -107,72 +98,22 @@ type Judge struct {
 	tracer  trace.Tracer
 	metrics *judgeMetrics
 	client  openrouter.CompletionClient
-	limiter *judgeRateLimiter
+	limiter *ratelimit.Limiter
 }
 
 var _ ra.PromptJudge = (*Judge)(nil)
 
 // New constructs a Judge. A nil client yields a judge whose Evaluate always
 // returns nil, so callers can wire it unconditionally.
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient) *Judge {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, limiter *ratelimit.Limiter) *Judge {
 	logger = logger.With(attr.SlogComponent("risk-llm-judge"))
 	return &Judge{
 		logger:  logger,
 		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/riskjudge"),
 		metrics: newJudgeMetrics(meterProvider, logger),
 		client:  client,
-		limiter: newJudgeRateLimiter(),
+		limiter: limiter,
 	}
-}
-
-// judgeRateLimiter is a per-org, in-memory token-bucket limiter guarding the
-// billable judge call. It mirrors the assistant bootstrap limiter: lazy GC of
-// idle buckets every 5 minutes, bounded memory without a background goroutine.
-type judgeRateLimiter struct {
-	mu        sync.Mutex
-	state     map[string]*rateLimiterEntry
-	limit     rate.Limit
-	burst     int
-	lastSweep time.Time
-}
-
-type rateLimiterEntry struct {
-	limiter  *rate.Limiter
-	lastSeen time.Time
-}
-
-func newJudgeRateLimiter() *judgeRateLimiter {
-	return &judgeRateLimiter{
-		mu:        sync.Mutex{},
-		state:     map[string]*rateLimiterEntry{},
-		limit:     rate.Limit(float64(judgeRatePerMin) / 60.0),
-		burst:     judgeRateBurst,
-		lastSweep: time.Now(),
-	}
-}
-
-func (l *judgeRateLimiter) allow(org string, now time.Time) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	// Lazy GC: every 5 minutes, drop limiters idle long enough to have refilled
-	// to full. Bounds memory across many orgs without paying a goroutine.
-	if now.Sub(l.lastSweep) > 5*time.Minute {
-		for k, e := range l.state {
-			if now.Sub(e.lastSeen) > 5*time.Minute {
-				delete(l.state, k)
-			}
-		}
-		l.lastSweep = now
-	}
-
-	e, ok := l.state[org]
-	if !ok {
-		e = &rateLimiterEntry{limiter: rate.NewLimiter(l.limit, l.burst), lastSeen: now}
-		l.state[org] = e
-	}
-	e.lastSeen = now
-	return e.limiter.AllowN(now, 1)
 }
 
 // Evaluate runs the judge and returns a non-nil verdict when the message
@@ -197,9 +138,20 @@ func (j *Judge) Evaluate(ctx context.Context, in ra.JudgeInput) *ra.JudgeVerdict
 	))
 	defer span.End()
 
-	// Org-scoped guardrail on the billable judge call. A throttled call is
-	// treated like a judge error: the policy's fail-mode decides the verdict.
-	if !j.limiter.allow(in.OrgID, time.Now()) {
+	// A throttled call is treated like a judge error: the policy's fail-mode
+	// decides. A Store outage is not a throttle — proceed rather than let limiter
+	// infra disable the guardrail.
+	model := in.Config.Model
+	if model == "" {
+		model = defaultJudgeModel
+	}
+	switch res, err := j.limiter.Allow(ctx, openrouter.JudgeRateLimitKey(in.OrgID, model)); {
+	case err != nil:
+		j.logger.WarnContext(ctx, "judge rate limiter unavailable, allowing call",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(in.OrgID),
+		)
+	case !res.Allowed:
 		j.metrics.RecordRateLimited(ctx, in.OrgID)
 		span.SetAttributes(attribute.Bool("risk.judge.rate_limited", true))
 		j.logger.WarnContext(ctx, "llm judge rate limited",

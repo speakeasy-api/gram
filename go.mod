@@ -31,6 +31,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-logr/logr v1.4.3
 	github.com/go-redis/cache/v9 v9.0.0
+	github.com/go-redis/redis_rate/v10 v10.0.1
 	github.com/gobwas/glob v0.2.3
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golangci/plugin-module-register v0.1.2

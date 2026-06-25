@@ -30,12 +30,12 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/time/rate"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -61,12 +61,6 @@ const (
 	// concurrency bounds how many judge calls run in parallel for one batched
 	// Classify call. Mirrors the batch analyzer's judge fan-out.
 	concurrency = 8
-	// ratePerMin and rateBurst cap how many judge calls a single org can drive
-	// per process. Judge calls are billable OpenRouter requests, so this guards
-	// against a thrashing session or runaway batch. Per-process backstop: the
-	// effective org cap is value × replica count. Mirrors riskjudge's limiter.
-	ratePerMin = 600
-	rateBurst  = 120
 	// stageJudge tags metrics emitted by this single-stage engine. The cascade
 	// adds a second stage value when it escalates, so dashboards split by stage
 	// without a metric rename.
@@ -118,7 +112,7 @@ type Engine struct {
 	tracer      trace.Tracer
 	metrics     *metrics
 	client      openrouter.CompletionClient
-	limiter     *rateLimiter
+	limiter     *ratelimit.Limiter
 	model       string
 	temperature float64
 	schema      or.ChatJSONSchemaConfig // built once; the verdict shape is constant
@@ -134,7 +128,7 @@ var safeResult = ra.PromptInjectionResult{Label: ra.LabelSafe, Score: 0, Rationa
 
 // New constructs an Engine. The composition root constructs the completions
 // client unconditionally, so it is always non-nil here.
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient) *Engine {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, limiter *ratelimit.Limiter) *Engine {
 	logger = logger.With(attr.SlogComponent("pi-llm-judge"))
 	strict := true
 	return &Engine{
@@ -142,7 +136,7 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/pijudge"),
 		metrics:     newMetrics(meterProvider, logger),
 		client:      client,
-		limiter:     newRateLimiter(),
+		limiter:     limiter,
 		model:       defaultModel,
 		temperature: defaultTemperature,
 		schema: or.ChatJSONSchemaConfig{
@@ -206,7 +200,15 @@ func (c *Engine) classifyOne(ctx context.Context, req ra.PromptInjectionRequest,
 	if ctx.Err() != nil {
 		return safeResult
 	}
-	if !c.limiter.allow(req.OrgID, time.Now()) {
+	// A Store outage is not a throttle — proceed rather than let limiter infra
+	// silence the scanner.
+	switch res, err := c.limiter.Allow(ctx, openrouter.JudgeRateLimitKey(req.OrgID, c.model)); {
+	case err != nil:
+		c.logger.WarnContext(ctx, "pi judge rate limiter unavailable, allowing call",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(req.OrgID),
+		)
+	case !res.Allowed:
 		c.metrics.RecordRateLimited(ctx, req.OrgID)
 		c.logger.WarnContext(ctx, "pi judge rate limited; failing open",
 			attr.SlogOrganizationID(req.OrgID),
@@ -327,52 +329,4 @@ func labelFor(isAttack bool, err error) string {
 		return ra.LabelInjection
 	}
 	return ra.LabelSafe
-}
-
-// rateLimiter is a per-org, in-memory token-bucket limiter guarding the billable
-// judge call. Mirrors riskjudge's limiter: lazy GC of idle buckets every 5
-// minutes, bounded memory without a background goroutine.
-type rateLimiter struct {
-	mu        sync.Mutex
-	state     map[string]*rateLimiterEntry
-	limit     rate.Limit
-	burst     int
-	lastSweep time.Time
-}
-
-type rateLimiterEntry struct {
-	limiter  *rate.Limiter
-	lastSeen time.Time
-}
-
-func newRateLimiter() *rateLimiter {
-	return &rateLimiter{
-		mu:        sync.Mutex{},
-		state:     map[string]*rateLimiterEntry{},
-		limit:     rate.Limit(float64(ratePerMin) / 60.0),
-		burst:     rateBurst,
-		lastSweep: time.Now(),
-	}
-}
-
-func (l *rateLimiter) allow(org string, now time.Time) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if now.Sub(l.lastSweep) > 5*time.Minute {
-		for k, e := range l.state {
-			if now.Sub(e.lastSeen) > 5*time.Minute {
-				delete(l.state, k)
-			}
-		}
-		l.lastSweep = now
-	}
-
-	e, ok := l.state[org]
-	if !ok {
-		e = &rateLimiterEntry{limiter: rate.NewLimiter(l.limit, l.burst), lastSeen: now}
-		l.state[org] = e
-	}
-	e.lastSeen = now
-	return e.limiter.AllowN(now, 1)
 }

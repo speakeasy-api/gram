@@ -87,6 +87,7 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/resources"
@@ -862,7 +863,7 @@ func newStartCommand() *cli.Command {
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
-			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
+			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
@@ -997,9 +998,10 @@ func newStartCommand() *cli.Command {
 
 			// L1 prompt-injection engine is the LLM judge (POC-193). A completions
 			// client is always constructed, so the judge is always available.
-			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
+			hookJudgeLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
+			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Classify)
 
-			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient)
+			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter)
 			celEngine, err := celenv.New()
 			if err != nil {
 				return fmt.Errorf("create cel engine: %w", err)
@@ -1199,7 +1201,7 @@ func newStartCommand() *cli.Command {
 						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 					}
 
-					piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
+					piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:                 guardianPolicy,
