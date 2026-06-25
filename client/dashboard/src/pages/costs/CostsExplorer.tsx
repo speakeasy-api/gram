@@ -32,7 +32,7 @@ import { useRoutes } from "@/routes";
 import { ChatDetailSheet } from "../chatLogs/ChatDetailPanel";
 import { type CardSpec, CostWidgets } from "./CostWidgets";
 import { EntityProfile } from "./EntityProfile";
-import { SessionTable } from "./SessionTable";
+import { SessionTable, type SessionColumnId } from "./SessionTable";
 import {
   type Axis,
   availableDimensions,
@@ -180,6 +180,20 @@ export function CostsExplorer(): JSX.Element {
     if (!project.id) return drill;
     return [{ dimension: Dimension.ProjectId, values: [project.id] }, ...drill];
   }, [path, project.id]);
+
+  // Drop session columns whose dimension the drill path already pins to a single
+  // value — that column would just repeat the same value down every row. Mapped
+  // from drill dimension to the session-table column id it makes redundant.
+  const hiddenSessionColumns = useMemo<SessionColumnId[]>(() => {
+    const byDimension: Partial<Record<Dimension, SessionColumnId>> = {
+      [Dimension.Email]: "user",
+      [Dimension.HookSource]: "agent",
+      [Dimension.Model]: "model",
+    };
+    return path
+      .map((c) => byDimension[c.dim])
+      .filter((id): id is SessionColumnId => id !== undefined);
+  }, [path]);
 
   // The generated useTelemetryQuery hook keys its cache on gramSession only — it
   // ignores the request body — so every drill would return the first cached
@@ -822,6 +836,7 @@ export function CostsExplorer(): JSX.Element {
               isLoading={sessionsFetching && !sessionsData}
               isError={sessionsError}
               onOpen={setOpenChatId}
+              hiddenColumns={hiddenSessionColumns}
             />
           ) : undefined
         }
