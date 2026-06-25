@@ -58,6 +58,28 @@ var ClaudeHookResult = Type("ClaudeHookResult", func() {
 	Attribute("reason", String, "Reason accompanying decision; shown to the user (UserPromptSubmit) or Claude (PostToolUse/Stop).")
 })
 
+// A single captured Claude Code transcript message for idempotent conversation
+// capture (Stop / SubagentStop). external_id is the transcript line UUID and is
+// the per-chat dedup key (stored as external_message_id).
+var ClaudeCapturedMessage = Type("ClaudeCapturedMessage", func() {
+	Description("A captured Claude Code transcript message, deduplicated per chat by external_id.")
+	Required("external_id", "role")
+	Attribute("external_id", String, "Transcript line UUID; stored as external_message_id and used as the per-chat dedup key.")
+	Attribute("role", String, "Message role", func() {
+		Enum("user", "assistant", "tool")
+	})
+	Attribute("content", String, "Message text content")
+	Attribute("model", String, "Model identifier (assistant messages)")
+	Attribute("tool_calls", Any, "Tool call requests as a JSON array (assistant tool-call messages)")
+	Attribute("tool_call_id", String, "ID of the tool call this result answers (tool messages)")
+	Attribute("prompt_tokens", Int64, "Prompt/input token count")
+	Attribute("completion_tokens", Int64, "Completion/output token count")
+	Attribute("total_tokens", Int64, "Total token count")
+	Attribute("timestamp", String, "RFC3339 transcript timestamp; stored as created_at")
+	Attribute("agent_id", String, "Subagent id when the message originated from a subagent transcript (SubagentStop)")
+	Attribute("agent_type", String, "Subagent type when applicable")
+})
+
 // Cursor hook payload
 var CursorHookPayload = Type("CursorHookPayload", func() {
 	Description("Payload for Cursor hook events")
@@ -169,6 +191,7 @@ var _ = Service("hooks", func() {
 			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
 			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
 			Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
+			Attribute("hook_version", Int, "Plugin hook protocol version. At or above the Stop-collection version the per-event handlers skip persistence (blocking only) — conversation capture instead arrives idempotently via Method(\"claudeMessages\"). Absent/older versions persist on the per-event handlers as before.")
 		})
 		Result(ClaudeHookResult)
 		HTTP(func() {
@@ -177,6 +200,29 @@ var _ = Service("hooks", func() {
 			Header("project_slug_input:Gram-Project")
 			Header("hook_hostname:X-Gram-Hook-Hostname")
 			Header("idempotency_key:Idempotency-Key")
+			Header("hook_version:X-Gram-Hook-Version")
+		})
+	})
+
+	Method("claudeMessages", func() {
+		Description("Idempotent batch capture of Claude Code transcript messages emitted on Stop and SubagentStop. Each message carries its transcript UUID as external_id; the server stores it as external_message_id and deduplicates per chat, so re-delivery from multiple plugin installations persists each message exactly once. Same optional plugin-auth + session-metadata fallback as Method(\"claude\").")
+
+		Payload(func() {
+			Attribute("session_id", String, "The Claude Code session ID")
+			Attribute("user_email", String, "Email of the authenticated user from the Speakeasy device agent, if available")
+			Attribute("messages", ArrayOf(ClaudeCapturedMessage), "Captured transcript messages in order")
+			Attribute("apikey_token", String, "Optional API key for plugin-driven attribution.")
+			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
+			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
+			Required("session_id", "messages")
+		})
+		Result(Empty)
+		HTTP(func() {
+			POST("/rpc/hooks.claudeMessages")
+			Header("apikey_token:Gram-Key")
+			Header("project_slug_input:Gram-Project")
+			Header("hook_hostname:X-Gram-Hook-Hostname")
+			Response(StatusAccepted)
 		})
 	})
 

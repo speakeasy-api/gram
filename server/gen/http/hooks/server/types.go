@@ -60,6 +60,17 @@ type ClaudeRequestBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 }
 
+// ClaudeMessagesRequestBody is the type of the "hooks" service
+// "claudeMessages" endpoint HTTP request body.
+type ClaudeMessagesRequestBody struct {
+	// The Claude Code session ID
+	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// Email of the authenticated user from the Speakeasy device agent, if available
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Captured transcript messages in order
+	Messages []*ClaudeCapturedMessageRequestBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
+}
+
 // CursorRequestBody is the type of the "hooks" service "cursor" endpoint HTTP
 // request body.
 type CursorRequestBody struct {
@@ -382,6 +393,188 @@ type ClaudeUnexpectedResponseBody struct {
 // ClaudeGatewayErrorResponseBody is the type of the "hooks" service "claude"
 // endpoint HTTP response body for the "gateway_error" error.
 type ClaudeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClaudeMessagesUnauthorizedResponseBody is the type of the "hooks" service
+// "claudeMessages" endpoint HTTP response body for the "unauthorized" error.
+type ClaudeMessagesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClaudeMessagesForbiddenResponseBody is the type of the "hooks" service
+// "claudeMessages" endpoint HTTP response body for the "forbidden" error.
+type ClaudeMessagesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClaudeMessagesBadRequestResponseBody is the type of the "hooks" service
+// "claudeMessages" endpoint HTTP response body for the "bad_request" error.
+type ClaudeMessagesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClaudeMessagesNotFoundResponseBody is the type of the "hooks" service
+// "claudeMessages" endpoint HTTP response body for the "not_found" error.
+type ClaudeMessagesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClaudeMessagesConflictResponseBody is the type of the "hooks" service
+// "claudeMessages" endpoint HTTP response body for the "conflict" error.
+type ClaudeMessagesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClaudeMessagesUnsupportedMediaResponseBody is the type of the "hooks"
+// service "claudeMessages" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ClaudeMessagesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClaudeMessagesInvalidResponseBody is the type of the "hooks" service
+// "claudeMessages" endpoint HTTP response body for the "invalid" error.
+type ClaudeMessagesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClaudeMessagesInvariantViolationResponseBody is the type of the "hooks"
+// service "claudeMessages" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ClaudeMessagesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClaudeMessagesUnexpectedResponseBody is the type of the "hooks" service
+// "claudeMessages" endpoint HTTP response body for the "unexpected" error.
+type ClaudeMessagesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClaudeMessagesGatewayErrorResponseBody is the type of the "hooks" service
+// "claudeMessages" endpoint HTTP response body for the "gateway_error" error.
+type ClaudeMessagesGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1117,6 +1310,37 @@ type MetricsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ClaudeCapturedMessageRequestBody is used to define fields on request body
+// types.
+type ClaudeCapturedMessageRequestBody struct {
+	// Transcript line UUID; stored as external_message_id and used as the per-chat
+	// dedup key.
+	ExternalID *string `form:"external_id,omitempty" json:"external_id,omitempty" xml:"external_id,omitempty"`
+	// Message role
+	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
+	// Message text content
+	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	// Model identifier (assistant messages)
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Tool call requests as a JSON array (assistant tool-call messages)
+	ToolCalls any `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+	// ID of the tool call this result answers (tool messages)
+	ToolCallID *string `form:"tool_call_id,omitempty" json:"tool_call_id,omitempty" xml:"tool_call_id,omitempty"`
+	// Prompt/input token count
+	PromptTokens *int64 `form:"prompt_tokens,omitempty" json:"prompt_tokens,omitempty" xml:"prompt_tokens,omitempty"`
+	// Completion/output token count
+	CompletionTokens *int64 `form:"completion_tokens,omitempty" json:"completion_tokens,omitempty" xml:"completion_tokens,omitempty"`
+	// Total token count
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// RFC3339 transcript timestamp; stored as created_at
+	Timestamp *string `form:"timestamp,omitempty" json:"timestamp,omitempty" xml:"timestamp,omitempty"`
+	// Subagent id when the message originated from a subagent transcript
+	// (SubagentStop)
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Subagent type when applicable
+	AgentType *string `form:"agent_type,omitempty" json:"agent_type,omitempty" xml:"agent_type,omitempty"`
+}
+
 // OTELResourceLogRequestBody is used to define fields on request body types.
 type OTELResourceLogRequestBody struct {
 	// Resource information
@@ -1437,6 +1661,146 @@ func NewClaudeUnexpectedResponseBody(res *goa.ServiceError) *ClaudeUnexpectedRes
 // result of the "claude" endpoint of the "hooks" service.
 func NewClaudeGatewayErrorResponseBody(res *goa.ServiceError) *ClaudeGatewayErrorResponseBody {
 	body := &ClaudeGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClaudeMessagesUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "claudeMessages" endpoint of the "hooks" service.
+func NewClaudeMessagesUnauthorizedResponseBody(res *goa.ServiceError) *ClaudeMessagesUnauthorizedResponseBody {
+	body := &ClaudeMessagesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClaudeMessagesForbiddenResponseBody builds the HTTP response body from
+// the result of the "claudeMessages" endpoint of the "hooks" service.
+func NewClaudeMessagesForbiddenResponseBody(res *goa.ServiceError) *ClaudeMessagesForbiddenResponseBody {
+	body := &ClaudeMessagesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClaudeMessagesBadRequestResponseBody builds the HTTP response body from
+// the result of the "claudeMessages" endpoint of the "hooks" service.
+func NewClaudeMessagesBadRequestResponseBody(res *goa.ServiceError) *ClaudeMessagesBadRequestResponseBody {
+	body := &ClaudeMessagesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClaudeMessagesNotFoundResponseBody builds the HTTP response body from the
+// result of the "claudeMessages" endpoint of the "hooks" service.
+func NewClaudeMessagesNotFoundResponseBody(res *goa.ServiceError) *ClaudeMessagesNotFoundResponseBody {
+	body := &ClaudeMessagesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClaudeMessagesConflictResponseBody builds the HTTP response body from the
+// result of the "claudeMessages" endpoint of the "hooks" service.
+func NewClaudeMessagesConflictResponseBody(res *goa.ServiceError) *ClaudeMessagesConflictResponseBody {
+	body := &ClaudeMessagesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClaudeMessagesUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "claudeMessages" endpoint of the "hooks" service.
+func NewClaudeMessagesUnsupportedMediaResponseBody(res *goa.ServiceError) *ClaudeMessagesUnsupportedMediaResponseBody {
+	body := &ClaudeMessagesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClaudeMessagesInvalidResponseBody builds the HTTP response body from the
+// result of the "claudeMessages" endpoint of the "hooks" service.
+func NewClaudeMessagesInvalidResponseBody(res *goa.ServiceError) *ClaudeMessagesInvalidResponseBody {
+	body := &ClaudeMessagesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClaudeMessagesInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "claudeMessages" endpoint of the "hooks" service.
+func NewClaudeMessagesInvariantViolationResponseBody(res *goa.ServiceError) *ClaudeMessagesInvariantViolationResponseBody {
+	body := &ClaudeMessagesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClaudeMessagesUnexpectedResponseBody builds the HTTP response body from
+// the result of the "claudeMessages" endpoint of the "hooks" service.
+func NewClaudeMessagesUnexpectedResponseBody(res *goa.ServiceError) *ClaudeMessagesUnexpectedResponseBody {
+	body := &ClaudeMessagesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClaudeMessagesGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "claudeMessages" endpoint of the "hooks" service.
+func NewClaudeMessagesGatewayErrorResponseBody(res *goa.ServiceError) *ClaudeMessagesGatewayErrorResponseBody {
+	body := &ClaudeMessagesGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2008,7 +2372,7 @@ func NewMetricsGatewayErrorResponseBody(res *goa.ServiceError) *MetricsGatewayEr
 }
 
 // NewClaudePayload builds a hooks service claude endpoint payload.
-func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string, idempotencyKey *string) *hooks.ClaudePayload {
+func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string, idempotencyKey *string, hookVersion *int) *hooks.ClaudePayload {
 	v := &hooks.ClaudePayload{
 		HookEventName:        *body.HookEventName,
 		ToolName:             body.ToolName,
@@ -2043,6 +2407,29 @@ func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugI
 	v.ProjectSlugInput = projectSlugInput
 	v.HookHostname = hookHostname
 	v.IdempotencyKey = idempotencyKey
+	v.HookVersion = hookVersion
+
+	return v
+}
+
+// NewClaudeMessagesPayload builds a hooks service claudeMessages endpoint
+// payload.
+func NewClaudeMessagesPayload(body *ClaudeMessagesRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string) *hooks.ClaudeMessagesPayload {
+	v := &hooks.ClaudeMessagesPayload{
+		SessionID: *body.SessionID,
+		UserEmail: body.UserEmail,
+	}
+	v.Messages = make([]*hooks.ClaudeCapturedMessage, len(body.Messages))
+	for i, val := range body.Messages {
+		if val == nil {
+			v.Messages[i] = nil
+			continue
+		}
+		v.Messages[i] = unmarshalClaudeCapturedMessageRequestBodyToHooksClaudeCapturedMessage(val)
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.HookHostname = hookHostname
 
 	return v
 }
@@ -2178,6 +2565,25 @@ func ValidateClaudeRequestBody(body *ClaudeRequestBody) (err error) {
 	return
 }
 
+// ValidateClaudeMessagesRequestBody runs the validations defined on
+// ClaudeMessagesRequestBody
+func ValidateClaudeMessagesRequestBody(body *ClaudeMessagesRequestBody) (err error) {
+	if body.SessionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_id", "body"))
+	}
+	if body.Messages == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("messages", "body"))
+	}
+	for _, e := range body.Messages {
+		if e != nil {
+			if err2 := ValidateClaudeCapturedMessageRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateCursorRequestBody runs the validations defined on CursorRequestBody
 func ValidateCursorRequestBody(body *CursorRequestBody) (err error) {
 	if body.HookEventName == nil {
@@ -2218,6 +2624,23 @@ func ValidateMetricsRequestBody(body *MetricsRequestBody) (err error) {
 			if err2 := ValidateOTELResourceMetricsRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	return
+}
+
+// ValidateClaudeCapturedMessageRequestBody runs the validations defined on
+// ClaudeCapturedMessageRequestBody
+func ValidateClaudeCapturedMessageRequestBody(body *ClaudeCapturedMessageRequestBody) (err error) {
+	if body.ExternalID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("external_id", "body"))
+	}
+	if body.Role == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role", "body"))
+	}
+	if body.Role != nil {
+		if !(*body.Role == "user" || *body.Role == "assistant" || *body.Role == "tool") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.role", *body.Role, []any{"user", "assistant", "tool"}))
 		}
 	}
 	return

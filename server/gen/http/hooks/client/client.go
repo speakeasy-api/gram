@@ -20,6 +20,10 @@ type Client struct {
 	// Claude Doer is the HTTP client used to make requests to the claude endpoint.
 	ClaudeDoer goahttp.Doer
 
+	// ClaudeMessages Doer is the HTTP client used to make requests to the
+	// claudeMessages endpoint.
+	ClaudeMessagesDoer goahttp.Doer
+
 	// Cursor Doer is the HTTP client used to make requests to the cursor endpoint.
 	CursorDoer goahttp.Doer
 
@@ -54,6 +58,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		ClaudeDoer:          doer,
+		ClaudeMessagesDoer:  doer,
 		CursorDoer:          doer,
 		CodexDoer:           doer,
 		LogsDoer:            doer,
@@ -85,6 +90,30 @@ func (c *Client) Claude() goa.Endpoint {
 		resp, err := c.ClaudeDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("hooks", "claude", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ClaudeMessages returns an endpoint that makes HTTP requests to the hooks
+// service claudeMessages server.
+func (c *Client) ClaudeMessages() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeClaudeMessagesRequest(c.encoder)
+		decodeResponse = DecodeClaudeMessagesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildClaudeMessagesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ClaudeMessagesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("hooks", "claudeMessages", err)
 		}
 		return decodeResponse(resp)
 	}

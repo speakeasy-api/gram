@@ -306,6 +306,7 @@ const (
 	HookErrorKey                = attribute.Key("gram.hook.error")
 	HookIsInterruptKey          = attribute.Key("gram.hook.is_interrupt")
 	HookSourceKey               = attribute.Key("gram.hook.source")
+	HookMessagesCapturedKey     = attribute.Key("gram.hook.messages_captured")
 	HookServerNameOverrideIDKey = attribute.Key("gram.hook.server_name_override_id")
 	HookHasPluginAuthKey        = attribute.Key("gram.hook.has_plugin_auth")
 	HookHostnameKey             = attribute.Key("gram.hook.hostname")
@@ -535,6 +536,11 @@ func SlogHookEvent(v string) slog.Attr      { return slog.String(string(HookEven
 
 func HookSource(v string) attribute.KeyValue { return HookSourceKey.String(v) }
 func SlogHookSource(v string) slog.Attr      { return slog.String(string(HookSourceKey), v) }
+
+func HookMessagesCaptured(v int) attribute.KeyValue { return HookMessagesCapturedKey.Int(v) }
+func SlogHookMessagesCaptured(v int) slog.Attr {
+	return slog.Int(string(HookMessagesCapturedKey), v)
+}
 
 func HookBlockReason(v string) attribute.KeyValue { return HookBlockReasonKey.String(v) }
 func SlogHookBlockReason(v string) slog.Attr      { return slog.String(string(HookBlockReasonKey), v) }

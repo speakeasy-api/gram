@@ -30,6 +30,12 @@ hook_hostname_header=()
 if [ -n "$hook_hostname" ]; then
   hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
 fi
+
+# Stop-collection protocol version. The server treats this version as
+# "captures via Stop/SubagentStop": its per-event handlers become blocking-only
+# and persist nothing, since this plugin sends the full transcript batch on Stop.
+# Must match claudeHookStopCollectionVersion on the server.
+hook_version_header=(-H "X-Gram-Hook-Version: 2")
 auth_config=""
 auth_config_arg=()
 cleanup_auth_config() {
@@ -55,10 +61,36 @@ if [ -n "${GRAM_HOOKS_API_KEY:-}" ] || [ -n "${GRAM_HOOKS_PROJECT_SLUG:-}" ]; th
   auth_config_arg=(--config "$auth_config")
 fi
 
+# Stop and SubagentStop carry the completed transcript. Conversation capture is
+# idempotent server-side (deduped by transcript uuid), so these route to the
+# batch capture endpoint built from the transcript file rather than the
+# per-event path. They never block, so a capture failure is best-effort.
+hook_event=""
+if command -v python3 >/dev/null 2>&1; then
+  hook_event=$(printf '%s' "$payload" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("hook_event_name", ""))' 2>/dev/null || true)
+fi
+if [ -z "$hook_event" ]; then
+  hook_event=$(printf '%s' "$payload" | sed -n 's/.*"hook_event_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+fi
+
+if [ "$hook_event" = "Stop" ] || [ "$hook_event" = "SubagentStop" ]; then
+  if command -v python3 >/dev/null 2>&1; then
+    capture_body=$(printf '%s' "$payload" | python3 "$script_dir/extract_messages.py" 2>/dev/null || true)
+    if [ -n "$capture_body" ]; then
+      gram_http_post "${server_url}/rpc/hooks.claudeMessages" "$capture_body" 10 \
+        ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
+        ${hook_version_header[@]+"${hook_version_header[@]}"} \
+        ${auth_config_arg[@]+"${auth_config_arg[@]}"}
+    fi
+  fi
+  exit 0
+fi
+
 # Retries transient resets (see http.sh) so a single reset no longer blocks
 # the tool call; the server still decides allow/block from the HTTP code.
 gram_http_post "${server_url}/rpc/hooks.claude" "$payload" 10 \
   ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
+  ${hook_version_header[@]+"${hook_version_header[@]}"} \
   ${auth_config_arg[@]+"${auth_config_arg[@]}"}
 
 http_code="$GRAM_HTTP_CODE"

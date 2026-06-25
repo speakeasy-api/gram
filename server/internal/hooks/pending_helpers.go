@@ -112,8 +112,13 @@ func (s *Service) resolveUserByEmail(ctx context.Context, email, orgID string) s
 	return ""
 }
 
-// persistToolCallEvent writes a hook event to ClickHouse with full session context
-func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) error {
+// persistToolCallEvent writes a hook event to ClickHouse and (unless
+// skipPGPersist) to Postgres chat_messages. ClickHouse always runs — it carries
+// per-event context (duration, live MCP snapshot) that the Stop batch lacks — but
+// is deduped across duplicate plugin installations on the tool_use_id. Postgres
+// is skipped for Stop-collection plugins, which capture chat_messages via
+// ClaudeMessages on Stop instead.
+func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, skipPGPersist bool) error {
 	attrs := s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata)
 	toolName, ok := attrs[attr.ToolNameKey].(string) //  Make sure this comes from here so that we get the parsed tool name
 	if !ok {
@@ -137,16 +142,27 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeP
 	}
 
 	if s.telemetryLogger != nil {
-		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp:  time.Now(),
-			ToolInfo:   toolInfo,
-			UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
-			Attributes: attrs,
-		})
+		// The claim key is per (session, tool call, event) so PreToolUse and
+		// PostToolUse stay distinct while duplicate installs collapse. Fall open to
+		// logging if tool_use_id is somehow absent rather than drop telemetry.
+		toolUseID := conv.PtrValOr(payload.ToolUseID, "")
+		write := toolUseID == "" || s.claimHookIdempotency(ctx, "claude-tool-telemetry:"+conv.PtrValOr(payload.SessionID, "")+":"+toolUseID+":"+payload.HookEventName)
+		if write {
+			s.telemetryLogger.Log(ctx, telemetry.LogParams{
+				Timestamp:  time.Now(),
+				ToolInfo:   toolInfo,
+				UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
+				Attributes: attrs,
+			})
 
-		s.logger.DebugContext(ctx, "Wrote hook to ClickHouse with metadata",
-			attr.SlogEvent("hook_written"),
-		)
+			s.logger.DebugContext(ctx, "Wrote hook to ClickHouse with metadata",
+				attr.SlogEvent("hook_written"),
+			)
+		}
+	}
+
+	if skipPGPersist {
+		return nil
 	}
 
 	if payload.HookEventName == "PreToolUse" {

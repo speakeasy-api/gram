@@ -295,7 +295,7 @@ func TestPersistToolCallEvent_PreservesEmailWhenUserIDUnresolved(t *testing.T) {
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
 		SessionID:     &sessionID,
-	}, metadata)
+	}, metadata, false)
 	require.NoError(t, err)
 	require.Empty(t, metadata.UserID, "test email should not resolve to a connected user")
 

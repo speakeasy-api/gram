@@ -12,6 +12,11 @@ func ClaudeHooksPath() string {
 	return "/rpc/hooks.claude"
 }
 
+// ClaudeMessagesHooksPath returns the URL path to the hooks service claudeMessages HTTP endpoint.
+func ClaudeMessagesHooksPath() string {
+	return "/rpc/hooks.claudeMessages"
+}
+
 // CursorHooksPath returns the URL path to the hooks service cursor HTTP endpoint.
 func CursorHooksPath() string {
 	return "/rpc/hooks.cursor"

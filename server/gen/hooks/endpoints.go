@@ -16,11 +16,12 @@ import (
 
 // Endpoints wraps the "hooks" service endpoints.
 type Endpoints struct {
-	Claude  goa.Endpoint
-	Cursor  goa.Endpoint
-	Codex   goa.Endpoint
-	Logs    goa.Endpoint
-	Metrics goa.Endpoint
+	Claude         goa.Endpoint
+	ClaudeMessages goa.Endpoint
+	Cursor         goa.Endpoint
+	Codex          goa.Endpoint
+	Logs           goa.Endpoint
+	Metrics        goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "hooks" service with endpoints.
@@ -28,17 +29,19 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Claude:  NewClaudeEndpoint(s),
-		Cursor:  NewCursorEndpoint(s, a.APIKeyAuth),
-		Codex:   NewCodexEndpoint(s, a.APIKeyAuth),
-		Logs:    NewLogsEndpoint(s, a.APIKeyAuth),
-		Metrics: NewMetricsEndpoint(s, a.APIKeyAuth),
+		Claude:         NewClaudeEndpoint(s),
+		ClaudeMessages: NewClaudeMessagesEndpoint(s),
+		Cursor:         NewCursorEndpoint(s, a.APIKeyAuth),
+		Codex:          NewCodexEndpoint(s, a.APIKeyAuth),
+		Logs:           NewLogsEndpoint(s, a.APIKeyAuth),
+		Metrics:        NewMetricsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "hooks" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Claude = m(e.Claude)
+	e.ClaudeMessages = m(e.ClaudeMessages)
 	e.Cursor = m(e.Cursor)
 	e.Codex = m(e.Codex)
 	e.Logs = m(e.Logs)
@@ -51,6 +54,15 @@ func NewClaudeEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*ClaudePayload)
 		return s.Claude(ctx, p)
+	}
+}
+
+// NewClaudeMessagesEndpoint returns an endpoint function that calls the method
+// "claudeMessages" of service "hooks".
+func NewClaudeMessagesEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ClaudeMessagesPayload)
+		return nil, s.ClaudeMessages(ctx, p)
 	}
 }
 

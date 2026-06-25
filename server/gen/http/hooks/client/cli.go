@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
 	goa "goa.design/goa/v3/pkg"
@@ -17,7 +18,7 @@ import (
 
 // BuildClaudePayload builds the payload for the hooks claude endpoint from CLI
 // flags.
-func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, hooksClaudeProjectSlugInput string, hooksClaudeHookHostname string, hooksClaudeIdempotencyKey string) (*hooks.ClaudePayload, error) {
+func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, hooksClaudeProjectSlugInput string, hooksClaudeHookHostname string, hooksClaudeIdempotencyKey string, hooksClaudeHookVersion string) (*hooks.ClaudePayload, error) {
 	var err error
 	var body ClaudeRequestBody
 	{
@@ -56,6 +57,18 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 			idempotencyKey = &hooksClaudeIdempotencyKey
 		}
 	}
+	var hookVersion *int
+	{
+		if hooksClaudeHookVersion != "" {
+			var v int64
+			v, err = strconv.ParseInt(hooksClaudeHookVersion, 10, strconv.IntSize)
+			val := int(v)
+			hookVersion = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for hookVersion, must be INT")
+			}
+		}
+	}
 	v := &hooks.ClaudePayload{
 		HookEventName:        body.HookEventName,
 		ToolName:             body.ToolName,
@@ -90,6 +103,72 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 	v.ProjectSlugInput = projectSlugInput
 	v.HookHostname = hookHostname
 	v.IdempotencyKey = idempotencyKey
+	v.HookVersion = hookVersion
+
+	return v, nil
+}
+
+// BuildClaudeMessagesPayload builds the payload for the hooks claudeMessages
+// endpoint from CLI flags.
+func BuildClaudeMessagesPayload(hooksClaudeMessagesBody string, hooksClaudeMessagesApikeyToken string, hooksClaudeMessagesProjectSlugInput string, hooksClaudeMessagesHookHostname string) (*hooks.ClaudeMessagesPayload, error) {
+	var err error
+	var body ClaudeMessagesRequestBody
+	{
+		err = json.Unmarshal([]byte(hooksClaudeMessagesBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"messages\": [\n         {\n            \"agent_id\": \"abc123\",\n            \"agent_type\": \"abc123\",\n            \"completion_tokens\": 1,\n            \"content\": \"abc123\",\n            \"external_id\": \"abc123\",\n            \"model\": \"abc123\",\n            \"prompt_tokens\": 1,\n            \"role\": \"assistant\",\n            \"timestamp\": \"abc123\",\n            \"tool_call_id\": \"abc123\",\n            \"tool_calls\": \"abc123\",\n            \"total_tokens\": 1\n         }\n      ],\n      \"session_id\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }'")
+		}
+		if body.Messages == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("messages", "body"))
+		}
+		for _, e := range body.Messages {
+			if e != nil {
+				if err2 := ValidateClaudeCapturedMessageRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if hooksClaudeMessagesApikeyToken != "" {
+			apikeyToken = &hooksClaudeMessagesApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if hooksClaudeMessagesProjectSlugInput != "" {
+			projectSlugInput = &hooksClaudeMessagesProjectSlugInput
+		}
+	}
+	var hookHostname *string
+	{
+		if hooksClaudeMessagesHookHostname != "" {
+			hookHostname = &hooksClaudeMessagesHookHostname
+		}
+	}
+	v := &hooks.ClaudeMessagesPayload{
+		SessionID: body.SessionID,
+		UserEmail: body.UserEmail,
+	}
+	if body.Messages != nil {
+		v.Messages = make([]*hooks.ClaudeCapturedMessage, len(body.Messages))
+		for i, val := range body.Messages {
+			if val == nil {
+				v.Messages[i] = nil
+				continue
+			}
+			v.Messages[i] = marshalClaudeCapturedMessageRequestBodyToHooksClaudeCapturedMessage(val)
+		}
+	} else {
+		v.Messages = []*hooks.ClaudeCapturedMessage{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.HookHostname = hookHostname
 
 	return v, nil
 }

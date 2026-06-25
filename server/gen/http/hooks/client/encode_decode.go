@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
 	goahttp "goa.design/goa/v3/http"
@@ -56,6 +57,11 @@ func EncodeClaudeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		if p.IdempotencyKey != nil {
 			head := *p.IdempotencyKey
 			req.Header.Set("Idempotency-Key", head)
+		}
+		if p.HookVersion != nil {
+			head := *p.HookVersion
+			headStr := strconv.Itoa(head)
+			req.Header.Set("X-Gram-Hook-Version", headStr)
 		}
 		body := NewClaudeRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -256,6 +262,235 @@ func DecodeClaudeResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("hooks", "claude", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildClaudeMessagesRequest instantiates a HTTP request object with method
+// and path set to call the "hooks" service "claudeMessages" endpoint
+func (c *Client) BuildClaudeMessagesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ClaudeMessagesHooksPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("hooks", "claudeMessages", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeClaudeMessagesRequest returns an encoder for requests sent to the
+// hooks claudeMessages server.
+func EncodeClaudeMessagesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*hooks.ClaudeMessagesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("hooks", "claudeMessages", "*hooks.ClaudeMessagesPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		if p.HookHostname != nil {
+			head := *p.HookHostname
+			req.Header.Set("X-Gram-Hook-Hostname", head)
+		}
+		body := NewClaudeMessagesRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("hooks", "claudeMessages", err)
+		}
+		return nil
+	}
+}
+
+// DecodeClaudeMessagesResponse returns a decoder for responses returned by the
+// hooks claudeMessages endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeClaudeMessagesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeClaudeMessagesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusAccepted:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body ClaudeMessagesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "claudeMessages", err)
+			}
+			err = ValidateClaudeMessagesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "claudeMessages", err)
+			}
+			return nil, NewClaudeMessagesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ClaudeMessagesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "claudeMessages", err)
+			}
+			err = ValidateClaudeMessagesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "claudeMessages", err)
+			}
+			return nil, NewClaudeMessagesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ClaudeMessagesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "claudeMessages", err)
+			}
+			err = ValidateClaudeMessagesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "claudeMessages", err)
+			}
+			return nil, NewClaudeMessagesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ClaudeMessagesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "claudeMessages", err)
+			}
+			err = ValidateClaudeMessagesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "claudeMessages", err)
+			}
+			return nil, NewClaudeMessagesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ClaudeMessagesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "claudeMessages", err)
+			}
+			err = ValidateClaudeMessagesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "claudeMessages", err)
+			}
+			return nil, NewClaudeMessagesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ClaudeMessagesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "claudeMessages", err)
+			}
+			err = ValidateClaudeMessagesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "claudeMessages", err)
+			}
+			return nil, NewClaudeMessagesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ClaudeMessagesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "claudeMessages", err)
+			}
+			err = ValidateClaudeMessagesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "claudeMessages", err)
+			}
+			return nil, NewClaudeMessagesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ClaudeMessagesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "claudeMessages", err)
+				}
+				err = ValidateClaudeMessagesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "claudeMessages", err)
+				}
+				return nil, NewClaudeMessagesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ClaudeMessagesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "claudeMessages", err)
+				}
+				err = ValidateClaudeMessagesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "claudeMessages", err)
+				}
+				return nil, NewClaudeMessagesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("hooks", "claudeMessages", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ClaudeMessagesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "claudeMessages", err)
+			}
+			err = ValidateClaudeMessagesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "claudeMessages", err)
+			}
+			return nil, NewClaudeMessagesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("hooks", "claudeMessages", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1192,6 +1427,50 @@ func DecodeMetricsResponse(decoder func(*http.Response) goahttp.Decoder, restore
 			return nil, goahttp.ErrInvalidResponse("hooks", "metrics", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// marshalHooksClaudeCapturedMessageToClaudeCapturedMessageRequestBody builds a
+// value of type *ClaudeCapturedMessageRequestBody from a value of type
+// *hooks.ClaudeCapturedMessage.
+func marshalHooksClaudeCapturedMessageToClaudeCapturedMessageRequestBody(v *hooks.ClaudeCapturedMessage) *ClaudeCapturedMessageRequestBody {
+	res := &ClaudeCapturedMessageRequestBody{
+		ExternalID:       v.ExternalID,
+		Role:             v.Role,
+		Content:          v.Content,
+		Model:            v.Model,
+		ToolCalls:        v.ToolCalls,
+		ToolCallID:       v.ToolCallID,
+		PromptTokens:     v.PromptTokens,
+		CompletionTokens: v.CompletionTokens,
+		TotalTokens:      v.TotalTokens,
+		Timestamp:        v.Timestamp,
+		AgentID:          v.AgentID,
+		AgentType:        v.AgentType,
+	}
+
+	return res
+}
+
+// marshalClaudeCapturedMessageRequestBodyToHooksClaudeCapturedMessage builds a
+// value of type *hooks.ClaudeCapturedMessage from a value of type
+// *ClaudeCapturedMessageRequestBody.
+func marshalClaudeCapturedMessageRequestBodyToHooksClaudeCapturedMessage(v *ClaudeCapturedMessageRequestBody) *hooks.ClaudeCapturedMessage {
+	res := &hooks.ClaudeCapturedMessage{
+		ExternalID:       v.ExternalID,
+		Role:             v.Role,
+		Content:          v.Content,
+		Model:            v.Model,
+		ToolCalls:        v.ToolCalls,
+		ToolCallID:       v.ToolCallID,
+		PromptTokens:     v.PromptTokens,
+		CompletionTokens: v.CompletionTokens,
+		TotalTokens:      v.TotalTokens,
+		Timestamp:        v.Timestamp,
+		AgentID:          v.AgentID,
+		AgentType:        v.AgentType,
+	}
+
+	return res
 }
 
 // marshalHooksOTELResourceLogToOTELResourceLogRequestBody builds a value of

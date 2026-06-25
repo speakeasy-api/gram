@@ -39,6 +39,13 @@ import (
 // payload.
 const decodeBodySampleLimit = 1024
 
+// claudeHookStopCollectionVersion is the plugin hook protocol version at which
+// the plugin captures the full transcript via ClaudeMessages on Stop/SubagentStop.
+// At or above it, the per-event handlers are blocking-only and persist nothing —
+// see recordHook. Plugins sending no X-Gram-Hook-Version (older builds) persist
+// on the per-event handlers as before.
+const claudeHookStopCollectionVersion = 2
+
 const claudeShadowMCPMetadataUnavailableReason = "Speakeasy could not verify this MCP tool call. Try restarting Claude, or running /reload-plugins."
 
 // Diagnostic codes appended to claudeShadowMCPMetadataUnavailableReason. The
@@ -784,14 +791,28 @@ func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, m
 
 	metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 
+	// Stop-collection plugins persist chat_messages via ClaudeMessages on Stop, so
+	// persisting them on the per-event handlers too would double-write. ClickHouse
+	// tool telemetry stays per-event regardless of version (it needs per-event
+	// context like duration and the live MCP snapshot) and is deduped across
+	// installs inside persistToolCallEvent. Versionless plugins persist everything
+	// per-event, so a server deploy is safe for hooks already in the field.
+	stopCollection := payload.HookVersion != nil && *payload.HookVersion >= claudeHookStopCollectionVersion
+
 	if isConversationEvent(payload.HookEventName) {
+		// Conversation events never wrote ClickHouse, only chat_messages — nothing
+		// to do here once that moves to the Stop batch.
+		if stopCollection {
+			return
+		}
 		if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to persist conversation event", attr.SlogError(err))
 		}
-	} else {
-		if err := s.persistToolCallEvent(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist tool call event", attr.SlogError(err))
-		}
+		return
+	}
+
+	if err := s.persistToolCallEvent(ctx, payload, metadata, stopCollection); err != nil {
+		s.logger.ErrorContext(ctx, "Failed to persist tool call event", attr.SlogError(err))
 	}
 }
 
