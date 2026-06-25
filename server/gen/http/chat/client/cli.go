@@ -19,7 +19,7 @@ import (
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
 // from CLI flags.
-func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsAssistantID string, chatListChatsHasRisk string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
+func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsAssistantID string, chatListChatsHasRisk string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
 	var err error
 	var search *string
 	{
@@ -49,6 +49,18 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 			hasRisk = &chatListChatsHasRisk
 			if !(*hasRisk == "" || *hasRisk == "true" || *hasRisk == "false") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("has_risk", *hasRisk, []any{"", "true", "false"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var pinned *string
+	{
+		if chatListChatsPinned != "" {
+			pinned = &chatListChatsPinned
+			if !(*pinned == "" || *pinned == "true" || *pinned == "false") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("pinned", *pinned, []any{"", "true", "false"}))
 			}
 			if err != nil {
 				return nil, err
@@ -177,6 +189,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	v.ExternalUserID = externalUserID
 	v.AssistantID = assistantID
 	v.HasRisk = hasRisk
+	v.Pinned = pinned
 	v.MinRiskScore = minRiskScore
 	v.From = from
 	v.To = to
@@ -420,6 +433,39 @@ func BuildDeleteChatPayload(chatDeleteChatID string, chatDeleteChatSessionToken 
 	}
 	v := &chat.DeleteChatPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetPinnedPayload builds the payload for the chat setPinned endpoint
+// from CLI flags.
+func BuildSetPinnedPayload(chatSetPinnedBody string, chatSetPinnedSessionToken string, chatSetPinnedProjectSlugInput string) (*chat.SetPinnedPayload, error) {
+	var err error
+	var body SetPinnedRequestBody
+	{
+		err = json.Unmarshal([]byte(chatSetPinnedBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"abc123\",\n      \"pinned\": false\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if chatSetPinnedSessionToken != "" {
+			sessionToken = &chatSetPinnedSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatSetPinnedProjectSlugInput != "" {
+			projectSlugInput = &chatSetPinnedProjectSlugInput
+		}
+	}
+	v := &chat.SetPinnedPayload{
+		ID:     body.ID,
+		Pinned: body.Pinned,
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

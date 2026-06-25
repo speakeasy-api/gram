@@ -6848,6 +6848,17 @@ paths:
                         - "false"
                     type: string
                 - allowEmptyValue: true
+                  description: 'Filter by pinned state: ''true'' for pinned chats, ''false'' for unpinned, or empty for no filter.'
+                  in: query
+                  name: pinned
+                  schema:
+                    description: 'Filter by pinned state: ''true'' for pinned chats, ''false'' for unpinned, or empty for no filter.'
+                    enum:
+                        - ""
+                        - "true"
+                        - "false"
+                    type: string
+                - allowEmptyValue: true
                   description: Filter to chats with at least this many active risk findings (inclusive). Omit or pass 0 for no threshold.
                   in: query
                   name: min_risk_score
@@ -7176,6 +7187,95 @@ paths:
             x-speakeasy-name-override: load
             x-speakeasy-react-hook:
                 name: LoadChat
+    /rpc/chat.setPinned:
+        post:
+            description: Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.
+            operationId: setChatPinned
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetPinnedRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: setPinned chat
+            tags:
+                - chat
+            x-speakeasy-name-override: setPinned
     /rpc/chat.submitFeedback:
         post:
             description: Submit user feedback for a chat (success/failure)
@@ -46027,6 +46127,18 @@ components:
             required:
                 - organization_id
                 - whitelisted
+        SetPinnedRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the chat to pin or unpin
+                pinned:
+                    type: boolean
+                    description: True to pin the chat, false to unpin it
+            required:
+                - id
+                - pinned
         SetPluginAssignmentsForm:
             type: object
             properties:

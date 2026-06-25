@@ -16,12 +16,22 @@ import {
   Loader2,
   MessageCircle,
   Minus,
+  Pin,
   Plus,
   SquarePen,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { ChatOverview } from "@gram/client/models/components";
-import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
-import { useListChats } from "@gram/client/react-query";
+import {
+  Pinned,
+  SortBy,
+  SortOrder,
+} from "@gram/client/models/operations/listchats";
+import {
+  invalidateAllListChats,
+  useChatSetPinnedMutation,
+  useListChats,
+} from "@gram/client/react-query";
 import { useSession } from "@/contexts/Auth";
 import {
   useHideInsightsDock,
@@ -297,6 +307,7 @@ export function ChatLanding({
         </form>
       </div>
 
+      <ChatHomePinned />
       <ChatHomeRecents />
       <ChatHomeSuggestions onPick={startChat} />
     </div>
@@ -464,7 +475,13 @@ function buildRecentEntries(
   return entries;
 }
 
-function ChatHomeRecents(): ReactElement {
+// Resolve the project's Project Assistant and list its conversations, filtered
+// by pinned state. Shared by the pinned and recents sections so the
+// assistant-resolution logic lives in one place.
+function useProjectAssistantChats(pinned: Pinned): {
+  chats: ChatOverview[];
+  loading: boolean;
+} {
   const { projectSlug } = useSlugs();
   // Reuse the dock's managed-assistant resolution to scope the list to this
   // project's Project Assistant conversations.
@@ -475,6 +492,7 @@ function ChatHomeRecents(): ReactElement {
   const { data } = useListChats(
     {
       assistantId: assistantId || undefined,
+      pinned,
       sortBy: SortBy.LastMessageTimestamp,
       sortOrder: SortOrder.Desc,
       limit: 50,
@@ -482,7 +500,30 @@ function ChatHomeRecents(): ReactElement {
     undefined,
     { enabled: Boolean(ready && assistantId), throwOnError: false },
   );
-  const chats = data?.chats ?? [];
+  return { chats: data?.chats ?? [], loading: !data };
+}
+
+// Pinned conversations, shown above recents. Hidden entirely when none exist.
+function ChatHomePinned(): ReactElement | null {
+  const { chats, loading } = useProjectAssistantChats(Pinned.True);
+  if (loading || chats.length === 0) {
+    return null;
+  }
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="text-muted-foreground px-3 text-sm font-medium">Pinned</h2>
+      <div className="flex flex-col">
+        {chats.map((chat) => (
+          <RecentRow key={chat.id} chat={chat} pinned />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ChatHomeRecents(): ReactElement {
+  // Exclude pinned chats — they live in the Pinned section above.
+  const { chats, loading } = useProjectAssistantChats(Pinned.False);
   const [showAll, setShowAll] = useState(false);
 
   return (
@@ -506,7 +547,7 @@ function ChatHomeRecents(): ReactElement {
           </button>
         )}
       </div>
-      <RecentsBody chats={chats} loading={!data} showAll={showAll} />
+      <RecentsBody chats={chats} loading={loading} showAll={showAll} />
     </section>
   );
 }
@@ -563,26 +604,79 @@ function RecentEntryView({ entry }: { entry: RecentEntry }): ReactElement {
       </h3>
     );
   }
-  return <RecentRow chat={entry.chat} />;
+  return <RecentRow chat={entry.chat} pinned={false} />;
 }
 
-function RecentRow({ chat }: { chat: ChatOverview }): ReactElement {
+function RecentRow({
+  chat,
+  pinned,
+}: {
+  chat: ChatOverview;
+  pinned: boolean;
+}): ReactElement {
   const routes = useRoutes();
+  // `group/row` lets the pin affordance reveal on row hover. The row is a
+  // container (not a Link) so the pin button isn't nested inside an anchor; the
+  // Link covers the icon + title, and the pin button is a sibling action.
   return (
-    <Link
-      to={routes.chat.conversation.href(chat.id)}
-      className="hover:bg-accent flex items-center gap-3 rounded-lg px-3 py-1.5 transition-colors"
-    >
-      <span className="border-border bg-card text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg border">
-        <MessageCircle className="size-4" />
-      </span>
-      <span className="text-foreground min-w-0 flex-1 truncate text-sm">
-        {chat.title || "New chat"}
-      </span>
+    <div className="group/row hover:bg-accent flex items-center gap-3 rounded-lg px-3 py-1.5 transition-colors">
+      <Link
+        to={routes.chat.conversation.href(chat.id)}
+        className="flex min-w-0 flex-1 items-center gap-3"
+      >
+        <span className="border-border bg-card text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg border">
+          <MessageCircle className="size-4" />
+        </span>
+        <span className="text-foreground min-w-0 flex-1 truncate text-sm">
+          {chat.title || "New chat"}
+        </span>
+      </Link>
+      <PinButton chatId={chat.id} pinned={pinned} />
       <span className="text-muted-foreground shrink-0 text-xs">
         {formatRelativeTime(chat.lastMessageTimestamp)}
       </span>
-    </Link>
+    </div>
+  );
+}
+
+// Pin/unpin toggle for a chat row. An unpinned chat reveals an outline pin on
+// row hover; a pinned chat shows a persistent filled pin. preventDefault +
+// stopPropagation keep a pin click from triggering the row's navigation Link.
+function PinButton({
+  chatId,
+  pinned,
+}: {
+  chatId: string;
+  pinned: boolean;
+}): ReactElement {
+  const queryClient = useQueryClient();
+  const setPinned = useChatSetPinnedMutation();
+
+  return (
+    <button
+      type="button"
+      disabled={setPinned.isPending}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setPinned.mutate(
+          {
+            request: { setPinnedRequestBody: { id: chatId, pinned: !pinned } },
+          },
+          { onSettled: () => void invalidateAllListChats(queryClient) },
+        );
+      }}
+      aria-label={pinned ? "Unpin chat" : "Pin chat"}
+      title={pinned ? "Unpin chat" : "Pin chat"}
+      className={cn(
+        "text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 rounded p-1 transition-opacity",
+        pinned
+          ? "text-foreground"
+          : "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100",
+      )}
+    >
+      <Pin className={cn("size-3.5", pinned && "fill-current")} aria-hidden />
+    </button>
   );
 }
 

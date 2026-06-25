@@ -67,6 +67,9 @@ func EncodeListChatsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		if p.HasRisk != nil {
 			values.Add("has_risk", *p.HasRisk)
 		}
+		if p.Pinned != nil {
+			values.Add("pinned", *p.Pinned)
+		}
 		if p.MinRiskScore != nil {
 			values.Add("min_risk_score", fmt.Sprintf("%v", *p.MinRiskScore))
 		}
@@ -1232,6 +1235,231 @@ func DecodeDeleteChatResponse(decoder func(*http.Response) goahttp.Decoder, rest
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("chat", "deleteChat", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetPinnedRequest instantiates a HTTP request object with method and
+// path set to call the "chat" service "setPinned" endpoint
+func (c *Client) BuildSetPinnedRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetPinnedChatPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("chat", "setPinned", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetPinnedRequest returns an encoder for requests sent to the chat
+// setPinned server.
+func EncodeSetPinnedRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*chat.SetPinnedPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("chat", "setPinned", "*chat.SetPinnedPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSetPinnedRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("chat", "setPinned", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetPinnedResponse returns a decoder for responses returned by the chat
+// setPinned endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeSetPinnedResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetPinnedResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetPinnedUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setPinned", err)
+			}
+			err = ValidateSetPinnedUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setPinned", err)
+			}
+			return nil, NewSetPinnedUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetPinnedForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setPinned", err)
+			}
+			err = ValidateSetPinnedForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setPinned", err)
+			}
+			return nil, NewSetPinnedForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetPinnedBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setPinned", err)
+			}
+			err = ValidateSetPinnedBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setPinned", err)
+			}
+			return nil, NewSetPinnedBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetPinnedNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setPinned", err)
+			}
+			err = ValidateSetPinnedNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setPinned", err)
+			}
+			return nil, NewSetPinnedNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetPinnedConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setPinned", err)
+			}
+			err = ValidateSetPinnedConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setPinned", err)
+			}
+			return nil, NewSetPinnedConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetPinnedUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setPinned", err)
+			}
+			err = ValidateSetPinnedUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setPinned", err)
+			}
+			return nil, NewSetPinnedUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetPinnedInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setPinned", err)
+			}
+			err = ValidateSetPinnedInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setPinned", err)
+			}
+			return nil, NewSetPinnedInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetPinnedInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "setPinned", err)
+				}
+				err = ValidateSetPinnedInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "setPinned", err)
+				}
+				return nil, NewSetPinnedInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetPinnedUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "setPinned", err)
+				}
+				err = ValidateSetPinnedUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "setPinned", err)
+				}
+				return nil, NewSetPinnedUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "setPinned", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetPinnedGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setPinned", err)
+			}
+			err = ValidateSetPinnedGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setPinned", err)
+			}
+			return nil, NewSetPinnedGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("chat", "setPinned", resp.StatusCode, string(body))
 		}
 	}
 }
