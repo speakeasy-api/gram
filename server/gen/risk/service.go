@@ -117,6 +117,11 @@ type Service interface {
 	ListPolicyEvalFindings(context.Context, *ListPolicyEvalFindingsPayload) (res *ListPolicyEvalFindingsResult, err error)
 	// Cancel an in-progress policy eval run.
 	CancelPolicyEvalRun(context.Context, *CancelPolicyEvalRunPayload) (res *PolicyEvalRun, err error)
+	// Aggregate ALL of a policy eval run's findings (not paginated) into
+	// actionable clusters so the dashboard can suggest config refinements: by
+	// matched value (deduped, secret content redacted), by (source, rule_id), and
+	// by message type.
+	GetPolicyEvalRunInsights(context.Context, *GetPolicyEvalRunInsightsPayload) (res *PolicyEvalRunInsights, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -139,7 +144,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [36]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule", "createPolicyEvalRun", "listPolicyEvalRuns", "getPolicyEvalRun", "listPolicyEvalFindings", "cancelPolicyEvalRun"}
+var MethodNames = [37]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule", "createPolicyEvalRun", "listPolicyEvalRuns", "getPolicyEvalRun", "listPolicyEvalFindings", "cancelPolicyEvalRun", "getPolicyEvalRunInsights"}
 
 // ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
 // service approveRiskPolicyBypassRequest method.
@@ -351,6 +356,16 @@ type GetCustomDetectionRulePayload struct {
 	ProjectSlugInput *string
 	// The custom detection rule ID.
 	ID string
+}
+
+// GetPolicyEvalRunInsightsPayload is the payload type of the risk service
+// getPolicyEvalRunInsights method.
+type GetPolicyEvalRunInsightsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The eval run ID whose findings to aggregate.
+	RunID string
 }
 
 // GetPolicyEvalRunPayload is the payload type of the risk service
@@ -710,6 +725,42 @@ type PolicyEvalFinding struct {
 	ChatUserID *string
 }
 
+type PolicyEvalMatchCluster struct {
+	// Opaque, stable hash of the matched value used to collapse duplicates. Never
+	// the raw value.
+	MatchHash string
+	// Redacted/masked representative of the matched value, safe to display (e.g.
+	// `<redacted len=N sha=XXXX>`). For non-sensitive sources (e.g. shadow_mcp)
+	// this may be the value verbatim, mirroring the rest of the risk UI.
+	MatchRedacted string
+	// Detection source for this cluster (e.g. gitleaks, presidio, custom).
+	Source string
+	// Canonical rule id for this cluster.
+	RuleID *string
+	// Number of findings sharing this matched value.
+	Count int64
+	// Number of distinct chat sessions this matched value appeared in.
+	DistinctSessions int64
+}
+
+type PolicyEvalMessageTypeCluster struct {
+	// The scanned message's role (user, assistant, system, tool).
+	Role string
+	// Number of findings on messages of this role.
+	Count int64
+}
+
+type PolicyEvalRuleCluster struct {
+	// Detection source (e.g. gitleaks, presidio, llm_judge, custom).
+	Source string
+	// Canonical rule id.
+	RuleID *string
+	// Number of findings produced by this rule.
+	Count int64
+	// Number of distinct messages this rule fired on.
+	DistinctMessages int64
+}
+
 // PolicyEvalRun is the result type of the risk service createPolicyEvalRun
 // method.
 type PolicyEvalRun struct {
@@ -749,6 +800,17 @@ type PolicyEvalRun struct {
 	CompletedAt *string
 	// When the run and its findings are eligible for GC.
 	ExpiresAt *string
+}
+
+// PolicyEvalRunInsights is the result type of the risk service
+// getPolicyEvalRunInsights method.
+type PolicyEvalRunInsights struct {
+	// Top duplicated matched values (count > 1), ordered by count descending.
+	ByMatch []*PolicyEvalMatchCluster
+	// Findings grouped by (source, rule_id), ordered by count descending.
+	ByRule []*PolicyEvalRuleCluster
+	// Findings grouped by message role.
+	ByMessageType []*PolicyEvalMessageTypeCluster
 }
 
 type PolicyEvalSampleDefinition struct {

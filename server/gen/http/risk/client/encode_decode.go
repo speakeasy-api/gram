@@ -8760,6 +8760,248 @@ func DecodeCancelPolicyEvalRunResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildGetPolicyEvalRunInsightsRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "getPolicyEvalRunInsights"
+// endpoint
+func (c *Client) BuildGetPolicyEvalRunInsightsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetPolicyEvalRunInsightsRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "getPolicyEvalRunInsights", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetPolicyEvalRunInsightsRequest returns an encoder for requests sent
+// to the risk getPolicyEvalRunInsights server.
+func EncodeGetPolicyEvalRunInsightsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.GetPolicyEvalRunInsightsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "getPolicyEvalRunInsights", "*risk.GetPolicyEvalRunInsightsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("run_id", p.RunID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetPolicyEvalRunInsightsResponse returns a decoder for responses
+// returned by the risk getPolicyEvalRunInsights endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetPolicyEvalRunInsightsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetPolicyEvalRunInsightsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetPolicyEvalRunInsightsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getPolicyEvalRunInsights", err)
+			}
+			err = ValidateGetPolicyEvalRunInsightsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getPolicyEvalRunInsights", err)
+			}
+			res := NewGetPolicyEvalRunInsightsPolicyEvalRunInsightsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetPolicyEvalRunInsightsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getPolicyEvalRunInsights", err)
+			}
+			err = ValidateGetPolicyEvalRunInsightsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getPolicyEvalRunInsights", err)
+			}
+			return nil, NewGetPolicyEvalRunInsightsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetPolicyEvalRunInsightsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getPolicyEvalRunInsights", err)
+			}
+			err = ValidateGetPolicyEvalRunInsightsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getPolicyEvalRunInsights", err)
+			}
+			return nil, NewGetPolicyEvalRunInsightsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetPolicyEvalRunInsightsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getPolicyEvalRunInsights", err)
+			}
+			err = ValidateGetPolicyEvalRunInsightsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getPolicyEvalRunInsights", err)
+			}
+			return nil, NewGetPolicyEvalRunInsightsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetPolicyEvalRunInsightsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getPolicyEvalRunInsights", err)
+			}
+			err = ValidateGetPolicyEvalRunInsightsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getPolicyEvalRunInsights", err)
+			}
+			return nil, NewGetPolicyEvalRunInsightsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetPolicyEvalRunInsightsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getPolicyEvalRunInsights", err)
+			}
+			err = ValidateGetPolicyEvalRunInsightsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getPolicyEvalRunInsights", err)
+			}
+			return nil, NewGetPolicyEvalRunInsightsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetPolicyEvalRunInsightsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getPolicyEvalRunInsights", err)
+			}
+			err = ValidateGetPolicyEvalRunInsightsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getPolicyEvalRunInsights", err)
+			}
+			return nil, NewGetPolicyEvalRunInsightsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetPolicyEvalRunInsightsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getPolicyEvalRunInsights", err)
+			}
+			err = ValidateGetPolicyEvalRunInsightsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getPolicyEvalRunInsights", err)
+			}
+			return nil, NewGetPolicyEvalRunInsightsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetPolicyEvalRunInsightsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getPolicyEvalRunInsights", err)
+				}
+				err = ValidateGetPolicyEvalRunInsightsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getPolicyEvalRunInsights", err)
+				}
+				return nil, NewGetPolicyEvalRunInsightsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetPolicyEvalRunInsightsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "getPolicyEvalRunInsights", err)
+				}
+				err = ValidateGetPolicyEvalRunInsightsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "getPolicyEvalRunInsights", err)
+				}
+				return nil, NewGetPolicyEvalRunInsightsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "getPolicyEvalRunInsights", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetPolicyEvalRunInsightsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "getPolicyEvalRunInsights", err)
+			}
+			err = ValidateGetPolicyEvalRunInsightsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "getPolicyEvalRunInsights", err)
+			}
+			return nil, NewGetPolicyEvalRunInsightsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "getPolicyEvalRunInsights", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody builds a
 // value of type *RiskPolicyModelConfigRequestBody from a value of type
 // *types.RiskPolicyModelConfig.
@@ -9386,6 +9628,48 @@ func unmarshalPolicyEvalFindingResponseBodyToRiskPolicyEvalFinding(v *PolicyEval
 		for i, val := range v.Tags {
 			res.Tags[i] = val
 		}
+	}
+
+	return res
+}
+
+// unmarshalPolicyEvalMatchClusterResponseBodyToRiskPolicyEvalMatchCluster
+// builds a value of type *risk.PolicyEvalMatchCluster from a value of type
+// *PolicyEvalMatchClusterResponseBody.
+func unmarshalPolicyEvalMatchClusterResponseBodyToRiskPolicyEvalMatchCluster(v *PolicyEvalMatchClusterResponseBody) *risk.PolicyEvalMatchCluster {
+	res := &risk.PolicyEvalMatchCluster{
+		MatchHash:        *v.MatchHash,
+		MatchRedacted:    *v.MatchRedacted,
+		Source:           *v.Source,
+		RuleID:           v.RuleID,
+		Count:            *v.Count,
+		DistinctSessions: *v.DistinctSessions,
+	}
+
+	return res
+}
+
+// unmarshalPolicyEvalRuleClusterResponseBodyToRiskPolicyEvalRuleCluster builds
+// a value of type *risk.PolicyEvalRuleCluster from a value of type
+// *PolicyEvalRuleClusterResponseBody.
+func unmarshalPolicyEvalRuleClusterResponseBodyToRiskPolicyEvalRuleCluster(v *PolicyEvalRuleClusterResponseBody) *risk.PolicyEvalRuleCluster {
+	res := &risk.PolicyEvalRuleCluster{
+		Source:           *v.Source,
+		RuleID:           v.RuleID,
+		Count:            *v.Count,
+		DistinctMessages: *v.DistinctMessages,
+	}
+
+	return res
+}
+
+// unmarshalPolicyEvalMessageTypeClusterResponseBodyToRiskPolicyEvalMessageTypeCluster
+// builds a value of type *risk.PolicyEvalMessageTypeCluster from a value of
+// type *PolicyEvalMessageTypeClusterResponseBody.
+func unmarshalPolicyEvalMessageTypeClusterResponseBodyToRiskPolicyEvalMessageTypeCluster(v *PolicyEvalMessageTypeClusterResponseBody) *risk.PolicyEvalMessageTypeCluster {
+	res := &risk.PolicyEvalMessageTypeCluster{
+		Role:  *v.Role,
+		Count: *v.Count,
 	}
 
 	return res

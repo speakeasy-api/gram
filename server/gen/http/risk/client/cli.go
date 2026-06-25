@@ -2039,3 +2039,42 @@ func BuildCancelPolicyEvalRunPayload(riskCancelPolicyEvalRunBody string, riskCan
 
 	return v, nil
 }
+
+// BuildGetPolicyEvalRunInsightsPayload builds the payload for the risk
+// getPolicyEvalRunInsights endpoint from CLI flags.
+func BuildGetPolicyEvalRunInsightsPayload(riskGetPolicyEvalRunInsightsRunID string, riskGetPolicyEvalRunInsightsApikeyToken string, riskGetPolicyEvalRunInsightsSessionToken string, riskGetPolicyEvalRunInsightsProjectSlugInput string) (*risk.GetPolicyEvalRunInsightsPayload, error) {
+	var err error
+	var runID string
+	{
+		runID = riskGetPolicyEvalRunInsightsRunID
+		err = goa.MergeErrors(err, goa.ValidateFormat("run_id", runID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskGetPolicyEvalRunInsightsApikeyToken != "" {
+			apikeyToken = &riskGetPolicyEvalRunInsightsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetPolicyEvalRunInsightsSessionToken != "" {
+			sessionToken = &riskGetPolicyEvalRunInsightsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskGetPolicyEvalRunInsightsProjectSlugInput != "" {
+			projectSlugInput = &riskGetPolicyEvalRunInsightsProjectSlugInput
+		}
+	}
+	v := &risk.GetPolicyEvalRunInsightsPayload{}
+	v.RunID = runID
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

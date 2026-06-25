@@ -12,6 +12,173 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const aggregatePolicyEvalFindingsByMatch = `-- name: AggregatePolicyEvalFindingsByMatch :many
+SELECT
+    md5(COALESCE(pef.match, ''))::text AS match_hash
+  , MIN(pef.match)::text AS match_sample
+  , pef.source
+  , pef.rule_id
+  , COUNT(*)::bigint AS finding_count
+  , COUNT(DISTINCT cm.chat_id)::bigint AS distinct_sessions
+FROM policy_eval_findings pef
+JOIN chat_messages cm ON cm.id = pef.chat_message_id
+WHERE pef.project_id = $1
+  AND pef.policy_eval_run_id = $2
+GROUP BY md5(COALESCE(pef.match, '')), pef.source, pef.rule_id
+HAVING COUNT(*) > 1
+ORDER BY finding_count DESC, match_hash ASC
+LIMIT $3
+`
+
+type AggregatePolicyEvalFindingsByMatchParams struct {
+	ProjectID       uuid.UUID
+	PolicyEvalRunID uuid.UUID
+	ResultLimit     int32
+}
+
+type AggregatePolicyEvalFindingsByMatchRow struct {
+	MatchHash        string
+	MatchSample      string
+	Source           string
+	RuleID           pgtype.Text
+	FindingCount     int64
+	DistinctSessions int64
+}
+
+// Clusters a run's findings by the matched value so the dashboard can surface
+// duplicate matches (the actionable ones — a secret detected many times, a
+// recurring entity) and suggest an exclusion. The raw match is SENSITIVE
+// (secrets/PII) so we GROUP BY md5(match) and never order/filter on the plaintext.
+// A representative raw match is returned via MIN(pef.match) ONLY so the Go layer
+// can redact it consistently before it leaves the server (see redactMatch); it is
+// never returned to the client verbatim. distinct_sessions counts unique chats
+// via the chat_messages join. Only rows with count > 1 are returned (a single
+// occurrence is not a cluster worth acting on). Scoped to project_id AND the run.
+func (q *Queries) AggregatePolicyEvalFindingsByMatch(ctx context.Context, arg AggregatePolicyEvalFindingsByMatchParams) ([]AggregatePolicyEvalFindingsByMatchRow, error) {
+	rows, err := q.db.Query(ctx, aggregatePolicyEvalFindingsByMatch, arg.ProjectID, arg.PolicyEvalRunID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AggregatePolicyEvalFindingsByMatchRow
+	for rows.Next() {
+		var i AggregatePolicyEvalFindingsByMatchRow
+		if err := rows.Scan(
+			&i.MatchHash,
+			&i.MatchSample,
+			&i.Source,
+			&i.RuleID,
+			&i.FindingCount,
+			&i.DistinctSessions,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const aggregatePolicyEvalFindingsByMessageType = `-- name: AggregatePolicyEvalFindingsByMessageType :many
+SELECT
+    cm.role
+  , COUNT(*)::bigint AS finding_count
+FROM policy_eval_findings pef
+JOIN chat_messages cm ON cm.id = pef.chat_message_id
+WHERE pef.project_id = $1
+  AND pef.policy_eval_run_id = $2
+GROUP BY cm.role
+ORDER BY finding_count DESC, cm.role ASC
+`
+
+type AggregatePolicyEvalFindingsByMessageTypeParams struct {
+	ProjectID       uuid.UUID
+	PolicyEvalRunID uuid.UUID
+}
+
+type AggregatePolicyEvalFindingsByMessageTypeRow struct {
+	Role         string
+	FindingCount int64
+}
+
+// Clusters a run's findings by the scanned message's role (the FE maps role to a
+// message type). Drives the "narrow message_types scope" suggestion. Scoped to
+// project_id AND the run.
+func (q *Queries) AggregatePolicyEvalFindingsByMessageType(ctx context.Context, arg AggregatePolicyEvalFindingsByMessageTypeParams) ([]AggregatePolicyEvalFindingsByMessageTypeRow, error) {
+	rows, err := q.db.Query(ctx, aggregatePolicyEvalFindingsByMessageType, arg.ProjectID, arg.PolicyEvalRunID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AggregatePolicyEvalFindingsByMessageTypeRow
+	for rows.Next() {
+		var i AggregatePolicyEvalFindingsByMessageTypeRow
+		if err := rows.Scan(&i.Role, &i.FindingCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const aggregatePolicyEvalFindingsByRule = `-- name: AggregatePolicyEvalFindingsByRule :many
+SELECT
+    pef.source
+  , pef.rule_id
+  , COUNT(*)::bigint AS finding_count
+  , COUNT(DISTINCT pef.chat_message_id)::bigint AS distinct_messages
+FROM policy_eval_findings pef
+WHERE pef.project_id = $1
+  AND pef.policy_eval_run_id = $2
+GROUP BY pef.source, pef.rule_id
+ORDER BY finding_count DESC, pef.rule_id ASC
+`
+
+type AggregatePolicyEvalFindingsByRuleParams struct {
+	ProjectID       uuid.UUID
+	PolicyEvalRunID uuid.UUID
+}
+
+type AggregatePolicyEvalFindingsByRuleRow struct {
+	Source           string
+	RuleID           pgtype.Text
+	FindingCount     int64
+	DistinctMessages int64
+}
+
+// Clusters a run's findings by (source, rule_id): how many findings each rule
+// produced and how many distinct messages it fired on. Drives the "which rule is
+// noisy / which to disable" suggestion. Scoped to project_id AND the run.
+func (q *Queries) AggregatePolicyEvalFindingsByRule(ctx context.Context, arg AggregatePolicyEvalFindingsByRuleParams) ([]AggregatePolicyEvalFindingsByRuleRow, error) {
+	rows, err := q.db.Query(ctx, aggregatePolicyEvalFindingsByRule, arg.ProjectID, arg.PolicyEvalRunID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AggregatePolicyEvalFindingsByRuleRow
+	for rows.Next() {
+		var i AggregatePolicyEvalFindingsByRuleRow
+		if err := rows.Scan(
+			&i.Source,
+			&i.RuleID,
+			&i.FindingCount,
+			&i.DistinctMessages,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const applyExactExclusionBatch = `-- name: ApplyExactExclusionBatch :many
 UPDATE risk_results
 SET excluded_at = clock_timestamp()

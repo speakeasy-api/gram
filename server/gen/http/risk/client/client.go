@@ -161,6 +161,10 @@ type Client struct {
 	// cancelPolicyEvalRun endpoint.
 	CancelPolicyEvalRunDoer goahttp.Doer
 
+	// GetPolicyEvalRunInsights Doer is the HTTP client used to make requests to
+	// the getPolicyEvalRunInsights endpoint.
+	GetPolicyEvalRunInsightsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -217,6 +221,7 @@ func NewClient(
 		GetPolicyEvalRunDoer:               doer,
 		ListPolicyEvalFindingsDoer:         doer,
 		CancelPolicyEvalRunDoer:            doer,
+		GetPolicyEvalRunInsightsDoer:       doer,
 		RestoreResponseBody:                restoreBody,
 		scheme:                             scheme,
 		host:                               host,
@@ -1084,6 +1089,30 @@ func (c *Client) CancelPolicyEvalRun() goa.Endpoint {
 		resp, err := c.CancelPolicyEvalRunDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "cancelPolicyEvalRun", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetPolicyEvalRunInsights returns an endpoint that makes HTTP requests to the
+// risk service getPolicyEvalRunInsights server.
+func (c *Client) GetPolicyEvalRunInsights() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetPolicyEvalRunInsightsRequest(c.encoder)
+		decodeResponse = DecodeGetPolicyEvalRunInsightsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetPolicyEvalRunInsightsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetPolicyEvalRunInsightsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "getPolicyEvalRunInsights", err)
 		}
 		return decodeResponse(resp)
 	}

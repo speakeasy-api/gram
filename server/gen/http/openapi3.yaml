@@ -24351,6 +24351,115 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskGetPolicyEvalRun
                 type: query
+    /rpc/risk.evals.insights:
+        get:
+            description: 'Aggregate ALL of a policy eval run''s findings (not paginated) into actionable clusters so the dashboard can suggest config refinements: by matched value (deduped, secret content redacted), by (source, rule_id), and by message type.'
+            operationId: getPolicyEvalRunInsights
+            parameters:
+                - allowEmptyValue: true
+                  description: The eval run ID whose findings to aggregate.
+                  in: query
+                  name: run_id
+                  required: true
+                  schema:
+                    description: The eval run ID whose findings to aggregate.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PolicyEvalRunInsights'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getPolicyEvalRunInsights risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.evals
+            x-speakeasy-name-override: insights
+            x-speakeasy-react-hook:
+                name: RiskGetPolicyEvalRunInsights
+                type: query
     /rpc/risk.evals.list:
         get:
             description: List policy eval runs for the current project, newest first.
@@ -43212,6 +43321,69 @@ components:
                 - chat_message_id
                 - source
                 - created_at
+        PolicyEvalMatchCluster:
+            type: object
+            properties:
+                count:
+                    type: integer
+                    description: Number of findings sharing this matched value.
+                    format: int64
+                distinct_sessions:
+                    type: integer
+                    description: Number of distinct chat sessions this matched value appeared in.
+                    format: int64
+                match_hash:
+                    type: string
+                    description: Opaque, stable hash of the matched value used to collapse duplicates. Never the raw value.
+                match_redacted:
+                    type: string
+                    description: Redacted/masked representative of the matched value, safe to display (e.g. `<redacted len=N sha=XXXX>`). For non-sensitive sources (e.g. shadow_mcp) this may be the value verbatim, mirroring the rest of the risk UI.
+                rule_id:
+                    type: string
+                    description: Canonical rule id for this cluster.
+                source:
+                    type: string
+                    description: Detection source for this cluster (e.g. gitleaks, presidio, custom).
+            required:
+                - match_hash
+                - match_redacted
+                - source
+                - count
+                - distinct_sessions
+        PolicyEvalMessageTypeCluster:
+            type: object
+            properties:
+                count:
+                    type: integer
+                    description: Number of findings on messages of this role.
+                    format: int64
+                role:
+                    type: string
+                    description: The scanned message's role (user, assistant, system, tool).
+            required:
+                - role
+                - count
+        PolicyEvalRuleCluster:
+            type: object
+            properties:
+                count:
+                    type: integer
+                    description: Number of findings produced by this rule.
+                    format: int64
+                distinct_messages:
+                    type: integer
+                    description: Number of distinct messages this rule fired on.
+                    format: int64
+                rule_id:
+                    type: string
+                    description: Canonical rule id.
+                source:
+                    type: string
+                    description: Detection source (e.g. gitleaks, presidio, llm_judge, custom).
+            required:
+                - source
+                - count
+                - distinct_messages
         PolicyEvalRun:
             type: object
             properties:
@@ -43295,6 +43467,28 @@ components:
                 - findings_count
                 - total_cost_usd
                 - created_at
+        PolicyEvalRunInsights:
+            type: object
+            properties:
+                by_match:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PolicyEvalMatchCluster'
+                    description: Top duplicated matched values (count > 1), ordered by count descending.
+                by_message_type:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PolicyEvalMessageTypeCluster'
+                    description: Findings grouped by message role.
+                by_rule:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PolicyEvalRuleCluster'
+                    description: Findings grouped by (source, rule_id), ordered by count descending.
+            required:
+                - by_match
+                - by_rule
+                - by_message_type
         PolicyEvalSampleDefinition:
             type: object
             properties:

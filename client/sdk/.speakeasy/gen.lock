@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: d65462b69b64640129f24281e82d7d29
+  docChecksum: 14ed43d6d82c5cfb4d93ddf2277868d6
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -778,8 +778,16 @@ trackedFiles:
     last_write_checksum: sha1:953231eb371f7f52b2e19adea68dc025beda2aa7
   docs/models/components/policyevalfinding.md:
     last_write_checksum: sha1:6d3d58a7aaf8a1ab74e21775d4b1b2434b9d95fe
+  docs/models/components/policyevalmatchcluster.md:
+    last_write_checksum: sha1:4b1a0d2e15c1513f665a62ecba4f7c5baf61fa09
+  docs/models/components/policyevalmessagetypecluster.md:
+    last_write_checksum: sha1:e74a8a3b5a43e911d2ae58e5243aa4059493209b
+  docs/models/components/policyevalrulecluster.md:
+    last_write_checksum: sha1:4f3e023b28a2707b79758cc36d8d6740d735da6a
   docs/models/components/policyevalrun.md:
     last_write_checksum: sha1:ce641ac9b8e160377c9b1fe5fb2598e1e9fbf0cc
+  docs/models/components/policyevalruninsights.md:
+    last_write_checksum: sha1:4686bd154ad12fcd4648f958a80cc321e41cc7ba
   docs/models/components/policyevalrunstatus.md:
     last_write_checksum: sha1:e8df311433492a24abc3e3f7a881c0daddeb3183
   docs/models/components/policyevalsampledefinition.md:
@@ -2168,6 +2176,14 @@ trackedFiles:
     last_write_checksum: sha1:6306d00e8c4ee10d78926f43c6e82c5365532e64
   docs/models/operations/getpluginsecurity.md:
     last_write_checksum: sha1:33f0d6e5986f17bf55088f6b06400be9c3f50887
+  docs/models/operations/getpolicyevalruninsightsrequest.md:
+    last_write_checksum: sha1:31a08d89131ddafcf9aec99980017be031e634c5
+  docs/models/operations/getpolicyevalruninsightssecurity.md:
+    last_write_checksum: sha1:2b8534bfc9072717a82b165c9da3191357cd7b3a
+  docs/models/operations/getpolicyevalruninsightssecurityoption1.md:
+    last_write_checksum: sha1:dd9200a6988ea70133cab163f0d92c52f9ce971f
+  docs/models/operations/getpolicyevalruninsightssecurityoption2.md:
+    last_write_checksum: sha1:41ab6f2d7e7d9a61e17798ed899e36ef1b89058e
   docs/models/operations/getpolicyevalrunrequest.md:
     last_write_checksum: sha1:a1a5842afe32298765e25349954beb9b3ebc9973
   docs/models/operations/getpolicyevalrunsecurity.md:
@@ -3501,7 +3517,7 @@ trackedFiles:
   docs/sdks/environments/README.md:
     last_write_checksum: sha1:6e3cf385846dc2b2da70e4bb9101ef11e01126a9
   docs/sdks/evals/README.md:
-    last_write_checksum: sha1:38567b26b720e5e9997cc20d01933aab41718cda
+    last_write_checksum: sha1:b4dc35264acb4ac11f754963f9d964e00a7b4ed7
   docs/sdks/exclusions/README.md:
     last_write_checksum: sha1:eb72f4e952a67504b17b06a2b6b9d0eca34926f5
   docs/sdks/expr/README.md:
@@ -4060,6 +4076,8 @@ trackedFiles:
     last_write_checksum: sha1:5b78b17c8d08b7718b6774f9751fa2a9980a7866
   src/funcs/riskEvalsGet.ts:
     last_write_checksum: sha1:021a1140eea874c7ae5ba0aed3437ab98166ffbe
+  src/funcs/riskEvalsInsights.ts:
+    last_write_checksum: sha1:951caed7720f449921c06cb5f540238119cf4ad8
   src/funcs/riskEvalsList.ts:
     last_write_checksum: sha1:39f93852035abc497d77a550dbf2ec30afa03091
   src/funcs/riskEvalsListFindings.ts:
@@ -4623,7 +4641,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:3c5b5fd1eda36bc232e8d3e17394d3747523d777
+    last_write_checksum: sha1:ee1d85099dc3f4f6d00a74e28820eff9b8dbda2c
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4919,8 +4937,16 @@ trackedFiles:
     last_write_checksum: sha1:3705836852364f48f768ae78564e6e0cebb60ea7
   src/models/components/policyevalfinding.ts:
     last_write_checksum: sha1:1e6bbd863896354b91f26fb9ed2f7e65db218e4c
+  src/models/components/policyevalmatchcluster.ts:
+    last_write_checksum: sha1:91731e561be7cf6b6aa4c830c05e2110b255ed2c
+  src/models/components/policyevalmessagetypecluster.ts:
+    last_write_checksum: sha1:4fd9aaa717c34f16bbbb32b9072708306c5d10bf
+  src/models/components/policyevalrulecluster.ts:
+    last_write_checksum: sha1:c3e1d490bfa36c81857a5a9f6eb161d3b4117136
   src/models/components/policyevalrun.ts:
     last_write_checksum: sha1:34de85ba07ecb3c84b8aaf6bd32c35742523cc79
+  src/models/components/policyevalruninsights.ts:
+    last_write_checksum: sha1:0ec5fb4c64ddffff2678b86b443aff2f1e44a776
   src/models/components/policyevalsampledefinition.ts:
     last_write_checksum: sha1:ff13af45c17f58d2f6cc11c46a0cf9a919a66b80
   src/models/components/project.ts:
@@ -5622,6 +5648,8 @@ trackedFiles:
     last_write_checksum: sha1:7b2604c8ee3b5122e5ef9ddc4595183e70710a79
   src/models/operations/getpolicyevalrun.ts:
     last_write_checksum: sha1:1826318089290cb908d910802f5d2e4eadc84781
+  src/models/operations/getpolicyevalruninsights.ts:
+    last_write_checksum: sha1:ea031db8b0722d4827d1753f0ad30403124ddbf9
   src/models/operations/getproductfeatures.ts:
     last_write_checksum: sha1:81244d1e94decda47179cb8b9e32bf6bc3400882
   src/models/operations/getproject.ts:
@@ -5686,7 +5714,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:ffd77a0b9f236eddac5e40cb9b155639a0b15f9f
+    last_write_checksum: sha1:2625f99d5d07b9bd4e064941f371f7f92dd733a1
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -6370,7 +6398,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:ceb183bda49ecb9d07f2c8e5421aad8ca06613f7
+    last_write_checksum: sha1:b53f2e8c4bbe214fd4bbeab3c4cf57e5f0f241ce
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -6724,6 +6752,10 @@ trackedFiles:
     last_write_checksum: sha1:6fb7fb2083a41d028dd0dd92b23061f31287fbce
   src/react-query/riskGetPolicyEvalRun.ts:
     last_write_checksum: sha1:c9ec7e8405f97745aee9f38485e31d0ac78241a5
+  src/react-query/riskGetPolicyEvalRunInsights.core.ts:
+    last_write_checksum: sha1:3adfdfbf6714666ccc5bbcf1c77dc210453519b1
+  src/react-query/riskGetPolicyEvalRunInsights.ts:
+    last_write_checksum: sha1:4f32ccdbb21cd8211b0b41fcabb55fb203f66aa8
   src/react-query/riskListCustomDetectionRules.core.ts:
     last_write_checksum: sha1:beab2fabf712e1cb25a1c761ca9cddf68ddfae80
   src/react-query/riskListCustomDetectionRules.ts:
@@ -7035,7 +7067,7 @@ trackedFiles:
   src/sdk/environments.ts:
     last_write_checksum: sha1:32ad1a2228a56ab7f4de58aa38785085e0f3a1c3
   src/sdk/evals.ts:
-    last_write_checksum: sha1:ebea63b18b55e25ba44920f53df3b507fb55c122
+    last_write_checksum: sha1:0a9f8635e2f32273336309dcdcd42abe4ae67c66
   src/sdk/exclusions.ts:
     last_write_checksum: sha1:d9f2c5b173f9bb3b9b5da6475ee9fffb7ebb66c0
   src/sdk/expr.ts:
@@ -10763,5 +10795,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getPolicyEvalRunInsights:
+    speakeasy-default-get-policy-eval-run-insights:
+      parameters:
+        query:
+          run_id: "8c45dfdb-6408-4f77-94b8-232fa03af000"
+      responses:
+        "200":
+          application/json: {"by_match": [], "by_message_type": [{"count": 429567, "role": "<value>"}], "by_rule": [{"count": 953039, "distinct_messages": 540367, "source": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

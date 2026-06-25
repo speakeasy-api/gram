@@ -186,3 +186,8 @@ func ListPolicyEvalFindingsRiskPath() string {
 func CancelPolicyEvalRunRiskPath() string {
 	return "/rpc/risk.evals.cancel"
 }
+
+// GetPolicyEvalRunInsightsRiskPath returns the URL path to the risk service getPolicyEvalRunInsights HTTP endpoint.
+func GetPolicyEvalRunInsightsRiskPath() string {
+	return "/rpc/risk.evals.insights"
+}

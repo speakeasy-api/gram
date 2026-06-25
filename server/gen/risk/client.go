@@ -52,10 +52,11 @@ type Client struct {
 	GetPolicyEvalRunEndpoint               goa.Endpoint
 	ListPolicyEvalFindingsEndpoint         goa.Endpoint
 	CancelPolicyEvalRunEndpoint            goa.Endpoint
+	GetPolicyEvalRunInsightsEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "risk" service client given the endpoints.
-func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, getRiskOverview, listRiskCategories, compileExpr, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, createRiskPolicyBypassRequest, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, testDetectionRule, createPolicyEvalRun, listPolicyEvalRuns, getPolicyEvalRun, listPolicyEvalFindings, cancelPolicyEvalRun goa.Endpoint) *Client {
+func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, getRiskOverview, listRiskCategories, compileExpr, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, createRiskPolicyBypassRequest, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, testDetectionRule, createPolicyEvalRun, listPolicyEvalRuns, getPolicyEvalRun, listPolicyEvalFindings, cancelPolicyEvalRun, getPolicyEvalRunInsights goa.Endpoint) *Client {
 	return &Client{
 		CreateRiskPolicyEndpoint:               createRiskPolicy,
 		ListRiskPoliciesEndpoint:               listRiskPolicies,
@@ -93,6 +94,7 @@ func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPoli
 		GetPolicyEvalRunEndpoint:               getPolicyEvalRun,
 		ListPolicyEvalFindingsEndpoint:         listPolicyEvalFindings,
 		CancelPolicyEvalRunEndpoint:            cancelPolicyEvalRun,
+		GetPolicyEvalRunInsightsEndpoint:       getPolicyEvalRunInsights,
 	}
 }
 
@@ -897,4 +899,27 @@ func (c *Client) CancelPolicyEvalRun(ctx context.Context, p *CancelPolicyEvalRun
 		return
 	}
 	return ires.(*PolicyEvalRun), nil
+}
+
+// GetPolicyEvalRunInsights calls the "getPolicyEvalRunInsights" endpoint of
+// the "risk" service.
+// GetPolicyEvalRunInsights may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetPolicyEvalRunInsights(ctx context.Context, p *GetPolicyEvalRunInsightsPayload) (res *PolicyEvalRunInsights, err error) {
+	var ires any
+	ires, err = c.GetPolicyEvalRunInsightsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*PolicyEvalRunInsights), nil
 }

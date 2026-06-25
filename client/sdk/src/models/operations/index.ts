@@ -131,6 +131,7 @@ export * from "./getotelforwardingconfig.js";
 export * from "./getperiodusage.js";
 export * from "./getplugin.js";
 export * from "./getpolicyevalrun.js";
+export * from "./getpolicyevalruninsights.js";
 export * from "./getproductfeatures.js";
 export * from "./getproject.js";
 export * from "./getprojectmetricssummary.js";

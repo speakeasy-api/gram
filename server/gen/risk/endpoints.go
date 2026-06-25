@@ -52,6 +52,7 @@ type Endpoints struct {
 	GetPolicyEvalRun               goa.Endpoint
 	ListPolicyEvalFindings         goa.Endpoint
 	CancelPolicyEvalRun            goa.Endpoint
+	GetPolicyEvalRunInsights       goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "risk" service with endpoints.
@@ -95,6 +96,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetPolicyEvalRun:               NewGetPolicyEvalRunEndpoint(s, a.APIKeyAuth),
 		ListPolicyEvalFindings:         NewListPolicyEvalFindingsEndpoint(s, a.APIKeyAuth),
 		CancelPolicyEvalRun:            NewCancelPolicyEvalRunEndpoint(s, a.APIKeyAuth),
+		GetPolicyEvalRunInsights:       NewGetPolicyEvalRunInsightsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -136,6 +138,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetPolicyEvalRun = m(e.GetPolicyEvalRun)
 	e.ListPolicyEvalFindings = m(e.ListPolicyEvalFindings)
 	e.CancelPolicyEvalRun = m(e.CancelPolicyEvalRun)
+	e.GetPolicyEvalRunInsights = m(e.GetPolicyEvalRunInsights)
 }
 
 // NewCreateRiskPolicyEndpoint returns an endpoint function that calls the
@@ -2223,5 +2226,64 @@ func NewCancelPolicyEvalRunEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return s.CancelPolicyEvalRun(ctx, p)
+	}
+}
+
+// NewGetPolicyEvalRunInsightsEndpoint returns an endpoint function that calls
+// the method "getPolicyEvalRunInsights" of service "risk".
+func NewGetPolicyEvalRunInsightsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetPolicyEvalRunInsightsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetPolicyEvalRunInsights(ctx, p)
 	}
 }

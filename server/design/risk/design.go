@@ -1238,6 +1238,36 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "cancel")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCancelPolicyEvalRun", "type": "mutation"}`)
 	})
+
+	Method("getPolicyEvalRunInsights", func() {
+		Description("Aggregate ALL of a policy eval run's findings (not paginated) into actionable clusters so the dashboard can suggest config refinements: by matched value (deduped, secret content redacted), by (source, rule_id), and by message type.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("run_id", String, "The eval run ID whose findings to aggregate.", func() {
+				Format(FormatUUID)
+			})
+			Required("run_id")
+		})
+
+		Result(PolicyEvalRunInsights)
+
+		HTTP(func() {
+			GET("/rpc/risk.evals.insights")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("run_id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getPolicyEvalRunInsights")
+		Meta("openapi:extension:x-speakeasy-group", "risk.evals")
+		Meta("openapi:extension:x-speakeasy-name-override", "insights")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskGetPolicyEvalRunInsights", "type": "query"}`)
+	})
 })
 
 // PolicyEvalSampleDefinition describes how a run selects the historical messages
@@ -1335,6 +1365,46 @@ var ListPolicyEvalFindingsResult = Type("ListPolicyEvalFindingsResult", func() {
 	Attribute("findings", ArrayOf(PolicyEvalFinding), "The list of eval findings.")
 	Attribute("next_cursor", String, "Cursor for the next page of findings.")
 	Required("findings")
+})
+
+// PolicyEvalMatchCluster groups a run's findings that share the same matched
+// value. The raw match is sensitive (secrets/PII) and is never returned: grouping
+// happens on a hash and the representative is a redacted fingerprint.
+var PolicyEvalMatchCluster = Type("PolicyEvalMatchCluster", func() {
+	Attribute("match_hash", String, "Opaque, stable hash of the matched value used to collapse duplicates. Never the raw value.")
+	Attribute("match_redacted", String, "Redacted/masked representative of the matched value, safe to display (e.g. `<redacted len=N sha=XXXX>`). For non-sensitive sources (e.g. shadow_mcp) this may be the value verbatim, mirroring the rest of the risk UI.")
+	Attribute("source", String, "Detection source for this cluster (e.g. gitleaks, presidio, custom).")
+	Attribute("rule_id", String, "Canonical rule id for this cluster.")
+	Attribute("count", Int64, "Number of findings sharing this matched value.")
+	Attribute("distinct_sessions", Int64, "Number of distinct chat sessions this matched value appeared in.")
+	Required("match_hash", "match_redacted", "source", "count", "distinct_sessions")
+})
+
+// PolicyEvalRuleCluster groups a run's findings by (source, rule_id).
+var PolicyEvalRuleCluster = Type("PolicyEvalRuleCluster", func() {
+	Attribute("source", String, "Detection source (e.g. gitleaks, presidio, llm_judge, custom).")
+	Attribute("rule_id", String, "Canonical rule id.")
+	Attribute("count", Int64, "Number of findings produced by this rule.")
+	Attribute("distinct_messages", Int64, "Number of distinct messages this rule fired on.")
+	Required("source", "count", "distinct_messages")
+})
+
+// PolicyEvalMessageTypeCluster groups a run's findings by the scanned message's
+// role. The FE maps role to a message type.
+var PolicyEvalMessageTypeCluster = Type("PolicyEvalMessageTypeCluster", func() {
+	Attribute("role", String, "The scanned message's role (user, assistant, system, tool).")
+	Attribute("count", Int64, "Number of findings on messages of this role.")
+	Required("role", "count")
+})
+
+// PolicyEvalRunInsights is a server-side aggregation over ALL of a run's findings
+// (not paginated), grouped along actionable dimensions so the dashboard can
+// cluster findings and suggest config edits.
+var PolicyEvalRunInsights = Type("PolicyEvalRunInsights", func() {
+	Attribute("by_match", ArrayOf(PolicyEvalMatchCluster), "Top duplicated matched values (count > 1), ordered by count descending.")
+	Attribute("by_rule", ArrayOf(PolicyEvalRuleCluster), "Findings grouped by (source, rule_id), ordered by count descending.")
+	Attribute("by_message_type", ArrayOf(PolicyEvalMessageTypeCluster), "Findings grouped by message role.")
+	Required("by_match", "by_rule", "by_message_type")
 })
 
 var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", func() {

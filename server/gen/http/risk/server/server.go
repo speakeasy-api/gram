@@ -55,6 +55,7 @@ type Server struct {
 	GetPolicyEvalRun               http.Handler
 	ListPolicyEvalFindings         http.Handler
 	CancelPolicyEvalRun            http.Handler
+	GetPolicyEvalRunInsights       http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -120,6 +121,7 @@ func New(
 			{"GetPolicyEvalRun", "GET", "/rpc/risk.evals.get"},
 			{"ListPolicyEvalFindings", "GET", "/rpc/risk.evals.findings.list"},
 			{"CancelPolicyEvalRun", "POST", "/rpc/risk.evals.cancel"},
+			{"GetPolicyEvalRunInsights", "GET", "/rpc/risk.evals.insights"},
 		},
 		CreateRiskPolicy:               NewCreateRiskPolicyHandler(e.CreateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
 		ListRiskPolicies:               NewListRiskPoliciesHandler(e.ListRiskPolicies, mux, decoder, encoder, errhandler, formatter),
@@ -157,6 +159,7 @@ func New(
 		GetPolicyEvalRun:               NewGetPolicyEvalRunHandler(e.GetPolicyEvalRun, mux, decoder, encoder, errhandler, formatter),
 		ListPolicyEvalFindings:         NewListPolicyEvalFindingsHandler(e.ListPolicyEvalFindings, mux, decoder, encoder, errhandler, formatter),
 		CancelPolicyEvalRun:            NewCancelPolicyEvalRunHandler(e.CancelPolicyEvalRun, mux, decoder, encoder, errhandler, formatter),
+		GetPolicyEvalRunInsights:       NewGetPolicyEvalRunInsightsHandler(e.GetPolicyEvalRunInsights, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -201,6 +204,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetPolicyEvalRun = m(s.GetPolicyEvalRun)
 	s.ListPolicyEvalFindings = m(s.ListPolicyEvalFindings)
 	s.CancelPolicyEvalRun = m(s.CancelPolicyEvalRun)
+	s.GetPolicyEvalRunInsights = m(s.GetPolicyEvalRunInsights)
 }
 
 // MethodNames returns the methods served.
@@ -244,6 +248,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetPolicyEvalRunHandler(mux, h.GetPolicyEvalRun)
 	MountListPolicyEvalFindingsHandler(mux, h.ListPolicyEvalFindings)
 	MountCancelPolicyEvalRunHandler(mux, h.CancelPolicyEvalRun)
+	MountGetPolicyEvalRunInsightsHandler(mux, h.GetPolicyEvalRunInsights)
 }
 
 // Mount configures the mux to serve the risk endpoints.
@@ -2146,6 +2151,60 @@ func NewCancelPolicyEvalRunHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "cancelPolicyEvalRun")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetPolicyEvalRunInsightsHandler configures the mux to serve the "risk"
+// service "getPolicyEvalRunInsights" endpoint.
+func MountGetPolicyEvalRunInsightsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.evals.insights", f)
+}
+
+// NewGetPolicyEvalRunInsightsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "risk" service "getPolicyEvalRunInsights"
+// endpoint.
+func NewGetPolicyEvalRunInsightsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetPolicyEvalRunInsightsRequest(mux, decoder)
+		encodeResponse = EncodeGetPolicyEvalRunInsightsResponse(encoder)
+		encodeError    = EncodeGetPolicyEvalRunInsightsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getPolicyEvalRunInsights")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

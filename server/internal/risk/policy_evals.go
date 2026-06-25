@@ -256,6 +256,79 @@ func (s *Service) ListPolicyEvalFindings(ctx context.Context, payload *gen.ListP
 	return &gen.ListPolicyEvalFindingsResult{Findings: findings, NextCursor: nextCursor}, nil
 }
 
+// policyEvalInsightsMatchLimit caps the byMatch cluster list: the duplicated
+// matches are the actionable ones and the dashboard only surfaces the top few.
+const policyEvalInsightsMatchLimit = 20
+
+// GetPolicyEvalRunInsights aggregates ALL of a run's findings (not paginated)
+// into actionable clusters: by matched value (deduped, secrets redacted), by
+// (source, rule_id), and by message type. Mirrors ListPolicyEvalFindings for
+// auth/scoping.
+func (s *Service) GetPolicyEvalRunInsights(ctx context.Context, payload *gen.GetPolicyEvalRunInsightsPayload) (*gen.PolicyEvalRunInsights, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	runID, err := uuid.Parse(payload.RunID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid run_id")
+	}
+	// Scope the run to this project (clean 404 + cross-project read protection).
+	if _, err := s.repo.GetPolicyEvalRun(ctx, repo.GetPolicyEvalRunParams{ID: runID, ProjectID: *authCtx.ProjectID}); errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeNotFound, err, "policy eval run not found")
+	} else if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get policy eval run").LogError(ctx, s.logger)
+	}
+
+	matchRows, err := s.repo.AggregatePolicyEvalFindingsByMatch(ctx, repo.AggregatePolicyEvalFindingsByMatchParams{
+		ProjectID:       *authCtx.ProjectID,
+		PolicyEvalRunID: runID,
+		ResultLimit:     policyEvalInsightsMatchLimit,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "aggregate eval findings by match").LogError(ctx, s.logger)
+	}
+
+	ruleRows, err := s.repo.AggregatePolicyEvalFindingsByRule(ctx, repo.AggregatePolicyEvalFindingsByRuleParams{
+		ProjectID:       *authCtx.ProjectID,
+		PolicyEvalRunID: runID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "aggregate eval findings by rule").LogError(ctx, s.logger)
+	}
+
+	roleRows, err := s.repo.AggregatePolicyEvalFindingsByMessageType(ctx, repo.AggregatePolicyEvalFindingsByMessageTypeParams{
+		ProjectID:       *authCtx.ProjectID,
+		PolicyEvalRunID: runID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "aggregate eval findings by message type").LogError(ctx, s.logger)
+	}
+
+	byMatch := make([]*gen.PolicyEvalMatchCluster, 0, len(matchRows))
+	for _, r := range matchRows {
+		byMatch = append(byMatch, evalMatchClusterRowToType(r, authCtx.ActiveOrganizationID))
+	}
+	byRule := make([]*gen.PolicyEvalRuleCluster, 0, len(ruleRows))
+	for _, r := range ruleRows {
+		byRule = append(byRule, evalRuleClusterRowToType(r))
+	}
+	byMessageType := make([]*gen.PolicyEvalMessageTypeCluster, 0, len(roleRows))
+	for _, r := range roleRows {
+		byMessageType = append(byMessageType, &gen.PolicyEvalMessageTypeCluster{Role: r.Role, Count: r.FindingCount})
+	}
+
+	return &gen.PolicyEvalRunInsights{
+		ByMatch:       byMatch,
+		ByRule:        byRule,
+		ByMessageType: byMessageType,
+	}, nil
+}
+
 // CancelPolicyEvalRun cancels an in-progress run and signals its workflow.
 func (s *Service) CancelPolicyEvalRun(ctx context.Context, payload *gen.CancelPolicyEvalRunPayload) (*gen.PolicyEvalRun, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -482,6 +555,33 @@ func evalFindingRowToType(row repo.ListPolicyEvalFindingsRow) *gen.PolicyEvalFin
 		out.ChatID = &cid
 	}
 	return out
+}
+
+// evalMatchClusterRowToType maps a byMatch aggregate row to its API type. The
+// raw match (MatchSample, a representative pulled solely so the server can mask
+// it) is NEVER returned verbatim: it is passed through redactMatch — the same
+// helper used for the agent-facing redacted results — so secrets/PII leave the
+// server only as an opaque length+sha fingerprint (or, for non-sensitive sources
+// like shadow_mcp, the value as the rest of the risk UI shows it).
+func evalMatchClusterRowToType(row repo.AggregatePolicyEvalFindingsByMatchRow, orgID string) *gen.PolicyEvalMatchCluster {
+	sample := row.MatchSample
+	return &gen.PolicyEvalMatchCluster{
+		MatchHash:        row.MatchHash,
+		MatchRedacted:    redactMatch(row.Source, &sample, orgID),
+		Source:           row.Source,
+		RuleID:           conv.FromPGText[string](row.RuleID),
+		Count:            row.FindingCount,
+		DistinctSessions: row.DistinctSessions,
+	}
+}
+
+func evalRuleClusterRowToType(row repo.AggregatePolicyEvalFindingsByRuleRow) *gen.PolicyEvalRuleCluster {
+	return &gen.PolicyEvalRuleCluster{
+		Source:           row.Source,
+		RuleID:           conv.FromPGText[string](row.RuleID),
+		Count:            row.FindingCount,
+		DistinctMessages: row.DistinctMessages,
+	}
 }
 
 func pgTimePtr(ts pgtype.Timestamptz) *string {

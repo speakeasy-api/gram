@@ -5,6 +5,7 @@
 import { riskEvalsCancel } from "../funcs/riskEvalsCancel.js";
 import { riskEvalsCreate } from "../funcs/riskEvalsCreate.js";
 import { riskEvalsGet } from "../funcs/riskEvalsGet.js";
+import { riskEvalsInsights } from "../funcs/riskEvalsInsights.js";
 import { riskEvalsList } from "../funcs/riskEvalsList.js";
 import { riskEvalsListFindings } from "../funcs/riskEvalsListFindings.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -82,6 +83,25 @@ export class Evals extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.PolicyEvalRun> {
     return unwrapAsync(riskEvalsGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getPolicyEvalRunInsights risk
+   *
+   * @remarks
+   * Aggregate ALL of a policy eval run's findings (not paginated) into actionable clusters so the dashboard can suggest config refinements: by matched value (deduped, secret content redacted), by (source, rule_id), and by message type.
+   */
+  async insights(
+    request: operations.GetPolicyEvalRunInsightsRequest,
+    security?: operations.GetPolicyEvalRunInsightsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.PolicyEvalRunInsights> {
+    return unwrapAsync(riskEvalsInsights(
       this,
       request,
       security,

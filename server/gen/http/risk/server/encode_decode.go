@@ -8580,6 +8580,233 @@ func EncodeCancelPolicyEvalRunError(encoder func(context.Context, http.ResponseW
 	}
 }
 
+// EncodeGetPolicyEvalRunInsightsResponse returns an encoder for responses
+// returned by the risk getPolicyEvalRunInsights endpoint.
+func EncodeGetPolicyEvalRunInsightsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*risk.PolicyEvalRunInsights)
+		enc := encoder(ctx, w)
+		body := NewGetPolicyEvalRunInsightsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetPolicyEvalRunInsightsRequest returns a decoder for requests sent to
+// the risk getPolicyEvalRunInsights endpoint.
+func DecodeGetPolicyEvalRunInsightsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*risk.GetPolicyEvalRunInsightsPayload, error) {
+	return func(r *http.Request) (*risk.GetPolicyEvalRunInsightsPayload, error) {
+		var payload *risk.GetPolicyEvalRunInsightsPayload
+		var (
+			runID            string
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+			err              error
+		)
+		runID = r.URL.Query().Get("run_id")
+		if runID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("run_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("run_id", runID, goa.FormatUUID))
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetPolicyEvalRunInsightsPayload(runID, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetPolicyEvalRunInsightsError returns an encoder for errors returned
+// by the getPolicyEvalRunInsights risk endpoint.
+func EncodeGetPolicyEvalRunInsightsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPolicyEvalRunInsightsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPolicyEvalRunInsightsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPolicyEvalRunInsightsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPolicyEvalRunInsightsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPolicyEvalRunInsightsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPolicyEvalRunInsightsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPolicyEvalRunInsightsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPolicyEvalRunInsightsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPolicyEvalRunInsightsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetPolicyEvalRunInsightsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig builds
 // a value of type *types.RiskPolicyModelConfig from a value of type
 // *RiskPolicyModelConfigRequestBody.
@@ -9138,6 +9365,48 @@ func marshalRiskPolicyEvalFindingToPolicyEvalFindingResponseBody(v *risk.PolicyE
 		for i, val := range v.Tags {
 			res.Tags[i] = val
 		}
+	}
+
+	return res
+}
+
+// marshalRiskPolicyEvalMatchClusterToPolicyEvalMatchClusterResponseBody builds
+// a value of type *PolicyEvalMatchClusterResponseBody from a value of type
+// *risk.PolicyEvalMatchCluster.
+func marshalRiskPolicyEvalMatchClusterToPolicyEvalMatchClusterResponseBody(v *risk.PolicyEvalMatchCluster) *PolicyEvalMatchClusterResponseBody {
+	res := &PolicyEvalMatchClusterResponseBody{
+		MatchHash:        v.MatchHash,
+		MatchRedacted:    v.MatchRedacted,
+		Source:           v.Source,
+		RuleID:           v.RuleID,
+		Count:            v.Count,
+		DistinctSessions: v.DistinctSessions,
+	}
+
+	return res
+}
+
+// marshalRiskPolicyEvalRuleClusterToPolicyEvalRuleClusterResponseBody builds a
+// value of type *PolicyEvalRuleClusterResponseBody from a value of type
+// *risk.PolicyEvalRuleCluster.
+func marshalRiskPolicyEvalRuleClusterToPolicyEvalRuleClusterResponseBody(v *risk.PolicyEvalRuleCluster) *PolicyEvalRuleClusterResponseBody {
+	res := &PolicyEvalRuleClusterResponseBody{
+		Source:           v.Source,
+		RuleID:           v.RuleID,
+		Count:            v.Count,
+		DistinctMessages: v.DistinctMessages,
+	}
+
+	return res
+}
+
+// marshalRiskPolicyEvalMessageTypeClusterToPolicyEvalMessageTypeClusterResponseBody
+// builds a value of type *PolicyEvalMessageTypeClusterResponseBody from a
+// value of type *risk.PolicyEvalMessageTypeCluster.
+func marshalRiskPolicyEvalMessageTypeClusterToPolicyEvalMessageTypeClusterResponseBody(v *risk.PolicyEvalMessageTypeCluster) *PolicyEvalMessageTypeClusterResponseBody {
+	res := &PolicyEvalMessageTypeClusterResponseBody{
+		Role:  v.Role,
+		Count: v.Count,
 	}
 
 	return res

@@ -479,6 +479,7 @@ run();
 * [create](docs/sdks/evals/README.md#create) - createPolicyEvalRun risk
 * [listFindings](docs/sdks/evals/README.md#listfindings) - listPolicyEvalFindings risk
 * [get](docs/sdks/evals/README.md#get) - getPolicyEvalRun risk
+* [insights](docs/sdks/evals/README.md#insights) - getPolicyEvalRunInsights risk
 * [list](docs/sdks/evals/README.md#list) - listPolicyEvalRuns risk
 
 ### [Risk.Exclusions](docs/sdks/exclusions/README.md)
@@ -884,6 +885,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskEvalsCancel`](docs/sdks/evals/README.md#cancel) - cancelPolicyEvalRun risk
 - [`riskEvalsCreate`](docs/sdks/evals/README.md#create) - createPolicyEvalRun risk
 - [`riskEvalsGet`](docs/sdks/evals/README.md#get) - getPolicyEvalRun risk
+- [`riskEvalsInsights`](docs/sdks/evals/README.md#insights) - getPolicyEvalRunInsights risk
 - [`riskEvalsList`](docs/sdks/evals/README.md#list) - listPolicyEvalRuns risk
 - [`riskEvalsListFindings`](docs/sdks/evals/README.md#listfindings) - listPolicyEvalFindings risk
 - [`riskExclusionsCreate`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
@@ -1247,6 +1249,7 @@ To learn about this feature and how to get started, check
 - [`useRiskDenyPolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
 - [`useRiskGetCustomDetectionRule`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
 - [`useRiskGetPolicyEvalRun`](docs/sdks/evals/README.md#get) - getPolicyEvalRun risk
+- [`useRiskGetPolicyEvalRunInsights`](docs/sdks/evals/README.md#insights) - getPolicyEvalRunInsights risk
 - [`useRiskListCustomDetectionRules`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`useRiskListExclusions`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
 - [`useRiskListPolicies`](docs/sdks/policies/README.md#list) - listRiskPolicies risk

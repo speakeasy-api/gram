@@ -1098,6 +1098,17 @@ type CancelPolicyEvalRunResponseBody struct {
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
+// GetPolicyEvalRunInsightsResponseBody is the type of the "risk" service
+// "getPolicyEvalRunInsights" endpoint HTTP response body.
+type GetPolicyEvalRunInsightsResponseBody struct {
+	// Top duplicated matched values (count > 1), ordered by count descending.
+	ByMatch []*PolicyEvalMatchClusterResponseBody `form:"by_match,omitempty" json:"by_match,omitempty" xml:"by_match,omitempty"`
+	// Findings grouped by (source, rule_id), ordered by count descending.
+	ByRule []*PolicyEvalRuleClusterResponseBody `form:"by_rule,omitempty" json:"by_rule,omitempty" xml:"by_rule,omitempty"`
+	// Findings grouped by message role.
+	ByMessageType []*PolicyEvalMessageTypeClusterResponseBody `form:"by_message_type,omitempty" json:"by_message_type,omitempty" xml:"by_message_type,omitempty"`
+}
+
 // CreateRiskPolicyUnauthorizedResponseBody is the type of the "risk" service
 // "createRiskPolicy" endpoint HTTP response body for the "unauthorized" error.
 type CreateRiskPolicyUnauthorizedResponseBody struct {
@@ -7793,6 +7804,196 @@ type CancelPolicyEvalRunGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetPolicyEvalRunInsightsUnauthorizedResponseBody is the type of the "risk"
+// service "getPolicyEvalRunInsights" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetPolicyEvalRunInsightsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPolicyEvalRunInsightsForbiddenResponseBody is the type of the "risk"
+// service "getPolicyEvalRunInsights" endpoint HTTP response body for the
+// "forbidden" error.
+type GetPolicyEvalRunInsightsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPolicyEvalRunInsightsBadRequestResponseBody is the type of the "risk"
+// service "getPolicyEvalRunInsights" endpoint HTTP response body for the
+// "bad_request" error.
+type GetPolicyEvalRunInsightsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPolicyEvalRunInsightsNotFoundResponseBody is the type of the "risk"
+// service "getPolicyEvalRunInsights" endpoint HTTP response body for the
+// "not_found" error.
+type GetPolicyEvalRunInsightsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPolicyEvalRunInsightsConflictResponseBody is the type of the "risk"
+// service "getPolicyEvalRunInsights" endpoint HTTP response body for the
+// "conflict" error.
+type GetPolicyEvalRunInsightsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPolicyEvalRunInsightsUnsupportedMediaResponseBody is the type of the
+// "risk" service "getPolicyEvalRunInsights" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetPolicyEvalRunInsightsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPolicyEvalRunInsightsInvalidResponseBody is the type of the "risk"
+// service "getPolicyEvalRunInsights" endpoint HTTP response body for the
+// "invalid" error.
+type GetPolicyEvalRunInsightsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPolicyEvalRunInsightsInvariantViolationResponseBody is the type of the
+// "risk" service "getPolicyEvalRunInsights" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetPolicyEvalRunInsightsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPolicyEvalRunInsightsUnexpectedResponseBody is the type of the "risk"
+// service "getPolicyEvalRunInsights" endpoint HTTP response body for the
+// "unexpected" error.
+type GetPolicyEvalRunInsightsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPolicyEvalRunInsightsGatewayErrorResponseBody is the type of the "risk"
+// service "getPolicyEvalRunInsights" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetPolicyEvalRunInsightsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // RiskPolicyModelConfigRequestBody is used to define fields on request body
 // types.
 type RiskPolicyModelConfigRequestBody struct {
@@ -8329,6 +8530,48 @@ type PolicyEvalFindingResponseBody struct {
 	ChatTitle *string `form:"chat_title,omitempty" json:"chat_title,omitempty" xml:"chat_title,omitempty"`
 	// The session's external user id, when available.
 	ChatUserID *string `form:"chat_user_id,omitempty" json:"chat_user_id,omitempty" xml:"chat_user_id,omitempty"`
+}
+
+// PolicyEvalMatchClusterResponseBody is used to define fields on response body
+// types.
+type PolicyEvalMatchClusterResponseBody struct {
+	// Opaque, stable hash of the matched value used to collapse duplicates. Never
+	// the raw value.
+	MatchHash *string `form:"match_hash,omitempty" json:"match_hash,omitempty" xml:"match_hash,omitempty"`
+	// Redacted/masked representative of the matched value, safe to display (e.g.
+	// `<redacted len=N sha=XXXX>`). For non-sensitive sources (e.g. shadow_mcp)
+	// this may be the value verbatim, mirroring the rest of the risk UI.
+	MatchRedacted *string `form:"match_redacted,omitempty" json:"match_redacted,omitempty" xml:"match_redacted,omitempty"`
+	// Detection source for this cluster (e.g. gitleaks, presidio, custom).
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Canonical rule id for this cluster.
+	RuleID *string `form:"rule_id,omitempty" json:"rule_id,omitempty" xml:"rule_id,omitempty"`
+	// Number of findings sharing this matched value.
+	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
+	// Number of distinct chat sessions this matched value appeared in.
+	DistinctSessions *int64 `form:"distinct_sessions,omitempty" json:"distinct_sessions,omitempty" xml:"distinct_sessions,omitempty"`
+}
+
+// PolicyEvalRuleClusterResponseBody is used to define fields on response body
+// types.
+type PolicyEvalRuleClusterResponseBody struct {
+	// Detection source (e.g. gitleaks, presidio, llm_judge, custom).
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Canonical rule id.
+	RuleID *string `form:"rule_id,omitempty" json:"rule_id,omitempty" xml:"rule_id,omitempty"`
+	// Number of findings produced by this rule.
+	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
+	// Number of distinct messages this rule fired on.
+	DistinctMessages *int64 `form:"distinct_messages,omitempty" json:"distinct_messages,omitempty" xml:"distinct_messages,omitempty"`
+}
+
+// PolicyEvalMessageTypeClusterResponseBody is used to define fields on
+// response body types.
+type PolicyEvalMessageTypeClusterResponseBody struct {
+	// The scanned message's role (user, assistant, system, tool).
+	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
+	// Number of findings on messages of this role.
+	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
 }
 
 // NewCreateRiskPolicyRequestBody builds the HTTP request body from the payload
@@ -14937,6 +15180,188 @@ func NewCancelPolicyEvalRunGatewayError(body *CancelPolicyEvalRunGatewayErrorRes
 	return v
 }
 
+// NewGetPolicyEvalRunInsightsPolicyEvalRunInsightsOK builds a "risk" service
+// "getPolicyEvalRunInsights" endpoint result from a HTTP "OK" response.
+func NewGetPolicyEvalRunInsightsPolicyEvalRunInsightsOK(body *GetPolicyEvalRunInsightsResponseBody) *risk.PolicyEvalRunInsights {
+	v := &risk.PolicyEvalRunInsights{}
+	v.ByMatch = make([]*risk.PolicyEvalMatchCluster, len(body.ByMatch))
+	for i, val := range body.ByMatch {
+		if val == nil {
+			v.ByMatch[i] = nil
+			continue
+		}
+		v.ByMatch[i] = unmarshalPolicyEvalMatchClusterResponseBodyToRiskPolicyEvalMatchCluster(val)
+	}
+	v.ByRule = make([]*risk.PolicyEvalRuleCluster, len(body.ByRule))
+	for i, val := range body.ByRule {
+		if val == nil {
+			v.ByRule[i] = nil
+			continue
+		}
+		v.ByRule[i] = unmarshalPolicyEvalRuleClusterResponseBodyToRiskPolicyEvalRuleCluster(val)
+	}
+	v.ByMessageType = make([]*risk.PolicyEvalMessageTypeCluster, len(body.ByMessageType))
+	for i, val := range body.ByMessageType {
+		if val == nil {
+			v.ByMessageType[i] = nil
+			continue
+		}
+		v.ByMessageType[i] = unmarshalPolicyEvalMessageTypeClusterResponseBodyToRiskPolicyEvalMessageTypeCluster(val)
+	}
+
+	return v
+}
+
+// NewGetPolicyEvalRunInsightsUnauthorized builds a risk service
+// getPolicyEvalRunInsights endpoint unauthorized error.
+func NewGetPolicyEvalRunInsightsUnauthorized(body *GetPolicyEvalRunInsightsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPolicyEvalRunInsightsForbidden builds a risk service
+// getPolicyEvalRunInsights endpoint forbidden error.
+func NewGetPolicyEvalRunInsightsForbidden(body *GetPolicyEvalRunInsightsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPolicyEvalRunInsightsBadRequest builds a risk service
+// getPolicyEvalRunInsights endpoint bad_request error.
+func NewGetPolicyEvalRunInsightsBadRequest(body *GetPolicyEvalRunInsightsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPolicyEvalRunInsightsNotFound builds a risk service
+// getPolicyEvalRunInsights endpoint not_found error.
+func NewGetPolicyEvalRunInsightsNotFound(body *GetPolicyEvalRunInsightsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPolicyEvalRunInsightsConflict builds a risk service
+// getPolicyEvalRunInsights endpoint conflict error.
+func NewGetPolicyEvalRunInsightsConflict(body *GetPolicyEvalRunInsightsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPolicyEvalRunInsightsUnsupportedMedia builds a risk service
+// getPolicyEvalRunInsights endpoint unsupported_media error.
+func NewGetPolicyEvalRunInsightsUnsupportedMedia(body *GetPolicyEvalRunInsightsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPolicyEvalRunInsightsInvalid builds a risk service
+// getPolicyEvalRunInsights endpoint invalid error.
+func NewGetPolicyEvalRunInsightsInvalid(body *GetPolicyEvalRunInsightsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPolicyEvalRunInsightsInvariantViolation builds a risk service
+// getPolicyEvalRunInsights endpoint invariant_violation error.
+func NewGetPolicyEvalRunInsightsInvariantViolation(body *GetPolicyEvalRunInsightsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPolicyEvalRunInsightsUnexpected builds a risk service
+// getPolicyEvalRunInsights endpoint unexpected error.
+func NewGetPolicyEvalRunInsightsUnexpected(body *GetPolicyEvalRunInsightsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPolicyEvalRunInsightsGatewayError builds a risk service
+// getPolicyEvalRunInsights endpoint gateway_error error.
+func NewGetPolicyEvalRunInsightsGatewayError(body *GetPolicyEvalRunInsightsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateCreateRiskPolicyResponseBody runs the validations defined on
 // CreateRiskPolicyResponseBody
 func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (err error) {
@@ -16167,6 +16592,42 @@ func ValidateCancelPolicyEvalRunResponseBody(body *CancelPolicyEvalRunResponseBo
 	}
 	if body.ExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetPolicyEvalRunInsightsResponseBody runs the validations defined on
+// GetPolicyEvalRunInsightsResponseBody
+func ValidateGetPolicyEvalRunInsightsResponseBody(body *GetPolicyEvalRunInsightsResponseBody) (err error) {
+	if body.ByMatch == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("by_match", "body"))
+	}
+	if body.ByRule == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("by_rule", "body"))
+	}
+	if body.ByMessageType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("by_message_type", "body"))
+	}
+	for _, e := range body.ByMatch {
+		if e != nil {
+			if err2 := ValidatePolicyEvalMatchClusterResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ByRule {
+		if e != nil {
+			if err2 := ValidatePolicyEvalRuleClusterResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ByMessageType {
+		if e != nil {
+			if err2 := ValidatePolicyEvalMessageTypeClusterResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -24849,6 +25310,248 @@ func ValidateCancelPolicyEvalRunGatewayErrorResponseBody(body *CancelPolicyEvalR
 	return
 }
 
+// ValidateGetPolicyEvalRunInsightsUnauthorizedResponseBody runs the
+// validations defined on getPolicyEvalRunInsights_unauthorized_response_body
+func ValidateGetPolicyEvalRunInsightsUnauthorizedResponseBody(body *GetPolicyEvalRunInsightsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPolicyEvalRunInsightsForbiddenResponseBody runs the validations
+// defined on getPolicyEvalRunInsights_forbidden_response_body
+func ValidateGetPolicyEvalRunInsightsForbiddenResponseBody(body *GetPolicyEvalRunInsightsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPolicyEvalRunInsightsBadRequestResponseBody runs the validations
+// defined on getPolicyEvalRunInsights_bad_request_response_body
+func ValidateGetPolicyEvalRunInsightsBadRequestResponseBody(body *GetPolicyEvalRunInsightsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPolicyEvalRunInsightsNotFoundResponseBody runs the validations
+// defined on getPolicyEvalRunInsights_not_found_response_body
+func ValidateGetPolicyEvalRunInsightsNotFoundResponseBody(body *GetPolicyEvalRunInsightsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPolicyEvalRunInsightsConflictResponseBody runs the validations
+// defined on getPolicyEvalRunInsights_conflict_response_body
+func ValidateGetPolicyEvalRunInsightsConflictResponseBody(body *GetPolicyEvalRunInsightsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPolicyEvalRunInsightsUnsupportedMediaResponseBody runs the
+// validations defined on
+// getPolicyEvalRunInsights_unsupported_media_response_body
+func ValidateGetPolicyEvalRunInsightsUnsupportedMediaResponseBody(body *GetPolicyEvalRunInsightsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPolicyEvalRunInsightsInvalidResponseBody runs the validations
+// defined on getPolicyEvalRunInsights_invalid_response_body
+func ValidateGetPolicyEvalRunInsightsInvalidResponseBody(body *GetPolicyEvalRunInsightsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPolicyEvalRunInsightsInvariantViolationResponseBody runs the
+// validations defined on
+// getPolicyEvalRunInsights_invariant_violation_response_body
+func ValidateGetPolicyEvalRunInsightsInvariantViolationResponseBody(body *GetPolicyEvalRunInsightsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPolicyEvalRunInsightsUnexpectedResponseBody runs the validations
+// defined on getPolicyEvalRunInsights_unexpected_response_body
+func ValidateGetPolicyEvalRunInsightsUnexpectedResponseBody(body *GetPolicyEvalRunInsightsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPolicyEvalRunInsightsGatewayErrorResponseBody runs the
+// validations defined on getPolicyEvalRunInsights_gateway_error_response_body
+func ValidateGetPolicyEvalRunInsightsGatewayErrorResponseBody(body *GetPolicyEvalRunInsightsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateRiskPolicyResponseBody runs the validations defined on
 // RiskPolicyResponseBody
 func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
@@ -25490,6 +26193,54 @@ func ValidatePolicyEvalFindingResponseBody(body *PolicyEvalFindingResponseBody) 
 	}
 	if body.ChatID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidatePolicyEvalMatchClusterResponseBody runs the validations defined on
+// PolicyEvalMatchClusterResponseBody
+func ValidatePolicyEvalMatchClusterResponseBody(body *PolicyEvalMatchClusterResponseBody) (err error) {
+	if body.MatchHash == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_hash", "body"))
+	}
+	if body.MatchRedacted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_redacted", "body"))
+	}
+	if body.Source == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+	}
+	if body.Count == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
+	}
+	if body.DistinctSessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("distinct_sessions", "body"))
+	}
+	return
+}
+
+// ValidatePolicyEvalRuleClusterResponseBody runs the validations defined on
+// PolicyEvalRuleClusterResponseBody
+func ValidatePolicyEvalRuleClusterResponseBody(body *PolicyEvalRuleClusterResponseBody) (err error) {
+	if body.Source == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+	}
+	if body.Count == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
+	}
+	if body.DistinctMessages == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("distinct_messages", "body"))
+	}
+	return
+}
+
+// ValidatePolicyEvalMessageTypeClusterResponseBody runs the validations
+// defined on PolicyEvalMessageTypeClusterResponseBody
+func ValidatePolicyEvalMessageTypeClusterResponseBody(body *PolicyEvalMessageTypeClusterResponseBody) (err error) {
+	if body.Role == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role", "body"))
+	}
+	if body.Count == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
 	}
 	return
 }

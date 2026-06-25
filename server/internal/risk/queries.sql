@@ -1282,3 +1282,58 @@ WHERE pef.project_id = @project_id
   )
 ORDER BY pef.created_at DESC, pef.id DESC
 LIMIT @result_limit;
+
+-- name: AggregatePolicyEvalFindingsByMatch :many
+-- Clusters a run's findings by the matched value so the dashboard can surface
+-- duplicate matches (the actionable ones — a secret detected many times, a
+-- recurring entity) and suggest an exclusion. The raw match is SENSITIVE
+-- (secrets/PII) so we GROUP BY md5(match) and never order/filter on the plaintext.
+-- A representative raw match is returned via MIN(pef.match) ONLY so the Go layer
+-- can redact it consistently before it leaves the server (see redactMatch); it is
+-- never returned to the client verbatim. distinct_sessions counts unique chats
+-- via the chat_messages join. Only rows with count > 1 are returned (a single
+-- occurrence is not a cluster worth acting on). Scoped to project_id AND the run.
+SELECT
+    md5(COALESCE(pef.match, ''))::text AS match_hash
+  , MIN(pef.match)::text AS match_sample
+  , pef.source
+  , pef.rule_id
+  , COUNT(*)::bigint AS finding_count
+  , COUNT(DISTINCT cm.chat_id)::bigint AS distinct_sessions
+FROM policy_eval_findings pef
+JOIN chat_messages cm ON cm.id = pef.chat_message_id
+WHERE pef.project_id = @project_id
+  AND pef.policy_eval_run_id = @policy_eval_run_id
+GROUP BY md5(COALESCE(pef.match, '')), pef.source, pef.rule_id
+HAVING COUNT(*) > 1
+ORDER BY finding_count DESC, match_hash ASC
+LIMIT @result_limit;
+
+-- name: AggregatePolicyEvalFindingsByRule :many
+-- Clusters a run's findings by (source, rule_id): how many findings each rule
+-- produced and how many distinct messages it fired on. Drives the "which rule is
+-- noisy / which to disable" suggestion. Scoped to project_id AND the run.
+SELECT
+    pef.source
+  , pef.rule_id
+  , COUNT(*)::bigint AS finding_count
+  , COUNT(DISTINCT pef.chat_message_id)::bigint AS distinct_messages
+FROM policy_eval_findings pef
+WHERE pef.project_id = @project_id
+  AND pef.policy_eval_run_id = @policy_eval_run_id
+GROUP BY pef.source, pef.rule_id
+ORDER BY finding_count DESC, pef.rule_id ASC;
+
+-- name: AggregatePolicyEvalFindingsByMessageType :many
+-- Clusters a run's findings by the scanned message's role (the FE maps role to a
+-- message type). Drives the "narrow message_types scope" suggestion. Scoped to
+-- project_id AND the run.
+SELECT
+    cm.role
+  , COUNT(*)::bigint AS finding_count
+FROM policy_eval_findings pef
+JOIN chat_messages cm ON cm.id = pef.chat_message_id
+WHERE pef.project_id = @project_id
+  AND pef.policy_eval_run_id = @policy_eval_run_id
+GROUP BY cm.role
+ORDER BY finding_count DESC, cm.role ASC;
