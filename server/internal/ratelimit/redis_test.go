@@ -2,7 +2,6 @@ package ratelimit
 
 import (
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -43,21 +42,61 @@ func TestRedisStoreConcurrentRespectsBurst(t *testing.T) {
 	// 10/min == one token per 6s, so no meaningful refill during the burst.
 	limiter := New(newRedisStore(t), t.Name(), Rate{Tokens: 10, Interval: time.Minute, Burst: burst})
 
-	var allowed atomic.Int64
+	var (
+		mu      sync.Mutex
+		allowed int
+		errs    []error
+	)
 	var wg sync.WaitGroup
 	for range 50 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			res, err := limiter.Allow(t.Context(), "hot")
-			if err == nil && res.Allowed {
-				allowed.Add(1)
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case err != nil:
+				errs = append(errs, err)
+			case res.Allowed:
+				allowed++
 			}
 		}()
 	}
 	wg.Wait()
 
-	require.Equal(t, int64(burst), allowed.Load(), "exactly burst tokens granted across all goroutines")
+	require.Empty(t, errs, "no Allow call should error")
+	require.Equal(t, burst, allowed, "exactly burst tokens granted across all goroutines")
+}
+
+func TestLimiterInvalidRateErrors(t *testing.T) {
+	t.Parallel()
+
+	limiter := New(newRedisStore(t), t.Name(), Rate{Tokens: 0, Interval: time.Minute, Burst: 0})
+	res, err := limiter.Allow(t.Context(), "k")
+	require.Error(t, err)
+	require.False(t, res.Allowed)
+}
+
+func TestAllowNRejectsNonPositive(t *testing.T) {
+	t.Parallel()
+
+	limiter := New(newRedisStore(t), t.Name(), Rate{Tokens: 60, Interval: time.Minute, Burst: 10})
+	for _, n := range []int{0, -1} {
+		res, err := limiter.AllowN(t.Context(), "k", n)
+		require.Error(t, err, "n=%d must be rejected", n)
+		require.False(t, res.Allowed)
+	}
+}
+
+func TestAllowNBeyondBurstNeverSucceeds(t *testing.T) {
+	t.Parallel()
+
+	limiter := New(newRedisStore(t), t.Name(), Rate{Tokens: 60, Interval: time.Minute, Burst: 5})
+	res, err := limiter.AllowN(t.Context(), "k", 6)
+	require.NoError(t, err)
+	require.False(t, res.Allowed)
+	require.Equal(t, time.Duration(0), res.RetryAfter, "n > burst can never be satisfied")
 }
 
 func TestRedisStoreNamespaceIsolation(t *testing.T) {

@@ -1,8 +1,7 @@
 // Package ratelimit is Gram's shared token-bucket rate limiter. A Limiter binds
-// one named Rate and enforces it across many keys (per-org, per-assistant, …),
-// backed by an in-memory or Redis Store. The Redis Store holds the cap
-// fleet-wide instead of per-replica — the limitation of the hand-rolled
-// in-memory limiters this package replaces.
+// one named Rate and enforces it across many keys (per-org, per-assistant, …)
+// through a Redis Store, so the cap holds fleet-wide instead of per-replica —
+// the limitation of the hand-rolled in-memory limiters this package replaces.
 package ratelimit
 
 import (
@@ -12,7 +11,7 @@ import (
 )
 
 // keyPrefix namespaces every bucket so rate-limit state can never collide with
-// other keys sharing the same Redis (or, in tests, the same memory store).
+// other keys sharing the same Redis.
 const keyPrefix = "ratelimit:"
 
 // Rate is a token-bucket configuration: Tokens are refilled smoothly over
@@ -47,12 +46,6 @@ func (r Rate) Valid() bool {
 	return r.Tokens > 0 && r.Interval > 0 && r.Burst > 0
 }
 
-// tokensPerSecond is the refill rate in the token-bucket math shared by both
-// stores.
-func (r Rate) tokensPerSecond() float64 {
-	return float64(r.Tokens) / r.Interval.Seconds()
-}
-
 // Result is the outcome of one Allow check.
 type Result struct {
 	// Allowed reports whether the caller may proceed.
@@ -65,9 +58,9 @@ type Result struct {
 }
 
 // Store holds bucket state and performs the atomic take. The method is
-// unexported, so the implementation set is closed to this package: callers pick
-// NewMemoryStore or NewRedisStore but cannot supply a subtly-wrong one. Tests
-// run against NewMemoryStore, which needs no infrastructure.
+// unexported, so the implementation set is closed to this package: callers pick a
+// constructor (NewRedisStore today) but cannot supply a subtly-wrong one. The
+// seam is kept so an alternative backend can be added without touching callers.
 type Store interface {
 	take(ctx context.Context, key string, rate Rate, n int) (Result, error)
 }
@@ -108,6 +101,14 @@ func (l *Limiter) Allow(ctx context.Context, key string) (Result, error) {
 func (l *Limiter) AllowN(ctx context.Context, key string, n int) (Result, error) {
 	if !l.rate.Valid() {
 		return Result{Allowed: false, Remaining: 0, RetryAfter: 0}, fmt.Errorf("ratelimit %q: invalid rate %+v", l.name, l.rate)
+	}
+	if n <= 0 {
+		return Result{Allowed: false, Remaining: 0, RetryAfter: 0}, fmt.Errorf("ratelimit %q: n must be positive, got %d", l.name, n)
+	}
+	if n > l.rate.Burst {
+		// More than the bucket can ever hold: no wait makes it satisfiable, so
+		// report it as such instead of a misleading finite RetryAfter.
+		return Result{Allowed: false, Remaining: 0, RetryAfter: 0}, nil
 	}
 
 	res, err := l.store.take(ctx, keyPrefix+l.name+":"+key, l.rate, n)

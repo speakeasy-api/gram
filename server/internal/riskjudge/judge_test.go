@@ -13,7 +13,6 @@ import (
 
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/message"
-	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -145,12 +144,11 @@ func TestJudgeSkipsTrulyEmptyMessage(t *testing.T) {
 	require.Zero(t, client.calls.Load(), "a message with no content must not reach the client")
 }
 
-// newTestJudge builds a Judge with a memory-backed judge limiter, isolated per
-// test.
+// newTestJudge builds a Judge with a Redis-backed judge limiter on its own
+// logical DB, isolated per test.
 func newTestJudge(t *testing.T, client openrouter.CompletionClient) *Judge {
 	t.Helper()
-	return New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client,
-		openrouter.NewJudgeRateLimiter(ratelimit.NewMemoryStore()))
+	return New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, testJudgeLimiter(t))
 }
 
 // drainLimiter exhausts the org+model token bucket so the next Evaluate is

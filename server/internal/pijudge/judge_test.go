@@ -14,15 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
-	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 func newEngine(t *testing.T, client openrouter.CompletionClient) *Engine {
 	t.Helper()
-	return New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client,
-		openrouter.NewJudgeRateLimiter(ratelimit.NewMemoryStore()))
+	return New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, testJudgeLimiter(t))
 }
 
 func req(texts ...string) ra.PromptInjectionRequest {

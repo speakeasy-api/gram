@@ -260,13 +260,7 @@ func NewTemporalWorker(
 		logger.ErrorContext(context.Background(), "build CEL engine for risk activities", attr.SlogError(celErr))
 	}
 
-	var judgeRateStore ratelimit.Store
-	if opts.RedisClient != nil {
-		judgeRateStore = ratelimit.NewRedisStore(opts.RedisClient)
-	} else {
-		judgeRateStore = ratelimit.NewMemoryStore()
-	}
-	judgeRateLimiter := openrouter.NewJudgeRateLimiter(judgeRateStore)
+	judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(opts.RedisClient))
 
 	activities := NewActivities(
 		logger,
