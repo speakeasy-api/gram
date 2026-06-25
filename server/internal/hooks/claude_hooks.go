@@ -216,7 +216,9 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 }
 
 // Claude is the unified endpoint for all Claude Code hook events.
-func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *gen.ClaudeHookResult, err error) {
+	start := time.Now()
+
 	// project_slug header may be set even when the API key isn't validated
 	// yet on this optional-auth endpoint — log it as a hint up front.
 	projectSlugHint := conv.PtrValOr(payload.ProjectSlugInput, "")
@@ -249,6 +251,14 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 	if parsedEvent, ok := parseClaudeHookEvent(payload.HookEventName); ok {
 		hookEventName = string(parsedEvent)
 	}
+	orgSlug := ""
+	outcome := hookMetricOutcomeAccepted
+	defer func() {
+		if err != nil {
+			outcome = hookMetricOutcomeFailure
+		}
+		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, orgSlug, time.Since(start))
+	}()
 
 	if hasPluginAuth {
 		// Auth is optional. Returning a 401 on failure deadlocks the client:
@@ -271,11 +281,9 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 			)
 		}
 	}
-	orgSlug := ""
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
 		orgSlug = authCtx.OrganizationSlug
 	}
-	s.metrics.RecordHookEventReceived(ctx, "claude", hookEventName, hookMetricOutcomeAccepted, orgSlug)
 
 	// Claim the per-invocation idempotency token once, before persistence and
 	// the block side-effects in the handlers below. A retry re-sends the same

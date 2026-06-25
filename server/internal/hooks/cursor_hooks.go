@@ -26,12 +26,21 @@ import (
 )
 
 // Cursor is the endpoint for Cursor hook events
-func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.CursorHookResult, error) {
+func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *gen.CursorHookResult, err error) {
+	start := time.Now()
 	parsedEvent, parsedHookEvent := parseCursorHookEvent(payload.HookEventName)
 	logHookEventName := payload.HookEventName
 	if parsedHookEvent {
 		logHookEventName = string(parsedEvent)
 	}
+	orgSlug := ""
+	outcome := hookMetricOutcomeAccepted
+	defer func() {
+		if err != nil {
+			outcome = hookMetricOutcomeFailure
+		}
+		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, orgSlug, time.Since(start))
+	}()
 
 	logger := s.logger.With(
 		attr.SlogHookSource("cursor"),
@@ -43,7 +52,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 
 	authCtx, authOK := contextvalues.GetAuthContext(ctx)
 	if !authOK || authCtx == nil || authCtx.ProjectID == nil {
-		s.metrics.RecordHookEventReceived(ctx, "cursor", logHookEventName, hookMetricOutcomeUnauthorized, "")
+		outcome = hookMetricOutcomeUnauthorized
 		logger.WarnContext(ctx, "rejected unauthorized cursor hook request",
 			attr.SlogEvent("cursor_hook_unauthorized"),
 		)
@@ -56,6 +65,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	}
 
 	orgID := authCtx.ActiveOrganizationID
+	orgSlug = authCtx.OrganizationSlug
 	projectID := authCtx.ProjectID.String()
 	userEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
 	if userEmail == "" {
@@ -70,7 +80,6 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	logger.InfoContext(ctx, "cursor hook received",
 		attr.SlogEvent("cursor_hook"),
 	)
-	s.metrics.RecordHookEventReceived(ctx, "cursor", logHookEventName, hookMetricOutcomeAccepted, authCtx.OrganizationSlug)
 
 	// Claim the per-invocation idempotency token before persistence. A retry
 	// re-sends the same token: the decision still re-runs so the user stays
