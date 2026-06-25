@@ -40,7 +40,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { Network, Trash2 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import type {
   McpServer,
@@ -130,8 +130,16 @@ export default function PluginDetail(): JSX.Element | null {
   // Destructure mutate so callbacks depend on the stable function rather than
   // the fresh-per-render wrapper object (mirrors Plugins.tsx).
   const { mutate: publishMutate } = publishMutation;
+  // Mirror the in-flight flag into a ref so detached callbacks can gate on the
+  // current pending state. The "Publish now" toast action closure is created
+  // when offerPublish runs (before any publish starts), so it can't read a live
+  // isPending — without this guard, stacking edits into multiple toasts lets a
+  // user fire concurrent publishes that the disabled header button prevents.
+  const isPublishingRef = useRef(publishMutation.isPending);
+  isPublishingRef.current = publishMutation.isPending;
   const handlePublish = useCallback(
     (githubUsernames: string[]) => {
+      if (isPublishingRef.current) return;
       publishMutate({
         security: { sessionHeaderGramSession: "" },
         request: { publishPluginsRequestBody: { githubUsernames } },
