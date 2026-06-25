@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -76,17 +77,22 @@ func (w *TelemetryWriter) Write(ctx context.Context, ev any, metadata *SessionMe
 		md.UserID = w.resolveUserByEmail(ctx, md.UserEmail, md.GramOrgID)
 	}
 
-	var errs []error
-	if err := w.writeTelemetry(ctx, ev, &md, opts.BlockReason); err != nil {
-		errs = append(errs, fmt.Errorf("write hook telemetry: %w", err))
-	}
-	if !opts.SkipChat {
-		err := w.writeChatProjection(ctx, ev, &md)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("write hook chat projection: %w", err))
+	var eg errgroup.Group
+	eg.Go(func() error {
+		if err := w.writeTelemetry(ctx, ev, &md, opts.BlockReason); err != nil {
+			return fmt.Errorf("write hook telemetry: %w", err)
 		}
+		return nil
+	})
+	if !opts.SkipChat {
+		eg.Go(func() error {
+			if err := w.writeChatProjection(ctx, ev, &md); err != nil {
+				return fmt.Errorf("write hook chat projection: %w", err)
+			}
+			return nil
+		})
 	}
-	return errors.Join(errs...)
+	return eg.Wait()
 }
 
 func (w *TelemetryWriter) writeTelemetry(ctx context.Context, ev any, metadata *SessionMetadata, blockReason string) error {
