@@ -121,6 +121,21 @@ func seedChatWithFinding(t *testing.T, conn *pgxpool.Pool, msgCount, findingIdx 
 	return seeded{orgID: orgID, projectID: project.ID, chatID: chatID, messageIDs: ids}
 }
 
+// outputDir returns the directory the export writes to. By default it is an
+// ephemeral t.TempDir() (auto-cleaned, used in CI). Set RISK_EXPORT_TEST_OUTPUT
+// to a persistent path (e.g. server/.assets/risk-export-demo) to keep the part
+// files + manifest around for manual inspection after the run.
+func outputDir(t *testing.T) string {
+	t.Helper()
+	if base := os.Getenv("RISK_EXPORT_TEST_OUTPUT"); base != "" {
+		dir := filepath.Join(base, t.Name())
+		require.NoError(t, os.MkdirAll(dir, 0o750))
+		t.Logf("risk export output dir: %s", dir)
+		return dir
+	}
+	return t.TempDir()
+}
+
 func newExport(t *testing.T, conn *pgxpool.Pool, localDir string) *risk_export.RiskExport {
 	t.Helper()
 	root, err := os.OpenRoot(t.TempDir())
@@ -156,7 +171,7 @@ func TestExport_FindingCentric_EndToEnd(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	conn := cloneDB(t)
-	localDir := t.TempDir()
+	localDir := outputDir(t)
 	sd := seedChatWithFinding(t, conn, 6, 3) // finding on the 4th message (rn=4)
 	ex := newExport(t, conn, localDir)
 
@@ -204,7 +219,7 @@ func TestExport_FullTranscript_EndToEnd(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	conn := cloneDB(t)
-	localDir := t.TempDir()
+	localDir := outputDir(t)
 	sd := seedChatWithFinding(t, conn, 6, 3)
 	ex := newExport(t, conn, localDir)
 
