@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 46e315eef72e1dfceb7ecf66d85f0782
+  docChecksum: 0f90ac19734e3ecf5170b29209f201c7
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -358,8 +358,10 @@ trackedFiles:
     last_write_checksum: sha1:1df20aa88f01f3862e289bca08c3495efc00d523
   docs/models/components/functiontooldefinition.md:
     last_write_checksum: sha1:dadf68c76b2e0ed4d0205950f9b81504cab4d30c
+  docs/models/components/generatetitlerequestbody.md:
+    last_write_checksum: sha1:9b6786f57c3451687d2870651727f404974444aa
   docs/models/components/generatetitleresponsebody.md:
-    last_write_checksum: sha1:38ee2cf743b12e9ffa968731732b84116e7d4da8
+    last_write_checksum: sha1:e89263f6603022c536950e801a6b62b44cba01cf
   docs/models/components/generateworkosadminportallinkrequestbody.md:
     last_write_checksum: sha1:d83552291b26b2a64af70aba75c08181a352dc47
   docs/models/components/generateworkosadminportallinkresult.md:
@@ -996,8 +998,6 @@ trackedFiles:
     last_write_checksum: sha1:a8bfab897b87afbbd8253195d8c5b569e470f340
   docs/models/components/sendmessageresult.md:
     last_write_checksum: sha1:9325eeca23e115f9b30785531c51ba87288de934
-  docs/models/components/serveimageform.md:
-    last_write_checksum: sha1:530060f0cc468c392b1fd32052fc990c4a5c17c5
   docs/models/components/serverclass.md:
     last_write_checksum: sha1:974a1462df927f7814ebefd8735af1960ed6d6f7
   docs/models/components/servernameoverride.md:
@@ -1967,7 +1967,7 @@ trackedFiles:
   docs/models/operations/fetchopenapiv3fromurlsecurityoption2.md:
     last_write_checksum: sha1:9526a6db9ea2b54d88df044cfe82dfbdb0e25057
   docs/models/operations/generatetitlerequest.md:
-    last_write_checksum: sha1:ee6e08a7b9441f8d3fbd04d096ea393f9ffee3c2
+    last_write_checksum: sha1:c2820b16876bb7d90d70a19dabb21ccd3a5ccbac
   docs/models/operations/generatetitlesecurity.md:
     last_write_checksum: sha1:ed98f8b53e32a5f4db01b9f1770fff60e1fc61e9
   docs/models/operations/generatetitlesecurityoption1.md:
@@ -3445,7 +3445,7 @@ trackedFiles:
   docs/sdks/categories/README.md:
     last_write_checksum: sha1:1c455de965567c85a0f47659a2ca4913f6c560aa
   docs/sdks/chat/README.md:
-    last_write_checksum: sha1:1e30b91a7f90c39cd49070a2079fd7caa26cce66
+    last_write_checksum: sha1:dc8c0428a4b6797dbf40f2e51c4d12d721f778f7
   docs/sdks/chatsessions/README.md:
     last_write_checksum: sha1:5931e949f459441faaa30e05840cbaf1fab82836
   docs/sdks/collections/README.md:
@@ -3677,7 +3677,7 @@ trackedFiles:
   src/funcs/chatDelete.ts:
     last_write_checksum: sha1:1b27c84d09d7af61f6f19c01a04dc7f38724eb3c
   src/funcs/chatGenerateTitle.ts:
-    last_write_checksum: sha1:a5c2fb0ee636e1060daf3a106602d629c1d7c5c4
+    last_write_checksum: sha1:d2ca1ce7fea23f14ce3fa0c0d5b7fbc3f5b83838
   src/funcs/chatList.ts:
     last_write_checksum: sha1:c4a958d58a0588bb0c16b5108038f264b0e29076
   src/funcs/chatLoad.ts:
@@ -4495,8 +4495,10 @@ trackedFiles:
     last_write_checksum: sha1:cd82ab538fbb9585fc6d90b445e54499335975f0
   src/models/components/functiontooldefinition.ts:
     last_write_checksum: sha1:81cdcc477d5b4407af6e3b80b3eee59c04fdc5bd
+  src/models/components/generatetitlerequestbody.ts:
+    last_write_checksum: sha1:0eeeac1092745bcf85f814f83793d5a7a99fd069
   src/models/components/generatetitleresponsebody.ts:
-    last_write_checksum: sha1:0908a7700ea1b4d25b03d3baab6d728e51c3c43c
+    last_write_checksum: sha1:06267b71431dbcadcb85594742980ba20fc7ca06
   src/models/components/generateworkosadminportallinkrequestbody.ts:
     last_write_checksum: sha1:d7bcd95a32093d5b66024c51222248e444044fad
   src/models/components/generateworkosadminportallinkresult.ts:
@@ -4573,7 +4575,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:c8b9eb026198af902a0c87bb0cfd2a11fe82ec31
+    last_write_checksum: sha1:4de68f6f4f7e1a95c913295095873c8d36f27050
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -5038,8 +5040,6 @@ trackedFiles:
     last_write_checksum: sha1:9608affaba18b0452988338ee9839179a883a39f
   src/models/components/sendmessageresult.ts:
     last_write_checksum: sha1:1b536a4541a4bebd14271375512e1a22c348c541
-  src/models/components/serveimageform.ts:
-    last_write_checksum: sha1:02556f1de78b6d7b643c4bee99807bd701536d2a
   src/models/components/servernameoverride.ts:
     last_write_checksum: sha1:462812814e6981fa6943f7543755715db2888382
   src/models/components/servervariable.ts:
@@ -5497,7 +5497,7 @@ trackedFiles:
   src/models/operations/fetchopenapiv3fromurl.ts:
     last_write_checksum: sha1:e0c842f421275991681729fd84b2755fb502acec
   src/models/operations/generatetitle.ts:
-    last_write_checksum: sha1:20c96633141b08596c13b2898c5962ed9dca7467
+    last_write_checksum: sha1:8515bd3b86dfb89f8052cb23510be731555e4cac
   src/models/operations/generateworkosadminportallink.ts:
     last_write_checksum: sha1:46cd8d80e232f5c07b86c6eb58b2c8253689ab49
   src/models/operations/getactivedeployment.ts:
@@ -6029,7 +6029,7 @@ trackedFiles:
   src/react-query/chatDelete.ts:
     last_write_checksum: sha1:ed4948abe532c9d58b28f1f0681c2ddcab958779
   src/react-query/chatGenerateTitle.ts:
-    last_write_checksum: sha1:38971b3a11197701c06bbea6fc52c90093b262c3
+    last_write_checksum: sha1:ef4d42b345c30b83e37dc3e159209737ff46b84d
   src/react-query/chatSessionsCreate.ts:
     last_write_checksum: sha1:6abf5f57c31f7e53d4fd3ebbe3b5554ff12865c4
   src/react-query/chatSessionsRevoke.ts:
@@ -6941,7 +6941,7 @@ trackedFiles:
   src/sdk/categories.ts:
     last_write_checksum: sha1:59fa481e654b66796749e75ac7c957f288a3e35b
   src/sdk/chat.ts:
-    last_write_checksum: sha1:8209a532d4022b7a6dad36d79120b72db29971fa
+    last_write_checksum: sha1:ff540be89d15e0063b05f2f4f2ae5a1b5d990cba
   src/sdk/chatsessions.ts:
     last_write_checksum: sha1:130846542da7bbe81bd0c676bc1513a4a1e4e8a5
   src/sdk/collections.ts:

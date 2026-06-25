@@ -142,18 +142,21 @@ var _ = Service("chat", func() {
 	})
 
 	Method("generateTitle", func() {
-		Description("Generate a title for a chat based on its messages")
+		Description("Read or set a chat's title. Omit `title` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `title` to set a manual title that auto-generation will never overwrite; provide an empty `title` to clear the manual title and re-enable auto-generation.")
 
 		Payload(func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 			security.ChatSessionsTokenPayload()
 			Attribute("id", String, "The ID of the chat")
+			Attribute("title", String, "When present, sets the chat's title manually (empty string resets to auto-generated). When omitted, the current title is returned without changes.", func() {
+				MaxLength(200)
+			})
 			Required("id")
 		})
 
 		Result(func() {
-			Attribute("title", String, "The generated title")
+			Attribute("title", String, "The current title after the operation (empty when reset to auto-generated)")
 			Required("title")
 		})
 

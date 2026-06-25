@@ -595,7 +595,21 @@ WHERE chat_id = @chat_id AND generation = @generation
 ORDER BY seq ASC;
 
 -- name: UpdateChatTitle :exec
-UPDATE chats SET title = @title, updated_at = NOW() WHERE id = @id;
+-- Auto-generated title write. Guarded on title_manually_set so a manual rename
+-- landing during title generation (between the activity's read and this write)
+-- is never clobbered: the row no longer matches and the update no-ops.
+UPDATE chats SET title = @title, updated_at = NOW()
+WHERE id = @id AND title_manually_set IS FALSE;
+
+-- name: RenameChat :exec
+-- Set or clear a chat's title and record whether a human chose it. Project-scoped
+-- so a manual rename can never touch another project's chat. A NULL title resets
+-- to auto-naming (paired with title_manually_set = false).
+UPDATE chats
+SET title = sqlc.narg('title'),
+    title_manually_set = @title_manually_set,
+    updated_at = NOW()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: GetFirstUserChatMessage :one
 SELECT content FROM chat_messages

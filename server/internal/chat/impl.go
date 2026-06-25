@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -1179,6 +1180,10 @@ func (s *Service) CreditUsage(ctx context.Context, payload *gen.CreditUsagePaylo
 	}, nil
 }
 
+// maxChatTitleLength bounds a manually set chat title. Kept in sync with the
+// MaxLength(200) validation on the generateTitle design payload.
+const maxChatTitleLength = 200
+
 func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitlePayload) (*gen.GenerateTitleResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -1203,8 +1208,40 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Return current title from DB. Title generation happens asynchronously via
-	// Temporal after first completion; title will be available on next list()/fetch().
+	// Write path: a manual rename. A non-empty title is pinned (auto-generation
+	// skips it); an empty title clears the manual flag and re-enables auto-naming.
+	if payload.Title != nil {
+		// Mirrors the MaxLength(200) transport validation so the bound also holds
+		// for any non-HTTP caller. Goa's MaxLength counts runes, so we do too —
+		// using byte length here would wrongly reject valid multi-byte titles.
+		if titleLen := utf8.RuneCountInString(*payload.Title); titleLen > maxChatTitleLength {
+			return nil, oops.E(oops.CodeInvalid, fmt.Errorf("title length %d exceeds max %d", titleLen, maxChatTitleLength), "chat title is too long")
+		}
+
+		trimmed := strings.TrimSpace(*payload.Title)
+
+		var newTitle pgtype.Text
+		manual := false
+		if trimmed != "" {
+			newTitle = conv.PtrToPGText(&trimmed)
+			manual = true
+		}
+
+		if err := s.repo.RenameChat(ctx, repo.RenameChatParams{
+			Title:            newTitle,
+			TitleManuallySet: manual,
+			ID:               chatID,
+			ProjectID:        *authCtx.ProjectID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to rename chat").LogError(ctx, s.logger)
+		}
+
+		return &gen.GenerateTitleResult{Title: trimmed}, nil
+	}
+
+	// Read path: return the current title from DB. Title generation happens
+	// asynchronously via Temporal after first completion; the title will be
+	// available on the next list()/fetch().
 	title := DefaultChatTitle
 	if chat.Title.Valid && chat.Title.String != "" {
 		title = chat.Title.String

@@ -19,6 +19,9 @@ import (
 type GenerateTitleRequestBody struct {
 	// The ID of the chat
 	ID string `form:"id" json:"id" xml:"id"`
+	// When present, sets the chat's title manually (empty string resets to
+	// auto-generated). When omitted, the current title is returned without changes.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 }
 
 // SubmitFeedbackRequestBody is the type of the "chat" service "submitFeedback"
@@ -113,7 +116,7 @@ type LoadChatResponseBody struct {
 // GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
 // endpoint HTTP response body.
 type GenerateTitleResponseBody struct {
-	// The generated title
+	// The current title after the operation (empty when reset to auto-generated)
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 }
 
@@ -1384,7 +1387,8 @@ type ChatTotalsResponseBody struct {
 // the "generateTitle" endpoint of the "chat" service.
 func NewGenerateTitleRequestBody(p *chat.GenerateTitlePayload) *GenerateTitleRequestBody {
 	body := &GenerateTitleRequestBody{
-		ID: p.ID,
+		ID:    p.ID,
+		Title: p.Title,
 	}
 	return body
 }

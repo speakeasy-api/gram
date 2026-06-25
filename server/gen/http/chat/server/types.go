@@ -9,6 +9,7 @@ package server
 
 import (
 	"encoding/json"
+	"unicode/utf8"
 
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
 	goa "goa.design/goa/v3/pkg"
@@ -19,6 +20,9 @@ import (
 type GenerateTitleRequestBody struct {
 	// The ID of the chat
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// When present, sets the chat's title manually (empty string resets to
+	// auto-generated). When omitted, the current title is returned without changes.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 }
 
 // SubmitFeedbackRequestBody is the type of the "chat" service "submitFeedback"
@@ -113,7 +117,7 @@ type LoadChatResponseBody struct {
 // GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
 // endpoint HTTP response body.
 type GenerateTitleResponseBody struct {
-	// The generated title
+	// The current title after the operation (empty when reset to auto-generated)
 	Title string `form:"title" json:"title" xml:"title"`
 }
 
@@ -2381,7 +2385,8 @@ func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64,
 // NewGenerateTitlePayload builds a chat service generateTitle endpoint payload.
 func NewGenerateTitlePayload(body *GenerateTitleRequestBody, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.GenerateTitlePayload {
 	v := &chat.GenerateTitlePayload{
-		ID: *body.ID,
+		ID:    *body.ID,
+		Title: body.Title,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -2427,6 +2432,11 @@ func NewSubmitFeedbackPayload(body *SubmitFeedbackRequestBody, sessionToken *str
 func ValidateGenerateTitleRequestBody(body *GenerateTitleRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Title != nil {
+		if utf8.RuneCountInString(*body.Title) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.title", *body.Title, utf8.RuneCountInString(*body.Title), 200, false))
+		}
 	}
 	return
 }
