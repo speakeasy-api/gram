@@ -22,7 +22,7 @@ export type UpdateMcpServerFormVisibility = ClosedEnum<
 >;
 
 /**
- * Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.
+ * Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.
  */
 export type UpdateMcpServerForm = {
   /**
@@ -50,6 +50,10 @@ export type UpdateMcpServerForm = {
    */
   toolsetId?: string | undefined;
   /**
+   * The ID of the tunnelled MCP server to use as the backend
+   */
+  tunnelledMcpServerId?: string | undefined;
+  /**
    * The ID of the user session issuer that gates OAuth-based MCP client authentication. Omit to disable issuer-gated OAuth.
    */
   userSessionIssuerId?: string | undefined;
@@ -72,6 +76,7 @@ export type UpdateMcpServerForm$Outbound = {
   remote_mcp_server_id?: string | undefined;
   tool_variations_group_id?: string | undefined;
   toolset_id?: string | undefined;
+  tunnelled_mcp_server_id?: string | undefined;
   user_session_issuer_id?: string | undefined;
   visibility: string;
 };
@@ -88,6 +93,7 @@ export const UpdateMcpServerForm$outboundSchema: z.ZodMiniType<
     remoteMcpServerId: z.optional(z.string()),
     toolVariationsGroupId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
+    tunnelledMcpServerId: z.optional(z.string()),
     userSessionIssuerId: z.optional(z.string()),
     visibility: UpdateMcpServerFormVisibility$outboundSchema,
   }),
@@ -97,6 +103,7 @@ export const UpdateMcpServerForm$outboundSchema: z.ZodMiniType<
       remoteMcpServerId: "remote_mcp_server_id",
       toolVariationsGroupId: "tool_variations_group_id",
       toolsetId: "toolset_id",
+      tunnelledMcpServerId: "tunnelled_mcp_server_id",
       userSessionIssuerId: "user_session_issuer_id",
     });
   }),

@@ -205,6 +205,8 @@ func (s *Service) ServeWellKnownProtectedResourceForServer(
 	switch {
 	case mcpServer.RemoteMcpServerID.Valid:
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
+	case mcpServer.TunnelledMcpServerID.Valid:
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 	case mcpServer.ToolsetID.Valid:
 		toolset, err := s.loadToolsetForServer(ctx, logger, mcpServer.ToolsetID.UUID, mcpEndpoint.ProjectID)
 		if err != nil {
@@ -244,6 +246,8 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 
 	switch {
 	case mcpServer.RemoteMcpServerID.Valid:
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
+	case mcpServer.TunnelledMcpServerID.Valid:
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 	case mcpServer.ToolsetID.Valid:
 		toolset, err := s.loadToolsetForServer(ctx, logger, mcpServer.ToolsetID.UUID, mcpEndpoint.ProjectID)
