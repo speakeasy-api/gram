@@ -1146,6 +1146,7 @@ func newStartCommand() *cli.Command {
 				completionsClient,
 				shadowMCPClient,
 				auditLogger,
+				cache.NewRedisCacheAdapter(redisClient),
 				c.String(usersessions.JWTSigningKeyFlag),
 				hookPIIScanner,
 				hookPIScanner,
