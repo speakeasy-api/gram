@@ -48,9 +48,11 @@ export function AnnotationBadgeIcons({
   readOnly,
   destructive,
   idempotent,
-  openWorld,
 }: ResolvedToolAnnotations): JSX.Element | null {
-  if (!readOnly && !destructive && !idempotent && !openWorld) return null;
+  // Open-world is intentionally not surfaced as a label: it carries little
+  // permission signal, is set on nearly every tool, and Connect → Catalog → MCP
+  // omits it too — so matching that keeps the dense tool list readable.
+  if (!readOnly && !destructive && !idempotent) return null;
 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-1">
@@ -67,11 +69,6 @@ export function AnnotationBadgeIcons({
       {idempotent && !readOnly && (
         <Badge variant="information" className="text-xs">
           Idempotent
-        </Badge>
-      )}
-      {openWorld && (
-        <Badge variant="neutral" className="text-xs">
-          Open-world
         </Badge>
       )}
     </div>
