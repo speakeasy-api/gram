@@ -357,6 +357,81 @@ func TestClaudeMessages_FlushesPendingShadowMCPBlockFinding(t *testing.T) {
 	require.Empty(t, pending)
 }
 
+func TestClaudeMessages_MergesSubagentMessagesIntoParentStopOrder(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	seedCaptureSession(t, ctx, ti, sessionID, "subagent-user", "subagent@example.com")
+
+	agentID := "agent-1"
+	agentType := "general-purpose"
+	subContent := "subagent tool request"
+	subTS := "2026-06-26T09:00:02Z"
+	require.NoError(t, ti.service.ClaudeMessages(ctx, &gen.ClaudeMessagesPayload{
+		SessionID: sessionID,
+		Messages: []*gen.ClaudeCapturedMessage{{
+			ExternalID: "subagent-tool-call",
+			Role:       "assistant",
+			Content:    &subContent,
+			AgentID:    &agentID,
+			AgentType:  &agentType,
+			Timestamp:  &subTS,
+			ToolCalls: []any{map[string]any{
+				"id":   "toolu_subagent",
+				"type": "function",
+				"function": map[string]any{
+					"name":      "Read",
+					"arguments": `{"file_path":"README.md"}`,
+				},
+			}},
+		}},
+	}))
+
+	require.Never(t, func() bool {
+		got, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+			ChatID:    chatID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		return err == nil && len(got) > 0
+	}, 300*time.Millisecond, 50*time.Millisecond, "SubagentStop must wait for parent Stop before inserting")
+
+	userContent := "parent prompt"
+	assistantContent := "parent response"
+	userTS := "2026-06-26T09:00:01Z"
+	assistantTS := "2026-06-26T09:00:03Z"
+	require.NoError(t, ti.service.ClaudeMessages(ctx, &gen.ClaudeMessagesPayload{
+		SessionID: sessionID,
+		Messages: []*gen.ClaudeCapturedMessage{
+			{ExternalID: "parent-user", Role: "user", Content: &userContent, Timestamp: &userTS},
+			{ExternalID: "parent-assistant", Role: "assistant", Content: &assistantContent, Timestamp: &assistantTS},
+		},
+	}))
+
+	var msgs []chatRepo.ChatMessage
+	require.Eventually(t, func() bool {
+		var err error
+		msgs, err = chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+			ChatID:    chatID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		return err == nil && len(msgs) == 3
+	}, time.Second, 50*time.Millisecond)
+	require.Equal(t, "parent-user", msgs[0].ExternalMessageID.String)
+	require.Equal(t, "subagent-tool-call", msgs[1].ExternalMessageID.String)
+	require.Equal(t, "parent-assistant", msgs[2].ExternalMessageID.String)
+
+	var pending []gen.ClaudeMessagesPayload
+	require.NoError(t, ti.service.cache.ListRange(ctx, claudeSubagentMessagesPendingCacheKey(sessionID), 0, -1, &pending))
+	require.Empty(t, pending)
+}
+
 // TestClaudeHookVersion_StopCollectionSkipsPerEventPersist verifies the version
 // gate: a post-Stop-collection plugin (sends X-Gram-Hook-Version) must NOT
 // persist chat_messages on the per-event handlers — capture comes from the Stop

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -36,6 +37,20 @@ func (s *Service) ClaudeMessages(ctx context.Context, payload *gen.ClaudeMessage
 		return nil
 	}
 
+	if isSubagentClaudeMessagesPayload(payload) {
+		if err := s.bufferSubagentClaudeMessages(ctx, sessionID, payload); err != nil {
+			logger.ErrorContext(ctx, "failed to buffer claude subagent message capture",
+				attr.SlogEvent("claude_subagent_messages_buffer_failed"),
+				attr.SlogError(err),
+			)
+			return fmt.Errorf("buffer claude subagent messages: %w", err)
+		}
+		logger.DebugContext(ctx, "buffered claude subagent message capture pending parent Stop",
+			attr.SlogEvent("claude_subagent_messages_buffered"),
+		)
+		return nil
+	}
+
 	// Optional plugin auth, same posture as Method("claude"): on failure we fall
 	// through unauthenticated rather than 401 (a 401 would block the client with
 	// no way to recover). Without resolvable attribution we buffer the batch for
@@ -58,7 +73,7 @@ func (s *Service) ClaudeMessages(ctx context.Context, payload *gen.ClaudeMessage
 				attr.SlogEvent("claude_messages_buffer_failed"),
 				attr.SlogError(bErr),
 			)
-			return nil
+			return fmt.Errorf("buffer claude messages: %w", bErr)
 		}
 		logger.DebugContext(ctx, "buffered claude message capture pending session attribution",
 			attr.SlogEvent("claude_messages_buffered"),
@@ -67,7 +82,15 @@ func (s *Service) ClaudeMessages(ctx context.Context, payload *gen.ClaudeMessage
 		return nil
 	}
 
-	return s.persistClaudeMessages(ctx, payload, metadata, logger)
+	if err := s.bufferClaudeMessages(ctx, sessionID, payload); err != nil {
+		logger.ErrorContext(ctx, "failed to buffer claude message capture",
+			attr.SlogEvent("claude_messages_buffer_failed"),
+			attr.SlogError(err),
+		)
+		return fmt.Errorf("buffer claude messages: %w", err)
+	}
+	go s.flushPendingClaudeMessages(context.WithoutCancel(ctx), sessionID, &metadata)
+	return nil
 }
 
 func (s *Service) bufferClaudeMessages(ctx context.Context, sessionID string, payload *gen.ClaudeMessagesPayload) error {
@@ -102,6 +125,16 @@ func (s *Service) persistClaudeMessages(ctx context.Context, payload *gen.Claude
 	// Persistence must outlive the request: Claude Code closes the connection the
 	// instant the hook returns, which would otherwise cancel the in-flight writes.
 	ctx = context.WithoutCancel(ctx)
+
+	mergedSubagents := false
+	if !isSubagentClaudeMessagesPayload(payload) {
+		merged, ok, err := s.mergePendingSubagentClaudeMessages(ctx, sessionID, payload)
+		if err != nil {
+			return err
+		}
+		payload = merged
+		mergedSubagents = ok
+	}
 
 	chatID := sessionIDToUUID(sessionID)
 	if _, err := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
@@ -191,6 +224,11 @@ func (s *Service) persistClaudeMessages(ctx context.Context, payload *gen.Claude
 	if err != nil {
 		return fmt.Errorf("write captured claude messages: %w", err)
 	}
+	if mergedSubagents {
+		if err := s.cache.Delete(ctx, claudeSubagentMessagesPendingCacheKey(sessionID)); err != nil {
+			return fmt.Errorf("delete pending claude subagent message buffer: %w", err)
+		}
+	}
 
 	logger.InfoContext(ctx, "captured claude transcript messages",
 		attr.SlogEvent("claude_messages_captured"),
@@ -212,4 +250,64 @@ func (s *Service) persistClaudeMessages(ctx context.Context, payload *gen.Claude
 	}
 
 	return nil
+}
+
+func isSubagentClaudeMessagesPayload(payload *gen.ClaudeMessagesPayload) bool {
+	if payload == nil || len(payload.Messages) == 0 {
+		return false
+	}
+	hasSubagentMessage := false
+	for _, msg := range payload.Messages {
+		if msg == nil {
+			continue
+		}
+		if strings.TrimSpace(conv.PtrValOr(msg.AgentID, "")) == "" {
+			return false
+		}
+		hasSubagentMessage = true
+	}
+	return hasSubagentMessage
+}
+
+func (s *Service) mergePendingSubagentClaudeMessages(ctx context.Context, sessionID string, payload *gen.ClaudeMessagesPayload) (*gen.ClaudeMessagesPayload, bool, error) {
+	var subagentPayloads []gen.ClaudeMessagesPayload
+	key := claudeSubagentMessagesPendingCacheKey(sessionID)
+	if err := s.cache.ListRange(ctx, key, 0, -1, &subagentPayloads); err != nil {
+		return nil, false, fmt.Errorf("read pending claude subagent messages: %w", err)
+	}
+	if len(subagentPayloads) == 0 {
+		return payload, false, nil
+	}
+
+	merged := *payload
+	merged.Messages = append([]*gen.ClaudeCapturedMessage{}, payload.Messages...)
+	for i := range subagentPayloads {
+		merged.Messages = append(merged.Messages, subagentPayloads[i].Messages...)
+	}
+	sort.SliceStable(merged.Messages, func(i, j int) bool {
+		left, leftOK := claudeCapturedMessageTimestamp(merged.Messages[i])
+		right, rightOK := claudeCapturedMessageTimestamp(merged.Messages[j])
+		switch {
+		case leftOK && rightOK:
+			return left.Before(right)
+		case leftOK:
+			return true
+		case rightOK:
+			return false
+		default:
+			return false
+		}
+	})
+	return &merged, true, nil
+}
+
+func claudeCapturedMessageTimestamp(msg *gen.ClaudeCapturedMessage) (time.Time, bool) {
+	if msg == nil || msg.Timestamp == nil || *msg.Timestamp == "" {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(time.RFC3339, *msg.Timestamp)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
 }

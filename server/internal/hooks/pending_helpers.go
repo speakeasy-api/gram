@@ -645,7 +645,15 @@ func (s *Service) bufferShadowMCPBlockFinding(ctx context.Context, sessionID str
 	if sessionID == "" || finding.ToolCallID == "" {
 		return nil
 	}
+	if finding.ID == "" {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("generate shadow-mcp block finding id: %w", err)
+		}
+		finding.ID = id.String()
+	}
 	item := map[string]any{
+		"id":                  finding.ID,
 		"tool_call_id":        finding.ToolCallID,
 		"policy_id":           finding.PolicyID,
 		"risk_policy_version": finding.RiskPolicyVersion,
@@ -654,6 +662,16 @@ func (s *Service) bufferShadowMCPBlockFinding(ctx context.Context, sessionID str
 	}
 	if err := s.cache.ListAppend(context.WithoutCancel(ctx), shadowMCPBlockFindingsPendingCacheKey(sessionID), item, 5*time.Minute); err != nil {
 		return fmt.Errorf("append shadow-mcp block finding to list: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) bufferSubagentClaudeMessages(ctx context.Context, sessionID string, payload *gen.ClaudeMessagesPayload) error {
+	if sessionID == "" || payload == nil || len(payload.Messages) == 0 {
+		return nil
+	}
+	if err := s.cache.ListAppend(context.WithoutCancel(ctx), claudeSubagentMessagesPendingCacheKey(sessionID), payload, 5*time.Minute); err != nil {
+		return fmt.Errorf("append claude subagent messages to list: %w", err)
 	}
 	return nil
 }

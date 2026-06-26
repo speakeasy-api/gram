@@ -16,6 +16,8 @@ import (
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -35,6 +37,7 @@ import (
 )
 
 type pendingShadowMCPBlockFinding struct {
+	ID                string `json:"id"`
 	ToolCallID        string `json:"tool_call_id"`
 	PolicyID          string `json:"policy_id"`
 	RiskPolicyVersion int64  `json:"risk_policy_version"`
@@ -1162,6 +1165,7 @@ func buildPendingShadowMCPBlockFinding(toolCallID string, policy *risk.ShadowMCP
 		description = fmt.Sprintf("%s (server: %s)", detail, matched.Name)
 	}
 	return pendingShadowMCPBlockFinding{
+		ID:                "",
 		ToolCallID:        toolCallID,
 		PolicyID:          policy.ID,
 		RiskPolicyVersion: policy.Version,
@@ -1196,9 +1200,19 @@ func (s *Service) insertShadowMCPBlockFinding(
 	// id is time-ordered. uuid.New() (v4) is random and would interleave
 	// hook-time block rows at arbitrary positions in the Recent Findings
 	// table.
-	resultID, err := uuid.NewV7()
-	if err != nil {
-		return fmt.Errorf("generate uuidv7: %w", err)
+	var resultID uuid.UUID
+	if finding.ID != "" {
+		parsed, err := uuid.Parse(finding.ID)
+		if err != nil {
+			return fmt.Errorf("parse pending result id: %w", err)
+		}
+		resultID = parsed
+	} else {
+		var err error
+		resultID, err = uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("generate uuidv7: %w", err)
+		}
 	}
 	insertParams := repo.InsertShadowMCPBlockResultParams{
 		ID:                resultID,
@@ -1212,6 +1226,10 @@ func (s *Service) insertShadowMCPBlockFinding(
 		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
 	}
 	if err := s.repo.InsertShadowMCPBlockResult(ctx, insertParams); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil
+		}
 		return fmt.Errorf("insert shadow-mcp block result: %w", err)
 	}
 	return nil
