@@ -17,10 +17,12 @@ import {
   useListChats,
 } from "@gram/client/react-query";
 import { Badge } from "@/components/ui/badge";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useOrgRoutes } from "@/routes";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { ChatLogsTable } from "@/pages/chatLogs/ChatLogsTable";
 import {
@@ -96,6 +98,35 @@ const HAS_RISK_OPTIONS: OptionsById = {
     { value: "false", label: "No Risk" },
   ],
 };
+
+// Shown when RBAC is on and the caller lacks chat:read: the list is scoped to
+// their own sessions, so explain why and (for admins) point at the roles page
+// where chat:read is granted.
+function OwnSessionsNotice(): JSX.Element | null {
+  const orgRoutes = useOrgRoutes();
+  const { hasScope, isRbacEnabled, isLoading } = useRBAC();
+
+  if (isLoading || !isRbacEnabled || hasScope("chat:read")) return null;
+
+  return (
+    <Alert variant="info" dismissible={false} className="text-sm">
+      Only your own sessions are shown.{" "}
+      <code className="font-mono">chat:read</code> is required to view other
+      members&apos; sessions.
+      {hasScope("org:admin") && (
+        <>
+          {" "}
+          <Link
+            to={orgRoutes.access.roles.href()}
+            className="underline underline-offset-2"
+          >
+            Manage roles
+          </Link>
+        </>
+      )}
+    </Alert>
+  );
+}
 
 export function LogsAgentsContent(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -393,7 +424,9 @@ export function LogsAgentsContent(): JSX.Element {
         title="How can I help you debug?"
         subtitle="Search agent sessions, analyze failures, or explore logs"
         contextInfo={dateRangeContext}
-        hideTrigger={isLogsDisabled}
+        // Hide the docked assistant on this page — the agent-sessions list and
+        // its detail drawer are the primary surface here.
+        hideTrigger
         suggestions={INSIGHTS_SUGGESTIONS["agent-sessions"]}
       />
       <AgentSessionsPageContent
@@ -418,6 +451,7 @@ export function LogsAgentsContent(): JSX.Element {
         setSortOrder={setSortOrder}
         chats={chats}
         selectedChat={selectedChat}
+        selectedChatId={urlChatId}
         setSelectedChat={setSelectedChat}
         isLoading={isLoading}
         error={error}
@@ -456,6 +490,7 @@ function AgentSessionsPageContent({
   setSortOrder,
   chats,
   selectedChat,
+  selectedChatId,
   setSelectedChat,
   isLoading,
   error,
@@ -489,6 +524,7 @@ function AgentSessionsPageContent({
   setSortOrder: (value: SortOrder) => void;
   chats: ChatOverview[];
   selectedChat: ChatOverview | null;
+  selectedChatId: string | null;
   setSelectedChat: (chat: ChatOverview | null) => void;
   isLoading: boolean;
   error: Error | null;
@@ -620,6 +656,7 @@ function AgentSessionsPageContent({
               onDirectionChange={setSortOrder}
             />
           </Page.Toolbar>
+          <OwnSessionsNotice />
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden border-t">
@@ -659,7 +696,7 @@ function AgentSessionsPageContent({
       </div>
 
       <ChatDetailSheet
-        chatId={selectedChat?.id ?? null}
+        chatId={selectedChatId ?? selectedChat?.id ?? null}
         onClose={() => setSelectedChat(null)}
         onDelete={onDeleteChat}
         dimNonRisk={hasRisk === "true" || minRiskScore !== undefined}

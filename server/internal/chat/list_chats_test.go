@@ -104,11 +104,11 @@ func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
 	return ctx
 }
 
-// grantOrgAdmin returns a context carrying the grants a real customer org admin
-// holds, with RBAC enforcement active (enterprise): org:admin plus an
-// unrestricted chat:read (the admin system role includes both). chat:read is
-// what drives chat session visibility — org:admin alone no longer grants
-// see-all for chats.
+// grantOrgAdmin returns a context for an org admin who has ALSO been granted an
+// unrestricted chat:read, with RBAC enforcement active (enterprise). chat:read
+// is not a system-role default — it must be granted explicitly — and it, not
+// org:admin, is what drives chat session see-all visibility. These tests
+// exercise that chat:read-holder path.
 func grantOrgAdmin(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -261,6 +261,9 @@ func TestListChats_Member_SeesOnlyOwnChats(t *testing.T) {
 
 	seedChat(t, ctx, ti, authCtx.UserID, "", "own chat")
 	seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
+	// Anonymous session (no internal owner, no external user): an own-scoped
+	// member must not see it — only an admin's unrestricted chat:read does.
+	seedChat(t, ctx, ti, "", "", "anonymous chat")
 
 	result, err := ti.service.ListChats(ctx, defaultPayload())
 	require.NoError(t, err)

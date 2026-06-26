@@ -61,7 +61,10 @@ var adminScopes = []Scope{
 	ScopeMCPConnect,
 	ScopeEnvironmentRead,
 	ScopeEnvironmentWrite,
-	ScopeChatRead,
+	// chat:read is intentionally NOT a default for any system role: reading
+	// other members' session transcripts is sensitive, so it must be granted
+	// explicitly (via a custom role grant). Everyone reads their own sessions
+	// via owner-matching in the chat handlers regardless.
 }
 
 // scopeVisibilityByScope is the source of truth for whether a scope is exposed

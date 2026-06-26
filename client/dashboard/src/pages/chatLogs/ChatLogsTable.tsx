@@ -2,10 +2,30 @@ import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { useSession } from "@/contexts/Auth";
 import type { ChatOverview } from "@gram/client/models/components";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { useCallback, useState } from "react";
+
+// Label for a session's owner. The caller's own sessions always show "You"
+// (matched by internal user id, or by external user id when it equals their
+// email — seeded/dashboard chats carry the email there). Other external
+// (Elements) sessions show the external user id; other internal members show
+// "Member" (the list has only their user id, not a display name); truly
+// ownerless sessions show "anonymous".
+function ownerLabel(
+  chat: ChatOverview,
+  user: { id: string; email: string },
+): string {
+  const isMe =
+    (!!chat.userId && chat.userId === user.id) ||
+    (!!chat.externalUserId && chat.externalUserId === user.email);
+  if (isMe) return "You";
+  if (chat.externalUserId) return chat.externalUserId;
+  if (chat.userId) return "Member";
+  return "anonymous";
+}
 
 interface ChatLogsTableProps {
   chats: ChatOverview[];
@@ -123,6 +143,7 @@ export function ChatLogsTable({
   isLoading,
   error,
 }: ChatLogsTableProps): JSX.Element {
+  const { user } = useSession();
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   if (isLoading && chats.length === 0) {
     return (
@@ -233,7 +254,7 @@ export function ChatLogsTable({
                     <span className="flex items-center gap-1.5">
                       <Icon name="user" className="size-4 opacity-60" />
                       <span className="max-w-[120px] truncate">
-                        {chat.externalUserId || "anonymous"}
+                        {ownerLabel(chat, user)}
                       </span>
                     </span>
                     {source && (

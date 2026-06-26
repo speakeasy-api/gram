@@ -53,6 +53,25 @@ func TestLoadChat_RBAC_MemberSelfAccess(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, shareable.Code)
 }
 
+// A member (no chat:read grant) cannot open an anonymous session — one with no
+// internal owner (external / Elements chats). Owner-bypass requires a real
+// owner match, so these fall through to the chat:read check, which members
+// fail. Admins, holding an unrestricted chat:read, can still open them.
+func TestLoadChat_RBAC_MemberCannotReadAnonymous(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	anon := seedChat(t, ctx, ti, "", "", "anonymous session")
+	selfCtx := authztest.WithExactGrants(t, ctx)
+
+	_, err := ti.service.LoadChat(selfCtx, loadPayload(anon.String()))
+	require.Error(t, err)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeForbidden, shareable.Code)
+}
+
 // An admin holding an unrestricted chat:read grant can load any user's session.
 func TestLoadChat_RBAC_AdminReadsAll(t *testing.T) {
 	t.Parallel()

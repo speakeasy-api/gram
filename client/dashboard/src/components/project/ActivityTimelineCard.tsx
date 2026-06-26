@@ -18,6 +18,8 @@ import {
 import { Link } from "react-router";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { subjectHref } from "@/components/auditlogs/subject-href";
+import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
 import type { AuditLog } from "@gram/client/models/components";
@@ -34,6 +36,7 @@ export function ActivityTimelineCard({
   viewAllHref,
 }: Props): JSX.Element {
   const logGroups = groupLogsByDate(logs);
+  const { orgSlug } = useSlugs();
 
   return (
     <DashboardCard
@@ -70,6 +73,7 @@ export function ActivityTimelineCard({
                   const actor =
                     log.actorDisplayName ?? log.actorSlug ?? "Unknown";
                   const actionLabel = getActionLabel(log);
+                  const href = orgSlug ? subjectHref(log, orgSlug) : null;
                   return (
                     <li
                       key={log.id}
@@ -92,9 +96,18 @@ export function ActivityTimelineCard({
                           {log.subjectDisplayName && (
                             <>
                               {" "}
-                              <span className="font-medium">
-                                {log.subjectDisplayName}
-                              </span>
+                              {href ? (
+                                <Link
+                                  to={href}
+                                  className="font-medium hover:underline"
+                                >
+                                  {log.subjectDisplayName}
+                                </Link>
+                              ) : (
+                                <span className="font-medium">
+                                  {log.subjectDisplayName}
+                                </span>
+                              )}
                             </>
                           )}
                         </p>
