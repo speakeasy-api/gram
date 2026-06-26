@@ -97,7 +97,7 @@ candidate_chats AS (
       OR COALESCE(rc.cnt, 0) >= $10::int
     )
     AND (
-      cardinality($11::text[]) = 0
+      coalesce(cardinality($11::text[]), 0) = 0
       OR (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
@@ -1504,7 +1504,7 @@ candidate_chats AS (
       OR COALESCE(rc.cnt, 0) >= $8::int
     )
     AND (
-      cardinality($9::text[]) = 0
+      coalesce(cardinality($9::text[]), 0) = 0
       OR (
         SELECT cmsrc.source
         FROM chat_messages cmsrc

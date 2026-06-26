@@ -267,7 +267,7 @@ candidate_chats AS (
       OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
     )
     AND (
-      cardinality(@source_patterns::text[]) = 0
+      coalesce(cardinality(@source_patterns::text[]), 0) = 0
       OR (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
@@ -351,7 +351,7 @@ candidate_chats AS (
       OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
     )
     AND (
-      cardinality(@source_patterns::text[]) = 0
+      coalesce(cardinality(@source_patterns::text[]), 0) = 0
       OR (
         SELECT cmsrc.source
         FROM chat_messages cmsrc

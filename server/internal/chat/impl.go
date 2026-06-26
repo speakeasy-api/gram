@@ -357,7 +357,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 // server change.
 func agentTypeSourcePatterns(agentType string) []string {
 	if strings.TrimSpace(agentType) == "" {
-		return nil
+		return []string{}
 	}
 	patternsByType := map[string][]string{
 		"claude":     {"%claude%", "%cowork%"},
@@ -372,7 +372,7 @@ func agentTypeSourcePatterns(agentType string) []string {
 		"assistant":  {"%assistant%"},
 	}
 	seen := make(map[string]struct{})
-	var patterns []string
+	patterns := []string{}
 	for _, raw := range strings.Split(agentType, ",") {
 		key := strings.ToLower(strings.TrimSpace(raw))
 		if key == "" {
@@ -380,7 +380,7 @@ func agentTypeSourcePatterns(agentType string) []string {
 		}
 		pats, ok := patternsByType[key]
 		if !ok {
-			pats = []string{"%" + key + "%"}
+			pats = []string{"%" + strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(key) + "%"}
 		}
 		for _, p := range pats {
 			if _, dup := seen[p]; dup {
