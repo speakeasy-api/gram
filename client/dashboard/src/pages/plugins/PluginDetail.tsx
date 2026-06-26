@@ -658,9 +658,11 @@ function PublishStatusControl({
 }
 
 // Shows the published freshness of a connected project under the plugin
-// metadata: a dirty badge when there are unpublished changes, otherwise a muted
-// "Published <time> ago". Renders nothing when not connected or freshness is
-// unknown.
+// metadata: an explicit "Unpublished changes" vs "Up to date" badge, paired
+// with the last-published time. The timestamp shows in both states (it's still
+// useful to know when the last publish happened while there are pending
+// changes). Renders nothing when not connected, or when freshness is unknown
+// and there's no publish timestamp to show.
 function PublishFreshnessIndicator({
   publishStatus,
 }: {
@@ -668,26 +670,33 @@ function PublishFreshnessIndicator({
 }): JSX.Element | null {
   if (!publishStatus?.connected) return null;
 
-  if (publishStatus.upToDate === false) {
-    return (
-      <Badge variant="warning" className="mt-2">
-        Unpublished changes
-      </Badge>
-    );
-  }
+  // up_to_date is absent when freshness can't be determined (connection
+  // predates fingerprinting) — treat only the explicit booleans as known.
+  const hasUnpublishedChanges = publishStatus.upToDate === false;
+  const isUpToDate = publishStatus.upToDate === true;
 
-  if (publishStatus.lastPublishedAt) {
-    return (
-      <Type muted small className="mt-2 block">
-        Published{" "}
-        {formatDistanceToNow(publishStatus.lastPublishedAt, {
-          addSuffix: true,
-        })}
-      </Type>
-    );
-  }
+  const lastPublished = publishStatus.lastPublishedAt ? (
+    <Type muted small>
+      Published{" "}
+      {formatDistanceToNow(publishStatus.lastPublishedAt, {
+        addSuffix: true,
+      })}
+    </Type>
+  ) : null;
 
-  return null;
+  // Freshness unknown and nothing published yet — nothing meaningful to show.
+  if (!hasUnpublishedChanges && !isUpToDate && !lastPublished) return null;
+
+  return (
+    <Stack direction="horizontal" gap={2} align="center" className="mt-2">
+      {hasUnpublishedChanges ? (
+        <Badge variant="warning">Unpublished changes</Badge>
+      ) : isUpToDate ? (
+        <Badge variant="secondary">Up to date</Badge>
+      ) : null}
+      {lastPublished}
+    </Stack>
+  );
 }
 
 function PluginServerCard({
