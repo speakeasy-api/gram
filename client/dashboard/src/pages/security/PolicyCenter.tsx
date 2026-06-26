@@ -1173,8 +1173,13 @@ function PolicyCenterContent() {
       const userMessagePayload = formUserMessage.trim()
         ? { userMessage: formUserMessage }
         : {};
+      // In CEL scope mode the include predicate is the sole scope: send no
+      // message-type filter so a stale subset can't intersect it (the two are a
+      // mutex). The selection is preserved in form state for a mode switch-back.
       const promptMessageTypes =
-        policyMessageTypesForPayload(selectedMessageTypes);
+        scopeMode === "cel"
+          ? []
+          : policyMessageTypesForPayload(selectedMessageTypes);
       if (editingPolicy) {
         updateMutation.mutate({
           request: {
@@ -1213,7 +1218,12 @@ function PolicyCenterContent() {
       return;
     }
 
-    const messageTypes = policyMessageTypesForPayload(selectedMessageTypes);
+    // CEL scope mode replaces the message-type selection; send no message-type
+    // filter so a stale subset can't intersect the include predicate.
+    const messageTypes =
+      scopeMode === "cel"
+        ? []
+        : policyMessageTypesForPayload(selectedMessageTypes);
     const {
       sources,
       presidioEntities,
