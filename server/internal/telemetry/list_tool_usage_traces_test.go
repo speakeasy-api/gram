@@ -109,6 +109,87 @@ func TestListToolUsageTraces_ReturnsHostedShadowLocalAndSkills(t *testing.T) {
 	require.Equal(t, "golang", skill.ToolName)
 }
 
+func TestListToolUsageTraces_SummaryPathMatchesRawPath(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-20 * time.Minute),
+		toolsetSlug: "payments",
+		toolName:    "charge",
+		userEmail:   "alice@example.com",
+		statusCode:  200,
+	})
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-15 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "bob@example.com",
+		hookSource:     "cursor",
+		toolSource:     "shadow-db",
+		toolName:       "query",
+		result:         `"ok"`,
+		conversationID: "conv-shadow",
+	})
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-10 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "carol@example.com",
+		hookSource:     "claude-code",
+		toolName:       "Read",
+		result:         `"ok"`,
+		conversationID: "conv-local",
+	})
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-5 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "dana@example.com",
+		hookSource:     "claude-code",
+		toolName:       "Skill",
+		result:         `"ok"`,
+		skillName:      "golang",
+		conversationID: "conv-skill",
+	})
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	summaryPath := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From:  from,
+		To:    to,
+		Limit: 10,
+		Sort:  "desc",
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 4
+	})
+
+	// A non-empty query forces the raw telemetry_logs path. ":" is present in all
+	// seeded gram_urn values, so it should not change the logical result set.
+	rawPathQuery := ":"
+	rawPath := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From:  from,
+		To:    to,
+		Query: &rawPathQuery,
+		Limit: 10,
+		Sort:  "desc",
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 4
+	})
+
+	require.Equal(t, normalizeToolUsageTraces(summaryPath.Traces), normalizeToolUsageTraces(rawPath.Traces))
+}
+
 func TestListToolUsageTraces_DerivesSkillNameFromToolInput(t *testing.T) {
 	t.Parallel()
 
@@ -454,5 +535,49 @@ func waitForToolUsageTraces(
 		return err == nil && result != nil && ready(result)
 	}, 2*time.Second, 50*time.Millisecond, "expected tool usage traces to become query-ready, err: %v", errors.Unwrap(err))
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	return result
+}
+
+type normalizedToolUsageTrace struct {
+	TargetType  gen.ToolUsageTargetType
+	TargetID    string
+	TargetLabel string
+	ToolName    string
+	UserKind    gen.ToolUsageUserKind
+	UserLabel   string
+	HookSource  string
+	HookStatus  string
+	BlockReason string
+	LogCount    uint64
+}
+
+func normalizeToolUsageTraces(traces []*gen.ToolUsageTraceSummary) map[string]normalizedToolUsageTrace {
+	result := make(map[string]normalizedToolUsageTrace, len(traces))
+	for _, trace := range traces {
+		hookSource := ""
+		if trace.HookSource != nil {
+			hookSource = *trace.HookSource
+		}
+		hookStatus := ""
+		if trace.HookStatus != nil {
+			hookStatus = *trace.HookStatus
+		}
+		blockReason := ""
+		if trace.BlockReason != nil {
+			blockReason = *trace.BlockReason
+		}
+		result[string(trace.TargetType)+":"+trace.TargetID+":"+trace.ToolName] = normalizedToolUsageTrace{
+			TargetType:  trace.TargetType,
+			TargetID:    trace.TargetID,
+			TargetLabel: trace.TargetLabel,
+			ToolName:    trace.ToolName,
+			UserKind:    trace.UserKind,
+			UserLabel:   trace.UserLabel,
+			HookSource:  hookSource,
+			HookStatus:  hookStatus,
+			BlockReason: blockReason,
+			LogCount:    trace.LogCount,
+		}
+	}
 	return result
 }
