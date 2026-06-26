@@ -8,14 +8,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	pingv1 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v1"
+	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func StartPublisher(ctx context.Context, logger *slog.Logger, broker gcp.PublisherBroker) error {
-	pub, err := gcp.PubSubPublisherForMessage(ctx, broker, &pingv1.Message{})
+	pub, err := gcp.PubSubPublisherForMessage(ctx, broker, &pingv2.Message{})
 	if err != nil {
 		return fmt.Errorf("get publisher for ping messages: %w", err)
 	}
@@ -33,10 +32,10 @@ func StartPublisher(ctx context.Context, logger *slog.Logger, broker gcp.Publish
 			continue
 		}
 
-		msg := pingv1.Message_builder{
+		msg := pingv2.Message_builder{
 			Id:        new(id.String()),
 			Type:      new("simulated"),
-			CreatedAt: timestamppb.Now(),
+			CreatedAt: new(time.Now().Format(time.RFC3339)),
 			Payload:   []byte(`{"msg":"Hello, World!"}`),
 		}.Build()
 

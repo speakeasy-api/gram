@@ -13,6 +13,8 @@ type Assistant struct {
 	ID string
 	// The project ID owning the assistant.
 	ProjectID string
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string
 	// The assistant name.
 	Name string
 	// The model identifier used by the assistant.

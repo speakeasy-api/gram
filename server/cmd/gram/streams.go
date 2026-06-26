@@ -19,12 +19,14 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/infra/gen"
-	pingv1 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v1"
+	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ping"
@@ -169,6 +171,20 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
 
+			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
+			// scan over GitleaksAnalysis requests and publishes any matches into
+			// the shared Finding topic (nothing consumes them yet).
+			findingsPub, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.Finding{})
+			if err != nil {
+				return fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, findingsPub.Stop)
+
+			gitleaksHandler, err := gitleaks.NewHandler(logger, findingsPub)
+			if err != nil {
+				return fmt.Errorf("failed to create gitleaks handler: %w", err)
+			}
+
 			{
 				controlServer := control.Server{
 					Address:          c.String("control-address"),
@@ -212,7 +228,8 @@ func newStreamsCommand() *cli.Command {
 
 			// Start subscription receivers in this block
 			{
-				mustReceive(rg, &pingv1.Message{}, &pingv1.Processor{}, ping.NewHandler(logger, pingLogLevel))
+				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, pingLogLevel))
+				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
 			}
 
 			// This is just a heartbeat publisher that validates the publisher-

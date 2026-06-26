@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
@@ -28,13 +29,17 @@ export type UpdateCustomDetectionRuleRequestBody = {
    */
   description?: string | undefined;
   /**
+   * CEL detection predicate: a boolean expression over message fields whose true verdict produces a finding.
+   */
+  detectionExpr?: string | undefined;
+  /**
    * The custom detection rule ID.
    */
   id: string;
   /**
-   * RE2-compatible regex pattern.
+   * Deprecated legacy RE2 regex pattern; superseded by detection_expr. Accepted for backward compatibility.
    */
-  regex: string;
+  regex?: string | undefined;
   /**
    * Severity level for findings produced by this rule.
    */
@@ -54,8 +59,9 @@ export const UpdateCustomDetectionRuleRequestBodySeverity$outboundSchema:
 /** @internal */
 export type UpdateCustomDetectionRuleRequestBody$Outbound = {
   description?: string | undefined;
+  detection_expr?: string | undefined;
   id: string;
-  regex: string;
+  regex?: string | undefined;
   severity: string;
   title: string;
 };
@@ -64,13 +70,21 @@ export type UpdateCustomDetectionRuleRequestBody$Outbound = {
 export const UpdateCustomDetectionRuleRequestBody$outboundSchema: z.ZodMiniType<
   UpdateCustomDetectionRuleRequestBody$Outbound,
   UpdateCustomDetectionRuleRequestBody
-> = z.object({
-  description: z.optional(z.string()),
-  id: z.string(),
-  regex: z.string(),
-  severity: UpdateCustomDetectionRuleRequestBodySeverity$outboundSchema,
-  title: z.string(),
-});
+> = z.pipe(
+  z.object({
+    description: z.optional(z.string()),
+    detectionExpr: z.optional(z.string()),
+    id: z.string(),
+    regex: z.optional(z.string()),
+    severity: UpdateCustomDetectionRuleRequestBodySeverity$outboundSchema,
+    title: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      detectionExpr: "detection_expr",
+    });
+  }),
+);
 
 export function updateCustomDetectionRuleRequestBodyToJSON(
   updateCustomDetectionRuleRequestBody: UpdateCustomDetectionRuleRequestBody,

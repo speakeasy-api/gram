@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
 	goahttp "goa.design/goa/v3/http"
@@ -42,6 +43,8 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 			externalUserID    *string
 			assistantID       *string
 			hasRisk           *string
+			pinned            *string
+			minRiskScore      *int
 			from              *string
 			to                *string
 			limit             int
@@ -76,6 +79,31 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if hasRisk != nil {
 			if !(*hasRisk == "" || *hasRisk == "true" || *hasRisk == "false") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("has_risk", *hasRisk, []any{"", "true", "false"}))
+			}
+		}
+		pinnedRaw := qp.Get("pinned")
+		if pinnedRaw != "" {
+			pinned = &pinnedRaw
+		}
+		if pinned != nil {
+			if !(*pinned == "" || *pinned == "true" || *pinned == "false") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("pinned", *pinned, []any{"", "true", "false"}))
+			}
+		}
+		{
+			minRiskScoreRaw := qp.Get("min_risk_score")
+			if minRiskScoreRaw != "" {
+				v, err2 := strconv.ParseInt(minRiskScoreRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("min_risk_score", minRiskScoreRaw, "integer"))
+				}
+				pv := int(v)
+				minRiskScore = &pv
+			}
+		}
+		if minRiskScore != nil {
+			if *minRiskScore < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("min_risk_score", *minRiskScore, 0, true))
 			}
 		}
 		fromRaw := qp.Get("from")
@@ -156,7 +184,7 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListChatsPayload(search, externalUserID, assistantID, hasRisk, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewListChatsPayload(search, externalUserID, assistantID, hasRisk, pinned, minRiskScore, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -359,6 +387,12 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		var (
 			id                string
 			generation        *int
+			limit             int
+			beforeSeq         *int64
+			afterSeq          *int64
+			fromStart         bool
+			riskOnly          bool
+			query             *string
 			sessionToken      *string
 			projectSlugInput  *string
 			chatSessionsToken *string
@@ -385,6 +419,88 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 				err = goa.MergeErrors(err, goa.InvalidRangeError("generation", *generation, 0, true))
 			}
 		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw == "" {
+				limit = 50
+			} else {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				limit = int(v)
+			}
+		}
+		if limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+		}
+		if limit > 200 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+		}
+		{
+			beforeSeqRaw := qp.Get("before_seq")
+			if beforeSeqRaw != "" {
+				v, err2 := strconv.ParseInt(beforeSeqRaw, 10, 64)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("before_seq", beforeSeqRaw, "integer"))
+				}
+				beforeSeq = &v
+			}
+		}
+		if beforeSeq != nil {
+			if *beforeSeq < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("before_seq", *beforeSeq, 1, true))
+			}
+		}
+		{
+			afterSeqRaw := qp.Get("after_seq")
+			if afterSeqRaw != "" {
+				v, err2 := strconv.ParseInt(afterSeqRaw, 10, 64)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("after_seq", afterSeqRaw, "integer"))
+				}
+				afterSeq = &v
+			}
+		}
+		if afterSeq != nil {
+			if *afterSeq < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("after_seq", *afterSeq, 1, true))
+			}
+		}
+		{
+			fromStartRaw := qp.Get("from_start")
+			if fromStartRaw != "" {
+				v, err2 := strconv.ParseBool(fromStartRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("from_start", fromStartRaw, "boolean"))
+				}
+				fromStart = v
+			}
+		}
+		{
+			riskOnlyRaw := qp.Get("risk_only")
+			if riskOnlyRaw != "" {
+				v, err2 := strconv.ParseBool(riskOnlyRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("risk_only", riskOnlyRaw, "boolean"))
+				}
+				riskOnly = v
+			}
+		}
+		queryRaw := qp.Get("query")
+		if queryRaw != "" {
+			query = &queryRaw
+		}
+		if query != nil {
+			if utf8.RuneCountInString(*query) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("query", *query, utf8.RuneCountInString(*query), 1, true))
+			}
+		}
+		if query != nil {
+			if utf8.RuneCountInString(*query) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("query", *query, utf8.RuneCountInString(*query), 200, false))
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -400,7 +516,7 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if err != nil {
 			return payload, err
 		}
-		payload = NewLoadChatPayload(id, generation, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewLoadChatPayload(id, generation, limit, beforeSeq, afterSeq, fromStart, riskOnly, query, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1224,6 +1340,228 @@ func EncodeDeleteChatError(encoder func(context.Context, http.ResponseWriter) go
 	}
 }
 
+// EncodeSetPinnedResponse returns an encoder for responses returned by the
+// chat setPinned endpoint.
+func EncodeSetPinnedResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeSetPinnedRequest returns a decoder for requests sent to the chat
+// setPinned endpoint.
+func DecodeSetPinnedRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*chat.SetPinnedPayload, error) {
+	return func(r *http.Request) (*chat.SetPinnedPayload, error) {
+		var payload *chat.SetPinnedPayload
+		var (
+			body SetPinnedRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateSetPinnedRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewSetPinnedPayload(&body, sessionToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeSetPinnedError returns an encoder for errors returned by the setPinned
+// chat endpoint.
+func EncodeSetPinnedError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetPinnedUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetPinnedForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetPinnedBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetPinnedNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetPinnedConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetPinnedUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetPinnedInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetPinnedInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetPinnedUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetPinnedGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeSubmitFeedbackResponse returns an encoder for responses returned by
 // the chat submitFeedback endpoint.
 func EncodeSubmitFeedbackResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -1489,6 +1827,7 @@ func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *Ch
 func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatMessageResponseBody {
 	res := &ChatMessageResponseBody{
 		ID:             v.ID,
+		Seq:            v.Seq,
 		Role:           v.Role,
 		Content:        v.Content,
 		Model:          v.Model,
@@ -1500,6 +1839,22 @@ func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatM
 		ExternalUserID: v.ExternalUserID,
 		CreatedAt:      v.CreatedAt,
 		Generation:     v.Generation,
+	}
+
+	return res
+}
+
+// marshalChatRiskSegmentToRiskSegmentResponseBody builds a value of type
+// *RiskSegmentResponseBody from a value of type *chat.RiskSegment.
+func marshalChatRiskSegmentToRiskSegmentResponseBody(v *chat.RiskSegment) *RiskSegmentResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &RiskSegmentResponseBody{
+		FirstSeq:      v.FirstSeq,
+		LastSeq:       v.LastSeq,
+		HasMoreBefore: v.HasMoreBefore,
+		HasMoreAfter:  v.HasMoreAfter,
 	}
 
 	return res
@@ -1602,6 +1957,24 @@ func marshalChatClaudeToolUsageToClaudeToolUsageResponseBody(v *chat.ClaudeToolU
 		ToolName:        v.ToolName,
 		InputSizeBytes:  v.InputSizeBytes,
 		ResultSizeBytes: v.ResultSizeBytes,
+	}
+
+	return res
+}
+
+// marshalChatChatTotalsToChatTotalsResponseBody builds a value of type
+// *ChatTotalsResponseBody from a value of type *chat.ChatTotals.
+func marshalChatChatTotalsToChatTotalsResponseBody(v *chat.ChatTotals) *ChatTotalsResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ChatTotalsResponseBody{
+		Total:             v.Total,
+		UserMessages:      v.UserMessages,
+		AssistantMessages: v.AssistantMessages,
+		ToolCalls:         v.ToolCalls,
+		ToolResults:       v.ToolResults,
+		RiskOnly:          v.RiskOnly,
 	}
 
 	return res

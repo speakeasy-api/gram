@@ -20,14 +20,14 @@ import pytest
 import structlog
 from conftest import FakeMessage, FakeSubscriberClient
 from google.api_core.exceptions import NotFound
-from gram.ping.v1 import ping_pb2
+from gram.ping.v2 import ping_pb2
 from structlog.testing import capture_logs
 
 from gram_infra.pubsub import MessageMetadata, Subscriber, SubscriberHandle
 from gram_infra.pubsub.subscriber import _PortalScheduler
 
-TOPIC_PROTO = "gram.ping.v1.Message"
-SUB_PROTO = "gram.ping.v1.Processor"
+TOPIC_PROTO = "gram.ping.v2.Message"
+SUB_PROTO = "gram.ping.v2.Processor"
 
 
 def make_subscriber(logger=None) -> Subscriber:

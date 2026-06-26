@@ -3,7 +3,10 @@ import { DotRow } from "@/components/ui/dot-row";
 import { DotTable } from "@/components/ui/dot-table";
 import { Type } from "@/components/ui/type";
 import { useOrgRoutes } from "@/routes";
-import type { OrganizationRemoteSessionClient } from "@gram/client/models/components";
+import type {
+  OrganizationRemoteSessionClient,
+  RemoteSessionIssuer,
+} from "@gram/client/models/components";
 import { useOrganizationRemoteSessionClients } from "@gram/client/react-query/index.js";
 import {
   Button,
@@ -13,38 +16,41 @@ import {
   DropdownMenuTrigger,
   Icon,
 } from "@speakeasy-api/moonshine";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";
+import { CreateRemoteSessionClientSheet } from "../../CreateRemoteSessionClientSheet";
 import { DeleteClientDialog } from "../../clientDialogs";
 
-export function ClientsTab({ issuerId }: { issuerId: string }): JSX.Element {
+export function ClientsTab({
+  issuer,
+}: {
+  issuer: RemoteSessionIssuer;
+}): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const { data, isLoading, isError } = useOrganizationRemoteSessionClients({
-    issuerId,
+    issuerId: issuer.id,
   });
   const [deleteTarget, setDeleteTarget] =
     useState<OrganizationRemoteSessionClient | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const items = data?.result.items ?? [];
 
+  let body: JSX.Element;
   if (isError) {
-    return (
+    body = (
       <Type className="text-destructive py-8 text-center">
         Failed to load clients.
       </Type>
     );
-  }
-
-  if (!isLoading && items.length === 0) {
-    return (
+  } else if (!isLoading && items.length === 0) {
+    body = (
       <Type muted className="py-8 text-center">
         No clients registered with this provider.
       </Type>
     );
-  }
-
-  return (
-    <>
+  } else {
+    body = (
       <DotTable
         headers={[
           { label: "Client ID" },
@@ -58,7 +64,7 @@ export function ClientsTab({ issuerId }: { issuerId: string }): JSX.Element {
             key={item.client.id}
             icon={<Icon name="key" className="text-muted-foreground h-5 w-5" />}
             href={orgRoutes.remoteIdentityProviders.clientDetail.href(
-              issuerId,
+              issuer.id,
               item.client.id,
             )}
             ariaLabel={`View client ${item.client.clientId}`}
@@ -110,6 +116,23 @@ export function ClientsTab({ issuerId }: { issuerId: string }): JSX.Element {
           </DotRow>
         ))}
       </DotTable>
+    );
+  }
+
+  return (
+    <>
+      <div className="mb-4 flex items-center justify-end">
+        <RequireScope scope="org:admin" level="component">
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Button.LeftIcon>
+              <Plus />
+            </Button.LeftIcon>
+            <Button.Text>New Client</Button.Text>
+          </Button>
+        </RequireScope>
+      </div>
+
+      {body}
 
       {deleteTarget && (
         <DeleteClientDialog
@@ -118,6 +141,12 @@ export function ClientsTab({ issuerId }: { issuerId: string }): JSX.Element {
           onClose={() => setDeleteTarget(null)}
         />
       )}
+
+      <CreateRemoteSessionClientSheet
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        issuer={issuer}
+      />
     </>
   );
 }

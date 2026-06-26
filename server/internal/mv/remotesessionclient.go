@@ -4,12 +4,17 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
-func BuildRemoteSessionClientView(row repo.RemoteSessionClient) (*types.RemoteSessionClient, error) {
+// BuildRemoteSessionClientView renders a remote_session_client API view. The
+// user_session_issuer attachments come from the join table via
+// userSessionIssuerIDs, never the legacy remote_session_clients column.
+func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssuerIDs []uuid.UUID) (*types.RemoteSessionClient, error) {
 	if !row.ProjectID.Valid {
 		return nil, fmt.Errorf("remote_session_client %s has null project_id", row.ID)
 	}
@@ -23,15 +28,15 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient) (*types.RemoteSe
 		s := row.ClientSecretExpiresAt.Time.Format(time.RFC3339)
 		expiresAt = &s
 	}
-	var userSessionIssuerID string
-	if row.UserSessionIssuerID.Valid {
-		userSessionIssuerID = row.UserSessionIssuerID.UUID.String()
+	issuerIDs := make([]string, 0, len(userSessionIssuerIDs))
+	for _, id := range userSessionIssuerIDs {
+		issuerIDs = append(issuerIDs, id.String())
 	}
 	return &types.RemoteSessionClient{
 		ID:                      row.ID.String(),
 		ProjectID:               row.ProjectID.UUID.String(),
 		RemoteSessionIssuerID:   row.RemoteSessionIssuerID.String(),
-		UserSessionIssuerID:     userSessionIssuerID,
+		UserSessionIssuerIds:    issuerIDs,
 		ClientID:                row.ClientID,
 		ClientIDIssuedAt:        issuedAt,
 		ClientSecretExpiresAt:   expiresAt,

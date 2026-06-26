@@ -51,6 +51,17 @@ function toApiHasRisk(value: string): HasRisk | undefined {
   return undefined;
 }
 
+// Read the min-risk-score URL param. Empty, non-integer, or < 1 is treated as
+// "no threshold" — a minimum of 0 means "≥ 0", i.e. everything, so it's
+// indistinguishable from no filter (and the API rejects it).
+function parseMinRiskScore(value: string | null): number | undefined {
+  const trimmed = (value ?? "").trim();
+  if (trimmed === "") return undefined;
+  const n = Number(trimmed);
+  if (!Number.isInteger(n) || n < 1) return undefined;
+  return n;
+}
+
 function toApiSortOrder(order: SortOrder): ApiSortOrder {
   return order === "asc" ? ApiSortOrder.Asc : ApiSortOrder.Desc;
 }
@@ -71,6 +82,13 @@ const SESSION_FILTERS = defineFilters([
     defaultPreset: "30d",
   },
   { id: "has_risk", label: "Risk", kind: "select", allLabel: "All" },
+  {
+    id: "min_risk_score",
+    label: "Min risk score",
+    kind: "number",
+    min: 1,
+    placeholder: "e.g. 3 (≥ 3 findings)",
+  },
 ]);
 
 const HAS_RISK_OPTIONS: OptionsById = {
@@ -131,6 +149,7 @@ export function LogsAgentsContent(): JSX.Element {
   const urlSearch = searchParams.get("search");
   const urlChatId = searchParams.get("chatId");
   const urlHasRisk = searchParams.get("has_risk");
+  const urlMinRiskScore = searchParams.get("min_risk_score");
   const urlAssistantId = searchParams.get("assistantId");
   const urlSort = searchParams.get("sort") as SortField | null;
   const urlOrder = searchParams.get("order") as SortOrder | null;
@@ -141,6 +160,10 @@ export function LogsAgentsContent(): JSX.Element {
   const sortOrder: SortOrder = urlOrder === "asc" ? "asc" : "desc";
   const hasRisk: string =
     urlHasRisk === "true" || urlHasRisk === "false" ? urlHasRisk : "";
+  const minRiskScore = useMemo(
+    () => parseMinRiskScore(urlMinRiskScore),
+    [urlMinRiskScore],
+  );
 
   const customRange = useMemo(() => {
     if (urlFrom && urlTo) {
@@ -223,15 +246,44 @@ export function LogsAgentsContent(): JSX.Element {
 
   const setHasRisk = useCallback(
     (value: string) => {
-      updateSearchParams({ has_risk: value || null });
+      // "No Risk" means zero findings, which contradicts any positive
+      // threshold — clear the score so the two controls never disagree.
+      updateSearchParams(
+        value === "false"
+          ? { has_risk: value, min_risk_score: null }
+          : { has_risk: value || null },
+      );
     },
     [updateSearchParams],
+  );
+
+  const setMinRiskScore = useCallback(
+    (value: number | null) => {
+      // A threshold below 1 ("≥ 0" = everything) is meaningless, so treat it as
+      // clearing the filter rather than sending a 0 the API rejects.
+      const threshold =
+        value !== null && Number.isInteger(value) && value >= 1 ? value : null;
+      // Entering a real threshold contradicts the "No Risk" presence option,
+      // so drop that selection when a score is set.
+      const clearNoRisk = threshold !== null && hasRisk === "false";
+      updateSearchParams({
+        min_risk_score: threshold === null ? null : String(threshold),
+        ...(clearNoRisk ? { has_risk: null } : {}),
+      });
+    },
+    [updateSearchParams, hasRisk],
   );
 
   // Single setSearchParams so the synchronous clears don't clobber each other
   // (react-router's setSearchParams reads a memoized snapshot).
   const clearAllFilters = useCallback(() => {
-    updateSearchParams({ range: null, from: null, to: null, has_risk: null });
+    updateSearchParams({
+      range: null,
+      from: null,
+      to: null,
+      has_risk: null,
+      min_risk_score: null,
+    });
   }, [updateSearchParams]);
 
   const clearAssistantFilter = useCallback(() => {
@@ -257,7 +309,12 @@ export function LogsAgentsContent(): JSX.Element {
       useListChats(
         {
           search: searchQuery || undefined,
-          hasRisk: toApiHasRisk(hasRisk),
+          // A custom threshold supersedes the binary presence filter: "count >
+          // n" (n >= 0) already implies risk is present, so we don't also send
+          // has_risk and risk a contradictory pair.
+          hasRisk:
+            minRiskScore !== undefined ? undefined : toApiHasRisk(hasRisk),
+          minRiskScore,
           assistantId: assistantId || undefined,
           from: timeRange.from,
           to: timeRange.to,
@@ -351,6 +408,8 @@ export function LogsAgentsContent(): JSX.Element {
         setSearchQuery={setSearchQuery}
         hasRisk={hasRisk}
         setHasRisk={setHasRisk}
+        minRiskScore={minRiskScore}
+        setMinRiskScore={setMinRiskScore}
         clearAllFilters={clearAllFilters}
         assistantName={filteredAssistant?.name ?? null}
         hasAssistantFilter={!!assistantId}
@@ -387,6 +446,8 @@ function AgentSessionsPageContent({
   setSearchQuery,
   hasRisk,
   setHasRisk,
+  minRiskScore,
+  setMinRiskScore,
   clearAllFilters,
   assistantName,
   hasAssistantFilter,
@@ -418,6 +479,8 @@ function AgentSessionsPageContent({
   setSearchQuery: (value: string) => void;
   hasRisk: string;
   setHasRisk: (value: string) => void;
+  minRiskScore: number | undefined;
+  setMinRiskScore: (value: number | null) => void;
   clearAllFilters: () => void;
   assistantName: string | null;
   hasAssistantFilter: boolean;
@@ -512,6 +575,7 @@ function AgentSessionsPageContent({
                   customLabel: null,
                 },
                 has_risk: hasRisk || null,
+                min_risk_score: minRiskScore ?? null,
               }}
               optionsById={HAS_RISK_OPTIONS}
               onChange={(id: string, value: FilterValue) => {
@@ -532,6 +596,8 @@ function AgentSessionsPageContent({
                   }
                 } else if (id === "has_risk") {
                   setHasRisk((value as string | null) ?? "");
+                } else if (id === "min_risk_score") {
+                  setMinRiskScore(value as number | null);
                 }
               }}
               onClear={(id: string) => {
@@ -539,6 +605,8 @@ function AgentSessionsPageContent({
                   setDateRangeParam("30d");
                 } else if (id === "has_risk") {
                   setHasRisk("");
+                } else if (id === "min_risk_score") {
+                  setMinRiskScore(null);
                 }
               }}
               onClearAll={clearAllFilters}
@@ -596,6 +664,7 @@ function AgentSessionsPageContent({
         chatId={selectedChat?.id ?? null}
         onClose={() => setSelectedChat(null)}
         onDelete={onDeleteChat}
+        dimNonRisk={hasRisk === "true" || minRiskScore !== undefined}
       />
     </>
   );

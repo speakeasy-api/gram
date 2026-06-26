@@ -1,0 +1,16 @@
+edition = "2024";
+
+package test.schema.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "example.com/gen/test/schema/v1;schemav1";
+
+// Named sets an explicit topic name; the schema name must ignore it.
+message Named {
+  string id = 1;
+
+  option (gcp.pubsub.v1.topic) = {
+    name: "custom-name"
+  };
+}

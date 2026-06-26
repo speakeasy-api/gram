@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -176,6 +177,7 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 		nil,
 		nil,
 		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 
@@ -210,6 +212,7 @@ func TestScanner_ScanForEnforcement_SkipsGrantResolutionWhenNoPolicies(t *testin
 		nil,
 		nil,
 		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 
@@ -245,6 +248,7 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 		nil,
 		nil,
 		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 
@@ -261,10 +265,11 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 	require.Less(t, elapsed, 1*time.Second,
 		"wall time %v suggests siblings ran to completion; expected cancellation", elapsed)
 
-	// Give the cancelled goroutines a moment to record their ctx.Err.
-	time.Sleep(100 * time.Millisecond)
-	require.GreaterOrEqual(t, pii.cancellations.Load(), int32(1),
-		"expected at least one slow policy to observe ctx cancellation")
+	// Cancelled goroutines record their ctx.Err asynchronously; poll until observed.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.GreaterOrEqual(c, pii.cancellations.Load(), int32(1),
+			"expected at least one slow policy to observe ctx cancellation")
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
@@ -279,7 +284,7 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 		RuleID:         "custom.acme_token",
 		Title:          "ACME token",
 		Description:    "ACME token",
-		Regex:          pgtype.Text{String: `ACME-[A-Z0-9]{8}`, Valid: true},
+		DetectionExpr:  pgtype.Text{String: `content.matchRegex("ACME-[A-Z0-9]{8}")`, Valid: true},
 		Severity:       "high",
 	})
 	require.NoError(t, err)
@@ -313,6 +318,7 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 		nil,
 		nil,
 		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 
@@ -340,6 +346,7 @@ func TestScanner_RespectsMessageTypes(t *testing.T) {
 		nil,
 		nil,
 		testenv.NewMeterProvider(t),
+		testCELEngine(t),
 	)
 	require.NoError(t, err)
 

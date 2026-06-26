@@ -960,6 +960,12 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "presidioAnalysis", pub: presidioAnalysis})
 
+	gitleaksAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.GitleaksAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for gitleaks analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "gitleaksAnalysis", pub: gitleaksAnalysis})
+
 	shutdown := func(ctx context.Context) error {
 		var err error
 		for _, pub := range pubs {
@@ -972,5 +978,6 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 
 	return &background.Publishers{
 		PresidioAnalysis: presidioAnalysis,
+		GitleaksAnalysis: gitleaksAnalysis,
 	}, shutdown, nil
 }

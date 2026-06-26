@@ -19,15 +19,29 @@ import (
 type Service interface {
 	// List all chats for a project
 	ListChats(context.Context, *ListChatsPayload) (res *ListChatsResult, err error)
-	// Load a chat by its ID. Messages are paginated one generation per request;
-	// omit `generation` to receive the latest generation.
+	// Load a chat by its ID. Messages within a generation are paginated by `seq`
+	// keyset: omit cursors to receive the newest page, pass `before_seq` to load
+	// older messages (scroll up) or `after_seq` to load newer ones (scroll down).
+	// Set `from_start` to receive the oldest page (the start of the thread)
+	// instead of the newest. Omit `generation` to receive the latest generation.
+	// Set `risk_only` to return only messages with risk findings plus a few
+	// messages of surrounding context per finding. Set `query` to instead return
+	// only messages whose text matches a search query plus surrounding context
+	// (mutually exclusive with `risk_only`).
 	LoadChat(context.Context, *LoadChatPayload) (res *Chat, err error)
-	// Generate a title for a chat based on its messages
+	// Read or set a chat's title. Omit `title` to return the
+	// current/auto-generated title (titles are generated asynchronously after a
+	// completion). Provide `title` to set a manual title that auto-generation will
+	// never overwrite; provide an empty `title` to clear the manual title and
+	// re-enable auto-generation.
 	GenerateTitle(context.Context, *GenerateTitlePayload) (res *GenerateTitleResult, err error)
 	// Get the total number of chat credits and usage for the current billing period
 	CreditUsage(context.Context, *CreditUsagePayload) (res *CreditUsageResult, err error)
 	// Soft-delete a chat by its ID
 	DeleteChat(context.Context, *DeleteChatPayload) (err error)
+	// Pin or unpin a chat. Pinned chats surface in a dedicated section above
+	// recents on the chat page.
+	SetPinned(context.Context, *SetPinnedPayload) (err error)
 	// Submit user feedback for a chat (success/failure)
 	SubmitFeedback(context.Context, *SubmitFeedbackPayload) (res *SubmitFeedbackResult, err error)
 }
@@ -54,7 +68,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"listChats", "loadChat", "generateTitle", "creditUsage", "deleteChat", "submitFeedback"}
+var MethodNames = [7]string{"listChats", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "submitFeedback"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -65,7 +79,8 @@ type AgentUsage struct {
 
 // Chat is the result type of the chat service loadChat method.
 type Chat struct {
-	// The list of messages in the chat for the returned generation
+	// The list of messages in the chat for the returned generation, ordered oldest
+	// to newest by `seq`.
 	Messages []*ChatMessage
 	// The generation that this response's messages belong to. A generation is an
 	// immutable snapshot of the transcript; a new one is opened on compaction or
@@ -75,8 +90,30 @@ type Chat struct {
 	// history, walk from `max_generation` down to 0, requesting each generation in
 	// turn.
 	MaxGeneration int
+	// Whether older messages exist before the first message in this page (within
+	// the returned generation). Load them with a `before_seq` cursor.
+	HasMoreBefore bool
+	// Whether newer messages exist after the last message in this page (within the
+	// returned generation). Load them with an `after_seq` cursor.
+	HasMoreAfter bool
+	// Present only when `risk_only` was requested: contiguous runs of returned
+	// messages, each spanning a risk finding and its surrounding context. Use each
+	// segment's cursors to expand it.
+	RiskSegments []*RiskSegment
+	// Present only when `query` was requested: contiguous runs of returned
+	// messages, each spanning one or more query matches and their surrounding
+	// context. Use each segment's cursors to expand it.
+	MatchSegments []*RiskSegment
+	// Present only when `query` was requested: the `seq` of every message whose
+	// text matched the query, ascending. These are the jump-to-match navigation
+	// targets; surrounding-context messages in `messages` are not listed here.
+	MatchSeqs []int64
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsage
+	// Whole-generation trace-entry totals for the returned generation. Because
+	// messages are paginated, callers must use these (not the length of
+	// `messages`) to render filter-bar counts.
+	Totals *ChatTotals
 	// The ID of the chat
 	ID string
 	// The title of the chat
@@ -113,6 +150,11 @@ type Chat struct {
 type ChatMessage struct {
 	// The ID of the message
 	ID string
+	// Monotonic sequence number of the message. Strictly increasing within a chat;
+	// use it as the keyset cursor for `before_seq`/`after_seq` pagination. Not
+	// contiguous (the sequence is shared across chats), so do not infer gaps from
+	// arithmetic differences.
+	Seq int64
 	// The role of the message
 	Role string
 	// The content of the message — string for plain text, array for
@@ -171,6 +213,26 @@ type ChatOverview struct {
 	// (project-scoped, found=true). Only populated by endpoints that join risk
 	// data; absent elsewhere.
 	RiskFindingsCount *int
+}
+
+// Trace-entry counts across the entire returned generation, independent of
+// pagination. Each message maps to exactly one entry: a message carrying tool
+// calls counts as a tool call regardless of role, otherwise the role decides.
+type ChatTotals struct {
+	// Total trace entries in the generation (sum of the four entry-type counts;
+	// the `of N entries` denominator).
+	Total int64
+	// Number of user messages in the generation.
+	UserMessages int64
+	// Number of assistant messages (without tool calls) in the generation.
+	AssistantMessages int64
+	// Number of messages carrying tool calls in the generation.
+	ToolCalls int64
+	// Number of tool-result messages in the generation.
+	ToolResults int64
+	// Number of messages with an active (found, non-suppressed) risk finding in
+	// the generation.
+	RiskOnly int64
 }
 
 type ClaudeAgentUsage struct {
@@ -252,12 +314,15 @@ type GenerateTitlePayload struct {
 	ChatSessionsToken *string
 	// The ID of the chat
 	ID string
+	// When present, sets the chat's title manually (empty string resets to
+	// auto-generated). When omitted, the current title is returned without changes.
+	Title *string
 }
 
 // GenerateTitleResult is the result type of the chat service generateTitle
 // method.
 type GenerateTitleResult struct {
-	// The generated title
+	// The current title after the operation (empty when reset to auto-generated)
 	Title string
 }
 
@@ -275,6 +340,12 @@ type ListChatsPayload struct {
 	// Filter by whether chat has risk findings: 'true', 'false', or empty for no
 	// filter.
 	HasRisk *string
+	// Filter by pinned state: 'true' for pinned chats, 'false' for unpinned, or
+	// empty for no filter.
+	Pinned *string
+	// Filter to chats with at least this many active risk findings (inclusive).
+	// Omit or pass 0 for no threshold.
+	MinRiskScore *int
 	// Filter chats last active after this timestamp (ISO 8601)
 	From *string
 	// Filter chats last active before this timestamp (ISO 8601)
@@ -311,6 +382,69 @@ type LoadChatPayload struct {
 	// (latest). Omit this attribute to receive the latest generation, or page
 	// through history by walking from `max_generation` down to 0.
 	Generation *int
+	// Maximum number of messages to return for this page.
+	Limit int
+	// Keyset cursor: return the page of messages with `seq` strictly less than
+	// this value (older messages). The returned `messages` are always ordered
+	// oldest to newest by `seq`, like every other response. Use the `seq` of the
+	// oldest message you currently hold to load the previous page. Ignored when
+	// `risk_only` is set. Mutually exclusive with `after_seq`; if both are
+	// supplied, `after_seq` takes precedence.
+	BeforeSeq *int64
+	// Keyset cursor: return the page of messages with `seq` strictly greater than
+	// this value (newer messages). The returned `messages` are always ordered
+	// oldest to newest by `seq`. Use the `seq` of the newest message you currently
+	// hold to load the next page. Ignored when `risk_only` is set. Mutually
+	// exclusive with `before_seq`; if both are supplied, `after_seq` takes
+	// precedence.
+	AfterSeq *int64
+	// When true, return the oldest page of the generation (the start of the
+	// thread), ordered oldest to newest, with `has_more_before=false`. Page
+	// forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`,
+	// or `risk_only` is set.
+	FromStart bool
+	// When true, return only messages that have active risk findings, each padded
+	// with a fixed window of surrounding messages, grouped into contiguous
+	// segments (see `risk_segments`). Cursors are ignored in this mode; expand a
+	// segment with a follow-up `before_seq`/`after_seq` request. Mutually
+	// exclusive with `query`.
+	RiskOnly bool
+	// When set (and `risk_only` is false), return only messages whose text matches
+	// this query (case-insensitive substring over message text, tool
+	// names/arguments, and structured content), each padded with a fixed window of
+	// surrounding messages, grouped into contiguous segments (see
+	// `match_segments`). The seqs that actually matched are listed in
+	// `match_seqs`. Cursors are ignored on the initial request; expand a segment
+	// with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with
+	// `risk_only`.
+	Query *string
+}
+
+// A contiguous run of messages in a windowed view (`risk_only` via
+// `risk_segments`, or `query` via `match_segments`), covering one or more
+// matches plus their surrounding context. Messages for a segment are the
+// entries of `Chat.messages` whose `seq` falls within `[first_seq, last_seq]`.
+type RiskSegment struct {
+	// The `seq` of the first (oldest) message in this segment.
+	FirstSeq int64
+	// The `seq` of the last (newest) message in this segment.
+	LastSeq int64
+	// Whether messages exist before this segment within the generation. Expand
+	// with a `before_seq` request using `first_seq`.
+	HasMoreBefore bool
+	// Whether messages exist after this segment within the generation. Expand with
+	// an `after_seq` request using `last_seq`.
+	HasMoreAfter bool
+}
+
+// SetPinnedPayload is the payload type of the chat service setPinned method.
+type SetPinnedPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the chat to pin or unpin
+	ID string
+	// True to pin the chat, false to unpin it
+	Pinned bool
 }
 
 // SubmitFeedbackPayload is the payload type of the chat service submitFeedback

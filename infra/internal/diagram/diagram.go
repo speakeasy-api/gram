@@ -352,7 +352,7 @@ func (m asgMatch) multiCount(name string) int {
 }
 
 // normalizeType strips language wrappers from a captured type expression so it
-// reduces to a bare qualified type: Go's `&pingv1.Message{}` -> `pingv1.Message`.
+// reduces to a bare qualified type: Go's `&pingv2.Message{}` -> `pingv2.Message`.
 func normalizeType(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(s, "&")
@@ -446,8 +446,8 @@ func ruleYAML(s scan) string {
 
 // --- symbol resolution -------------------------------------------------------
 
-// resolveSymbol turns a qualified type reference like "pingv1.Message" or
-// "ping_pb2.Message" into its proto full name "gram.ping.v1.Message" using the
+// resolveSymbol turns a qualified type reference like "pingv2.Message" or
+// "ping_pb2.Message" into its proto full name "gram.ping.v2.Message" using the
 // file's import map (qualifier -> proto package).
 func resolveSymbol(imports map[string]string, symbol string) (string, bool) {
 	parts := strings.Split(symbol, ".")
@@ -476,12 +476,12 @@ const genMarker = "/infra/gen/"
 
 // goImports maps each generated-proto import's local qualifier to its proto
 // package. Only imports under .../infra/gen/ are kept; the proto package is the
-// path tail (e.g. ".../infra/gen/gram/ping/v1" -> "gram.ping.v1").
+// path tail (e.g. ".../infra/gen/gram/ping/v2" -> "gram.ping.v2").
 //
 // The qualifier is the import alias when one is given. Otherwise it is the
-// imported package's *declared* name (`package pingv1`), which for these
-// generated packages differs from the directory basename (`v1`) — using the
-// basename would resolve `pingv1.Message` against the wrong key and silently drop
+// imported package's *declared* name (`package pingv2`), which for these
+// generated packages differs from the directory basename (`v2`) — using the
+// basename would resolve `pingv2.Message` against the wrong key and silently drop
 // the publisher/consumer. The basename is only a fallback when the package source
 // cannot be read.
 func goImports(absPath, repoRoot string) (map[string]string, error) {

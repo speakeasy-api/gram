@@ -8,13 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCanonicalGitleaksRuleID_PrependsSecret(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, "secret.anthropic_api_key", CanonicalGitleaksRuleID("anthropic-api-key"))
-	assert.Equal(t, "secret.aws_access_token", CanonicalGitleaksRuleID("AWS-Access-Token"))
-}
-
 func TestCanonicalPresidioRuleID_SnakeCasesAndPrependsPII(t *testing.T) {
 	t.Parallel()
 
@@ -84,9 +77,6 @@ func TestDescribe_AllBuildersReturnCanonicalIDs(t *testing.T) {
 		}},
 		{"pii.credit_card", "pii.credit_card", func() (string, string) { return DescribePresidioEntity("CREDIT_CARD") }},
 		{"pii.dead_letter", "pii.dead_letter", DescribePresidioDeadLetter},
-		{"secret.anthropic_api_key", "secret.anthropic_api_key", func() (string, string) {
-			return DescribeGitleaks("anthropic-api-key", "Identified an Anthropic API Key.")
-		}},
 		{"prompt_injection", "prompt_injection", DescribePromptInjection},
 	}
 	for _, c := range cases {
@@ -136,14 +126,6 @@ func TestDescribePresidioEntity_UnknownEntityFallsBackToGeneric(t *testing.T) {
 	id, desc := DescribePresidioEntity("UNKNOWN_ENTITY")
 	assert.Equal(t, "pii.unknown_entity", id)
 	assert.Equal(t, "Identified potentially sensitive personal information.", desc)
-}
-
-func TestDescribeGitleaks_PassesThroughUpstreamDescription(t *testing.T) {
-	t.Parallel()
-
-	id, desc := DescribeGitleaks("some-new-gitleaks-rule", "Identified a Foo API key.")
-	assert.Equal(t, "secret.some_new_gitleaks_rule", id)
-	assert.Equal(t, "Identified a Foo API key.", desc)
 }
 
 func TestDescribeBuilders_NeverLeakSensitiveMatch(t *testing.T) {

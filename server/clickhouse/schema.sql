@@ -420,14 +420,34 @@ SELECT
     -- Cost
     sumIfState(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost,
 
-    -- Tool call count
-    countIfState(startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS total_tool_calls
+    -- Tool-call count. Tool calls in a session — Gram and non-Gram alike — are
+    -- reported via agent hooks as one PostToolUse / PostToolUseFailure row per
+    -- call (carrying gram.tool.name). The hook.event guard is required: every
+    -- tool call also emits a PreToolUse row with the same gram.tool.name, so a
+    -- bare `tool.name != ''` count would double-count. Provider names (the
+    -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
+    countIfState(
+        toString(attributes.gram.tool.name) != ''
+        AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
+        AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
+    ) AS total_tool_calls
 FROM telemetry_logs
+-- Admit usage-metrics rows and cost-bearing chat-completion rows (the source of
+-- token/cost sums; the per-aggregate `x != ''` guards stop non-usage rows from
+-- inflating cost) AND tool-call rows.
+-- Tool calls are captured by the hook events' gram.tool.name, which covers all
+-- tools used in a session, not just Gram-proxied ones. The previous filter kept
+-- only usage rows, so total_tool_calls (counted from a separate event class) was
+-- always 0 (POC-209). Tool rows carry no gen_ai.usage.* so they cannot inflate
+-- token/cost totals.
 WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
   AND (
     startsWith(gram_urn, 'claude-code:usage') OR
     startsWith(gram_urn, 'codex:usage') OR
-    startsWith(gram_urn, 'cursor:usage'))
+    startsWith(gram_urn, 'cursor:usage') OR
+    (toString(attributes.gen_ai.operation.name) = 'chat' AND toString(attributes.gen_ai.usage.cost) != '') OR
+    (toString(attributes.gram.tool.name) != '' AND
+     toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')))
 GROUP BY
     gram_project_id,
     time_bucket,

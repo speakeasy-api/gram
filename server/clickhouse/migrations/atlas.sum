@@ -1,4 +1,4 @@
-h1:rW7PgP45+B0qbuvkXfQYoAvbQroZrSScuYSrpBMN6vQ=
+h1:fW0QySXCJFywHisq7NuSjQQlONXkaTGf9WHhPL/pcJI=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -48,3 +48,5 @@ h1:rW7PgP45+B0qbuvkXfQYoAvbQroZrSScuYSrpBMN6vQ=
 20260619130959_add-tool-usage-cols-to-trace-summaries.sql h1:92JDt/xG3JOXqe6zGRXLA1lCkG7TpOziSDD4ifIXn4k=
 20260619135930_filter-attribute-metrics-usage-metrics.sql h1:NcgZevqyE5cHw7mFczZ5rtwcQaUudjLfZIfqBCafQjE=
 20260619180655_set-cutoff-date-for-attributes-summaries-mv.sql h1:nTymmlPhJIFqxcNKjCh8Lj0tmAdBc1NaolQYhITsOEs=
+20260622132459_include-session-tool-calls-in-attribute-metrics.sql h1:qv5vE4rTYHxIvfKewhbV4R/QWdAo/HzRxi+F4hjXeNc=
+20260626094430_include-chat-completion-usage-cost.sql h1:DX0d4cgeANOspCqlTtRxEkoT9zILkr9tckpHFKQkJlA=

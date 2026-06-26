@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -585,7 +586,9 @@ func newWorkerCommand() *cli.Command {
 				30*time.Second,
 				logger,
 			)
-			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
+			// riskSignaler.Shutdown is flushed synchronously after temporalWorker.Run
+			// returns (below), not via shutdownFuncs, to avoid racing the concurrent
+			// temporalClient.Close() over the same gRPC connection.
 			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger))
 
 			completionsClient := openrouter.NewUnifiedClient(
@@ -593,7 +596,7 @@ func newWorkerCommand() *cli.Command {
 				guardianPolicy,
 				openRouter,
 				captureStrategy,
-				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
+				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				telemetryLogger,
 			)
@@ -732,7 +735,7 @@ func newWorkerCommand() *cli.Command {
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
-			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
+			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
 			/**
@@ -745,7 +748,7 @@ func newWorkerCommand() *cli.Command {
 				logger.InfoContext(ctx, "presidio PII scanner enabled", attr.SlogURL(presidioURL))
 			}
 
-			piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
+			piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:                 guardianPolicy,
@@ -786,7 +789,22 @@ func newWorkerCommand() *cli.Command {
 				Publishers:                     publishers,
 			})
 
-			return temporalWorker.Run(worker.InterruptCh())
+			// Flush the throttle's queued trailing risk signals before this Action
+			// returns, while the Temporal client is still open. The cli After hook runs
+			// runShutdown, which closes the client concurrently across shutdownFuncs and
+			// would otherwise race the flush ("grpc: the client connection is closing").
+			// riskSignaler.Shutdown is deliberately not registered as a shutdownFunc.
+			defer func() {
+				if ferr := riskSignaler.Shutdown(ctx); ferr != nil {
+					logger.ErrorContext(ctx, "flush pending risk signals", attr.SlogError(ferr))
+				}
+			}()
+
+			if err := temporalWorker.Run(worker.InterruptCh()); err != nil {
+				return fmt.Errorf("run temporal worker: %w", err)
+			}
+
+			return nil
 		},
 		Before: func(ctx *cli.Context) error {
 			return loadConfigFromFile(ctx, flags)

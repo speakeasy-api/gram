@@ -441,9 +441,6 @@ type ListMembersResult struct {
 type ListRoleGrant struct {
 	// The scope slug this grant applies to.
 	Scope string
-	// Whether this grant allows or denies the scope. Defaults to 'allow' when
-	// omitted.
-	Effect string
 	// The inherited scopes the primary scope grants.
 	SubScopes []string
 	// Selector constraints. Null means unrestricted.
@@ -580,9 +577,6 @@ type Role struct {
 type RoleGrant struct {
 	// The scope slug this grant applies to.
 	Scope string
-	// Whether this grant allows or denies the scope. Defaults to 'allow' when
-	// omitted.
-	Effect string
 	// Selector constraints. Null means unrestricted.
 	Selectors []*Selector
 }
@@ -594,6 +588,11 @@ type ScopeDefinition struct {
 	Description string
 	// The type of resource this scope applies to.
 	ResourceType string
+	// Whether this scope is a first-class permission or an internal
+	// storage/evaluation scope.
+	Visibility string
+	// The scope used to store exception rules for this scope.
+	ExclusionScope *string
 }
 
 // A constraint that narrows which resources a grant applies to.

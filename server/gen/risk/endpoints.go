@@ -26,10 +26,13 @@ type Endpoints struct {
 	ListRiskResultsByChat          goa.Endpoint
 	GetRiskOverview                goa.Endpoint
 	ListRiskCategories             goa.Endpoint
+	CompileExpr                    goa.Endpoint
 	GetRiskUserBreakdown           goa.Endpoint
 	GetRiskRuleBreakdown           goa.Endpoint
 	GetRiskPolicyStatus            goa.Endpoint
 	CreateRiskPolicyBypassRequest  goa.Endpoint
+	GetRiskBlock                   goa.Endpoint
+	SubmitRiskBlockFeedback        goa.Endpoint
 	ListRiskPolicyBypassRequests   goa.Endpoint
 	ApproveRiskPolicyBypassRequest goa.Endpoint
 	DenyRiskPolicyBypassRequest    goa.Endpoint
@@ -63,10 +66,13 @@ func NewEndpoints(s Service) *Endpoints {
 		ListRiskResultsByChat:          NewListRiskResultsByChatEndpoint(s, a.APIKeyAuth),
 		GetRiskOverview:                NewGetRiskOverviewEndpoint(s, a.APIKeyAuth),
 		ListRiskCategories:             NewListRiskCategoriesEndpoint(s, a.APIKeyAuth),
+		CompileExpr:                    NewCompileExprEndpoint(s, a.APIKeyAuth),
 		GetRiskUserBreakdown:           NewGetRiskUserBreakdownEndpoint(s, a.APIKeyAuth),
 		GetRiskRuleBreakdown:           NewGetRiskRuleBreakdownEndpoint(s, a.APIKeyAuth),
 		GetRiskPolicyStatus:            NewGetRiskPolicyStatusEndpoint(s, a.APIKeyAuth),
 		CreateRiskPolicyBypassRequest:  NewCreateRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
+		GetRiskBlock:                   NewGetRiskBlockEndpoint(s, a.APIKeyAuth),
+		SubmitRiskBlockFeedback:        NewSubmitRiskBlockFeedbackEndpoint(s, a.APIKeyAuth),
 		ListRiskPolicyBypassRequests:   NewListRiskPolicyBypassRequestsEndpoint(s, a.APIKeyAuth),
 		ApproveRiskPolicyBypassRequest: NewApproveRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
 		DenyRiskPolicyBypassRequest:    NewDenyRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
@@ -98,10 +104,13 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListRiskResultsByChat = m(e.ListRiskResultsByChat)
 	e.GetRiskOverview = m(e.GetRiskOverview)
 	e.ListRiskCategories = m(e.ListRiskCategories)
+	e.CompileExpr = m(e.CompileExpr)
 	e.GetRiskUserBreakdown = m(e.GetRiskUserBreakdown)
 	e.GetRiskRuleBreakdown = m(e.GetRiskRuleBreakdown)
 	e.GetRiskPolicyStatus = m(e.GetRiskPolicyStatus)
 	e.CreateRiskPolicyBypassRequest = m(e.CreateRiskPolicyBypassRequest)
+	e.GetRiskBlock = m(e.GetRiskBlock)
+	e.SubmitRiskBlockFeedback = m(e.SubmitRiskBlockFeedback)
 	e.ListRiskPolicyBypassRequests = m(e.ListRiskPolicyBypassRequests)
 	e.ApproveRiskPolicyBypassRequest = m(e.ApproveRiskPolicyBypassRequest)
 	e.DenyRiskPolicyBypassRequest = m(e.DenyRiskPolicyBypassRequest)
@@ -710,6 +719,65 @@ func NewListRiskCategoriesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 	}
 }
 
+// NewCompileExprEndpoint returns an endpoint function that calls the method
+// "compileExpr" of service "risk".
+func NewCompileExprEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CompileExprPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CompileExpr(ctx, p)
+	}
+}
+
 // NewGetRiskUserBreakdownEndpoint returns an endpoint function that calls the
 // method "getRiskUserBreakdown" of service "risk".
 func NewGetRiskUserBreakdownEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -907,6 +975,52 @@ func NewCreateRiskPolicyBypassRequestEndpoint(s Service, authAPIKeyFn security.A
 			return nil, err
 		}
 		return s.CreateRiskPolicyBypassRequest(ctx, p)
+	}
+}
+
+// NewGetRiskBlockEndpoint returns an endpoint function that calls the method
+// "getRiskBlock" of service "risk".
+func NewGetRiskBlockEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRiskBlockPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRiskBlock(ctx, p)
+	}
+}
+
+// NewSubmitRiskBlockFeedbackEndpoint returns an endpoint function that calls
+// the method "submitRiskBlockFeedback" of service "risk".
+func NewSubmitRiskBlockFeedbackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SubmitRiskBlockFeedbackPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SubmitRiskBlockFeedback(ctx, p)
 	}
 }
 

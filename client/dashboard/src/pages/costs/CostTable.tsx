@@ -7,22 +7,15 @@ import {
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { Dimension, type QueryRow } from "@gram/client/models/components";
-import {
-  Box,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsUpDown,
-  ChevronUp,
-  Info,
-} from "lucide-react";
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { Box, ChevronLeft, ChevronRight, Info } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ClaudeCodeIcon,
   CodexIcon,
   GeminiIcon,
   HookSourceIcon,
 } from "../hooks/HookSourceIcon";
+import { Gutter, SortHeader, SUBGRID_ROW_CLASS } from "./gridTable";
 import { Sparkline } from "./Sparkline";
 import { trendDirection, trendOf } from "./sparkline-math";
 
@@ -114,7 +107,7 @@ function isDrillableValue(groupValue: string): boolean {
 }
 
 // The provider logo for a model value (claude-* → Claude, gpt-* → OpenAI, …).
-export function ModelIcon({
+function ModelIcon({
   model,
   className,
 }: {
@@ -130,9 +123,7 @@ export function ModelIcon({
   return <Box className={className} />;
 }
 
-// One parent grid owns the column tracks; the header and every row opt into
-// them via `grid-template-columns: subgrid`, so each column auto-sizes to the
-// widest cell across the whole table and stays aligned — no hardcoded widths.
+// Parent grid track template (see gridTable.tsx for the subgrid mechanism).
 // Track order: gutter | name | Total Cost | % Share | Cost/session | Chats |
 // Tool calls | Tokens | Trend | gutter. Name sizes to its content (min 120px so
 // short names aren't cramped, capped at 24rem so long emails truncate rather
@@ -141,17 +132,6 @@ export function ModelIcon({
 // leftover width on wide viewports spreads across the columns instead of pooling
 // in a dead right gutter. Fixed 8px gutters keep row hover + dividers full-bleed.
 const COLUMNS = "8px minmax(120px,24rem) repeat(7,minmax(max-content,1fr)) 8px";
-
-// Header/row span all parent tracks and re-use them via subgrid.
-const SUBGRID_ROW: CSSProperties = {
-  gridColumn: "1 / -1",
-  gridTemplateColumns: "subgrid",
-};
-
-// Empty cell occupying an edge gutter track.
-function Gutter(): JSX.Element {
-  return <span aria-hidden="true" />;
-}
 
 const PAGE_SIZE = 10;
 
@@ -209,30 +189,13 @@ function HeaderButton({
   sort: Sort;
   onSort: (key: SortKey) => void;
 }): JSX.Element {
-  const active = sort.key === sortKey;
-  let arrow = (
-    <ChevronsUpDown className="text-muted-foreground/40 group-hover:text-foreground size-3.5" />
-  );
-  if (active) {
-    arrow =
-      sort.dir === "asc" ? (
-        <ChevronUp className="size-3.5" />
-      ) : (
-        <ChevronDown className="size-3.5" />
-      );
-  }
   return (
-    <button
-      type="button"
+    <SortHeader
+      label={label}
+      active={sort.key === sortKey}
+      dir={sort.dir}
       onClick={() => onSort(sortKey)}
-      className={cn(
-        "group hover:text-foreground inline-flex items-center gap-1 whitespace-nowrap transition-colors",
-        active && "text-foreground",
-      )}
-    >
-      {label}
-      {arrow}
-    </button>
+    />
   );
 }
 
@@ -318,8 +281,10 @@ export function CostTable({
       style={{ gridTemplateColumns: COLUMNS }}
     >
       <div
-        className="text-muted-foreground grid items-center py-3.5 text-sm font-medium"
-        style={SUBGRID_ROW}
+        className={cn(
+          "text-muted-foreground grid items-center py-3.5 text-sm font-medium",
+          SUBGRID_ROW_CLASS,
+        )}
       >
         <Gutter />
         <span className="flex">
@@ -426,10 +391,10 @@ export function CostTable({
               }}
               className={cn(
                 "grid w-full items-center py-4 text-left text-sm transition-colors",
+                SUBGRID_ROW_CLASS,
                 (safePage * PAGE_SIZE + i) % 2 === 1 && "bg-muted/25",
                 drillable ? "hover:bg-muted cursor-pointer" : "cursor-default",
               )}
-              style={SUBGRID_ROW}
             >
               <Gutter />
               <div className="flex min-w-0 items-center gap-2">

@@ -423,19 +423,20 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load remote session client").LogError(ctx, logger)
 	}
+	client := clientRow.RemoteSessionClient
 
 	var clientSecret string
-	if clientRow.ClientSecretEncrypted.Valid {
-		decoded, derr := m.enc.Decrypt(clientRow.ClientSecretEncrypted.String)
+	if client.ClientSecretEncrypted.Valid {
+		decoded, derr := m.enc.Decrypt(client.ClientSecretEncrypted.String)
 		if derr != nil {
 			return oops.E(oops.CodeUnexpected, derr, "decrypt client secret").LogError(ctx, logger)
 		}
 		clientSecret = decoded
 	}
 
-	authMethod := ResolveTokenEndpointAuthMethod(clientRow.TokenEndpointAuthMethod.String)
-	audience := conv.FromPGTextOrEmpty[string](clientRow.Audience)
-	tok, err := m.exchangeCode(ctx, state, clientRow.ClientID, clientSecret, authMethod, audience, code)
+	authMethod := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String)
+	audience := conv.FromPGTextOrEmpty[string](client.Audience)
+	tok, err := m.exchangeCode(ctx, state, client.ClientID, clientSecret, authMethod, audience, code)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
@@ -453,13 +454,15 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		refreshEnc = &v
 	}
 
-	// expires_in is OPTIONAL per RFC 6749 §5.1. Fall back to a 1h default
-	// so we always have a positive access_expires_at to compare against —
-	// silent-refresh logic in a later milestone will treat the row as
-	// "needs refresh" if the upstream didn't tell us.
-	accessExpires := time.Now().Add(1 * time.Hour)
+	// expires_in is OPTIONAL per RFC 6749 §5.1. When the upstream omits it we
+	// store NULL — "no known expiry" — rather than fabricating a deadline the
+	// provider never asserted. validateAndRefresh then decides what NULL means
+	// from the refresh token: non-expiring when none was issued (e.g. Slack
+	// non-rotating xoxp), or an hourly app-layer refresh cadence when one was.
+	var accessExpires *time.Time
 	if tok.ExpiresIn > 0 {
-		accessExpires = time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
+		v := time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
+		accessExpires = &v
 	}
 	var refreshExpires *time.Time
 	if tok.RefreshExpiresIn > 0 {
@@ -476,7 +479,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		UserSessionIssuerID:   state.UserSessionIssuerID,
 		RemoteSessionClientID: state.RemoteSessionClientID,
 		AccessTokenEncrypted:  accessEnc,
-		AccessExpiresAt:       conv.ToPGTimestamptz(accessExpires),
+		AccessExpiresAt:       conv.PtrToPGTimestamptz(accessExpires),
 		RefreshTokenEncrypted: conv.PtrToPGText(refreshEnc),
 		RefreshExpiresAt:      conv.PtrToPGTimestamptz(refreshExpires),
 		Scopes:                scopes,

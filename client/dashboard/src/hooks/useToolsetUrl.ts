@@ -2,6 +2,7 @@ import { useProject } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
 import { McpEndpoint, ToolsetEntry } from "@gram/client/models/components";
 import { useGetDomain } from "@gram/client/react-query";
+import { useMemo } from "react";
 
 export function useCustomDomain(enabled = true): {
   domain: ReturnType<typeof useGetDomain>["data"];
@@ -58,7 +59,7 @@ export function useCustomDomains(enabled = true): {
 // Returns `undefined` when the endpoint has no slug or when its custom domain
 // hasn't resolved yet (loading or denied), so callers can gracefully render an
 // empty state.
-export function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
+function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
   mcpUrl: string | undefined;
   installPageUrl: string | undefined;
 } {
@@ -84,6 +85,35 @@ export function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
 
   const mcpUrl = `${serverURL}/mcp/${endpoint.slug}`;
   return { mcpUrl, installPageUrl: `${mcpUrl}/install` };
+}
+
+// useResolvedMcpServerUrl resolves the runtime MCP URL for an mcp_server from
+// its endpoints, preferring a custom-domain endpoint. While the custom domain
+// is still resolving it falls back to the Gram-hosted `/mcp/<slug>` path so
+// callers always have a usable URL once a slug exists.
+export function useResolvedMcpServerUrl(
+  endpoints: McpEndpoint[],
+  isLoadingEndpoints: boolean,
+): {
+  mcpUrl: string | undefined;
+  installPageUrl: string | undefined;
+  loading: boolean;
+} {
+  const endpoint = useMemo(
+    () => endpoints.find((e) => e.customDomainId) ?? endpoints[0],
+    [endpoints],
+  );
+  const { mcpUrl: resolvedUrl } = useMcpEndpointUrl(endpoint);
+  const fallbackUrl = endpoint?.slug
+    ? `${getServerURL()}/mcp/${endpoint.slug}`
+    : undefined;
+  const mcpUrl = resolvedUrl ?? fallbackUrl;
+
+  return {
+    mcpUrl,
+    installPageUrl: mcpUrl ? `${mcpUrl}/install` : undefined,
+    loading: isLoadingEndpoints,
+  };
 }
 
 export function useMcpUrl(

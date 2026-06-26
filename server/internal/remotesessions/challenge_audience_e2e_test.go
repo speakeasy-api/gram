@@ -95,7 +95,6 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 			client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 				ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 				RemoteSessionIssuerID:   issuer.ID,
-				UserSessionIssuerID:     conv.ToNullUUID(userIssuer),
 				ClientID:                "aud-cid",
 				ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
 				ClientIDIssuedAt:        pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},

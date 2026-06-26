@@ -261,8 +261,7 @@ export default function RiskEvents(): JSX.Element {
             chatId={selectedChatId}
             onClose={() => setSelectedChatId(null)}
             onDelete={() => setSelectedChatId(null)}
-            collapseNonRisk
-            initialRiskOnly
+            riskFocus
           />
         }
         scrollRef={containerRef}

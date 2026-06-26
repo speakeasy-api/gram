@@ -2,6 +2,7 @@ import { Page } from "@/components/page-layout";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import {
@@ -9,7 +10,11 @@ import {
   useInfiniteListMCPCatalog,
 } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import { useLatestDeployment, useListToolsets } from "@gram/client/react-query";
+import {
+  useLatestDeployment,
+  useListToolsets,
+  useMcpRegistriesGetServerDetails,
+} from "@gram/client/react-query";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -70,6 +75,28 @@ export default function CatalogDetail(): JSX.Element {
       allServers.find((s) => s.registrySpecifier === decodedSpecifier) ?? null
     );
   }, [data, decodedSpecifier]);
+
+  // The catalog list omits per-tool definitions to stay small, so fetch the
+  // full tool list for the detail view separately (cached server-side).
+  const { data: serverDetails } = useMcpRegistriesGetServerDetails(
+    {
+      registryId: server?.registryId ?? "",
+      serverSpecifier: decodedSpecifier,
+    },
+    undefined,
+    { enabled: !!server?.registryId && !!decodedSpecifier },
+  );
+  const detailTools: Tool[] = useMemo(
+    () =>
+      (serverDetails?.tools ?? [])
+        .filter((tool) => !!tool.name)
+        .map((tool) => ({
+          name: tool.name as string,
+          description: tool.description ?? undefined,
+          annotations: tool.annotations as Tool["annotations"],
+        })),
+    [serverDetails],
+  );
 
   const removeServerMutation = useMutation({
     mutationFn: async (slug: string) => {
@@ -226,6 +253,7 @@ export default function CatalogDetail(): JSX.Element {
                   {versionMeta?.isLatest && (
                     <Badge variant="neutral">Latest</Badge>
                   )}
+                  <ManualSetupBadge server={server} />
                 </Stack>
                 {SERVER_WEBSITE_MAP[server.registrySpecifier] ? (
                   <a
@@ -296,10 +324,7 @@ export default function CatalogDetail(): JSX.Element {
             </Card>
 
             {/* Available Tools */}
-            {versionMeta?.["remotes[0]"]?.tools &&
-              versionMeta["remotes[0]"].tools.length > 0 && (
-                <ToolsSection tools={versionMeta["remotes[0]"].tools} />
-              )}
+            {detailTools.length > 0 && <ToolsSection tools={detailTools} />}
           </div>
 
           {/* Right Column - Info */}

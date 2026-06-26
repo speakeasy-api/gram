@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,37 +48,43 @@ func TestThrottledSignaler_FirstCallFiresImmediately(t *testing.T) {
 func TestThrottledSignaler_CoalescesDuringCooldown(t *testing.T) {
 	t.Parallel()
 
-	inner := &countingSignaler{}
-	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, testenv.NewLogger(t))
+	synctest.Test(t, func(t *testing.T) {
+		inner := &countingSignaler{}
+		throttled := NewThrottledSignaler(inner, 100*time.Millisecond, testenv.NewLogger(t))
 
-	projectID := uuid.New()
+		projectID := uuid.New()
 
-	_ = throttled.Signal(t.Context(), projectID)
-	assert.Equal(t, 1, inner.callCount())
-
-	for range 50 {
 		_ = throttled.Signal(t.Context(), projectID)
-	}
+		assert.Equal(t, 1, inner.callCount())
 
-	assert.Equal(t, 1, inner.callCount(), "calls during cooldown should be suppressed")
+		for range 50 {
+			_ = throttled.Signal(t.Context(), projectID)
+		}
 
-	time.Sleep(200 * time.Millisecond)
+		assert.Equal(t, 1, inner.callCount(), "calls during cooldown should be suppressed")
 
-	assert.Equal(t, 2, inner.callCount(), "exactly one trailing signal should fire after cooldown")
+		// Advance the fake clock past the cooldown so the single trailing signal fires.
+		time.Sleep(200 * time.Millisecond) //nolint:forbidigo // GG013: advances the synctest fake clock instantly (the only way to move past a timer inside a synctest.Test bubble); this exemption is valid ONLY within synctest.Test — do not copy it to a real-time time.Sleep
+		synctest.Wait()
+		assert.Equal(t, 2, inner.callCount(), "exactly one trailing signal should fire after cooldown")
+	})
 }
 
 func TestThrottledSignaler_NoPendingNoTrailing(t *testing.T) {
 	t.Parallel()
 
-	inner := &countingSignaler{}
-	throttled := NewThrottledSignaler(inner, 50*time.Millisecond, testenv.NewLogger(t))
+	synctest.Test(t, func(t *testing.T) {
+		inner := &countingSignaler{}
+		throttled := NewThrottledSignaler(inner, 50*time.Millisecond, testenv.NewLogger(t))
 
-	_ = throttled.Signal(t.Context(), uuid.New())
-	assert.Equal(t, 1, inner.callCount())
+		_ = throttled.Signal(t.Context(), uuid.New())
+		assert.Equal(t, 1, inner.callCount())
 
-	time.Sleep(100 * time.Millisecond)
-
-	assert.Equal(t, 1, inner.callCount(), "no trailing signal when nothing was pending")
+		// Advance past the cooldown; with nothing pending there is no trailing fire.
+		time.Sleep(100 * time.Millisecond) //nolint:forbidigo // GG013: advances the synctest fake clock instantly (the only way to move past a timer inside a synctest.Test bubble); this exemption is valid ONLY within synctest.Test — do not copy it to a real-time time.Sleep
+		synctest.Wait()
+		assert.Equal(t, 1, inner.callCount(), "no trailing signal when nothing was pending")
+	})
 }
 
 func TestThrottledSignaler_IndependentPerProject(t *testing.T) {
@@ -109,65 +116,79 @@ func TestThrottledSignaler_ZeroCooldownDisablesThrottling(t *testing.T) {
 func TestThrottledSignaler_RecoversAfterCooldown(t *testing.T) {
 	t.Parallel()
 
-	inner := &countingSignaler{}
-	throttled := NewThrottledSignaler(inner, 50*time.Millisecond, testenv.NewLogger(t))
+	synctest.Test(t, func(t *testing.T) {
+		inner := &countingSignaler{}
+		throttled := NewThrottledSignaler(inner, 50*time.Millisecond, testenv.NewLogger(t))
 
-	projectID := uuid.New()
+		projectID := uuid.New()
 
-	_ = throttled.Signal(t.Context(), projectID)
-	assert.Equal(t, 1, inner.callCount())
+		_ = throttled.Signal(t.Context(), projectID)
+		assert.Equal(t, 1, inner.callCount())
 
-	time.Sleep(100 * time.Millisecond)
+		// Advance past the cooldown so the entry resets; the next signal is a fresh leading edge.
+		time.Sleep(100 * time.Millisecond) //nolint:forbidigo // GG013: advances the synctest fake clock instantly (the only way to move past a timer inside a synctest.Test bubble); this exemption is valid ONLY within synctest.Test — do not copy it to a real-time time.Sleep
+		synctest.Wait()
 
-	_ = throttled.Signal(t.Context(), projectID)
-	assert.Equal(t, 2, inner.callCount(), "should fire immediately after cooldown expires")
+		_ = throttled.Signal(t.Context(), projectID)
+		assert.Equal(t, 2, inner.callCount(), "should fire immediately after cooldown expires")
+	})
 }
 
 func TestThrottledSignaler_ConcurrentCallers(t *testing.T) {
 	t.Parallel()
 
-	inner := &countingSignaler{}
-	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, testenv.NewLogger(t))
+	synctest.Test(t, func(t *testing.T) {
+		inner := &countingSignaler{}
+		throttled := NewThrottledSignaler(inner, 100*time.Millisecond, testenv.NewLogger(t))
 
-	projectID := uuid.New()
+		projectID := uuid.New()
 
-	var wg sync.WaitGroup
-	for range 100 {
-		wg.Go(func() {
-			_ = throttled.Signal(t.Context(), projectID)
-		})
-	}
-	wg.Wait()
+		var wg sync.WaitGroup
+		for range 100 {
+			wg.Go(func() {
+				_ = throttled.Signal(t.Context(), projectID)
+			})
+		}
+		wg.Wait()
 
-	assert.Equal(t, 1, inner.callCount(), "concurrent callers should result in exactly one immediate signal")
+		assert.Equal(t, 1, inner.callCount(), "concurrent callers should result in exactly one immediate signal")
 
-	time.Sleep(200 * time.Millisecond)
-	assert.Equal(t, 2, inner.callCount(), "one trailing signal after concurrent burst")
+		// Advance past the cooldown so the coalesced trailing signal fires once.
+		time.Sleep(200 * time.Millisecond) //nolint:forbidigo // GG013: advances the synctest fake clock instantly (the only way to move past a timer inside a synctest.Test bubble); this exemption is valid ONLY within synctest.Test — do not copy it to a real-time time.Sleep
+		synctest.Wait()
+		assert.Equal(t, 2, inner.callCount(), "one trailing signal after concurrent burst")
+	})
 }
 
 func TestThrottledSignaler_MultipleBursts(t *testing.T) {
 	t.Parallel()
 
-	inner := &countingSignaler{}
-	throttled := NewThrottledSignaler(inner, 50*time.Millisecond, testenv.NewLogger(t))
+	synctest.Test(t, func(t *testing.T) {
+		inner := &countingSignaler{}
+		throttled := NewThrottledSignaler(inner, 50*time.Millisecond, testenv.NewLogger(t))
 
-	projectID := uuid.New()
+		projectID := uuid.New()
 
-	_ = throttled.Signal(t.Context(), projectID)
-	_ = throttled.Signal(t.Context(), projectID)
-	assert.Equal(t, 1, inner.callCount())
+		_ = throttled.Signal(t.Context(), projectID)
+		_ = throttled.Signal(t.Context(), projectID)
+		assert.Equal(t, 1, inner.callCount())
 
-	time.Sleep(100 * time.Millisecond)
-	assert.Equal(t, 2, inner.callCount(), "trailing from burst 1")
+		time.Sleep(100 * time.Millisecond) //nolint:forbidigo // GG013: advances the synctest fake clock instantly (the only way to move past a timer inside a synctest.Test bubble); this exemption is valid ONLY within synctest.Test — do not copy it to a real-time time.Sleep
+		synctest.Wait()
+		assert.Equal(t, 2, inner.callCount(), "trailing from burst 1")
 
-	time.Sleep(100 * time.Millisecond)
+		// Let the entry's cooldown fully elapse so burst 2 starts fresh.
+		time.Sleep(100 * time.Millisecond) //nolint:forbidigo // GG013: advances the synctest fake clock instantly (the only way to move past a timer inside a synctest.Test bubble); this exemption is valid ONLY within synctest.Test — do not copy it to a real-time time.Sleep
+		synctest.Wait()
 
-	_ = throttled.Signal(t.Context(), projectID)
-	_ = throttled.Signal(t.Context(), projectID)
-	assert.Equal(t, 3, inner.callCount(), "immediate from burst 2")
+		_ = throttled.Signal(t.Context(), projectID)
+		_ = throttled.Signal(t.Context(), projectID)
+		assert.Equal(t, 3, inner.callCount(), "immediate from burst 2")
 
-	time.Sleep(100 * time.Millisecond)
-	assert.Equal(t, 4, inner.callCount(), "trailing from burst 2")
+		time.Sleep(100 * time.Millisecond) //nolint:forbidigo // GG013: advances the synctest fake clock instantly (the only way to move past a timer inside a synctest.Test bubble); this exemption is valid ONLY within synctest.Test — do not copy it to a real-time time.Sleep
+		synctest.Wait()
+		assert.Equal(t, 4, inner.callCount(), "trailing from burst 2")
+	})
 }
 
 func TestThrottledSignaler_FirstCallErrorPropagates(t *testing.T) {
@@ -191,6 +212,38 @@ func TestThrottledSignaler_SuppressedCallsReturnNil(t *testing.T) {
 
 	err := throttled.Signal(t.Context(), projectID)
 	require.NoError(t, err, "suppressed calls should return nil")
+}
+
+func TestThrottledSignaler_ShutdownFlushesPending(t *testing.T) {
+	t.Parallel()
+
+	inner := &countingSignaler{}
+	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, testenv.NewLogger(t))
+
+	projectID := uuid.New()
+	_ = throttled.Signal(t.Context(), projectID) // leading edge fires immediately
+	_ = throttled.Signal(t.Context(), projectID) // suppressed → pending trailing
+	assert.Equal(t, 1, inner.callCount())
+
+	require.NoError(t, throttled.Shutdown(t.Context()))
+	assert.Equal(t, 2, inner.callCount(), "shutdown should flush the pending trailing signal")
+
+	require.NoError(t, throttled.Shutdown(t.Context()))
+	assert.Equal(t, 2, inner.callCount(), "second shutdown is a no-op once entries are cleared")
+}
+
+func TestThrottledSignaler_ShutdownNoPendingNoFire(t *testing.T) {
+	t.Parallel()
+
+	inner := &countingSignaler{}
+	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, testenv.NewLogger(t))
+
+	projectID := uuid.New()
+	_ = throttled.Signal(t.Context(), projectID) // leading edge only, nothing suppressed
+	assert.Equal(t, 1, inner.callCount())
+
+	require.NoError(t, throttled.Shutdown(t.Context()))
+	assert.Equal(t, 1, inner.callCount(), "shutdown fires nothing when no trailing signal is pending")
 }
 
 func TestThrottledSignaler_NegativeCooldownDisablesThrottling(t *testing.T) {

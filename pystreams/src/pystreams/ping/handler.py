@@ -1,7 +1,7 @@
 import logging
 
 import structlog
-from gram.ping.v1 import ping_pb2
+from gram.ping.v2 import ping_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 
 

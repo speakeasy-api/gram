@@ -96,6 +96,10 @@ export function CommandPalette(): JSX.Element {
   };
 
   const trimmedQuery = query.trim();
+  // Recently Visited is a zero-state convenience and the Project Assistant row
+  // moves to the bottom once the user starts typing (see below), so both branch
+  // on whether there's an active query.
+  const hasQuery = trimmedQuery.length > 0;
   const askAiLabel = trimmedQuery
     ? `Ask AI: "${trimmedQuery}"`
     : "Ask the Project Assistant…";
@@ -104,6 +108,28 @@ export function CommandPalette(): JSX.Element {
     requestAskAi(trimmedQuery);
     closeAndReset();
   };
+
+  // Free-form AI escape hatch — always offered regardless of the filter
+  // (forceMount) so the typed query can always be sent to the assistant.
+  // Project Assistant is project-scoped, so only at the project level. Rendered
+  // near the top when the palette is idle (discoverable) but pushed below the
+  // results while searching: cmdk auto-selects the first item in DOM order after
+  // filtering, so keeping this forceMounted row above the matches would steal
+  // the highlight from the closest result and force an extra ↓ keypress to reach
+  // it (AGE-2807).
+  const askAiGroup = inProject ? (
+    <CommandGroup heading="Assistant">
+      <CommandItem
+        forceMount
+        value="__ask_ai__"
+        onSelect={handleAskAi}
+        className="flex items-center gap-2"
+      >
+        <Icon name="sparkles" className="text-primary size-4 shrink-0" />
+        <span className="truncate">{askAiLabel}</span>
+      </CommandItem>
+    </CommandGroup>
+  ) : null;
 
   return (
     <CommandDialog
@@ -144,8 +170,11 @@ export function CommandPalette(): JSX.Element {
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
 
-        {/* Recently visited pages (most-recent first), client-side localStorage. */}
-        {recents.length > 0 && (
+        {/* Recently visited pages (most-recent first), client-side localStorage.
+            Only a zero-state affordance: once the user types, hide it so search
+            results rank on their own merits instead of recents jumping ahead of
+            a closer text match (AGE-2808). */}
+        {!hasQuery && recents.length > 0 && (
           <CommandGroup heading="Recently Visited">
             {recents.map((recent) => (
               <CommandItem
@@ -163,22 +192,8 @@ export function CommandPalette(): JSX.Element {
           </CommandGroup>
         )}
 
-        {/* Free-form AI escape hatch — always offered regardless of the filter
-            (forceMount) so the typed query can always be sent to the assistant.
-            Project Assistant is project-scoped, so only at the project level. */}
-        {inProject && (
-          <CommandGroup heading="Assistant">
-            <CommandItem
-              forceMount
-              value="__ask_ai__"
-              onSelect={handleAskAi}
-              className="flex items-center gap-2"
-            >
-              <Icon name="sparkles" className="text-primary size-4 shrink-0" />
-              <span className="truncate">{askAiLabel}</span>
-            </CommandItem>
-          </CommandGroup>
-        )}
+        {/* Idle: Ask AI sits up top for discoverability. */}
+        {!hasQuery && askAiGroup}
 
         {sortedGroups.map(([groupName, groupActions]) => (
           <CommandGroup key={groupName} heading={groupName}>
@@ -212,6 +227,11 @@ export function CommandPalette(): JSX.Element {
         {isOpen && inProject && (
           <ResourceResults onNavigate={closeAndReset} query={trimmedQuery} />
         )}
+
+        {/* Searching: Ask AI drops below the results so the closest match keeps
+            the auto-selected highlight, while the "Ask AI: …" fallback stays
+            available at the bottom of the list (AGE-2807). */}
+        {hasQuery && askAiGroup}
       </CommandList>
 
       {/* Keyboard navigation hints */}

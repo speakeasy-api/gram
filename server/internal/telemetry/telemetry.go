@@ -85,6 +85,10 @@ func UserInfoByEmail(email string) UserInfo {
 	return UserInfo{userID: "", email: email}
 }
 
+func UserInfoByIDAndEmail(userID, email string) UserInfo {
+	return UserInfo{userID: userID, email: email}
+}
+
 func (u UserInfo) UserID() string {
 	return u.userID
 }

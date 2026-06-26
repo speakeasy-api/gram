@@ -173,7 +173,7 @@ analogue of `mustReceive`/`receiverGroup` in `streams.go`, so each subscription
 is one line at the call site.
 
 > Go and Python can consume the _same_ topic through _separate_ subscriptions:
-> `gram.ping.v1.Message` has both a `Processor` marker (consumed by Go) and a
+> `gram.ping.v2.Message` has both a `Processor` marker (consumed by Go) and a
 > `PyProcessor` marker (consumed by `pystreams`). If you want a Python consumer
 > of a topic the Go side already reads, declare a new subscription marker rather
 > than stealing the existing one. Declaration is a `gram-pubsub` task.

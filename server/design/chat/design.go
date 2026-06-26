@@ -29,6 +29,12 @@ var _ = Service("chat", func() {
 			Attribute("has_risk", String, "Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.", func() {
 				Enum("", "true", "false")
 			})
+			Attribute("pinned", String, "Filter by pinned state: 'true' for pinned chats, 'false' for unpinned, or empty for no filter.", func() {
+				Enum("", "true", "false")
+			})
+			Attribute("min_risk_score", Int, "Filter to chats with at least this many active risk findings (inclusive). Omit or pass 0 for no threshold.", func() {
+				Minimum(0)
+			})
 			Attribute("from", String, "Filter chats last active after this timestamp (ISO 8601)", func() {
 				Format(FormatDateTime)
 			})
@@ -62,6 +68,8 @@ var _ = Service("chat", func() {
 			Param("external_user_id")
 			Param("assistant_id")
 			Param("has_risk")
+			Param("pinned")
+			Param("min_risk_score")
 			Param("from")
 			Param("to")
 			Param("limit")
@@ -80,7 +88,7 @@ var _ = Service("chat", func() {
 	})
 
 	Method("loadChat", func() {
-		Description("Load a chat by its ID. Messages are paginated one generation per request; omit `generation` to receive the latest generation.")
+		Description("Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -89,6 +97,27 @@ var _ = Service("chat", func() {
 			Attribute("id", String, "The ID of the chat")
 			Attribute("generation", Int, "Generation to load. A generation is an immutable snapshot of the chat transcript: a new one is opened whenever the conversation is compacted or an earlier message is edited, while normal turns append to the current generation. Generations are numbered from 0 (oldest) up to `max_generation` (latest). Omit this attribute to receive the latest generation, or page through history by walking from `max_generation` down to 0.", func() {
 				Minimum(0)
+			})
+			Attribute("limit", Int, "Maximum number of messages to return for this page.", func() {
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
+			Attribute("before_seq", Int64, "Keyset cursor: return the page of messages with `seq` strictly less than this value (older messages). The returned `messages` are always ordered oldest to newest by `seq`, like every other response. Use the `seq` of the oldest message you currently hold to load the previous page. Ignored when `risk_only` is set. Mutually exclusive with `after_seq`; if both are supplied, `after_seq` takes precedence.", func() {
+				Minimum(1)
+			})
+			Attribute("after_seq", Int64, "Keyset cursor: return the page of messages with `seq` strictly greater than this value (newer messages). The returned `messages` are always ordered oldest to newest by `seq`. Use the `seq` of the newest message you currently hold to load the next page. Ignored when `risk_only` is set. Mutually exclusive with `before_seq`; if both are supplied, `after_seq` takes precedence.", func() {
+				Minimum(1)
+			})
+			Attribute("from_start", Boolean, "When true, return the oldest page of the generation (the start of the thread), ordered oldest to newest, with `has_more_before=false`. Page forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`, or `risk_only` is set.", func() {
+				Default(false)
+			})
+			Attribute("risk_only", Boolean, "When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.", func() {
+				Default(false)
+			})
+			Attribute("query", String, "When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). The seqs that actually matched are listed in `match_seqs`. Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.", func() {
+				MinLength(1)
+				MaxLength(200)
 			})
 			Required("id")
 		})
@@ -99,6 +128,12 @@ var _ = Service("chat", func() {
 			GET("/rpc/chat.load")
 			Param("id")
 			Param("generation")
+			Param("limit")
+			Param("before_seq")
+			Param("after_seq")
+			Param("from_start")
+			Param("risk_only")
+			Param("query")
 			security.SessionHeader()
 			security.ProjectHeader()
 			security.ChatSessionsTokenHeader()
@@ -111,18 +146,21 @@ var _ = Service("chat", func() {
 	})
 
 	Method("generateTitle", func() {
-		Description("Generate a title for a chat based on its messages")
+		Description("Read or set a chat's title. Omit `title` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `title` to set a manual title that auto-generation will never overwrite; provide an empty `title` to clear the manual title and re-enable auto-generation.")
 
 		Payload(func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 			security.ChatSessionsTokenPayload()
 			Attribute("id", String, "The ID of the chat")
+			Attribute("title", String, "When present, sets the chat's title manually (empty string resets to auto-generated). When omitted, the current title is returned without changes.", func() {
+				MaxLength(200)
+			})
 			Required("id")
 		})
 
 		Result(func() {
-			Attribute("title", String, "The generated title")
+			Attribute("title", String, "The current title after the operation (empty when reset to auto-generated)")
 			Required("title")
 		})
 
@@ -186,6 +224,30 @@ var _ = Service("chat", func() {
 
 		Meta("openapi:operationId", "deleteChat")
 		Meta("openapi:extension:x-speakeasy-name-override", "delete")
+	})
+
+	Method("setPinned", func() {
+		Description("Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The ID of the chat to pin or unpin")
+			Attribute("pinned", Boolean, "True to pin the chat, false to unpin it")
+			Required("id", "pinned")
+		})
+
+		HTTP(func() {
+			POST("/rpc/chat.setPinned")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "setChatPinned")
+		Meta("openapi:extension:x-speakeasy-name-override", "setPinned")
 	})
 
 	Method("submitFeedback", func() {
@@ -256,16 +318,45 @@ var ChatOverview = Type("ChatOverview", func() {
 
 var Chat = Type("Chat", func() {
 	Extend(ChatOverview)
-	Attribute("messages", ArrayOf(ChatMessage), "The list of messages in the chat for the returned generation")
+	Attribute("messages", ArrayOf(ChatMessage), "The list of messages in the chat for the returned generation, ordered oldest to newest by `seq`.")
 	Attribute("generation", Int, "The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.")
 	Attribute("max_generation", Int, "The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.")
+	Attribute("has_more_before", Boolean, "Whether older messages exist before the first message in this page (within the returned generation). Load them with a `before_seq` cursor.")
+	Attribute("has_more_after", Boolean, "Whether newer messages exist after the last message in this page (within the returned generation). Load them with an `after_seq` cursor.")
+	Attribute("risk_segments", ArrayOf(RiskSegment), "Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment's cursors to expand it.")
+	Attribute("match_segments", ArrayOf(RiskSegment), "Present only when `query` was requested: contiguous runs of returned messages, each spanning one or more query matches and their surrounding context. Use each segment's cursors to expand it.")
+	Attribute("match_seqs", ArrayOf(Int64), "Present only when `query` was requested: the `seq` of every message whose text matched the query, ascending. These are the jump-to-match navigation targets; surrounding-context messages in `messages` are not listed here.")
 	Attribute("agent_usage", AgentUsage, "Agent-specific usage enrichment for the chat, when available.")
+	Attribute("totals", ChatTotals, "Whole-generation trace-entry totals for the returned generation. Because messages are paginated, callers must use these (not the length of `messages`) to render filter-bar counts.")
 
-	Required("messages", "generation", "max_generation")
+	Required("messages", "generation", "max_generation", "has_more_before", "has_more_after")
+})
+
+var ChatTotals = Type("ChatTotals", func() {
+	Description("Trace-entry counts across the entire returned generation, independent of pagination. Each message maps to exactly one entry: a message carrying tool calls counts as a tool call regardless of role, otherwise the role decides.")
+	Attribute("total", Int64, "Total trace entries in the generation (sum of the four entry-type counts; the `of N entries` denominator).")
+	Attribute("user_messages", Int64, "Number of user messages in the generation.")
+	Attribute("assistant_messages", Int64, "Number of assistant messages (without tool calls) in the generation.")
+	Attribute("tool_calls", Int64, "Number of messages carrying tool calls in the generation.")
+	Attribute("tool_results", Int64, "Number of tool-result messages in the generation.")
+	Attribute("risk_only", Int64, "Number of messages with an active (found, non-suppressed) risk finding in the generation.")
+
+	Required("total", "user_messages", "assistant_messages", "tool_calls", "tool_results", "risk_only")
+})
+
+var RiskSegment = Type("RiskSegment", func() {
+	Description("A contiguous run of messages in a windowed view (`risk_only` via `risk_segments`, or `query` via `match_segments`), covering one or more matches plus their surrounding context. Messages for a segment are the entries of `Chat.messages` whose `seq` falls within `[first_seq, last_seq]`.")
+	Attribute("first_seq", Int64, "The `seq` of the first (oldest) message in this segment.")
+	Attribute("last_seq", Int64, "The `seq` of the last (newest) message in this segment.")
+	Attribute("has_more_before", Boolean, "Whether messages exist before this segment within the generation. Expand with a `before_seq` request using `first_seq`.")
+	Attribute("has_more_after", Boolean, "Whether messages exist after this segment within the generation. Expand with an `after_seq` request using `last_seq`.")
+
+	Required("first_seq", "last_seq", "has_more_before", "has_more_after")
 })
 
 var ChatMessage = Type("ChatMessage", func() {
 	Attribute("id", String, "The ID of the message")
+	Attribute("seq", Int64, "Monotonic sequence number of the message. Strictly increasing within a chat; use it as the keyset cursor for `before_seq`/`after_seq` pagination. Not contiguous (the sequence is shared across chats), so do not infer gaps from arithmetic differences.")
 	Attribute("role", String, "The role of the message")
 	Attribute("content", Any, "The content of the message — string for plain text, array for multimodal/tool-call content parts, null for assistant messages that only carry tool_calls", func() {
 		Meta("struct:field:type", "json.RawMessage", "encoding/json")
@@ -283,7 +374,7 @@ var ChatMessage = Type("ChatMessage", func() {
 	})
 	Attribute("generation", Int, "Conversation generation — bumps on compaction or edit divergence")
 
-	Required("id", "role", "model", "created_at", "generation")
+	Required("id", "seq", "role", "model", "created_at", "generation")
 })
 
 var AgentUsage = Type("AgentUsage", func() {

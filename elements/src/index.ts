@@ -15,11 +15,30 @@ export { useChatId } from "./contexts/ChatIdContext";
 // Core Components
 export { Chat } from "@/components/Chat";
 export { ChatHistory } from "@/components/ChatHistory";
+export { ActiveChatTitle } from "@/components/ActiveChatTitle";
 export { ShareButton } from "@/components/ShareButton";
 export type { ShareButtonProps } from "@/components/ShareButton";
 export { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 export { MessageContent } from "@/components/MessageContent";
 export type { MessageContentProps } from "@/components/MessageContent";
+export { Markdown } from "@/components/Markdown";
+export type { MarkdownProps } from "@/components/Markdown";
+
+// Static presentation primitives — render with no ElementsProvider/runtime, so
+// the dashboard's chat detail panel can reuse the elements tool UI directly.
+export {
+  ToolUI,
+  ToolUISection,
+  SyntaxHighlightedCode,
+} from "@/components/ui/tool-ui";
+export type {
+  ToolUIProps,
+  ToolUISectionProps,
+  ToolStatus,
+  ContentItem,
+  SectionHighlight,
+  SectionMatch,
+} from "@/components/ui/tool-ui";
 
 // Replay
 export { Replay } from "@/components/Replay";

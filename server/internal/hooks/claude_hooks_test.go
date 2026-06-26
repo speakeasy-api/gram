@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -11,8 +12,10 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
 
@@ -52,7 +55,7 @@ func (s userScopedShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context,
 	return true, nil
 }
 
-func TestResolveClaudeScanContext_PrefersAuthContextProjectOverCachedMetadata(t *testing.T) {
+func TestNormalizeClaudeHookEvent_PrefersAuthContextProjectOverCachedMetadata(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -68,19 +71,26 @@ func TestResolveClaudeScanContext_PrefersAuthContextProjectOverCachedMetadata(t 
 		UserEmail: "cached-scan@example.com",
 	}, 0))
 
-	got, err := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
-		SessionID: &sessionID,
-	})
+	normalized, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+	}, time.Now())
 	require.NoError(t, err)
-	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
-	assert.Equal(t, *authCtx.ProjectID, got.projectID)
-	assert.Empty(t, got.userID)
+	require.NotNil(t, normalized)
+	got, ok := normalized.(*hookevents.UserPromptSubmit)
+	require.True(t, ok)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.Context.OrganizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.Context.ProjectID)
+	assert.Empty(t, got.Context.User.ID)
 }
 
-func TestResolveClaudeScanContext_RejectsMetadataWithoutUserEmail(t *testing.T) {
+func TestNormalizeClaudeHookEvent_AllowsMissingUserEmail(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
 
 	sessionID := uuid.NewString()
 	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
@@ -89,16 +99,21 @@ func TestResolveClaudeScanContext_RejectsMetadataWithoutUserEmail(t *testing.T) 
 		UserEmail: "",
 	}, 0))
 
-	got, err := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
-		SessionID: &sessionID,
-	})
-	require.ErrorContains(t, err, "claude session metadata missing user email")
-	assert.Empty(t, got.organizationID)
-	assert.Equal(t, uuid.Nil, got.projectID)
-	assert.Empty(t, got.userID)
+	normalized, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+	}, time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, normalized)
+	got, ok := normalized.(*hookevents.UserPromptSubmit)
+	require.True(t, ok)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.Context.OrganizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.Context.ProjectID)
+	assert.Empty(t, got.Context.User.ID)
+	assert.Empty(t, got.Context.User.Email)
 }
 
-func TestResolveClaudeScanContext_ResolvesPayloadEmailBeforeAuthUserID(t *testing.T) {
+func TestNormalizeClaudeHookEvent_ResolvesPayloadEmailBeforeAuthUserID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -111,17 +126,22 @@ func TestResolveClaudeScanContext_ResolvesPayloadEmailBeforeAuthUserID(t *testin
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
 
 	sessionID := uuid.NewString()
-	got, err := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
-		SessionID: &sessionID,
-		UserEmail: &userEmail,
-	})
+	normalized, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+	}, time.Now())
 	require.NoError(t, err)
-	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
-	assert.Equal(t, *authCtx.ProjectID, got.projectID)
-	assert.Equal(t, userID, got.userID)
+	require.NotNil(t, normalized)
+	got, ok := normalized.(*hookevents.UserPromptSubmit)
+	require.True(t, ok)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.Context.OrganizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.Context.ProjectID)
+	assert.Equal(t, userID, got.Context.User.ID)
+	assert.Equal(t, userEmail, got.Context.User.Email)
 }
 
-func TestResolveClaudeScanContext_ResolvesAuthContextActorFromCachedEmail(t *testing.T) {
+func TestNormalizeClaudeHookEvent_ResolvesAuthContextActorFromCachedEmail(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -147,13 +167,18 @@ func TestResolveClaudeScanContext_ResolvesAuthContextActorFromCachedEmail(t *tes
 		ProjectID:   uuid.NewString(),
 	}, 0))
 
-	got, err := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
-		SessionID: &sessionID,
-	})
+	normalized, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+	}, time.Now())
 	require.NoError(t, err)
-	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
-	assert.Equal(t, *authCtx.ProjectID, got.projectID)
-	assert.Equal(t, userID, got.userID)
+	require.NotNil(t, normalized)
+	got, ok := normalized.(*hookevents.UserPromptSubmit)
+	require.True(t, ok)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.Context.OrganizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.Context.ProjectID)
+	assert.Equal(t, userID, got.Context.User.ID)
+	assert.Equal(t, userEmail, got.Context.User.Email)
 }
 
 // When the request authenticated via Gram-Key + Gram-Project, handlePreToolUse
@@ -466,6 +491,259 @@ func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 	assert.Equal(t, "allow", *output.PermissionDecision)
 }
 
+// DNO-286: the blocking PreToolUse guard must enforce against the inventory
+// carried in the request payload — replayed from the SessionStart inventory
+// file by hook.sh — not only the server-side cache. Here no snapshot is
+// cached, yet a payload-supplied inventory that resolves the tool's server to
+// a Gram-hosted URL must ALLOW, proving the payload path is consulted. Before
+// the fix this session would have denied with the retry/restart message
+// because the cache races the async SessionStart snapshot.
+func TestClaude_PreToolUse_EnforcesFromPayloadInventoryWithoutCache(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__gram__do_thing"
+	toolUseID := "toolu_payload_inventory"
+	userEmail := "claude-payload-inv@example.com"
+
+	// No cache.Set — the inventory arrives only in the payload.
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+		AdditionalData: map[string]any{
+			"mcp_inventory_claude_code": "gram: https://app.getgram.ai/mcp/team-foo (HTTP) - connected",
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "allow", *output.PermissionDecision,
+		"payload-supplied inventory must drive enforcement even with no cached snapshot")
+
+	// The payload inventory also self-heals the cache, so the best-effort
+	// telemetry annotation path finds the snapshot on subsequent events.
+	cached, cacheErr := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, cacheErr, "payload inventory should be written back to the cache")
+	require.Len(t, cached, 1)
+	assert.Equal(t, "https://app.getgram.ai/mcp/team-foo", cached[0].URL)
+}
+
+// A payload-supplied inventory that resolves the server to a non-Gram URL must
+// block with the shadow-MCP policy decision — not the "snapshot unavailable"
+// retry/restart message — confirming the inventory was consumed for
+// enforcement rather than triggering the fail-closed cache-miss branch.
+func TestClaude_PreToolUse_PayloadInventoryBlocksNonGramServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__notion__search"
+	toolUseID := "toolu_payload_inventory_nongram"
+	userEmail := "claude-payload-inv-nongram@example.com"
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+		AdditionalData: map[string]any{
+			"mcp_inventory_claude_code": "notion: https://mcp.notion.com/mcp (HTTP) - connected",
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision)
+	require.NotNil(t, output.PermissionDecisionReason)
+	assert.NotContains(t, *output.PermissionDecisionReason, "restart Claude Code",
+		"a payload inventory was supplied, so the block must come from the policy, not the cache-miss fail-closed path")
+}
+
+// A payload inventory gathered live this call (mcp_inventory_fresh) must
+// supersede a stale cached snapshot. Here the cache resolves "gram" to a
+// Gram-hosted URL (would allow), but the fresh payload resolves the same server
+// to a non-Gram URL — the fresh inventory must win and BLOCK, and overwrite the
+// cache. This is the inline-gather path hook.sh takes on a session's first tool
+// call when the SessionStart file does not exist yet.
+func TestClaude_PreToolUse_FreshPayloadInventorySupersedesCache(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__gram__do_thing"
+	toolUseID := "toolu_fresh_supersedes"
+	userEmail := "claude-fresh-supersedes@example.com"
+
+	// Cache holds a Gram-hosted entry that would allow on its own.
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
+		sessionMCPListTTL,
+	))
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+		AdditionalData: map[string]any{
+			"mcp_inventory_claude_code": "gram: https://shadow.example.com/mcp (HTTP) - connected",
+			"mcp_inventory_fresh":       true,
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision,
+		"a live-gathered (fresh) payload inventory must supersede the cached snapshot")
+
+	// The fresh inventory must overwrite the cache, not be discarded.
+	cached, cacheErr := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, cacheErr)
+	require.Len(t, cached, 1)
+	assert.Equal(t, "https://shadow.example.com/mcp", cached[0].URL,
+		"fresh inventory should overwrite the previously cached snapshot")
+}
+
+// A replayed (non-fresh) payload inventory must NOT override a cached snapshot.
+// This guards the ConfigChange race danielkov flagged: the server may already
+// hold a fresher inventory (cached synchronously on ConfigChange) while hook.sh
+// replays an older per-session file. Here the cache allows (Gram-hosted) and
+// the non-fresh replayed payload would block (non-Gram) — the cache must win.
+func TestClaude_PreToolUse_StaleReplayDoesNotOverrideCache(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__gram__do_thing"
+	toolUseID := "toolu_stale_replay"
+	userEmail := "claude-stale-replay@example.com"
+
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
+		sessionMCPListTTL,
+	))
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+		AdditionalData: map[string]any{
+			// No mcp_inventory_fresh: this is a replay from the per-session file.
+			"mcp_inventory_claude_code": "gram: https://shadow.example.com/mcp (HTTP) - connected",
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "allow", *output.PermissionDecision,
+		"a non-fresh replayed inventory must not override the cached snapshot")
+
+	// The cache must remain the Gram-hosted entry, untouched by the replay.
+	cached, cacheErr := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, cacheErr)
+	require.Len(t, cached, 1)
+	assert.Equal(t, "https://app.getgram.ai/mcp/team-foo", cached[0].URL,
+		"replayed inventory must not clobber a fresher cached snapshot")
+}
+
+// mcpGetErrorCache wraps a real cache but forces a non-miss (transport-style)
+// error on Get for one key, so tests can exercise the fail-closed path without
+// a flaky real Redis outage.
+type mcpGetErrorCache struct {
+	cache.Cache
+	failKey string
+	err     error
+}
+
+func (c mcpGetErrorCache) Get(ctx context.Context, key string, value any) error {
+	if key == c.failKey {
+		return c.err
+	}
+	//nolint:wrapcheck // test pass-through to the embedded real cache
+	return c.Cache.Get(ctx, key, value)
+}
+
+// A Redis transport error (not a cache miss) must fail closed even when the
+// payload carries a non-fresh replayed inventory. A genuine miss legitimately
+// falls back to the replay (DNO-286), but on a transport error we cannot
+// establish cache-authoritative ordering, so enforcing against a possibly-stale
+// replay is unsafe — deny with the retry/restart message instead.
+func TestClaude_PreToolUse_CacheTransportErrorFailsClosedDespiteReplay(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__gram__do_thing"
+	toolUseID := "toolu_cache_transport_err"
+	userEmail := "claude-cache-transport-err@example.com"
+
+	// Force a non-miss error specifically on the MCP list key; everything else
+	// (session metadata, auth) still resolves through the real cache.
+	ti.service.cache = mcpGetErrorCache{
+		Cache:   ti.service.cache,
+		failKey: sessionMCPListCacheKey(sessionID),
+		err:     errors.New("redis: connection refused"),
+	}
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+		AdditionalData: map[string]any{
+			// Non-fresh replayed inventory (no mcp_inventory_fresh).
+			"mcp_inventory_claude_code": "gram: https://app.getgram.ai/mcp/team-foo (HTTP) - connected",
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision,
+		"a cache transport error must fail closed, not fall back to a non-fresh replay")
+	require.NotNil(t, output.PermissionDecisionReason)
+	assert.Contains(t, *output.PermissionDecisionReason, "restart Claude Code",
+		"the block must be the cache-unavailable fail-closed message, not a policy decision")
+}
+
 func TestMergeClaudeAuthContextMetadata_DoesNotSelectUserID(t *testing.T) {
 	t.Parallel()
 
@@ -692,6 +970,8 @@ func TestClaude_PreToolUse_DeniesMCPWhenNoAuthAndNoCachedMetadata(t *testing.T) 
 		"MCP tool calls without enforcement metadata must fail closed")
 	require.NotNil(t, output.PermissionDecisionReason)
 	assert.Contains(t, *output.PermissionDecisionReason, "could not verify this MCP tool call")
+	assert.Contains(t, *output.PermissionDecisionReason, "/reload-plugins")
+	assert.Contains(t, *output.PermissionDecisionReason, "(err code: "+denyCodeNoMetadata+")")
 }
 
 func TestClaude_PreToolUse_DeniesMCPWhenResolvedMetadataHasNoUserEmail(t *testing.T) {
@@ -732,6 +1012,7 @@ func TestClaude_PreToolUse_DeniesMCPWhenResolvedMetadataHasNoUserEmail(t *testin
 	assert.Equal(t, "deny", *output.PermissionDecision)
 	require.NotNil(t, output.PermissionDecisionReason)
 	assert.Contains(t, *output.PermissionDecisionReason, "could not verify this MCP tool call")
+	assert.Contains(t, *output.PermissionDecisionReason, "(err code: "+denyCodeNoUserEmail+")")
 }
 
 // Claude Code's hook output schema only permits hookSpecificOutput for

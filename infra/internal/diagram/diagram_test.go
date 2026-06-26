@@ -20,14 +20,14 @@ func writeTempGo(t *testing.T, src string) string {
 }
 
 // TestGoImportsUnaliasedUsesDeclaredPackageName guards the bug where an unaliased
-// generated-proto import was keyed by the directory basename (v1) instead of the
-// package's declared name (pingv1), silently dropping its publishers/consumers.
+// generated-proto import was keyed by the directory basename (v2) instead of the
+// package's declared name (pingv2), silently dropping its publishers/consumers.
 func TestGoImportsUnaliasedUsesDeclaredPackageName(t *testing.T) {
 	path := writeTempGo(t, `package x
 
-import "github.com/speakeasy-api/gram/infra/gen/gram/ping/v1"
+import "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 
-var _ = pingv1.Message{}
+var _ = pingv2.Message{}
 `)
 
 	imports, err := goImports(path, repoRoot)
@@ -35,11 +35,11 @@ var _ = pingv1.Message{}
 		t.Fatalf("goImports: %v", err)
 	}
 
-	if got := imports["pingv1"]; got != "gram.ping.v1" {
-		t.Errorf("declared package name not resolved: imports[%q] = %q, want %q", "pingv1", got, "gram.ping.v1")
+	if got := imports["pingv2"]; got != "gram.ping.v2" {
+		t.Errorf("declared package name not resolved: imports[%q] = %q, want %q", "pingv2", got, "gram.ping.v2")
 	}
-	if _, ok := imports["v1"]; ok {
-		t.Errorf("import keyed by directory basename %q; should use declared package name", "v1")
+	if _, ok := imports["v2"]; ok {
+		t.Errorf("import keyed by directory basename %q; should use declared package name", "v2")
 	}
 }
 

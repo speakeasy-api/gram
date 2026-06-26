@@ -1201,12 +1201,14 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 	}
 
 	result := &gen.PublishStatusResult{
-		Configured:     s.github != nil,
-		Connected:      false,
-		RepoOwner:      nil,
-		RepoName:       nil,
-		RepoURL:        nil,
-		MarketplaceURL: nil,
+		Configured:      s.github != nil,
+		Connected:       false,
+		RepoOwner:       nil,
+		RepoName:        nil,
+		RepoURL:         nil,
+		MarketplaceURL:  nil,
+		UpToDate:        nil,
+		LastPublishedAt: nil,
 	}
 
 	if s.github != nil {
@@ -1224,10 +1226,59 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
 				result.MarketplaceURL = &marketplaceURL
 			}
+			// The connection row is only ever written by a successful publish, so
+			// updated_at is a faithful last-published timestamp.
+			if conn.UpdatedAt.Valid {
+				lastPublishedAt := formatTime(conn.UpdatedAt)
+				result.LastPublishedAt = &lastPublishedAt
+			}
+			result.UpToDate = s.publishUpToDate(ctx, ac, conn)
 		}
 	}
 
 	return result, nil
+}
+
+// publishUpToDate reports whether the project's current plugin state matches
+// what was last published, by recomputing the live content fingerprint the same
+// way publishProject does and comparing it to the stored published_fingerprint.
+// It returns nil ("unknown") when freshness can't be determined — the
+// connection predates fingerprinting, or recomputing the fingerprint fails — so
+// a transient compute error degrades the status read rather than failing it.
+func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthContext, conn repo.PluginGithubConnection) *bool {
+	// Connections published before fingerprinting existed carry no stored hash,
+	// so there's nothing to compare against.
+	if !conn.PublishedFingerprint.Valid {
+		return nil
+	}
+
+	// The fingerprint embeds the project slug, so it must match the slug used at
+	// publish time. Sessions carry it; fall back to the project row otherwise.
+	projectSlug := conv.PtrValOr(ac.ProjectSlug, "")
+	if projectSlug == "" {
+		project, err := projectsrepo.New(s.db).GetProjectByID(ctx, *ac.ProjectID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "publish freshness: get project", attr.SlogError(err))
+			return nil
+		}
+		projectSlug = project.Slug
+	}
+
+	pluginInfos, err := s.resolvePluginInfos(ctx, *ac.ProjectID)
+	if err != nil {
+		// resolvePluginInfos already logged the underlying error.
+		return nil
+	}
+
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID)
+	fingerprint, err := PluginFingerprint(pluginInfos, cfg)
+	if err != nil {
+		s.logger.WarnContext(ctx, "publish freshness: compute fingerprint", attr.SlogError(err))
+		return nil
+	}
+
+	upToDate := conn.PublishedFingerprint.String == fingerprint
+	return &upToDate
 }
 
 func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPluginsPayload) (*gen.PublishPluginsResult, error) {

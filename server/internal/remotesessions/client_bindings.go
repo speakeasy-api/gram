@@ -10,6 +10,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
+// remoteSessionClientWithIssuers pairs a client row with the user_session_issuer
+// ids it is attached to (from the join table), giving the two project-scoped
+// list queries a single shape for the view builder.
+type remoteSessionClientWithIssuers struct {
+	Client               repo.RemoteSessionClient
+	UserSessionIssuerIDs []uuid.UUID
+}
+
 // listRemoteSessionClientsByProjectID reads project-scoped clients. When
 // filtering by user_session_issuer_id it resolves the client / user session
 // issuer relationship solely through the
@@ -21,10 +29,10 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 	userSessionIssuerID uuid.NullUUID,
 	cursor uuid.NullUUID,
 	limit int32,
-) ([]repo.RemoteSessionClient, error) {
+) ([]remoteSessionClientWithIssuers, error) {
 	q := repo.New(s.db)
 	if !userSessionIssuerID.Valid {
-		clients, err := q.ListRemoteSessionClientsByProjectID(ctx, repo.ListRemoteSessionClientsByProjectIDParams{
+		rows, err := q.ListRemoteSessionClientsByProjectID(ctx, repo.ListRemoteSessionClientsByProjectIDParams{
 			ProjectID:             conv.ToNullUUID(projectID),
 			RemoteSessionIssuerID: remoteSessionIssuerID,
 			Cursor:                cursor,
@@ -33,7 +41,11 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 		if err != nil {
 			return nil, fmt.Errorf("list remote session clients by project: %w", err)
 		}
-		return clients, nil
+		out := make([]remoteSessionClientWithIssuers, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, remoteSessionClientWithIssuers{Client: row.RemoteSessionClient, UserSessionIssuerIDs: row.UserSessionIssuerIds})
+		}
+		return out, nil
 	}
 
 	rows, err := q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
@@ -46,7 +58,11 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients by project for user_session_issuer: %w", err)
 	}
-	return rows, nil
+	out := make([]remoteSessionClientWithIssuers, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, remoteSessionClientWithIssuers{Client: row.RemoteSessionClient, UserSessionIssuerIDs: row.UserSessionIssuerIds})
+	}
+	return out, nil
 }
 
 // listRemoteSessionClientRowsForUserSessionIssuer is the runtime counterpart to

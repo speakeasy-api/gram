@@ -3,6 +3,7 @@ package risk
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -83,13 +84,27 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeUnexpected, nil, "risk policy bypass request tokens are not configured").LogError(ctx, s.logger)
 	}
 
-	claims, err := parsePolicyBypassRequestToken(s.jwtSecret, payload.RequestToken)
+	claims, err := parsePolicyBypassRequestToken(ctx, s.cache, s.jwtSecret, payload.RequestToken)
 	if err != nil {
+		// A failure to reach the cache backing the link is an infrastructure
+		// problem, not a bad token: surface it as a server error and log it
+		// rather than telling the user their link is invalid.
+		if errors.Is(err, errPolicyBypassRequestStoreUnavailable) {
+			return nil, oops.E(oops.CodeUnexpected, err, "load risk policy bypass request").LogError(ctx, s.logger)
+		}
 		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass request token")
 	}
+	// The token is only a bearer reference; these checks are what actually
+	// bind a redemption to the right caller, so a leaked link can't be cashed
+	// in by someone else. The org must match the active session's org.
 	if claims.OrganizationID != authCtx.ActiveOrganizationID {
 		return nil, oops.C(oops.CodeForbidden)
 	}
+	// Bind to the original requester when we know who they are. Note this is
+	// conditional: when the block hook couldn't resolve a user, RequesterUserID
+	// is empty and any authenticated user in the org can redeem. That residual
+	// exposure is exactly why the token still travels in the URL fragment (see
+	// GeneratePolicyBypassRequestURL) rather than anywhere it could be logged.
 	if claims.RequesterUserID != "" && claims.RequesterUserID != authCtx.UserID {
 		return nil, oops.C(oops.CodeForbidden)
 	}

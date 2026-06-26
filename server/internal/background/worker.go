@@ -40,6 +40,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -137,6 +139,7 @@ func ForDeploymentProcessing(
 		PluginPublisher:                nil,
 		Publishers: &Publishers{
 			PresidioAnalysis: gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
+			GitleaksAnalysis: gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
 		},
 	}
 }
@@ -248,6 +251,17 @@ func NewTemporalWorker(
 		MaxConcurrentActivityExecutionSize: perPodAIUsagePollerConcurrency,
 	})
 
+	// The CEL engine is immutable + thread-safe; build one for this worker's
+	// risk activities and pass it down. Construction is deterministic and only
+	// fails on a malformed descriptor (a bug caught by tests), so log and carry
+	// on rather than failing worker startup.
+	celEng, celErr := celenv.New()
+	if celErr != nil {
+		logger.ErrorContext(context.Background(), "build CEL engine for risk activities", attr.SlogError(celErr))
+	}
+
+	judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(opts.RedisClient))
+
 	activities := NewActivities(
 		logger,
 		tracerProvider,
@@ -287,6 +301,8 @@ func NewTemporalWorker(
 		opts.PluginPublisher,
 		opts.ChatMessageWriter,
 		opts.Publishers,
+		celEng,
+		judgeRateLimiter,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -306,7 +322,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
-	temporalWorker.RegisterActivity(activities.FallbackModelUsageTracking)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	temporalWorker.RegisterActivity(activities.CorrelateClaudePrompts)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
@@ -370,7 +385,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
-	temporalWorker.RegisterWorkflow(FallbackModelUsageTrackingWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(CorrelateClaudePromptsWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)

@@ -19,6 +19,18 @@ import (
 type GenerateTitleRequestBody struct {
 	// The ID of the chat
 	ID string `form:"id" json:"id" xml:"id"`
+	// When present, sets the chat's title manually (empty string resets to
+	// auto-generated). When omitted, the current title is returned without changes.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+}
+
+// SetPinnedRequestBody is the type of the "chat" service "setPinned" endpoint
+// HTTP request body.
+type SetPinnedRequestBody struct {
+	// The ID of the chat to pin or unpin
+	ID string `form:"id" json:"id" xml:"id"`
+	// True to pin the chat, false to unpin it
+	Pinned bool `form:"pinned" json:"pinned" xml:"pinned"`
 }
 
 // SubmitFeedbackRequestBody is the type of the "chat" service "submitFeedback"
@@ -42,7 +54,8 @@ type ListChatsResponseBody struct {
 // LoadChatResponseBody is the type of the "chat" service "loadChat" endpoint
 // HTTP response body.
 type LoadChatResponseBody struct {
-	// The list of messages in the chat for the returned generation
+	// The list of messages in the chat for the returned generation, ordered oldest
+	// to newest by `seq`.
 	Messages []*ChatMessageResponseBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
 	// The generation that this response's messages belong to. A generation is an
 	// immutable snapshot of the transcript; a new one is opened on compaction or
@@ -52,8 +65,30 @@ type LoadChatResponseBody struct {
 	// history, walk from `max_generation` down to 0, requesting each generation in
 	// turn.
 	MaxGeneration *int `form:"max_generation,omitempty" json:"max_generation,omitempty" xml:"max_generation,omitempty"`
+	// Whether older messages exist before the first message in this page (within
+	// the returned generation). Load them with a `before_seq` cursor.
+	HasMoreBefore *bool `form:"has_more_before,omitempty" json:"has_more_before,omitempty" xml:"has_more_before,omitempty"`
+	// Whether newer messages exist after the last message in this page (within the
+	// returned generation). Load them with an `after_seq` cursor.
+	HasMoreAfter *bool `form:"has_more_after,omitempty" json:"has_more_after,omitempty" xml:"has_more_after,omitempty"`
+	// Present only when `risk_only` was requested: contiguous runs of returned
+	// messages, each spanning a risk finding and its surrounding context. Use each
+	// segment's cursors to expand it.
+	RiskSegments []*RiskSegmentResponseBody `form:"risk_segments,omitempty" json:"risk_segments,omitempty" xml:"risk_segments,omitempty"`
+	// Present only when `query` was requested: contiguous runs of returned
+	// messages, each spanning one or more query matches and their surrounding
+	// context. Use each segment's cursors to expand it.
+	MatchSegments []*RiskSegmentResponseBody `form:"match_segments,omitempty" json:"match_segments,omitempty" xml:"match_segments,omitempty"`
+	// Present only when `query` was requested: the `seq` of every message whose
+	// text matched the query, ascending. These are the jump-to-match navigation
+	// targets; surrounding-context messages in `messages` are not listed here.
+	MatchSeqs []int64 `form:"match_seqs,omitempty" json:"match_seqs,omitempty" xml:"match_seqs,omitempty"`
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsageResponseBody `form:"agent_usage,omitempty" json:"agent_usage,omitempty" xml:"agent_usage,omitempty"`
+	// Whole-generation trace-entry totals for the returned generation. Because
+	// messages are paginated, callers must use these (not the length of
+	// `messages`) to render filter-bar counts.
+	Totals *ChatTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
 	// The ID of the chat
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The title of the chat
@@ -90,7 +125,7 @@ type LoadChatResponseBody struct {
 // GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
 // endpoint HTTP response body.
 type GenerateTitleResponseBody struct {
-	// The generated title
+	// The current title after the operation (empty when reset to auto-generated)
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 }
 
@@ -1013,6 +1048,186 @@ type DeleteChatGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SetPinnedUnauthorizedResponseBody is the type of the "chat" service
+// "setPinned" endpoint HTTP response body for the "unauthorized" error.
+type SetPinnedUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetPinnedForbiddenResponseBody is the type of the "chat" service "setPinned"
+// endpoint HTTP response body for the "forbidden" error.
+type SetPinnedForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetPinnedBadRequestResponseBody is the type of the "chat" service
+// "setPinned" endpoint HTTP response body for the "bad_request" error.
+type SetPinnedBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetPinnedNotFoundResponseBody is the type of the "chat" service "setPinned"
+// endpoint HTTP response body for the "not_found" error.
+type SetPinnedNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetPinnedConflictResponseBody is the type of the "chat" service "setPinned"
+// endpoint HTTP response body for the "conflict" error.
+type SetPinnedConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetPinnedUnsupportedMediaResponseBody is the type of the "chat" service
+// "setPinned" endpoint HTTP response body for the "unsupported_media" error.
+type SetPinnedUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetPinnedInvalidResponseBody is the type of the "chat" service "setPinned"
+// endpoint HTTP response body for the "invalid" error.
+type SetPinnedInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetPinnedInvariantViolationResponseBody is the type of the "chat" service
+// "setPinned" endpoint HTTP response body for the "invariant_violation" error.
+type SetPinnedInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetPinnedUnexpectedResponseBody is the type of the "chat" service
+// "setPinned" endpoint HTTP response body for the "unexpected" error.
+type SetPinnedUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetPinnedGatewayErrorResponseBody is the type of the "chat" service
+// "setPinned" endpoint HTTP response body for the "gateway_error" error.
+type SetPinnedGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // SubmitFeedbackUnauthorizedResponseBody is the type of the "chat" service
 // "submitFeedback" endpoint HTTP response body for the "unauthorized" error.
 type SubmitFeedbackUnauthorizedResponseBody struct {
@@ -1234,6 +1449,11 @@ type ChatOverviewResponseBody struct {
 type ChatMessageResponseBody struct {
 	// The ID of the message
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Monotonic sequence number of the message. Strictly increasing within a chat;
+	// use it as the keyset cursor for `before_seq`/`after_seq` pagination. Not
+	// contiguous (the sequence is shared across chats), so do not infer gaps from
+	// arithmetic differences.
+	Seq *int64 `form:"seq,omitempty" json:"seq,omitempty" xml:"seq,omitempty"`
 	// The role of the message
 	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
 	// The content of the message — string for plain text, array for
@@ -1258,6 +1478,20 @@ type ChatMessageResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Conversation generation — bumps on compaction or edit divergence
 	Generation *int `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+}
+
+// RiskSegmentResponseBody is used to define fields on response body types.
+type RiskSegmentResponseBody struct {
+	// The `seq` of the first (oldest) message in this segment.
+	FirstSeq *int64 `form:"first_seq,omitempty" json:"first_seq,omitempty" xml:"first_seq,omitempty"`
+	// The `seq` of the last (newest) message in this segment.
+	LastSeq *int64 `form:"last_seq,omitempty" json:"last_seq,omitempty" xml:"last_seq,omitempty"`
+	// Whether messages exist before this segment within the generation. Expand
+	// with a `before_seq` request using `first_seq`.
+	HasMoreBefore *bool `form:"has_more_before,omitempty" json:"has_more_before,omitempty" xml:"has_more_before,omitempty"`
+	// Whether messages exist after this segment within the generation. Expand with
+	// an `after_seq` request using `last_seq`.
+	HasMoreAfter *bool `form:"has_more_after,omitempty" json:"has_more_after,omitempty" xml:"has_more_after,omitempty"`
 }
 
 // AgentUsageResponseBody is used to define fields on response body types.
@@ -1320,11 +1554,40 @@ type ClaudeToolUsageResponseBody struct {
 	ResultSizeBytes *int64 `form:"result_size_bytes,omitempty" json:"result_size_bytes,omitempty" xml:"result_size_bytes,omitempty"`
 }
 
+// ChatTotalsResponseBody is used to define fields on response body types.
+type ChatTotalsResponseBody struct {
+	// Total trace entries in the generation (sum of the four entry-type counts;
+	// the `of N entries` denominator).
+	Total *int64 `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
+	// Number of user messages in the generation.
+	UserMessages *int64 `form:"user_messages,omitempty" json:"user_messages,omitempty" xml:"user_messages,omitempty"`
+	// Number of assistant messages (without tool calls) in the generation.
+	AssistantMessages *int64 `form:"assistant_messages,omitempty" json:"assistant_messages,omitempty" xml:"assistant_messages,omitempty"`
+	// Number of messages carrying tool calls in the generation.
+	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+	// Number of tool-result messages in the generation.
+	ToolResults *int64 `form:"tool_results,omitempty" json:"tool_results,omitempty" xml:"tool_results,omitempty"`
+	// Number of messages with an active (found, non-suppressed) risk finding in
+	// the generation.
+	RiskOnly *int64 `form:"risk_only,omitempty" json:"risk_only,omitempty" xml:"risk_only,omitempty"`
+}
+
 // NewGenerateTitleRequestBody builds the HTTP request body from the payload of
 // the "generateTitle" endpoint of the "chat" service.
 func NewGenerateTitleRequestBody(p *chat.GenerateTitlePayload) *GenerateTitleRequestBody {
 	body := &GenerateTitleRequestBody{
-		ID: p.ID,
+		ID:    p.ID,
+		Title: p.Title,
+	}
+	return body
+}
+
+// NewSetPinnedRequestBody builds the HTTP request body from the payload of the
+// "setPinned" endpoint of the "chat" service.
+func NewSetPinnedRequestBody(p *chat.SetPinnedPayload) *SetPinnedRequestBody {
+	body := &SetPinnedRequestBody{
+		ID:     p.ID,
+		Pinned: p.Pinned,
 	}
 	return body
 }
@@ -1511,6 +1774,8 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 	v := &chat.Chat{
 		Generation:           *body.Generation,
 		MaxGeneration:        *body.MaxGeneration,
+		HasMoreBefore:        *body.HasMoreBefore,
+		HasMoreAfter:         *body.HasMoreAfter,
 		ID:                   *body.ID,
 		Title:                *body.Title,
 		UserID:               body.UserID,
@@ -1534,8 +1799,37 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 		}
 		v.Messages[i] = unmarshalChatMessageResponseBodyToChatChatMessage(val)
 	}
+	if body.RiskSegments != nil {
+		v.RiskSegments = make([]*chat.RiskSegment, len(body.RiskSegments))
+		for i, val := range body.RiskSegments {
+			if val == nil {
+				v.RiskSegments[i] = nil
+				continue
+			}
+			v.RiskSegments[i] = unmarshalRiskSegmentResponseBodyToChatRiskSegment(val)
+		}
+	}
+	if body.MatchSegments != nil {
+		v.MatchSegments = make([]*chat.RiskSegment, len(body.MatchSegments))
+		for i, val := range body.MatchSegments {
+			if val == nil {
+				v.MatchSegments[i] = nil
+				continue
+			}
+			v.MatchSegments[i] = unmarshalRiskSegmentResponseBodyToChatRiskSegment(val)
+		}
+	}
+	if body.MatchSeqs != nil {
+		v.MatchSeqs = make([]int64, len(body.MatchSeqs))
+		for i, val := range body.MatchSeqs {
+			v.MatchSeqs[i] = val
+		}
+	}
 	if body.AgentUsage != nil {
 		v.AgentUsage = unmarshalAgentUsageResponseBodyToChatAgentUsage(body.AgentUsage)
+	}
+	if body.Totals != nil {
+		v.Totals = unmarshalChatTotalsResponseBodyToChatChatTotals(body.Totals)
 	}
 
 	return v
@@ -2157,6 +2451,154 @@ func NewDeleteChatGatewayError(body *DeleteChatGatewayErrorResponseBody) *goa.Se
 	return v
 }
 
+// NewSetPinnedUnauthorized builds a chat service setPinned endpoint
+// unauthorized error.
+func NewSetPinnedUnauthorized(body *SetPinnedUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetPinnedForbidden builds a chat service setPinned endpoint forbidden
+// error.
+func NewSetPinnedForbidden(body *SetPinnedForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetPinnedBadRequest builds a chat service setPinned endpoint bad_request
+// error.
+func NewSetPinnedBadRequest(body *SetPinnedBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetPinnedNotFound builds a chat service setPinned endpoint not_found
+// error.
+func NewSetPinnedNotFound(body *SetPinnedNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetPinnedConflict builds a chat service setPinned endpoint conflict error.
+func NewSetPinnedConflict(body *SetPinnedConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetPinnedUnsupportedMedia builds a chat service setPinned endpoint
+// unsupported_media error.
+func NewSetPinnedUnsupportedMedia(body *SetPinnedUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetPinnedInvalid builds a chat service setPinned endpoint invalid error.
+func NewSetPinnedInvalid(body *SetPinnedInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetPinnedInvariantViolation builds a chat service setPinned endpoint
+// invariant_violation error.
+func NewSetPinnedInvariantViolation(body *SetPinnedInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetPinnedUnexpected builds a chat service setPinned endpoint unexpected
+// error.
+func NewSetPinnedUnexpected(body *SetPinnedUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetPinnedGatewayError builds a chat service setPinned endpoint
+// gateway_error error.
+func NewSetPinnedGatewayError(body *SetPinnedGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewSubmitFeedbackResultOK builds a "chat" service "submitFeedback" endpoint
 // result from a HTTP "OK" response.
 func NewSubmitFeedbackResultOK(body *SubmitFeedbackResponseBody) *chat.SubmitFeedbackResult {
@@ -2348,6 +2790,12 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	if body.MaxGeneration == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_generation", "body"))
 	}
+	if body.HasMoreBefore == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_more_before", "body"))
+	}
+	if body.HasMoreAfter == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_more_after", "body"))
+	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -2373,8 +2821,27 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 			}
 		}
 	}
+	for _, e := range body.RiskSegments {
+		if e != nil {
+			if err2 := ValidateRiskSegmentResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.MatchSegments {
+		if e != nil {
+			if err2 := ValidateRiskSegmentResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.AgentUsage != nil {
 		if err2 := ValidateAgentUsageResponseBody(body.AgentUsage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Totals != nil {
+		if err2 := ValidateChatTotalsResponseBody(body.Totals); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -3620,6 +4087,246 @@ func ValidateDeleteChatGatewayErrorResponseBody(body *DeleteChatGatewayErrorResp
 	return
 }
 
+// ValidateSetPinnedUnauthorizedResponseBody runs the validations defined on
+// setPinned_unauthorized_response_body
+func ValidateSetPinnedUnauthorizedResponseBody(body *SetPinnedUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetPinnedForbiddenResponseBody runs the validations defined on
+// setPinned_forbidden_response_body
+func ValidateSetPinnedForbiddenResponseBody(body *SetPinnedForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetPinnedBadRequestResponseBody runs the validations defined on
+// setPinned_bad_request_response_body
+func ValidateSetPinnedBadRequestResponseBody(body *SetPinnedBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetPinnedNotFoundResponseBody runs the validations defined on
+// setPinned_not_found_response_body
+func ValidateSetPinnedNotFoundResponseBody(body *SetPinnedNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetPinnedConflictResponseBody runs the validations defined on
+// setPinned_conflict_response_body
+func ValidateSetPinnedConflictResponseBody(body *SetPinnedConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetPinnedUnsupportedMediaResponseBody runs the validations defined
+// on setPinned_unsupported_media_response_body
+func ValidateSetPinnedUnsupportedMediaResponseBody(body *SetPinnedUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetPinnedInvalidResponseBody runs the validations defined on
+// setPinned_invalid_response_body
+func ValidateSetPinnedInvalidResponseBody(body *SetPinnedInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetPinnedInvariantViolationResponseBody runs the validations defined
+// on setPinned_invariant_violation_response_body
+func ValidateSetPinnedInvariantViolationResponseBody(body *SetPinnedInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetPinnedUnexpectedResponseBody runs the validations defined on
+// setPinned_unexpected_response_body
+func ValidateSetPinnedUnexpectedResponseBody(body *SetPinnedUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetPinnedGatewayErrorResponseBody runs the validations defined on
+// setPinned_gateway_error_response_body
+func ValidateSetPinnedGatewayErrorResponseBody(body *SetPinnedGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateSubmitFeedbackUnauthorizedResponseBody runs the validations defined
 // on submitFeedback_unauthorized_response_body
 func ValidateSubmitFeedbackUnauthorizedResponseBody(body *SubmitFeedbackUnauthorizedResponseBody) (err error) {
@@ -3899,6 +4606,9 @@ func ValidateChatMessageResponseBody(body *ChatMessageResponseBody) (err error) 
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
+	if body.Seq == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("seq", "body"))
+	}
 	if body.Role == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("role", "body"))
 	}
@@ -3913,6 +4623,24 @@ func ValidateChatMessageResponseBody(body *ChatMessageResponseBody) (err error) 
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRiskSegmentResponseBody runs the validations defined on
+// RiskSegmentResponseBody
+func ValidateRiskSegmentResponseBody(body *RiskSegmentResponseBody) (err error) {
+	if body.FirstSeq == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("first_seq", "body"))
+	}
+	if body.LastSeq == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_seq", "body"))
+	}
+	if body.HasMoreBefore == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_more_before", "body"))
+	}
+	if body.HasMoreAfter == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_more_after", "body"))
 	}
 	return
 }
@@ -4024,6 +4752,30 @@ func ValidateClaudeToolUsageResponseBody(body *ClaudeToolUsageResponseBody) (err
 	}
 	if body.ResultSizeBytes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("result_size_bytes", "body"))
+	}
+	return
+}
+
+// ValidateChatTotalsResponseBody runs the validations defined on
+// ChatTotalsResponseBody
+func ValidateChatTotalsResponseBody(body *ChatTotalsResponseBody) (err error) {
+	if body.Total == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
+	}
+	if body.UserMessages == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_messages", "body"))
+	}
+	if body.AssistantMessages == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assistant_messages", "body"))
+	}
+	if body.ToolCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
+	}
+	if body.ToolResults == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_results", "body"))
+	}
+	if body.RiskOnly == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("risk_only", "body"))
 	}
 	return
 }

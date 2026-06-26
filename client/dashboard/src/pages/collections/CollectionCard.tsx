@@ -3,6 +3,7 @@ import { Type } from "@/components/ui/type";
 import { Badge } from "@/components/ui/badge";
 import { useOrganization } from "@/contexts/Auth";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
+import { toolStats } from "@/pages/catalog/hooks/serverMetadata";
 import { buildCollectionMcpJson } from "@/lib/mcp-json";
 import { useOrgRoutes } from "@/routes";
 import { Button, Stack } from "@speakeasy-api/moonshine";
@@ -41,6 +42,9 @@ export function CollectionCard({
       rawServers.map((server) => ({
         ...server,
         meta: {},
+        // Collection-backed servers carry no Pulse DCR metadata.
+        supportsDcr: false,
+        ...toolStats(server.tools),
       })),
     [rawServers],
   );

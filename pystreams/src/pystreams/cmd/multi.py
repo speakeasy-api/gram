@@ -7,7 +7,7 @@ import anyio
 import click
 import structlog
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
-from gram.ping.v1 import ping_pb2, processor_pb2
+from gram.ping.v2 import ping_pb2, processor_pb2
 from gram.risk.v1 import finding_pb2, presidio_analysis_pb2, presidio_analyzer_pb2
 from gram_infra.pubsub import (
     EmulatedPubSubBroker,

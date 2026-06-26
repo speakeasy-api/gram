@@ -9,6 +9,8 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { AgentUsage, AgentUsage$inboundSchema } from "./agentusage.js";
 import { ChatMessage, ChatMessage$inboundSchema } from "./chatmessage.js";
+import { ChatTotals, ChatTotals$inboundSchema } from "./chattotals.js";
+import { RiskSegment, RiskSegment$inboundSchema } from "./risksegment.js";
 
 export type Chat = {
   agentUsage?: AgentUsage | undefined;
@@ -25,6 +27,14 @@ export type Chat = {
    */
   generation: number;
   /**
+   * Whether newer messages exist after the last message in this page (within the returned generation). Load them with an `after_seq` cursor.
+   */
+  hasMoreAfter: boolean;
+  /**
+   * Whether older messages exist before the first message in this page (within the returned generation). Load them with a `before_seq` cursor.
+   */
+  hasMoreBefore: boolean;
+  /**
    * The ID of the chat
    */
   id: string;
@@ -33,11 +43,19 @@ export type Chat = {
    */
   lastMessageTimestamp: Date;
   /**
+   * Present only when `query` was requested: contiguous runs of returned messages, each spanning one or more query matches and their surrounding context. Use each segment's cursors to expand it.
+   */
+  matchSegments?: Array<RiskSegment> | undefined;
+  /**
+   * Present only when `query` was requested: the `seq` of every message whose text matched the query, ascending. These are the jump-to-match navigation targets; surrounding-context messages in `messages` are not listed here.
+   */
+  matchSeqs?: Array<number> | undefined;
+  /**
    * The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
    */
   maxGeneration: number;
   /**
-   * The list of messages in the chat for the returned generation
+   * The list of messages in the chat for the returned generation, ordered oldest to newest by `seq`.
    */
   messages: Array<ChatMessage>;
   /**
@@ -48,6 +66,10 @@ export type Chat = {
    * Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
    */
   riskFindingsCount?: number | undefined;
+  /**
+   * Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment's cursors to expand it.
+   */
+  riskSegments?: Array<RiskSegment> | undefined;
   /**
    * The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)
    */
@@ -73,6 +95,10 @@ export type Chat = {
    */
   totalTokens?: number | undefined;
   /**
+   * Trace-entry counts across the entire returned generation, independent of pagination. Each message maps to exactly one entry: a message carrying tool calls counts as a tool call regardless of role, otherwise the role decides.
+   */
+  totals?: ChatTotals | undefined;
+  /**
    * When the chat was last updated.
    */
   updatedAt: Date;
@@ -92,21 +118,27 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
     ),
     external_user_id: z.optional(z.string()),
     generation: z.int(),
+    has_more_after: z.boolean(),
+    has_more_before: z.boolean(),
     id: z.string(),
     last_message_timestamp: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    match_segments: z.optional(z.array(RiskSegment$inboundSchema)),
+    match_seqs: z.optional(z.array(z.int())),
     max_generation: z.int(),
     messages: z.array(ChatMessage$inboundSchema),
     num_messages: z.int(),
     risk_findings_count: z.optional(z.int()),
+    risk_segments: z.optional(z.array(RiskSegment$inboundSchema)),
     source: z.optional(z.string()),
     title: z.string(),
     total_cost: z.optional(z.number()),
     total_input_tokens: z.optional(z.int()),
     total_output_tokens: z.optional(z.int()),
     total_tokens: z.optional(z.int()),
+    totals: z.optional(ChatTotals$inboundSchema),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -118,10 +150,15 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "agent_usage": "agentUsage",
       "created_at": "createdAt",
       "external_user_id": "externalUserId",
+      "has_more_after": "hasMoreAfter",
+      "has_more_before": "hasMoreBefore",
       "last_message_timestamp": "lastMessageTimestamp",
+      "match_segments": "matchSegments",
+      "match_seqs": "matchSeqs",
       "max_generation": "maxGeneration",
       "num_messages": "numMessages",
       "risk_findings_count": "riskFindingsCount",
+      "risk_segments": "riskSegments",
       "total_cost": "totalCost",
       "total_input_tokens": "totalInputTokens",
       "total_output_tokens": "totalOutputTokens",

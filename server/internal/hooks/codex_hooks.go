@@ -15,21 +15,38 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hookevents"
+	codexevents "github.com/speakeasy-api/gram/server/internal/hookevents/adapters/codex"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
-func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.CodexHookResult, error) {
+func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *gen.CodexHookResult, err error) {
+	start := time.Now()
+	hookEventName := payload.HookEventName
+	if parsedEvent, ok := parseCodexHookEvent(payload.HookEventName); ok {
+		hookEventName = string(parsedEvent)
+	}
+	orgSlug := ""
+	outcome := hookMetricOutcomeAccepted
+	defer func() {
+		if err != nil && outcome == hookMetricOutcomeAccepted {
+			outcome = hookMetricOutcomeFailure
+		}
+		s.metrics.RecordHookEventDuration(ctx, "codex", hookEventName, outcome, orgSlug, time.Since(start))
+	}()
+
 	logger := s.logger.With(
 		attr.SlogHookSource("codex"),
-		attr.SlogHookEvent(payload.HookEventName),
+		attr.SlogHookEvent(hookEventName),
 		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
 		attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
 	)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		outcome = hookMetricOutcomeUnauthorized
 		logger.WarnContext(ctx, "rejected unauthorized codex hook request",
 			attr.SlogEvent("codex_hook_unauthorized"),
 		)
@@ -40,6 +57,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 	}
 
 	orgID := authCtx.ActiveOrganizationID
+	orgSlug = authCtx.OrganizationSlug
 	projectID := authCtx.ProjectID.String()
 	metadata := s.codexSessionMetadata(ctx, payload, orgID, projectID)
 	if metadata.UserEmail == "" {
@@ -63,65 +81,108 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 	}
 
 	var blockReason, userReason string
+	// Tracks a tool-call block (vs a prompt/permission block) so we can attach a
+	// durable block page link to the agent-facing reason below.
+	var isToolCallBlock bool
+	var blockToolName, blockPolicyID string
 
-	switch payload.HookEventName {
-	case "PreToolUse":
-		if scanResult := s.scanCodexForEnforcement(ctx, payload, orgID, projectID, metadata.UserID); scanResult != nil {
-			blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
-			break
-		}
-		policy := s.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, metadata.UserID)
-		if policy != nil {
-			toolName := conv.PtrValOr(payload.ToolName, "")
-			evidence, matched := s.codexShadowMCPEvidence(ctx, payload)
-			detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy.ID, payload.ToolInput, toolName, evidence)
-			if !denied {
-				// Toolset validation proves a valid x-gram-toolset-id was
-				// echoed, but a shadow server's schema can coach the client
-				// into copying one. The inventory snapshot pins where the
-				// call actually routes — deny when it points at a non-Gram
-				// target. Unmatched prefixes and missing snapshots stay
-				// allowed: older plugin installs ship no inventory.
-				if d := s.codexInventoryProvenanceDetail(ctx, matched, orgID); d != "" {
-					if _, allowed := s.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
-						detail, denied = d, true
+	hookEvent, err := codexevents.Normalize(authCtx, payload, hookevents.EventContext{
+		OrganizationID: orgID,
+		ProjectID:      *authCtx.ProjectID,
+		User: hookevents.User{
+			ID:    metadata.UserID,
+			Email: metadata.UserEmail,
+		},
+	}, time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("normalize codex hook event: %w", err)
+	}
+
+	if hookEvent != nil {
+		switch ev := hookEvent.(type) {
+		case *hookevents.BeforeToolUse:
+			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
+				blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
+				isToolCallBlock = true
+				blockToolName = ev.ToolName
+				blockPolicyID = scanResult.PolicyID
+				break
+			}
+			policy := s.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, metadata.UserID)
+			if policy != nil {
+				toolName := ev.ToolName
+				evidence, matched := s.codexShadowMCPEvidence(ctx, payload)
+				detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy.ID, ev.ToolInput, toolName, evidence)
+				if !denied {
+					// Toolset validation proves a valid x-gram-toolset-id was
+					// echoed, but a shadow server's schema can coach the client
+					// into copying one. The inventory snapshot pins where the
+					// call actually routes — deny when it points at a non-Gram
+					// target. Unmatched prefixes and missing snapshots stay
+					// allowed: older plugin installs ship no inventory.
+					if d := s.codexInventoryProvenanceDetail(ctx, matched, orgID); d != "" {
+						if _, allowed := s.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
+							detail, denied = d, true
+						}
 					}
 				}
+				if denied {
+					logger.InfoContext(ctx, "denying codex tool call: failed gram toolset validation",
+						attr.SlogEvent("codex_hook_denied"),
+						attr.SlogHookBlockReason(detail),
+						attr.SlogRiskPolicyID(policy.ID),
+						attr.SlogRiskPolicyName(policy.Name),
+					)
+					blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
+					userReason = s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
+						OrganizationID:  orgID,
+						ProjectID:       projectID,
+						RequesterUserID: metadata.UserID,
+						UserMessage:     policy.UserMessage,
+						AuditReason:     blockReason,
+						Evidence:        evidence,
+						ToolName:        toolName,
+						ToolInput:       ev.ToolInput,
+						RiskPolicyID:    policy.ID,
+					})
+					isToolCallBlock = true
+					blockToolName = toolName
+					blockPolicyID = policy.ID
+				}
 			}
-			if denied {
-				logger.InfoContext(ctx, "denying codex tool call: failed gram toolset validation",
-					attr.SlogEvent("codex_hook_denied"),
-					attr.SlogHookBlockReason(detail),
-					attr.SlogRiskPolicyID(policy.ID),
-					attr.SlogRiskPolicyName(policy.Name),
-				)
-				blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
-				userReason = s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
-					OrganizationID:  orgID,
-					ProjectID:       projectID,
-					RequesterUserID: metadata.UserID,
-					UserMessage:     policy.UserMessage,
-					AuditReason:     blockReason,
-					Evidence:        evidence,
-					ToolName:        toolName,
-					ToolInput:       payload.ToolInput,
-					RiskPolicyID:    policy.ID,
-				})
+		case *hookevents.PermissionRequest:
+			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil {
+				blockReason = fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
 			}
+		case *hookevents.UserPromptSubmit:
+			if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
+				blockReason = fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+				userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
+			}
+		default:
+			// Non-blocking events: telemetry only.
 		}
-	case "PermissionRequest":
-		if scanResult := s.scanCodexForEnforcement(ctx, payload, orgID, projectID, metadata.UserID); scanResult != nil {
-			blockReason = fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
+	}
+
+	// Tool-call blocks get a durable block page; mint its URL and attach it to
+	// the agent-facing reason, persisting the row off the hot path.
+	if isToolCallBlock && blockReason != "" {
+		if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+			Provider:       "codex",
+			OrganizationID: orgID,
+			ProjectID:      *authCtx.ProjectID,
+			Reason:         blockReason,
+			ToolName:       blockToolName,
+			UserID:         metadata.UserID,
+			RiskPolicyID:   conv.StringToNullUUID(blockPolicyID),
+			RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ChatID:         chatIDForBlock(metadata.SessionID),
+			ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		}); bURL != "" {
+			userReason = appendBlockURL(userReason, bURL)
 		}
-	case "UserPromptSubmit":
-		if scanResult := s.scanCodexForEnforcement(ctx, payload, orgID, projectID, metadata.UserID); scanResult != nil {
-			blockReason = fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
-		}
-	default:
-		// Non-blocking events: telemetry only.
 	}
 
 	s.recordCodexHook(ctx, payload, metadata, blockReason)
@@ -266,7 +327,7 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
-			UserInfo:   telemetry.UserInfoByID(metadata.UserID),
+			UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
 			Attributes: attrs,
 		})
 

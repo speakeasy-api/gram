@@ -100,6 +100,93 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 	require.Equal(t, "another-active", result.Servers[1].RegistrySpecifier)
 }
 
+func TestListServers_OmitsToolsAndComputesScalars(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	inputSchema := json.RawMessage(`{"type":"object","properties":{"q":{"type":"string"}}}`)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := listResponse{
+			Servers: []serverEntry{
+				{
+					Server: serverJSON{
+						Name:        "readonly-server",
+						Description: "Every tool is read-only",
+						Version:     "1.0.0",
+					},
+					Meta: pulseMCPServerMeta{
+						Version: serverMetaVersion{
+							Status: "active",
+							FirstRemote: serverRemoteMeta{
+								Tools: []serverTool{
+									{Name: "search", Description: "Search things", InputSchema: inputSchema, Annotations: map[string]any{"readOnlyHint": true}},
+									{Name: "list", Description: "List things", InputSchema: inputSchema, Annotations: map[string]any{"readOnlyHint": true}},
+								},
+							},
+						},
+					},
+				},
+				{
+					Server: serverJSON{
+						Name:        "writer-server",
+						Description: "Has a write tool",
+						Version:     "1.0.0",
+					},
+					Meta: pulseMCPServerMeta{
+						Version: serverMetaVersion{
+							Status: "active",
+							FirstRemote: serverRemoteMeta{
+								Tools: []serverTool{
+									{Name: "read", InputSchema: inputSchema, Annotations: map[string]any{"readOnlyHint": true}},
+									{Name: "write", InputSchema: inputSchema},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		err := json.NewEncoder(w).Encode(response)
+		assert.NoError(t, err)
+	}))
+	defer srv.Close()
+
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, nil)
+	client.httpClient = srv.Client()
+	registry := Registry{
+		ID:  uuid.New(),
+		URL: srv.URL,
+	}
+
+	result, err := client.ListServers(ctx, registry, ListServersParams{})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 2)
+
+	// Scalars are precomputed; all tools read-only -> is_read_only true.
+	readonly := result.Servers[0]
+	require.Equal(t, 2, readonly.ToolCount)
+	require.True(t, readonly.IsReadOnly)
+
+	// One non-read-only tool -> is_read_only false.
+	writer := result.Servers[1]
+	require.Equal(t, 2, writer.ToolCount)
+	require.False(t, writer.IsReadOnly)
+
+	// The _meta blob must not carry tool definitions (schemas/descriptions).
+	metaJSON, err := json.Marshal(readonly.Meta)
+	require.NoError(t, err)
+	require.NotContains(t, string(metaJSON), "properties")
+	require.NotContains(t, string(metaJSON), "Search things")
+}
+
 func TestListServers_PreservesRemoteHeadersAndVariables(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -439,4 +526,78 @@ func TestGetServerDetails_SelectedRemotesStillPrefersStreamableHTTP(t *testing.T
 	// Should prefer streamable-http when both are allowed
 	require.Equal(t, "https://example.com/streamable", details.RemoteURL)
 	require.Equal(t, types.TransportTypeStreamableHTTP, details.TransportType)
+}
+
+// TestListServers_ComputesSupportsDcr exercises the raw PulseMCP wire format so
+// the JSON tags for detail.authorizationServerMetadata.registration_endpoint
+// stay faithful to the upstream schema. A non-empty registration endpoint on
+// any remote's OAuth auth option marks the server as DCR-capable; OAuth without
+// a registration endpoint and API-key servers are not.
+func TestListServers_ComputesSupportsDcr(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	// Raw body matching PulseMCP's documented _meta shape.
+	body := `{
+		"servers": [
+			{
+				"server": {"name": "dcr-oauth", "description": "OAuth with DCR", "version": "1.0.0"},
+				"_meta": {"com.pulsemcp/server-version": {"status": "active", "remotes[0]": {"authOptions": [
+					{"type": "oauth", "detail": {"authorizationServerMetadata": {"registration_endpoint": "https://idp.example/oauth/register"}}}
+				]}}}
+			},
+			{
+				"server": {"name": "oauth-no-dcr", "description": "OAuth without DCR", "version": "1.0.0"},
+				"_meta": {"com.pulsemcp/server-version": {"status": "active", "remotes[0]": {"authOptions": [
+					{"type": "oauth", "detail": {"authorizationServerMetadata": {"registration_endpoint": ""}}}
+				]}}}
+			},
+			{
+				"server": {"name": "apikey", "description": "API key auth", "version": "1.0.0"},
+				"_meta": {"com.pulsemcp/server-version": {"status": "active", "remotes[0]": {"authOptions": [
+					{"type": "api_key", "detail": {"sources": [{"location": "header", "name": "Authorization"}]}}
+				]}}}
+			},
+			{
+				"server": {"name": "dcr-secondary-remote", "description": "DCR on a non-first remote", "version": "1.0.0"},
+				"_meta": {"com.pulsemcp/server-version": {"status": "active", "remotes[1]": {"authOptions": [
+					{"type": "oauth", "detail": {"authorizationServerMetadata": {"registration_endpoint": "https://idp.example/oauth/register"}}}
+				]}}}
+			}
+		],
+		"metadata": {}
+	}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, writeErr := w.Write([]byte(body))
+		assert.NoError(t, writeErr)
+	}))
+	defer srv.Close()
+
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, nil)
+	client.httpClient = srv.Client()
+	registry := Registry{
+		ID:  uuid.New(),
+		URL: srv.URL,
+	}
+
+	result, err := client.ListServers(ctx, registry, ListServersParams{})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 4)
+
+	byName := make(map[string]bool, len(result.Servers))
+	for _, s := range result.Servers {
+		byName[s.RegistrySpecifier] = s.SupportsDcr
+	}
+
+	require.True(t, byName["dcr-oauth"], "oauth with a registration endpoint supports DCR")
+	require.False(t, byName["oauth-no-dcr"], "oauth without a registration endpoint does not support DCR")
+	require.False(t, byName["apikey"], "api-key servers do not support DCR")
+	require.True(t, byName["dcr-secondary-remote"], "a registration endpoint on any remote slot counts")
 }

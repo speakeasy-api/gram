@@ -15,9 +15,15 @@ import (
 // MintUserSessionRequestBody is the type of the "userSessions" service
 // "mintUserSession" endpoint HTTP request body.
 type MintUserSessionRequestBody struct {
-	// The toolset to bind the minted JWT to. Must be issuer-gated and live in the
+	// Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with
+	// mcp_server_id; exactly one must be set. Must be issuer-gated and live in the
 	// caller's project.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Bind the JWT to this remote MCP server's user_session_issuer audience (the
+	// /x/mcp convention, since remote servers have no toolset). Mutually exclusive
+	// with toolset_id; exactly one must be set. Must be issuer-gated and live in
+	// the caller's project.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 }
 
 // ListUserSessionsResponseBody is the type of the "userSessions" service
@@ -43,7 +49,7 @@ type ListFacetsResponseBody struct {
 // "mintUserSession" endpoint HTTP response body.
 type MintUserSessionResponseBody struct {
 	// The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests
-	// to the toolset's /mcp/{slug} surface.
+	// to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.
 	AccessToken string `form:"access_token" json:"access_token" xml:"access_token"`
 	// Lifetime of the access token in seconds.
 	ExpiresIn int `form:"expires_in" json:"expires_in" xml:"expires_in"`
@@ -1520,7 +1526,8 @@ func NewListFacetsPayload(sessionToken *string, apikeyToken *string, projectSlug
 // endpoint payload.
 func NewMintUserSessionPayload(body *MintUserSessionRequestBody, sessionToken *string, projectSlugInput *string) *usersessions.MintUserSessionPayload {
 	v := &usersessions.MintUserSessionPayload{
-		ToolsetID: *body.ToolsetID,
+		ToolsetID:   body.ToolsetID,
+		McpServerID: body.McpServerID,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1543,11 +1550,11 @@ func NewRevokeUserSessionPayload(id string, sessionToken *string, apikeyToken *s
 // ValidateMintUserSessionRequestBody runs the validations defined on
 // MintUserSessionRequestBody
 func ValidateMintUserSessionRequestBody(body *MintUserSessionRequestBody) (err error) {
-	if body.ToolsetID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
-	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	return
 }

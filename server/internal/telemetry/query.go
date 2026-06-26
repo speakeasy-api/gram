@@ -8,8 +8,11 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/google/uuid"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -20,6 +23,11 @@ import (
 // The source aggregate (attribute_metrics_summaries) is bucketed hourly, so
 // anything finer would just return sparse hourly data.
 const minIntervalSeconds int64 = 3600
+
+const (
+	defaultQuerySortBy = "total_cost"
+	defaultQueryTopN   = 10
+)
 
 // otherGroupLabel is the default synthetic group value that holds the rolled-up
 // remainder beyond top_n. If a real group already uses this value, the response
@@ -71,6 +79,14 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	if payload.GroupBy != nil {
 		groupBy = *payload.GroupBy
 	}
+	sortBy := payload.SortBy
+	if sortBy == "" {
+		sortBy = defaultQuerySortBy
+	}
+	topN := payload.TopN
+	if topN == 0 {
+		topN = defaultQueryTopN
+	}
 
 	interval := calculateInterval(timeStart, timeEnd)
 	if payload.GranularitySeconds != nil && *payload.GranularitySeconds > 0 {
@@ -82,6 +98,9 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 
 	filters := make([]repo.AttributeMetricsFilter, 0, len(payload.Filters))
 	for _, f := range payload.Filters {
+		if f == nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "filters must not contain null entries")
+		}
 		filters = append(filters, repo.AttributeMetricsFilter{Dimension: f.Dimension, Values: f.Values})
 	}
 
@@ -90,7 +109,7 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 		TimeStart:       timeStart,
 		TimeEnd:         timeEnd,
 		GroupBy:         groupBy,
-		SortBy:          payload.SortBy,
+		SortBy:          sortBy,
 		Filters:         filters,
 		IntervalSeconds: interval,
 	}
@@ -104,7 +123,7 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "error running analytics timeseries query")
 	}
 
-	return buildQueryResult(groupBy, interval, timeStart, timeEnd, payload.TopN, tableRows, tsRows), nil
+	return buildQueryResult(groupBy, interval, timeStart, timeEnd, topN, tableRows, tsRows), nil
 }
 
 // ListSessions returns org-scoped chat sessions for a filtered analytics slice.
@@ -193,14 +212,23 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		items = items[:limit]
 	}
 
+	// Chat titles live in Postgres, not the ClickHouse telemetry the session
+	// metrics come from, so resolve them in a single batch and stitch them on.
+	titlesByChatID := s.chatTitlesForSessions(ctx, items, projectIDs)
+
 	sessions := make([]*telem_gen.SessionSummary, len(items))
 	for i, item := range items {
+		var title *string
+		if t, ok := titlesByChatID[item.GramChatID]; ok {
+			title = &t
+		}
 		sessions[i] = &telem_gen.SessionSummary{
 			GramChatID:        item.GramChatID,
 			ProjectID:         item.ProjectID,
 			UserEmail:         item.UserEmail,
 			HookSource:        item.HookSource,
 			Model:             item.Model,
+			Title:             title,
 			StartTimeUnixNano: strconv.FormatInt(item.StartTimeUnixNano, 10),
 			EndTimeUnixNano:   strconv.FormatInt(item.EndTimeUnixNano, 10),
 			DurationSeconds:   sanitizeFloat64(item.DurationSeconds),
@@ -218,6 +246,55 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		Sessions:   sessions,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// chatTitlesForSessions resolves the Postgres chat title for each session,
+// keyed by gram_chat_id. Best-effort: a session whose chat row is missing,
+// untitled, or whose id doesn't parse simply gets no title, and a query error
+// is logged rather than failing the whole list (titles are cosmetic). Scoped to
+// the org's projects so it can never surface a title from another tenant.
+func (s *Service) chatTitlesForSessions(ctx context.Context, items []repo.SessionSummary, projectIDs []string) map[string]string {
+	if len(items) == 0 {
+		return nil
+	}
+
+	chatIDs := make([]uuid.UUID, 0, len(items))
+	for _, item := range items {
+		id, err := uuid.Parse(item.GramChatID)
+		if err != nil {
+			continue
+		}
+		chatIDs = append(chatIDs, id)
+	}
+	if len(chatIDs) == 0 {
+		return nil
+	}
+
+	projectUUIDs := make([]uuid.UUID, 0, len(projectIDs))
+	for _, p := range projectIDs {
+		id, err := uuid.Parse(p)
+		if err != nil {
+			continue
+		}
+		projectUUIDs = append(projectUUIDs, id)
+	}
+
+	rows, err := s.chatRepo.GetChatTitlesByIDs(ctx, chatRepo.GetChatTitlesByIDsParams{
+		Ids:        chatIDs,
+		ProjectIds: projectUUIDs,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to resolve chat titles for sessions", attr.SlogError(err))
+		return nil
+	}
+
+	titles := make(map[string]string, len(rows))
+	for _, row := range rows {
+		if row.Title.Valid && row.Title.String != "" {
+			titles[row.ID.String()] = row.Title.String
+		}
+	}
+	return titles
 }
 
 func encodeListSessionsCursor(sortValue float64, gramChatID string) string {

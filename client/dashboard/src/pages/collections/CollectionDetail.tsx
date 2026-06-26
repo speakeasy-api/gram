@@ -40,6 +40,7 @@ import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
+import { toolStats } from "@/pages/catalog/hooks/serverMetadata";
 import { buildCollectionMcpJson, formatMcpJson } from "@/lib/mcp-json";
 import { toast } from "sonner";
 import { CollectionInstallDialog } from "./CollectionInstallDialog";
@@ -222,6 +223,9 @@ function CollectionDetailInner() {
   const installableServers: CatalogServer[] = rawServers.map((s) => ({
     ...s,
     meta: {},
+    // Collection-backed servers carry no Pulse DCR metadata.
+    supportsDcr: false,
+    ...toolStats(s.tools),
   }));
 
   const collectionMcpJson = useMemo(

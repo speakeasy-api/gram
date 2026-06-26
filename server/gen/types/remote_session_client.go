@@ -16,8 +16,9 @@ type RemoteSessionClient struct {
 	ProjectID string
 	// The owning remote_session_issuer id.
 	RemoteSessionIssuerID string
-	// The user_session_issuer this client is paired with.
-	UserSessionIssuerID string
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID         string

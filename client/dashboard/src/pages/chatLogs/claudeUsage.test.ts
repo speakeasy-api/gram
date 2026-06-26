@@ -11,6 +11,7 @@ import {
   formatDurationFromNanos,
 } from "./claudeUsage";
 
+let seqCounter = 0;
 function message(
   id: string,
   role: ChatMessage["role"],
@@ -18,6 +19,7 @@ function message(
 ): ChatMessage {
   return {
     id,
+    seq: seqCounter++,
     role,
     model: "",
     createdAt: new Date("2026-06-16T00:00:00Z"),

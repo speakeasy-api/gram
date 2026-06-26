@@ -15,6 +15,7 @@ import {
   convertGramMessagesToUIMessages,
 } from "@/lib/messageConverter";
 import { sleep } from "@/lib/utils";
+import { trackError } from "@/lib/errorTracking";
 import {
   ThreadMetaContext,
   type ThreadMeta,
@@ -135,6 +136,54 @@ async function resolveAdapterHeaders(
   return options.getHeaders ? options.getHeaders() : options.headers;
 }
 
+// chat.load paginates by seq keyset and returns only the newest page by default.
+// assistant-ui's history adapter is one-shot (it imports the whole thread at
+// once), so page backwards to the start and return the chat with every message
+// in ascending order. Without this a long thread would render only its newest
+// page with no way to reach the rest.
+const FULL_LOAD_PAGE_SIZE = 200;
+
+async function loadFullChat(
+  apiUrl: string,
+  chatId: string,
+  headers: Record<string, string>,
+): Promise<GramChat | null> {
+  let beforeSeq: number | undefined;
+  let all: GramChatMessage[] = [];
+  let base: GramChat | null = null;
+
+  for (;;) {
+    const cursor = beforeSeq !== undefined ? `&before_seq=${beforeSeq}` : "";
+    const response = await fetch(
+      `${apiUrl}/rpc/chat.load?id=${encodeURIComponent(chatId)}&limit=${FULL_LOAD_PAGE_SIZE}${cursor}`,
+      { headers },
+    );
+    if (!response.ok) {
+      // First page failed → nothing to show. A later page failing means we'd
+      // silently truncate the thread, so log loudly rather than passing partial
+      // history off as complete.
+      if (!base) {
+        console.error("Failed to load chat:", response.status);
+        return null;
+      }
+      console.error(
+        `Failed to load full chat history (status ${response.status}); ` +
+          `returning ${all.length} of ${base.numMessages ?? "?"} messages — transcript is truncated.`,
+      );
+      return { ...base, messages: all };
+    }
+    const page = (await response.json()) as GramChat;
+    if (!base) base = page;
+    // Each page is ascending; older pages prepend.
+    all = [...page.messages, ...all];
+    const oldest = page.messages[0];
+    if (!page.has_more_before || !oldest || oldest.seq === undefined) break;
+    beforeSeq = oldest.seq;
+  }
+
+  return base ? { ...base, messages: all } : null;
+}
+
 /**
  * Thread history adapter that loads messages from Gram API.
  * Note: We use `as ThreadHistoryAdapter` cast because the withFormat generic
@@ -188,17 +237,15 @@ class GramThreadHistoryAdapter {
     }
 
     try {
-      const response = await fetch(
-        `${this.apiUrl}/rpc/chat.load?id=${encodeURIComponent(remoteId)}`,
-        { headers: await this.getHeaders() },
+      const chat = await loadFullChat(
+        this.apiUrl,
+        remoteId,
+        await this.getHeaders(),
       );
-
-      if (!response.ok) {
-        console.error("Failed to load chat:", response.status);
+      if (!chat) {
+        console.error("Failed to load chat");
         return { messages: [], headId: null };
       }
-
-      const chat = (await response.json()) as GramChat;
       return convertGramMessagesToExported(this.applyTransform(chat.messages));
     } catch (error) {
       console.error("Error loading chat:", error);
@@ -222,17 +269,15 @@ class GramThreadHistoryAdapter {
           return { messages: [], headId: null };
         }
 
-        const response = await fetch(
-          `${this.apiUrl}/rpc/chat.load?id=${encodeURIComponent(remoteId)}`,
-          { headers: await this.getHeaders() },
+        const chat = await loadFullChat(
+          this.apiUrl,
+          remoteId,
+          await this.getHeaders(),
         );
-
-        if (!response.ok) {
-          console.error("Failed to load chat (withFormat):", response.status);
+        if (!chat) {
+          console.error("Failed to load chat (withFormat)");
           return { messages: [], headId: null };
         }
-
-        const chat = (await response.json()) as GramChat;
         return convertGramMessagesToUIMessages(
           this.applyTransform(chat.messages),
         );
@@ -429,8 +474,42 @@ export function useGramThreadListAdapter(
         };
       },
 
-      async rename() {
-        // No-op
+      async rename(remoteId: string, newTitle: string) {
+        // Brand-new threads only have a local id until the first message
+        // persists them server-side; there's nothing to rename yet.
+        if (!remoteId || isLocalThreadId(remoteId)) {
+          return;
+        }
+
+        // Reuses chat.generateTitle: passing `title` sets a manual title that
+        // auto-generation won't overwrite (empty string resets to auto-naming).
+        //
+        // On failure we track AND rethrow: assistant-ui applies the rename
+        // optimistically and only rolls the title back if this promise rejects.
+        // Swallowing the error would leave a title showing that never persisted.
+        try {
+          const response = await fetch(
+            `${optionsRef.current.apiUrl}/rpc/chat.generateTitle`,
+            {
+              method: "POST",
+              headers: {
+                ...(await resolveAdapterHeaders(optionsRef.current)),
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ id: remoteId, title: newTitle }),
+            },
+          );
+
+          if (!response.ok) {
+            throw new Error(`Failed to rename chat: ${response.status}`);
+          }
+        } catch (error) {
+          trackError(error, {
+            source: "custom",
+            context: "useGramThreadListAdapter.rename",
+          });
+          throw error;
+        }
       },
 
       async archive() {
@@ -509,8 +588,10 @@ export function useGramThreadListAdapter(
         }
 
         try {
+          // Only chat metadata (id/title) is needed here, so request the
+          // smallest page instead of a full message page.
           const response = await fetch(
-            `${optionsRef.current.apiUrl}/rpc/chat.load?id=${encodeURIComponent(threadId)}`,
+            `${optionsRef.current.apiUrl}/rpc/chat.load?id=${encodeURIComponent(threadId)}&limit=1`,
             {
               headers: await resolveAdapterHeaders(optionsRef.current),
             },

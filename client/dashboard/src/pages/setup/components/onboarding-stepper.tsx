@@ -5,6 +5,8 @@ export interface Step {
   id: string;
   title: string;
   description: string;
+  /** Optional inline marker after the title, e.g. "Required" / "Optional". */
+  badge?: string;
 }
 
 interface OnboardingStepperProps {
@@ -12,6 +14,9 @@ interface OnboardingStepperProps {
   currentStep: number;
   onStepClick?: (index: number) => void;
   maxAllowedStep?: number;
+  /** Allow clicking ahead to upcoming (unlocked) steps, not just back to
+   *  completed ones. Off by default to preserve the linear onboarding flow. */
+  allowJumpAhead?: boolean;
 }
 
 export function OnboardingStepper({
@@ -19,6 +24,7 @@ export function OnboardingStepper({
   currentStep,
   onStepClick,
   maxAllowedStep = steps.length - 1,
+  allowJumpAhead = false,
 }: OnboardingStepperProps): JSX.Element {
   return (
     <nav className="flex flex-col" aria-label="Progress">
@@ -28,6 +34,11 @@ export function OnboardingStepper({
         const isUpcoming = index > currentStep;
         const isLocked = index > maxAllowedStep;
         const isLast = index === steps.length - 1;
+        const canJump =
+          !!onStepClick &&
+          !isLocked &&
+          !isCurrent &&
+          (isCompleted || allowJumpAhead);
 
         return (
           <div key={step.id} className="relative flex gap-4">
@@ -70,16 +81,36 @@ export function OnboardingStepper({
             </div>
 
             {/* Step content */}
-            <div className="min-w-0 pt-1 pb-8">
+            <div
+              className={cn("min-w-0 pt-1 pb-8", canJump && "cursor-pointer")}
+              onClick={canJump ? () => onStepClick?.(index) : undefined}
+              role={canJump ? "button" : undefined}
+              tabIndex={canJump ? 0 : undefined}
+              onKeyDown={
+                canJump
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onStepClick?.(index);
+                      }
+                    }
+                  : undefined
+              }
+            >
               <h3
                 className={cn(
-                  "text-sm leading-tight font-semibold",
+                  "flex items-center gap-2 text-sm leading-tight font-semibold",
                   isCurrent && "text-foreground",
                   isCompleted && "text-foreground",
                   isUpcoming && "text-muted-foreground",
                 )}
               >
                 {step.title}
+                {step.badge && (
+                  <span className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+                    {step.badge}
+                  </span>
+                )}
               </h3>
               <p
                 className={cn(

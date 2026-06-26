@@ -89,7 +89,8 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
                 {issuer && <OverviewTab issuer={issuer} />}
               </TabsContent>
               <TabsContent value="clients" className="mt-0">
-                <ClientsTab issuerId={issuerId} />
+                {issuer && <ClientsTab issuer={issuer} />}
+                {isLoading && <Type muted>Loading…</Type>}
               </TabsContent>
               <TabsContent value="settings" className="mt-0">
                 {issuer && <SettingsTab key={issuer.id} issuer={issuer} />}

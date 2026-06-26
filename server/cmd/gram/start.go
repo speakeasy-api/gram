@@ -87,10 +87,12 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -729,7 +731,7 @@ func newStartCommand() *cli.Command {
 				guardianPolicy,
 				openRouter,
 				captureStrategy,
-				chat.NewDefaultUsageTrackingStrategy(db, logger, openRouter, billingTracker, &background.FallbackModelUsageTracker{TemporalEnv: temporalEnv}),
+				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				telemLogger,
 			)
@@ -861,7 +863,7 @@ func newStartCommand() *cli.Command {
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
-			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
+			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
@@ -961,8 +963,21 @@ func newStartCommand() *cli.Command {
 					h.ServeHTTP(w, r)
 				})
 			})
+			// Drop client-supplied baggage on public routes before otelhttp
+			// extracts inbound trace context, so untrusted baggage never enters
+			// the request context.
+			mux.Use(middleware.DropInboundOTelBaggage)
 			mux.Use(func(h http.Handler) http.Handler {
-				return otelhttp.NewHandler(h, "http", otelhttp.WithServerName("gram"))
+				return otelhttp.NewHandler(h, "http",
+					otelhttp.WithServerName("gram"),
+					// Public MCP/OAuth routes are reachable by any third party, so
+					// their inbound trace context is potentially untrusted input.
+					// Treat them as OTel public endpoints: start a fresh root span
+					// and record the inbound context as a span link rather than
+					// adopting it as the parent. Trusted first-party routes (/rpc,
+					// /admin) keep parent-child continuity.
+					otelhttp.WithPublicEndpointFn(middleware.IsOTelPublicEndpoint),
+				)
 			})
 			mux.Use(middleware.RouteLabelerMiddleware)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
@@ -983,10 +998,15 @@ func newStartCommand() *cli.Command {
 
 			// L1 prompt-injection engine is the LLM judge (POC-193). A completions
 			// client is always constructed, so the judge is always available.
-			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
+			hookJudgeLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
+			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Classify)
 
-			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient)
-			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, meterProvider)
+			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter)
+			celEngine, err := celenv.New()
+			if err != nil {
+				return fmt.Errorf("create cel engine: %w", err)
+			}
+			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, meterProvider, celEngine)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -1010,6 +1030,7 @@ func newStartCommand() *cli.Command {
 				logger,
 				db,
 				tracerProvider,
+				meterProvider,
 				telemLogger,
 				sessionManager,
 				hooksCache,
@@ -1106,7 +1127,11 @@ func newStartCommand() *cli.Command {
 				30*time.Second,
 				logger,
 			)
-			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
+			// riskSignaler.Shutdown is intentionally NOT registered as a shutdownFunc.
+			// runShutdown runs every func concurrently, which races temporalClient.Close()
+			// against the signaler's trailing-edge flush over the same gRPC connection
+			// ("grpc: the client connection is closing"). Instead it is flushed
+			// synchronously in the drain goroutine below, while Temporal is still open.
 			riskReconciler := &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger}
 			riskResultsCleaner := &background.TemporalRiskPolicyResultsCleaner{TemporalEnv: temporalEnv, Logger: logger}
 			riskService := risk.NewService(
@@ -1121,10 +1146,12 @@ func newStartCommand() *cli.Command {
 				completionsClient,
 				shadowMCPClient,
 				auditLogger,
+				cache.NewRedisCacheAdapter(redisClient),
 				c.String(usersessions.JWTSigningKeyFlag),
 				hookPIIScanner,
 				hookPIScanner,
 				featureFlags,
+				celEngine,
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
@@ -1176,7 +1203,7 @@ func newStartCommand() *cli.Command {
 						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 					}
 
-					piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
+					piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:                 guardianPolicy,
@@ -1227,11 +1254,25 @@ func newStartCommand() *cli.Command {
 
 				logger.InfoContext(ctx, "shutting down server")
 
-				graceCtx, graceCancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownDrainTimeout)
+				graceCtx, graceCancel := context.WithTimeoutCause(
+					context.WithoutCancel(ctx),
+					shutdownDrainTimeout,
+					errors.New("graceful shutdown timed out"),
+				)
 				defer graceCancel()
 
 				if err := srv.Shutdown(graceCtx); err != nil {
-					logger.ErrorContext(ctx, "failed to shutdown development server", attr.SlogError(err))
+					if gerr := context.Cause(graceCtx); gerr != nil {
+						err = errors.Join(err, gerr)
+					}
+					logger.ErrorContext(ctx, "failed to shutdown server", attr.SlogError(err))
+				}
+
+				// The HTTP server is now fully drained, so no new risk signals are
+				// produced. Flush the throttle's queued trailing signals here while the
+				// Temporal client is still open — runShutdown closes it concurrently.
+				if err := riskSignaler.Shutdown(graceCtx); err != nil {
+					logger.ErrorContext(ctx, "flush pending risk signals", attr.SlogError(err))
 				}
 			})
 
@@ -1296,8 +1337,13 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
-			cancel()
+			// ListenAndServe returns ErrServerClosed the instant srv.Shutdown is
+			// called, not when the drain finishes. Wait for the drain goroutine to
+			// fully complete before cancelling ctx: ctx is the server's BaseContext,
+			// so cancelling it here would cancel every in-flight request mid-drain
+			// and they would abort with context.Canceled instead of completing.
 			group.Wait()
+			cancel()
 
 			return nil
 		},

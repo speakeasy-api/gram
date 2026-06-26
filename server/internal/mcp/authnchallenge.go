@@ -113,6 +113,13 @@ type AuthnChallengeState struct {
 	// MarshalJSON refuses to serialise a zero-value SessionSubject).
 	Subject   *urn.SessionSubject `json:"subject,omitempty"`
 	CreatedAt time.Time           `json:"created_at"`
+	// FirstParty marks a challenge minted by the dashboard for its own user
+	// (via ServeFirstPartyConnect) rather than by a DCR-registered MCP client's
+	// /authorize. First-party challenges carry no ClientID/RedirectURI: the
+	// consent page renders the remote-session cards so the user can link
+	// upstream providers, but there is no client to approve or redirect back to
+	// — completing the connections is terminal.
+	FirstParty bool `json:"first_party,omitempty"`
 }
 
 var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)

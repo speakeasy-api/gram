@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import anyio
 import structlog
-from gram.ping.v1 import ping_pb2, processor_pb2
+from gram.ping.v2 import ping_pb2, processor_pb2
 
 from gram_infra.pubsub import (
     Subscriber,
@@ -59,7 +59,7 @@ async def _main(backend: str) -> None:
     logger.info("running", backend=backend)
 
     with make_emulator_broker(logger, script_name="pubsub-stream-demo") as broker:
-        # Publisher for the topic declared by gram.ping.v1.Message.
+        # Publisher for the topic declared by gram.ping.v2.Message.
         publisher = pubsub_publisher_for_message(broker, ping_pb2.Message)
 
         # Two subscribers on the Processor subscription, each draining its own

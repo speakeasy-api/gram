@@ -178,7 +178,6 @@ ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE DO NOTHIN
 INSERT INTO remote_session_clients (
     project_id,
     remote_session_issuer_id,
-    user_session_issuer_id,
     client_id,
     client_secret_encrypted,
     client_id_issued_at,
@@ -191,7 +190,6 @@ INSERT INTO remote_session_clients (
 VALUES (
     @project_id,
     @remote_session_issuer_id,
-    @user_session_issuer_id,
     @client_id,
     @client_secret_encrypted,
     @client_id_issued_at,
@@ -228,24 +226,14 @@ WHERE link.remote_session_client_id = c.id
 
 -- name: GetRemoteSessionClientByID :one
 SELECT
-    id,
-    project_id,
-    remote_session_issuer_id,
-    user_session_issuer_id,
-    client_id,
-    client_secret_encrypted,
-    client_id_issued_at,
-    client_secret_expires_at,
-    token_endpoint_auth_method,
-    scope,
-    audience,
-    legacy_callback_url,
-    created_at,
-    updated_at,
-    deleted_at,
-    deleted
-FROM remote_session_clients
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+    sqlc.embed(c),
+    (
+        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
+        FROM remote_session_client_user_session_issuers AS link
+        WHERE link.remote_session_client_id = c.id
+    )::uuid[] AS user_session_issuer_ids
+FROM remote_session_clients AS c
+WHERE c.id = @id AND c.project_id = @project_id AND c.deleted IS FALSE;
 
 -- name: GetUserSessionIssuerForProject :one
 SELECT id
@@ -254,48 +242,31 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: ListRemoteSessionClientsByProjectID :many
 SELECT
-    id,
-    project_id,
-    remote_session_issuer_id,
-    user_session_issuer_id,
-    client_id,
-    client_secret_encrypted,
-    client_id_issued_at,
-    client_secret_expires_at,
-    token_endpoint_auth_method,
-    scope,
-    audience,
-    legacy_callback_url,
-    created_at,
-    updated_at,
-    deleted_at,
-    deleted
-FROM remote_session_clients
-WHERE project_id = @project_id
-  AND deleted IS FALSE
-  AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
-  AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
-ORDER BY id DESC
+    sqlc.embed(c),
+    (
+        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
+        FROM remote_session_client_user_session_issuers AS link
+        WHERE link.remote_session_client_id = c.id
+    )::uuid[] AS user_session_issuer_ids
+FROM remote_session_clients AS c
+WHERE c.project_id = @project_id
+  AND c.deleted IS FALSE
+  AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR c.remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
+  AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
+ORDER BY c.id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: ListRemoteSessionClientsByProjectIDForUserSessionIssuer :many
+-- Filters to clients bound to the given user_session_issuer through the join
+-- table, while user_session_issuer_ids reports every issuer each client is
+-- attached to (a correlated subquery independent of the filter join).
 SELECT
-    c.id,
-    c.project_id,
-    c.remote_session_issuer_id,
-    c.user_session_issuer_id,
-    c.client_id,
-    c.client_secret_encrypted,
-    c.client_id_issued_at,
-    c.client_secret_expires_at,
-    c.token_endpoint_auth_method,
-    c.scope,
-    c.audience,
-    c.legacy_callback_url,
-    c.created_at,
-    c.updated_at,
-    c.deleted_at,
-    c.deleted
+    sqlc.embed(c),
+    (
+        SELECT COALESCE(array_agg(all_link.user_session_issuer_id ORDER BY all_link.user_session_issuer_id), '{}'::uuid[])
+        FROM remote_session_client_user_session_issuers AS all_link
+        WHERE all_link.remote_session_client_id = c.id
+    )::uuid[] AS user_session_issuer_ids
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
@@ -314,7 +285,6 @@ UPDATE remote_session_clients
 SET
     client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), client_secret_encrypted),
     client_secret_expires_at = COALESCE(sqlc.narg('client_secret_expires_at'), client_secret_expires_at),
-    user_session_issuer_id = COALESCE(sqlc.narg('user_session_issuer_id'), user_session_issuer_id),
     token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), token_endpoint_auth_method),
     scope = COALESCE(sqlc.narg('scope')::text[], scope),
     audience = COALESCE(sqlc.narg('audience'), audience),
@@ -412,18 +382,22 @@ WHERE subject_urn = @subject_urn
 -- DISTINCT. A soft-deleted row is absent here entirely (truly disconnected).
 --
 -- The 'active' predicate mirrors validateAndRefresh in tokenservice.go: a
--- session is usable only when its access token is unexpired, or it carries a
--- refresh token that is not itself known-expired to renew with. A
--- refresh_expires_at of NULL means no known expiry (non-expiring refresh
--- token), so it still counts as usable. A present-but-unusable row is
--- 'expired' rather than dropped, so the consent UI can distinguish "reconnect
--- this expired link" from "never connected" — and so the runtime gate (which
--- rejects the same row as ErrNoValidToken) stops disagreeing with a green
--- "Connected" badge.
+-- session is usable when its access token is unexpired, or it is a NULL-expiry
+-- token with no refresh path (non-expiring, e.g. Slack non-rotating xoxp), or
+-- it carries a refresh token that is not itself known-expired to renew with. A
+-- NULL access_expires_at counts as usable on its own ONLY when there is no
+-- refresh token: with a refresh token present the gate re-validates on an
+-- hourly cadence, so usability defers to the refresh-token clause. A
+-- refresh_expires_at of NULL is a non-expiring refresh token. A
+-- present-but-unusable row is 'expired' rather than dropped, so the consent UI
+-- can distinguish "reconnect this expired link" from "never connected" — and
+-- so the runtime gate (which rejects the same row as ErrNoValidToken) stops
+-- disagreeing with a green "Connected" badge.
 SELECT
   remote_session_client_id,
   (CASE
     WHEN access_expires_at > now()
+      OR (access_expires_at IS NULL AND refresh_token_encrypted IS NULL)
       OR (refresh_token_encrypted IS NOT NULL
           AND (refresh_expires_at IS NULL OR refresh_expires_at > now())) THEN 'active'
     ELSE 'expired'
@@ -432,6 +406,19 @@ FROM remote_sessions
 WHERE subject_urn = @subject_urn
   AND user_session_issuer_id = @user_session_issuer_id
   AND deleted IS FALSE;
+
+-- name: SetRemoteSessionUpdatedAt :exec
+-- Sets updated_at on a remote session. Scoped through the owning
+-- remote_session_client's project so the write cannot cross tenant boundaries.
+-- Currently used by tests to backdate updated_at and exercise the
+-- application-layer refresh cadence in validateAndRefresh (NULL
+-- access_expires_at with a refresh token) without waiting wall-clock time.
+UPDATE remote_sessions s
+SET updated_at = @updated_at
+FROM remote_session_clients c
+WHERE s.id = @id
+  AND s.remote_session_client_id = c.id
+  AND c.project_id = @project_id;
 
 -- name: GetRemoteSessionClientWithIssuerByID :one
 -- Joined client + issuer view scoped to a single client_id. Used by
@@ -449,7 +436,6 @@ SELECT
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
-    c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
     i.authorization_endpoint               AS authorization_endpoint,
@@ -476,7 +462,6 @@ SELECT
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
-    c.user_session_issuer_id               AS user_session_issuer_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
     i.authorization_endpoint               AS authorization_endpoint,
@@ -622,14 +607,20 @@ WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: ListOrganizationRemoteSessionClientsByIssuerID :many
--- Clients registered with a given issuer in the org, each with its count of
--- attached MCP servers and active remote_sessions. The mcp_server_count counts
--- DISTINCT mcp_servers so a client whose user_session_issuer is reachable via
--- both the join table and the legacy column is not double-counted. The
--- active_session_count counts non-deleted remote_sessions minted against the
--- client, matching CountActiveRemoteSessionsByClientID and the delete preflight.
+-- Clients registered with a given issuer in the org, each with the list of
+-- user_session_issuers it is attached to (from the join table), its count of
+-- attached MCP servers, and its active remote_sessions. The mcp_server_count
+-- counts DISTINCT mcp_servers reachable through the client's join-table
+-- attachments. The active_session_count counts non-deleted remote_sessions
+-- minted against the client, matching CountActiveRemoteSessionsByClientID and
+-- the delete preflight.
 SELECT
     sqlc.embed(c),
+    (
+        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
+        FROM remote_session_client_user_session_issuers AS link
+        WHERE link.remote_session_client_id = c.id
+    )::uuid[] AS user_session_issuer_ids,
     (
         SELECT COUNT(DISTINCT m.id)
         FROM mcp_servers AS m
@@ -638,8 +629,6 @@ SELECT
               SELECT link.user_session_issuer_id
               FROM remote_session_client_user_session_issuers AS link
               WHERE link.remote_session_client_id = c.id
-              UNION
-              SELECT c.user_session_issuer_id
           )
     )::bigint AS mcp_server_count,
     (
@@ -660,7 +649,13 @@ LIMIT sqlc.arg('limit_value');
 
 -- name: GetOrganizationRemoteSessionClientByID :one
 -- A client in the org by id, scoped through its issuer's organization_id.
-SELECT c.*
+SELECT
+    sqlc.embed(c),
+    (
+        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
+        FROM remote_session_client_user_session_issuers AS link
+        WHERE link.remote_session_client_id = c.id
+    )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
@@ -675,7 +670,6 @@ WHERE c.id = @id
 UPDATE remote_session_clients AS c
 SET
     client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), c.client_secret_encrypted),
-    user_session_issuer_id = COALESCE(sqlc.narg('user_session_issuer_id'), c.user_session_issuer_id),
     token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), c.token_endpoint_auth_method),
     scope = COALESCE(sqlc.narg('scope')::text[], c.scope),
     audience = CASE
@@ -705,9 +699,9 @@ WHERE c.id = @id
 RETURNING c.*;
 
 -- name: ListOrganizationMcpServersForClient :many
--- MCP servers attached to a client through its user_session_issuer(s) — both the
--- join-table bindings and the legacy column. Callers establish the client
--- belongs to the org upstream (GetOrganizationRemoteSessionClientByID).
+-- MCP servers attached to a client through its user_session_issuer(s). Callers
+-- establish the client belongs to the org upstream
+-- (GetOrganizationRemoteSessionClientByID).
 SELECT DISTINCT
     m.id,
     m.project_id,
@@ -723,10 +717,6 @@ WHERE m.deleted IS FALSE
       SELECT link.user_session_issuer_id
       FROM remote_session_client_user_session_issuers AS link
       WHERE link.remote_session_client_id = @remote_session_client_id
-      UNION
-      SELECT c.user_session_issuer_id
-      FROM remote_session_clients AS c
-      WHERE c.id = @remote_session_client_id
   )
 ORDER BY m.id DESC;
 
@@ -744,10 +734,6 @@ WHERE m.deleted IS FALSE
       SELECT link.user_session_issuer_id
       FROM remote_session_client_user_session_issuers AS link
       JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-      WHERE c.remote_session_issuer_id = @remote_session_issuer_id AND c.deleted IS FALSE
-      UNION
-      SELECT c.user_session_issuer_id
-      FROM remote_session_clients AS c
       WHERE c.remote_session_issuer_id = @remote_session_issuer_id AND c.deleted IS FALSE
   );
 

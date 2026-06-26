@@ -590,12 +590,12 @@ for (const p of people) {
       "gen_ai.usage.cost": Number(cost),
       "gen_ai.response.model": model,
       "gen_ai.provider.name": provider,
-      "gram.resource.urn": "agents:chat:completion",
+      "gram.resource.urn": "chat:completion",
       "http.response.status_code": rnd() < 0.95 ? 200 : 500,
       ...baseAttrs,
     };
     rows.push(
-      `(${ct}, ${ct}, 'INFO', 'Chat completion', '${traceId}', '${attrJSON(ca)}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
+      `(${ct}, ${ct}, 'INFO', 'Chat completion', '${traceId}', '${attrJSON(ca)}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'chat:completion', 'gram-mcp-gateway', '${chatId}')`,
     );
   }
 }
