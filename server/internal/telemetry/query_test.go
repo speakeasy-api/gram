@@ -54,7 +54,47 @@ func insertAttributeUsageLog(t *testing.T, ctx context.Context, projectID string
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat completion",
 		nil, nil, string(attrsJSON), "{}",
-		projectID, usageURN, "gram-agents")
+		projectID, usageURN, "gram-server")
+	require.NoError(t, err)
+}
+
+func insertAttributeAssistantChatCompletionLog(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string, cost float64, totalTokens int, model, email, department string, roles []string) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gen_ai.conversation.id":          chatID,
+		"gen_ai.operation.name":           "chat",
+		"gen_ai.usage.input_tokens":       totalTokens,
+		"gen_ai.usage.total_tokens":       totalTokens,
+		"gen_ai.usage.cost":               cost,
+		"gen_ai.response.model":           model,
+		"gram.hook.source":                "assistants",
+		"gram.resource.urn":               "assistants:chat:completion",
+		"user.email":                      email,
+		"user.attributes.department_name": department,
+	}
+	if roles != nil {
+		attributes["user.roles"] = roles
+	}
+
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "assistant chat completion",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, "assistants:chat:completion", "gram-server")
 	require.NoError(t, err)
 }
 
@@ -94,7 +134,7 @@ func insertAttributeHookToolLog(t *testing.T, ctx context.Context, projectID str
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "tool hook",
 		nil, nil, string(attrsJSON), "{}",
-		projectID, gramURN, "gram-agents")
+		projectID, gramURN, "gram-server")
 	require.NoError(t, err)
 }
 
@@ -345,6 +385,48 @@ func TestQuery_CountsToolCalls(t *testing.T) {
 	// Hook tool rows carry no gen_ai.usage.cost, so cost stays sourced from the
 	// single usage row — admitting tool rows must not inflate cost.
 	require.InDelta(t, 0.25, totalResult.Table[0].Measures.TotalCost, 1e-9)
+}
+
+func TestQuery_IncludesCostBearingAssistantChatCompletions(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	ts := now.Add(-10 * time.Minute)
+	insertAttributeAssistantChatCompletionLog(t, ctx, projectID, ts, uuid.NewString(), 0.42, 25, "openai/gpt-5.4", "assistant@example.com", "Engineering", []string{"dev"})
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	var result *gen.QueryResult
+	require.Eventually(t, func() bool {
+		res, err := ti.service.Query(ctx, &gen.QueryPayload{
+			From:    from,
+			To:      to,
+			GroupBy: conv.PtrEmpty("hook_source"),
+			TopN:    10,
+			SortBy:  "total_cost",
+		})
+		if err != nil || res == nil || len(res.Table) != 1 {
+			return false
+		}
+		result = res
+		return res.Table[0].Measures.TotalCost == 0.42
+	}, 10*time.Second, 200*time.Millisecond)
+
+	require.Equal(t, "assistants", result.Table[0].GroupValue)
+	require.InDelta(t, 0.42, result.Table[0].Measures.TotalCost, 1e-9)
+	require.Equal(t, int64(25), result.Table[0].Measures.TotalInputTokens)
 }
 
 func TestQuery_TopNRollupIntoOther(t *testing.T) {

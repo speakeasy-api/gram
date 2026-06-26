@@ -7,6 +7,7 @@ import {
   Search,
   Sparkles,
   SlidersHorizontal,
+  TriangleAlert,
   User,
   Wrench,
   X,
@@ -45,6 +46,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Dialog } from "@/components/ui/dialog";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -83,6 +85,11 @@ import { ToolCallsView } from "./chatLogViews";
 import { exportTraceDataAsJson } from "./chatExport";
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
+
+// Mirrors the server-side `MaxLength(200)` on chat.load's `query` param (see
+// server/design/chat/design.go). Queries longer than this are rejected with a
+// hard 400, so we gate the request and flag the input instead of firing it.
+const MAX_SEARCH_QUERY_LEN = 200;
 
 interface ChatDetailPanelProps {
   chatId: string;
@@ -359,12 +366,25 @@ function ThreadSearchBar({
   onPrev: () => void;
   onNext: () => void;
 }) {
-  const hasQuery = value.trim().length > 0;
+  const trimmedLen = value.trim().length;
+  const hasQuery = trimmedLen > 0;
+  // Over the server's query cap: don't pretend to search — show a red counter in
+  // the match-count slot so the user sees why nothing is happening, and hide the
+  // (meaningless) prev/next nav while keeping clear available.
+  const overLimit = trimmedLen > MAX_SEARCH_QUERY_LEN;
   const navBtn =
     "text-muted-foreground hover:text-foreground hover:bg-background flex size-6 shrink-0 items-center justify-center rounded transition-colors disabled:opacity-40";
   return (
     <div className="bg-background focus-within:border-foreground/40 flex h-9 items-center gap-2 rounded-lg border px-2.5 transition-colors">
-      <Search className="text-muted-foreground size-3.5 shrink-0" />
+      {overLimit ? (
+        <SimpleTooltip
+          tooltip={`Queries are limited to ${MAX_SEARCH_QUERY_LEN} characters`}
+        >
+          <TriangleAlert className="text-destructive size-3.5 shrink-0" />
+        </SimpleTooltip>
+      ) : (
+        <Search className="text-muted-foreground size-3.5 shrink-0" />
+      )}
       <input
         type="text"
         value={value}
@@ -392,31 +412,41 @@ function ThreadSearchBar({
       />
       {hasQuery && (
         <>
-          <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-            {loading
-              ? "…"
-              : matchCount > 0
-                ? `${activeIndex + 1}/${matchCount}`
-                : "0/0"}
-          </span>
-          <button
-            type="button"
-            onClick={onPrev}
-            disabled={matchCount === 0}
-            aria-label="Previous match"
-            className={navBtn}
-          >
-            <ChevronUp className="size-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={onNext}
-            disabled={matchCount === 0}
-            aria-label="Next match"
-            className={navBtn}
-          >
-            <ChevronDown className="size-3.5" />
-          </button>
+          {overLimit ? (
+            <span className="text-destructive shrink-0 text-xs tabular-nums">
+              {trimmedLen}/{MAX_SEARCH_QUERY_LEN}
+            </span>
+          ) : (
+            <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
+              {loading
+                ? "…"
+                : matchCount > 0
+                  ? `${activeIndex + 1}/${matchCount}`
+                  : "0/0"}
+            </span>
+          )}
+          {!overLimit && (
+            <>
+              <button
+                type="button"
+                onClick={onPrev}
+                disabled={matchCount === 0}
+                aria-label="Previous match"
+                className={navBtn}
+              >
+                <ChevronUp className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={onNext}
+                disabled={matchCount === 0}
+                aria-label="Next match"
+                className={navBtn}
+              >
+                <ChevronDown className="size-3.5" />
+              </button>
+            </>
+          )}
           <button
             type="button"
             onClick={() => onChange("")}
@@ -629,7 +659,10 @@ function ChatDetailPanel({
   const riskTranscript = useChatRiskTranscript(chatId, dimNonRisk);
   // Search is a third windowed mode, available only in the normal (non-risk)
   // view. Disabled (no fetch) until there's a debounced query.
-  const searchActive = !dimNonRisk && searchQuery.length > 0;
+  const searchActive =
+    !dimNonRisk &&
+    searchQuery.length > 0 &&
+    searchQuery.length <= MAX_SEARCH_QUERY_LEN;
   const searchTranscript = useChatSearchTranscript(
     chatId,
     searchQuery,

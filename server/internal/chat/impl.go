@@ -849,20 +849,23 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	orgID := authCtx.ActiveOrganizationID
 	userID := authCtx.UserID
+	source := billing.ModelUsageSource(metadata.Source)
+	if source == "assistant" {
+		source = billing.ModelUsageSourceAssistants
+	}
+	if source == "" {
+		source = billing.ModelUsageSourcePlayground
+	}
+	sourceName := string(source)
 
 	eventProperties := map[string]any{
 		"action":            "chat_request_received",
 		"organization_slug": authCtx.OrganizationSlug,
 		"project_slug":      *authCtx.ProjectSlug,
 		"success":           false,
-		"source":            metadata.Source,
+		"source":            sourceName,
 		"user_agent":        metadata.UserAgent,
 		"origin":            metadata.Origin,
-	}
-
-	source := billing.ModelUsageSource(metadata.Source)
-	if source == "" {
-		source = billing.ModelUsageSourcePlayground
 	}
 
 	defer func() {

@@ -54,11 +54,7 @@ import type {
 import { Operator } from "@gram/client/models/components/logfilter";
 import type { ListToolUsageTracesPayloadTargetTypes } from "@gram/client/models/components/listtoolusagetracespayload";
 import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter";
-import {
-  useGramContext,
-  useListAttributeKeys,
-  useListToolsets,
-} from "@gram/client/react-query";
+import { useGramContext, useListAttributeKeys } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import type { BadgeProps } from "@speakeasy-api/moonshine";
@@ -274,8 +270,6 @@ export function LogsTools(): JSX.Element {
     [selectedHookTypes],
   );
 
-  const { data: toolsetsData } = useListToolsets();
-
   const { data: filterOptionsData } = useQuery({
     queryKey: [
       "tool-usage-filter-options",
@@ -304,7 +298,6 @@ export function LogsTools(): JSX.Element {
   const serverOptionGroups = useMemo(
     () =>
       buildServerOptionGroups({
-        hostedToolsets: toolsetsData?.toolsets ?? [],
         hostedServers: filterOptionsData?.hostedServers ?? [],
         shadowServers: filterOptionsData?.shadowServers ?? [],
         activeFilters,
@@ -315,7 +308,6 @@ export function LogsTools(): JSX.Element {
       filterOptionsData?.hostedServers,
       filterOptionsData?.shadowServers,
       serverNameMappings,
-      toolsetsData?.toolsets,
     ],
   );
 

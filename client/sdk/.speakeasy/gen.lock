@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 9adedbc1e05551a80bc0b43a57399f25
+  docChecksum: 1557dbe3d234d7f196388bcb5c11144f
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -413,7 +413,7 @@ trackedFiles:
   docs/models/components/gettoolusagefilteroptionspayload.md:
     last_write_checksum: sha1:13d50e7d45953d87b137da17e77f5ef5f8835452
   docs/models/components/gettoolusagefilteroptionsresult.md:
-    last_write_checksum: sha1:46b9bd9c5355037561d2400213399b5799236444
+    last_write_checksum: sha1:476b3d0f8d2e6d4f817b7059b17851ffebd950a0
   docs/models/components/gettoolusagesummarypayload.md:
     last_write_checksum: sha1:89cb3338e19ab8983999d851a6006a7e900684c5
   docs/models/components/gettoolusagesummaryresult.md:
@@ -1137,7 +1137,7 @@ trackedFiles:
   docs/models/components/toolusage.md:
     last_write_checksum: sha1:8e7c7baf87404355b4ba6b0cc6ae83b688cfa009
   docs/models/components/toolusagehostedserverfilteroption.md:
-    last_write_checksum: sha1:8a8480484333a31272b5f8c7332b3a660524112c
+    last_write_checksum: sha1:a928fdc5710b14a3cebf499891df49c89e903442
   docs/models/components/toolusageshadowserverfilteroption.md:
     last_write_checksum: sha1:40b27165c317f94c87085901a684cb141c965c1d
   docs/models/components/toolusagetargetsummary.md:
@@ -5143,7 +5143,7 @@ trackedFiles:
   src/models/components/toolusage.ts:
     last_write_checksum: sha1:afa11676e6aca32a23cae82bbc3472152265112c
   src/models/components/toolusagehostedserverfilteroption.ts:
-    last_write_checksum: sha1:1f418f70b8714f0ab81816a59da5a038754939ed
+    last_write_checksum: sha1:5e9743bc3526a2a554b821321d5ba817f7f23efb
   src/models/components/toolusageshadowserverfilteroption.ts:
     last_write_checksum: sha1:0947a47bc6bcf2316d8bec8f7e02c028cce0ff57
   src/models/components/toolusagetargetsummary.ts:
@@ -10408,7 +10408,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"hosted_servers": [{"event_count": 411092, "toolset_slug": "<value>"}], "shadow_servers": [], "users": []}
+          application/json: {"hosted_servers": [{"event_count": 411092, "toolset_name": "<value>", "toolset_slug": "<value>"}], "shadow_servers": [], "users": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

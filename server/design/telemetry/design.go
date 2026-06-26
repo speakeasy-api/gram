@@ -1939,9 +1939,10 @@ var ToolUsageHostedServerFilterOption = Type("ToolUsageHostedServerFilterOption"
 	Description("Hosted MCP server filter option with usage in the selected time window")
 
 	Attribute("toolset_slug", String, "Hosted MCP toolset slug")
+	Attribute("toolset_name", String, "Hosted MCP toolset display name")
 	Attribute("event_count", Int64, "Number of tool usage events observed for the hosted MCP server")
 
-	Required("toolset_slug", "event_count")
+	Required("toolset_slug", "toolset_name", "event_count")
 })
 
 var ToolUsageShadowServerFilterOption = Type("ToolUsageShadowServerFilterOption", func() {

@@ -1327,6 +1327,8 @@ type ToolUsageFilterOptionType string
 type ToolUsageHostedServerFilterOption struct {
 	// Hosted MCP toolset slug
 	ToolsetSlug string
+	// Hosted MCP toolset display name
+	ToolsetName string
 	// Number of tool usage events observed for the hosted MCP server
 	EventCount int64
 }

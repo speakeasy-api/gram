@@ -42,7 +42,7 @@ import type {
   ToolUsageUserTimeSeriesPoint,
   ToolUsageUsersByTargetRow,
 } from "@gram/client/models/components";
-import { useGramContext, useListToolsets } from "@gram/client/react-query";
+import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import { ChartCard } from "@/components/chart/ChartCard";
@@ -308,7 +308,6 @@ export function InsightsToolsContent(): JSX.Element {
     }),
   );
 
-  const { data: toolsetsData } = useListToolsets();
   const { data: filterOptionsData } = useQuery({
     queryKey: [
       "tool-usage-filter-options",
@@ -330,7 +329,6 @@ export function InsightsToolsContent(): JSX.Element {
   const serverOptionGroups = useMemo(
     () =>
       buildServerOptionGroups({
-        hostedToolsets: toolsetsData?.toolsets ?? [],
         hostedServers: filterOptionsData?.hostedServers ?? [],
         shadowServers: filterOptionsData?.shadowServers ?? [],
         activeFilters,
@@ -341,7 +339,6 @@ export function InsightsToolsContent(): JSX.Element {
       filterOptionsData?.hostedServers,
       filterOptionsData?.shadowServers,
       serverNameMappings,
-      toolsetsData?.toolsets,
     ],
   );
 

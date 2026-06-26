@@ -67,18 +67,18 @@ The table below shows representative keys from each category. See `conventions.g
 
 The `gram.*` prefix is used for attributes that are **Gram system-generated** — they identify internal Gram concepts that have no OTel equivalent. These are not fallbacks; they are explicitly namespaced to make it clear the attribute originates from the Gram platform.
 
-| Key                      | Description                                                   |
-| ------------------------ | ------------------------------------------------------------- |
-| `gram.project.id`        | Gram project UUID                                             |
-| `gram.deployment.id`     | Deployment UUID                                               |
-| `gram.function.id`       | Serverless function UUID                                      |
-| `gram.tool.urn`          | Tool URN (e.g., `tools:function:my-source:my-tool`)           |
-| `gram.tool.name`         | Human-readable tool name                                      |
-| `gram.external_user.id`  | End-user ID from the customer's system                        |
-| `gram.resource.urn`      | Internal resource identifier (e.g., `agents:chat:completion`) |
-| `gram.log.severity_text` | Severity override from caller                                 |
-| `gram.log.body`          | Log body/message content                                      |
-| `gram.api_key.id`        | API key used for the request                                  |
+| Key                      | Description                                            |
+| ------------------------ | ------------------------------------------------------ |
+| `gram.project.id`        | Gram project UUID                                      |
+| `gram.deployment.id`     | Deployment UUID                                        |
+| `gram.function.id`       | Serverless function UUID                               |
+| `gram.tool.urn`          | Tool URN (e.g., `tools:function:my-source:my-tool`)    |
+| `gram.tool.name`         | Human-readable tool name                               |
+| `gram.external_user.id`  | End-user ID from the customer's system                 |
+| `gram.resource.urn`      | Internal resource identifier (e.g., `chat:completion`) |
+| `gram.log.severity_text` | Severity override from caller                          |
+| `gram.log.body`          | Log body/message content                               |
+| `gram.api_key.id`        | API key used for the request                           |
 
 ### Adding new attributes
 
@@ -109,7 +109,7 @@ Build a `map[attr.Key]any`, populate it with typed attribute keys from the `attr
 
 ```go
 attrs := map[attr.Key]any{
-    attr.ResourceURNKey:           "agents:chat:completion",
+    attr.ResourceURNKey:           "chat:completion",
     attr.LogBodyKey:               "LLM chat completion: model=gpt-4o",
     attr.GenAIOperationNameKey:    telemetry.GenAIOperationChat,
     attr.GenAIRequestModelKey:     "gpt-4o",

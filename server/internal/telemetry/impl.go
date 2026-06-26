@@ -2483,7 +2483,7 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage filter options")
 	}
 
-	return toToolUsageFilterOptionsResult(options, payload.OptionTypes), nil
+	return toToolUsageFilterOptionsResult(options, hostedMCPMatchers, payload.OptionTypes), nil
 }
 
 func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid.UUID) ([]repo.HostedMCPMatcher, error) {
@@ -2499,6 +2499,7 @@ func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid
 		}
 		matchers = append(matchers, repo.HostedMCPMatcher{
 			ToolsetSlug: toolset.Slug,
+			ToolsetName: toolset.Name,
 			McpSlug:     toolset.McpSlug.String,
 		})
 	}
@@ -2562,7 +2563,7 @@ func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor strin
 	}
 }
 
-func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, optionTypes []telem_gen.ToolUsageFilterOptionType) *telem_gen.GetToolUsageFilterOptionsResult {
+func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, hostedMCPMatchers []repo.HostedMCPMatcher, optionTypes []telem_gen.ToolUsageFilterOptionType) *telem_gen.GetToolUsageFilterOptionsResult {
 	includeHostedServers, includeShadowServers, includeUsers := toolUsageFilterOptionTypeSet(optionTypes)
 	if options == nil {
 		return &telem_gen.GetToolUsageFilterOptionsResult{
@@ -2574,9 +2575,28 @@ func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, option
 
 	hostedServers := make([]*telem_gen.ToolUsageHostedServerFilterOption, 0, len(options.HostedServers))
 	if includeHostedServers {
+		hostedCounts := make(map[string]int64, len(options.HostedServers))
 		for _, row := range options.HostedServers {
+			hostedCounts[row.ToolsetSlug] = uint64ToInt64(row.EventCount)
+		}
+
+		seen := make(map[string]struct{}, len(hostedMCPMatchers))
+		for _, matcher := range hostedMCPMatchers {
+			seen[matcher.ToolsetSlug] = struct{}{}
+			hostedServers = append(hostedServers, &telem_gen.ToolUsageHostedServerFilterOption{
+				ToolsetSlug: matcher.ToolsetSlug,
+				ToolsetName: matcher.ToolsetName,
+				EventCount:  hostedCounts[matcher.ToolsetSlug],
+			})
+		}
+
+		for _, row := range options.HostedServers {
+			if _, ok := seen[row.ToolsetSlug]; ok {
+				continue
+			}
 			hostedServers = append(hostedServers, &telem_gen.ToolUsageHostedServerFilterOption{
 				ToolsetSlug: row.ToolsetSlug,
+				ToolsetName: row.ToolsetSlug,
 				EventCount:  uint64ToInt64(row.EventCount),
 			})
 		}
