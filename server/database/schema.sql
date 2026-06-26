@@ -2950,9 +2950,11 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   policy_type TEXT NOT NULL DEFAULT 'standard',
   sources TEXT[] NOT NULL,
   presidio_entities TEXT[],
-  -- Minimum Presidio confidence (0.0-1.0) a PII match must clear to surface.
-  -- NULL means the scanner applies its default threshold (0.75).
-  presidio_score_threshold DOUBLE PRECISION,
+  -- Per-analyzer scanner configuration as opaque JSON, namespaced by analyzer.
+  -- presidio.score_threshold (0.0-1.0): minimum Presidio confidence a PII match
+  -- must clear to surface; absent means the scanner applies its default (0.5).
+  -- New per-scanner options live here rather than as a column each.
+  analyzer_config JSONB NOT NULL DEFAULT '{}'::jsonb,
   prompt_injection_rules TEXT[],
   -- Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card')
   -- the policy author has unchecked within an otherwise-enabled category.
