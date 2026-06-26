@@ -52,6 +52,10 @@ database-changes:
   - "server/migrations/**"
   - "server/clickhouse/**"
 
+db-migrations:
+  - "server/migrations/**"
+  - "server/clickhouse/migrations/**"
+
 plog:
   - "go.mod"
   - "go.sum"
