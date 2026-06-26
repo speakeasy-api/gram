@@ -84,7 +84,7 @@ func UsageCommands() []string {
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
-		"chat (list-chats|load-chat|generate-title|credit-usage|delete-chat|submit-feedback)",
+		"chat (list-chats|load-chat|generate-title|credit-usage|delete-chat|set-pinned|submit-feedback)",
 		"chat-sessions (create|revoke)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|update-domain|delete-domain|list-mcp-endpoints)",
@@ -529,6 +529,7 @@ func ParseEndpoint(
 		chatListChatsExternalUserIDFlag    = chatListChatsFlags.String("external-user-id", "", "")
 		chatListChatsAssistantIDFlag       = chatListChatsFlags.String("assistant-id", "", "")
 		chatListChatsHasRiskFlag           = chatListChatsFlags.String("has-risk", "", "")
+		chatListChatsPinnedFlag            = chatListChatsFlags.String("pinned", "", "")
 		chatListChatsMinRiskScoreFlag      = chatListChatsFlags.String("min-risk-score", "", "")
 		chatListChatsFromFlag              = chatListChatsFlags.String("from", "", "")
 		chatListChatsToFlag                = chatListChatsFlags.String("to", "", "")
@@ -566,6 +567,11 @@ func ParseEndpoint(
 		chatDeleteChatIDFlag               = chatDeleteChatFlags.String("id", "REQUIRED", "")
 		chatDeleteChatSessionTokenFlag     = chatDeleteChatFlags.String("session-token", "", "")
 		chatDeleteChatProjectSlugInputFlag = chatDeleteChatFlags.String("project-slug-input", "", "")
+
+		chatSetPinnedFlags                = flag.NewFlagSet("set-pinned", flag.ExitOnError)
+		chatSetPinnedBodyFlag             = chatSetPinnedFlags.String("body", "REQUIRED", "")
+		chatSetPinnedSessionTokenFlag     = chatSetPinnedFlags.String("session-token", "", "")
+		chatSetPinnedProjectSlugInputFlag = chatSetPinnedFlags.String("project-slug-input", "", "")
 
 		chatSubmitFeedbackFlags                 = flag.NewFlagSet("submit-feedback", flag.ExitOnError)
 		chatSubmitFeedbackBodyFlag              = chatSubmitFeedbackFlags.String("body", "REQUIRED", "")
@@ -2252,6 +2258,7 @@ func ParseEndpoint(
 	chatGenerateTitleFlags.Usage = chatGenerateTitleUsage
 	chatCreditUsageFlags.Usage = chatCreditUsageUsage
 	chatDeleteChatFlags.Usage = chatDeleteChatUsage
+	chatSetPinnedFlags.Usage = chatSetPinnedUsage
 	chatSubmitFeedbackFlags.Usage = chatSubmitFeedbackUsage
 
 	chatSessionsFlags.Usage = chatSessionsUsage
@@ -3000,6 +3007,9 @@ func ParseEndpoint(
 
 			case "delete-chat":
 				epf = chatDeleteChatFlags
+
+			case "set-pinned":
+				epf = chatSetPinnedFlags
 
 			case "submit-feedback":
 				epf = chatSubmitFeedbackFlags
@@ -4259,7 +4269,7 @@ func ParseEndpoint(
 			switch epn {
 			case "list-chats":
 				endpoint = c.ListChats()
-				data, err = chatc.BuildListChatsPayload(*chatListChatsSearchFlag, *chatListChatsExternalUserIDFlag, *chatListChatsAssistantIDFlag, *chatListChatsHasRiskFlag, *chatListChatsMinRiskScoreFlag, *chatListChatsFromFlag, *chatListChatsToFlag, *chatListChatsLimitFlag, *chatListChatsOffsetFlag, *chatListChatsSortByFlag, *chatListChatsSortOrderFlag, *chatListChatsSessionTokenFlag, *chatListChatsProjectSlugInputFlag, *chatListChatsChatSessionsTokenFlag)
+				data, err = chatc.BuildListChatsPayload(*chatListChatsSearchFlag, *chatListChatsExternalUserIDFlag, *chatListChatsAssistantIDFlag, *chatListChatsHasRiskFlag, *chatListChatsPinnedFlag, *chatListChatsMinRiskScoreFlag, *chatListChatsFromFlag, *chatListChatsToFlag, *chatListChatsLimitFlag, *chatListChatsOffsetFlag, *chatListChatsSortByFlag, *chatListChatsSortOrderFlag, *chatListChatsSessionTokenFlag, *chatListChatsProjectSlugInputFlag, *chatListChatsChatSessionsTokenFlag)
 			case "load-chat":
 				endpoint = c.LoadChat()
 				data, err = chatc.BuildLoadChatPayload(*chatLoadChatIDFlag, *chatLoadChatGenerationFlag, *chatLoadChatLimitFlag, *chatLoadChatBeforeSeqFlag, *chatLoadChatAfterSeqFlag, *chatLoadChatFromStartFlag, *chatLoadChatRiskOnlyFlag, *chatLoadChatQueryFlag, *chatLoadChatSessionTokenFlag, *chatLoadChatProjectSlugInputFlag, *chatLoadChatChatSessionsTokenFlag)
@@ -4272,6 +4282,9 @@ func ParseEndpoint(
 			case "delete-chat":
 				endpoint = c.DeleteChat()
 				data, err = chatc.BuildDeleteChatPayload(*chatDeleteChatIDFlag, *chatDeleteChatSessionTokenFlag, *chatDeleteChatProjectSlugInputFlag)
+			case "set-pinned":
+				endpoint = c.SetPinned()
+				data, err = chatc.BuildSetPinnedPayload(*chatSetPinnedBodyFlag, *chatSetPinnedSessionTokenFlag, *chatSetPinnedProjectSlugInputFlag)
 			case "submit-feedback":
 				endpoint = c.SubmitFeedback()
 				data, err = chatc.BuildSubmitFeedbackPayload(*chatSubmitFeedbackBodyFlag, *chatSubmitFeedbackSessionTokenFlag, *chatSubmitFeedbackProjectSlugInputFlag, *chatSubmitFeedbackChatSessionsTokenFlag)
@@ -6963,6 +6976,7 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    generate-title: Read or set a chat's title. Omit `+"`"+`title`+"`"+` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `+"`"+`title`+"`"+` to set a manual title that auto-generation will never overwrite; provide an empty `+"`"+`title`+"`"+` to clear the manual title and re-enable auto-generation.`)
 	fmt.Fprintln(os.Stderr, `    credit-usage: Get the total number of chat credits and usage for the current billing period`)
 	fmt.Fprintln(os.Stderr, `    delete-chat: Soft-delete a chat by its ID`)
+	fmt.Fprintln(os.Stderr, `    set-pinned: Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -6975,6 +6989,7 @@ func chatListChatsUsage() {
 	fmt.Fprint(os.Stderr, " -external-user-id STRING")
 	fmt.Fprint(os.Stderr, " -assistant-id STRING")
 	fmt.Fprint(os.Stderr, " -has-risk STRING")
+	fmt.Fprint(os.Stderr, " -pinned STRING")
 	fmt.Fprint(os.Stderr, " -min-risk-score INT")
 	fmt.Fprint(os.Stderr, " -from STRING")
 	fmt.Fprint(os.Stderr, " -to STRING")
@@ -6996,6 +7011,7 @@ func chatListChatsUsage() {
 	fmt.Fprintln(os.Stderr, `    -external-user-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -assistant-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -has-risk STRING: `)
+	fmt.Fprintln(os.Stderr, `    -pinned STRING: `)
 	fmt.Fprintln(os.Stderr, `    -min-risk-score INT: `)
 	fmt.Fprintln(os.Stderr, `    -from STRING: `)
 	fmt.Fprintln(os.Stderr, `    -to STRING: `)
@@ -7009,7 +7025,7 @@ func chatListChatsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats --search \"abc123\" --external-user-id \"abc123\" --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --has-risk \"true\" --min-risk-score 1 --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats --search \"abc123\" --external-user-id \"abc123\" --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --has-risk \"true\" --pinned \"true\" --min-risk-score 1 --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 func chatLoadChatUsage() {
@@ -7112,6 +7128,28 @@ func chatDeleteChatUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat delete-chat --id \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func chatSetPinnedUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] chat set-pinned", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat set-pinned --body '{\n      \"id\": \"abc123\",\n      \"pinned\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func chatSubmitFeedbackUsage() {

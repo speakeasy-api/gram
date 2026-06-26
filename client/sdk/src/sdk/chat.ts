@@ -7,6 +7,7 @@ import { chatDelete } from "../funcs/chatDelete.js";
 import { chatGenerateTitle } from "../funcs/chatGenerateTitle.js";
 import { chatList } from "../funcs/chatList.js";
 import { chatLoad } from "../funcs/chatLoad.js";
+import { chatSetPinned } from "../funcs/chatSetPinned.js";
 import { chatSubmitFeedback } from "../funcs/chatSubmitFeedback.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -102,6 +103,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Chat> {
     return unwrapAsync(chatLoad(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setPinned chat
+   *
+   * @remarks
+   * Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.
+   */
+  async setPinned(
+    request: operations.SetChatPinnedRequest,
+    security?: operations.SetChatPinnedSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(chatSetPinned(
       this,
       request,
       security,

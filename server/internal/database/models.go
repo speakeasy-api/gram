@@ -267,6 +267,7 @@ type Chat struct {
 	ExternalChatID   pgtype.Text
 	Title            pgtype.Text
 	TitleManuallySet bool
+	PinnedAt         pgtype.Timestamptz
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	DeletedAt        pgtype.Timestamptz
@@ -1464,6 +1465,7 @@ type ToolCallBlock struct {
 	RiskResultID   uuid.NullUUID
 	ChatID         uuid.NullUUID
 	ChatMessageID  uuid.NullUUID
+	UserID         string
 	Feedback       pgtype.Text
 	FeedbackUserID pgtype.Text
 	FeedbackAt     pgtype.Timestamptz

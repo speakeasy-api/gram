@@ -28,6 +28,7 @@ export * from "./chatDelete.js";
 export * from "./chatGenerateTitle.js";
 export * from "./chatSessionsCreate.js";
 export * from "./chatSessionsRevoke.js";
+export * from "./chatSetPinned.js";
 export * from "./chatSubmitFeedback.js";
 export * from "./checkMcpEndpointSlugAvailability.js";
 export * from "./checkMCPSlugAvailability.js";

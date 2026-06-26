@@ -400,6 +400,7 @@ export * from "./sessionsummary.js";
 export * from "./setbillingmetadatarequestbody.js";
 export * from "./setmcpmetadatarequestbody.js";
 export * from "./setorganizationwhitelistrequestbody.js";
+export * from "./setpinnedrequestbody.js";
 export * from "./setpluginassignmentsform.js";
 export * from "./setpluginassignmentsresponsebody.js";
 export * from "./setproductfeaturerequestbody.js";

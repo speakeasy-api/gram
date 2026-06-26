@@ -221,6 +221,7 @@ run();
 * [generateTitle](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 * [list](docs/sdks/chat/README.md#list) - listChats chat
 * [load](docs/sdks/chat/README.md#load) - loadChat chat
+* [setPinned](docs/sdks/chat/README.md#setpinned) - setPinned chat
 * [submitFeedback](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 
 ### [ChatSessions](docs/sdks/chatsessions/README.md)
@@ -719,6 +720,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`chatLoad`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`chatSessionsCreate`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`chatSessionsRevoke`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
+- [`chatSetPinned`](docs/sdks/chat/README.md#setpinned) - setPinned chat
 - [`chatSubmitFeedback`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 - [`collectionsAttachServer`](docs/sdks/collections/README.md#attachserver) - attachServer collections
 - [`collectionsCreate`](docs/sdks/collections/README.md#create) - create collections
@@ -1036,6 +1038,7 @@ To learn about this feature and how to get started, check
 - [`useChatGenerateTitleMutation`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`useChatSessionsCreateMutation`](docs/sdks/chatsessions/README.md#create) - create chatSessions
 - [`useChatSessionsRevokeMutation`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
+- [`useChatSetPinnedMutation`](docs/sdks/chat/README.md#setpinned) - setPinned chat
 - [`useChatSubmitFeedbackMutation`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 - [`useCheckMcpEndpointSlugAvailability`](docs/sdks/mcpendpoints/README.md#checkslugavailability) - checkMcpEndpointSlugAvailability mcpEndpoints
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets

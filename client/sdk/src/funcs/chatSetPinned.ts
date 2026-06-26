@@ -4,14 +4,13 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,19 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listChats chat
+ * setPinned chat
  *
  * @remarks
- * List all chats for a project
+ * Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.
  */
-export function chatList(
+export function chatSetPinned(
   client: GramCore,
-  request?: operations.ListChatsRequest | undefined,
-  security?: operations.ListChatsSecurity | undefined,
+  request: operations.SetChatPinnedRequest,
+  security?: operations.SetChatPinnedSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ListChatsResult,
+    void,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +61,13 @@ export function chatList(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListChatsRequest | undefined,
-  security?: operations.ListChatsSecurity | undefined,
+  request: operations.SetChatPinnedRequest,
+  security?: operations.SetChatPinnedSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.ListChatsResult,
+      void,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -84,45 +83,27 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(z.optional(operations.ListChatsRequest$outboundSchema), value),
+    (value) => z.parse(operations.SetChatPinnedRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
-
-  const path = pathToFunc("/rpc/chat.list")();
-
-  const query = encodeFormQuery({
-    "assistant_id": payload?.assistant_id,
-    "external_user_id": payload?.external_user_id,
-    "from": payload?.from,
-    "has_risk": payload?.has_risk,
-    "limit": payload?.limit,
-    "min_risk_score": payload?.min_risk_score,
-    "offset": payload?.offset,
-    "pinned": payload?.pinned,
-    "search": payload?.search,
-    "sort_by": payload?.sort_by,
-    "sort_order": payload?.sort_order,
-    "to": payload?.to,
+  const body = encodeJSON("body", payload.SetPinnedRequestBody, {
+    explode: true,
   });
 
+  const path = pathToFunc("/rpc/chat.setPinned")();
+
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Chat-Session": encodeSimple(
-      "Gram-Chat-Session",
-      payload?.["Gram-Chat-Session"],
-      { explode: false, charEncoding: "none" },
-    ),
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -133,19 +114,12 @@ async function $do(
       {
         fieldName: "Gram-Project",
         type: "apiKey:header",
-        value: security?.option1?.projectSlugHeaderGramProject,
+        value: security?.projectSlugHeaderGramProject,
       },
       {
         fieldName: "Gram-Session",
         type: "apiKey:header",
-        value: security?.option1?.sessionHeaderGramSession,
-      },
-    ],
-    [
-      {
-        fieldName: "Authorization",
-        type: "http:bearer",
-        value: security?.option2?.chatSessionsTokenHeaderGramChatSession,
+        value: security?.sessionHeaderGramSession,
       },
     ],
   );
@@ -153,7 +127,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listChats",
+    operationID: "setChatPinned",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -167,11 +141,10 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -209,7 +182,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ListChatsResult,
+    void,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -220,7 +193,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.ListChatsResult$inboundSchema),
+    M.nil(204, z.void()),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

@@ -1205,6 +1205,9 @@ CREATE TABLE IF NOT EXISTS chats (
   -- True when a human explicitly renamed the chat. Auto title generation skips
   -- these so it never overwrites a manually chosen name.
   title_manually_set boolean NOT NULL DEFAULT false,
+  -- When a human pinned the chat (NULL = not pinned). Pinned chats surface in a
+  -- dedicated section above recents; the timestamp orders them by pin time.
+  pinned_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3348,6 +3351,13 @@ CREATE TABLE IF NOT EXISTS tool_call_blocks (
   risk_result_id uuid,
   chat_id uuid,
   chat_message_id uuid,
+
+  -- The Gram user whose agent triggered the block, captured at deny time.
+  -- Used to authorize the durable block page (the owner may view their own
+  -- block). Stored directly rather than derived via chat_id so it is available
+  -- even when session capture is disabled and no chat row was persisted. Empty
+  -- string when the user could not be resolved at deny time.
+  user_id TEXT NOT NULL,
 
   feedback TEXT,
   feedback_user_id TEXT,
