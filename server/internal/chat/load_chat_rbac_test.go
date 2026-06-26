@@ -66,6 +66,36 @@ func TestLoadChat_RBAC_AdminReadsAll(t *testing.T) {
 	require.Equal(t, other.String(), res.ID)
 }
 
+// Opening a session writes exactly one chat_session:access audit entry that
+// records the actor, the session subject, and the session owner.
+func TestLoadChat_AuditsSessionAccess(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, ctx, ti, "owner-user", "", "support thread")
+	adminCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource))
+
+	before, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
+	require.NoError(t, err)
+
+	_, err = ti.service.LoadChat(adminCtx, loadPayload(chatID.String()))
+	require.NoError(t, err)
+
+	after, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after, "loading a session writes one access audit entry")
+
+	rec, err := audittest.LatestAuditLogByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
+	require.NoError(t, err)
+	require.Equal(t, string(audit.ActionChatSessionAccess), rec.Action)
+	require.Equal(t, "chat_session", rec.SubjectType)
+	require.Equal(t, "support thread", rec.SubjectDisplay)
+	require.Equal(t, "owner-user", rec.SubjectSlug, "audit records the session owner")
+	require.True(t, rec.ProjectID.Valid)
+	require.Equal(t, ti.projectID, rec.ProjectID.UUID)
+}
+
 // Scroll pagination (before_seq/after_seq) does not emit additional audit
 // events: only the initial open of a session is recorded.
 func TestLoadChat_RBAC_PaginationNotReAudited(t *testing.T) {
