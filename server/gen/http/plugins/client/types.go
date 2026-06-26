@@ -227,6 +227,13 @@ type GetPublishStatusResponseBody struct {
 	// Present once a marketplace token has been minted, which happens
 	// automatically on the first publish.
 	MarketplaceURL *string `form:"marketplace_url,omitempty" json:"marketplace_url,omitempty" xml:"marketplace_url,omitempty"`
+	// Whether the project's current plugin state matches what was last published
+	// to GitHub. Absent when the project is not connected, or when the connection
+	// predates content fingerprinting (freshness can't be determined).
+	UpToDate *bool `form:"up_to_date,omitempty" json:"up_to_date,omitempty" xml:"up_to_date,omitempty"`
+	// When the project was last published to GitHub. Absent when the project is
+	// not connected.
+	LastPublishedAt *string `form:"last_published_at,omitempty" json:"last_published_at,omitempty" xml:"last_published_at,omitempty"`
 }
 
 // PublishPluginsResponseBody is the type of the "plugins" service
@@ -5411,12 +5418,14 @@ func NewDownloadCodexInstallScriptGatewayError(body *DownloadCodexInstallScriptG
 // "getPublishStatus" endpoint result from a HTTP "OK" response.
 func NewGetPublishStatusPublishStatusResultOK(body *GetPublishStatusResponseBody) *plugins.PublishStatusResult {
 	v := &plugins.PublishStatusResult{
-		Configured:     *body.Configured,
-		Connected:      *body.Connected,
-		RepoOwner:      body.RepoOwner,
-		RepoName:       body.RepoName,
-		RepoURL:        body.RepoURL,
-		MarketplaceURL: body.MarketplaceURL,
+		Configured:      *body.Configured,
+		Connected:       *body.Connected,
+		RepoOwner:       body.RepoOwner,
+		RepoName:        body.RepoName,
+		RepoURL:         body.RepoURL,
+		MarketplaceURL:  body.MarketplaceURL,
+		UpToDate:        body.UpToDate,
+		LastPublishedAt: body.LastPublishedAt,
 	}
 
 	return v
@@ -6303,6 +6312,9 @@ func ValidateGetPublishStatusResponseBody(body *GetPublishStatusResponseBody) (e
 	}
 	if body.Connected == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connected", "body"))
+	}
+	if body.LastPublishedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_published_at", *body.LastPublishedAt, goa.FormatDateTime))
 	}
 	return
 }

@@ -312,6 +312,13 @@ type PublishStatusResult struct {
 	// Present once a marketplace token has been minted, which happens
 	// automatically on the first publish.
 	MarketplaceURL *string
+	// Whether the project's current plugin state matches what was last published
+	// to GitHub. Absent when the project is not connected, or when the connection
+	// predates content fingerprinting (freshness can't be determined).
+	UpToDate *bool
+	// When the project was last published to GitHub. Absent when the project is
+	// not connected.
+	LastPublishedAt *string
 }
 
 // RemovePluginServerPayload is the payload type of the plugins service

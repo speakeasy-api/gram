@@ -18,6 +18,10 @@ export type PublishStatusResult = {
    */
   connected: boolean;
   /**
+   * When the project was last published to GitHub. Absent when the project is not connected.
+   */
+  lastPublishedAt?: Date | undefined;
+  /**
    * Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.
    */
   marketplaceUrl?: string | undefined;
@@ -33,6 +37,10 @@ export type PublishStatusResult = {
    * Full GitHub repository URL, if connected.
    */
   repoUrl?: string | undefined;
+  /**
+   * Whether the project's current plugin state matches what was last published to GitHub. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).
+   */
+  upToDate?: boolean | undefined;
 };
 
 /** @internal */
@@ -43,17 +51,23 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
   z.object({
     configured: z.boolean(),
     connected: z.boolean(),
+    last_published_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     marketplace_url: z.optional(z.string()),
     repo_name: z.optional(z.string()),
     repo_owner: z.optional(z.string()),
     repo_url: z.optional(z.string()),
+    up_to_date: z.optional(z.boolean()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "last_published_at": "lastPublishedAt",
       "marketplace_url": "marketplaceUrl",
       "repo_name": "repoName",
       "repo_owner": "repoOwner",
       "repo_url": "repoUrl",
+      "up_to_date": "upToDate",
     });
   }),
 );

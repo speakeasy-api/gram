@@ -37,6 +37,10 @@ type ExternalMCPServerEntry struct {
 	ToolCount int
 	// Whether every tool on the server is read-only
 	IsReadOnly bool
+	// Whether the server's OAuth authorization server advertises a dynamic client
+	// registration endpoint (RFC 7591). When false, connecting requires manual
+	// setup (static OAuth client credentials or API keys).
+	SupportsDcr bool
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemote
 }

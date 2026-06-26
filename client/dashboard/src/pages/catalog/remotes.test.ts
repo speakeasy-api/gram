@@ -32,6 +32,7 @@ function server(remotes: ExternalMCPRemote[]): PulseMCPServer {
     meta: {},
     toolCount: 0,
     isReadOnly: false,
+    supportsDcr: false,
     remotes,
   };
 }

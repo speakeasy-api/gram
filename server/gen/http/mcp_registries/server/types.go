@@ -848,6 +848,10 @@ type ExternalMCPServerEntryResponseBody struct {
 	ToolCount int `form:"tool_count" json:"tool_count" xml:"tool_count"`
 	// Whether every tool on the server is read-only
 	IsReadOnly bool `form:"is_read_only" json:"is_read_only" xml:"is_read_only"`
+	// Whether the server's OAuth authorization server advertises a dynamic client
+	// registration endpoint (RFC 7591). When false, connecting requires manual
+	// setup (static OAuth client credentials or API keys).
+	SupportsDcr bool `form:"supports_dcr" json:"supports_dcr" xml:"supports_dcr"`
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 }

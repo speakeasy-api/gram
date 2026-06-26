@@ -2,6 +2,7 @@ import { Page } from "@/components/page-layout";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import {
@@ -250,6 +251,7 @@ export default function CatalogDetail(): JSX.Element {
                   {versionMeta?.isLatest && (
                     <Badge variant="neutral">Latest</Badge>
                   )}
+                  <ManualSetupBadge server={server} />
                 </Stack>
                 {SERVER_WEBSITE_MAP[server.registrySpecifier] ? (
                   <a

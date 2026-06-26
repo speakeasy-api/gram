@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.38.1
+
+### Patch Changes
+
+- 4f9b199: Project Assistant chats can now be renamed from the live chat view. The dock header shows the active conversation's title and lets you click to edit it inline. Manually chosen names are preserved — automatic, session-context title generation skips any chat a human has renamed (clearing the title re-enables auto-naming).
+
 ## 1.38.0
 
 ### Minor Changes

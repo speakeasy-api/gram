@@ -962,6 +962,7 @@ func marshalTypesExternalMCPServerEntryToExternalMCPServerEntryResponseBody(v *t
 		Meta:                                v.Meta,
 		ToolCount:                           v.ToolCount,
 		IsReadOnly:                          v.IsReadOnly,
+		SupportsDcr:                         v.SupportsDcr,
 	}
 	if v.Remotes != nil {
 		res.Remotes = make([]*ExternalMCPRemoteResponseBody, len(v.Remotes))

@@ -1,5 +1,19 @@
 # dashboard
 
+## 0.77.0
+
+### Minor Changes
+
+- f479a1b: Org admins can now register a standalone `remote_session_client` directly from the Remote Identity Provider details page. A new `organizationRemoteSessionIssuers.createClient` endpoint creates a client under an existing issuer with no `user_session_issuer` attachments; the client inherits a project-specific issuer's project, or the admin names a project (downscoping) when the issuer is organization-level. The dashboard surfaces a `New Client` button on the issuer's Clients tab that opens a sheet supporting Dynamic Client Registration (when the issuer advertises a `registration_endpoint`) or manual `client_id` / `client_secret` entry.
+
+### Patch Changes
+
+- 81bc532: Audit trail subjects now link to their detail pages. MCP servers, risk policies, environments, assistants, roles, members, and collections render as links in the org audit log, alongside the deployments, toolsets, projects, plugins, and API keys that were already linked. Project-scoped subjects route under the entry's own project (which may differ from the project in the current URL), and risk policies and roles deep-link to open the specific item.
+- 4f9b199: Project Assistant chats can now be renamed from the live chat view. The dock header shows the active conversation's title and lets you click to edit it inline. Manually chosen names are preserved — automatic, session-context title generation skips any chat a human has renamed (clearing the title re-enables auto-naming).
+- 9b85ddd: feat(telemetry): include the chat title on `listSessions` results (resolved from Postgres, batched per page) and show it in place of the chat id in the cost dashboard's session table
+- Updated dependencies [4f9b199]
+  - @gram-ai/elements@1.38.1
+
 ## 0.76.0
 
 ### Minor Changes
