@@ -190,7 +190,7 @@ func TestNormalizeClaudeHookEvent_ResolvesAuthContextActorFromCachedEmail(t *tes
 func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 	// lookupShadowMCPBlockingPolicy needs a non-nil scanner that reports a
 	// blocking shadow-MCP policy, otherwise the handler short-circuits to
 	// allow before the cached-MCP-list check runs.
@@ -234,7 +234,7 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
@@ -268,7 +268,7 @@ func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
 func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
@@ -308,7 +308,7 @@ func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
@@ -341,7 +341,7 @@ func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
 func TestClaude_PreToolUse_TargetedShadowMCPPolicyUsesResolvedHookUser(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -381,7 +381,7 @@ func TestClaude_PreToolUse_TargetedShadowMCPPolicyUsesResolvedHookUser(t *testin
 func TestClaude_PreToolUse_DeniesLocalStdioServerWithLegacyIdentityRule(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -419,7 +419,7 @@ func TestClaude_PreToolUse_DeniesLocalStdioServerWithLegacyIdentityRule(t *testi
 func TestClaude_PreToolUse_DoesNotAllowUnconfiguredServerByIdentityRule(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -461,7 +461,7 @@ func TestClaude_PreToolUse_DoesNotAllowUnconfiguredServerByIdentityRule(t *testi
 func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
@@ -501,7 +501,7 @@ func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 func TestClaude_PreToolUse_EnforcesFromPayloadInventoryWithoutCache(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
@@ -545,7 +545,7 @@ func TestClaude_PreToolUse_EnforcesFromPayloadInventoryWithoutCache(t *testing.T
 func TestClaude_PreToolUse_PayloadInventoryBlocksNonGramServer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
@@ -585,7 +585,7 @@ func TestClaude_PreToolUse_PayloadInventoryBlocksNonGramServer(t *testing.T) {
 func TestClaude_PreToolUse_FreshPayloadInventorySupersedesCache(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
@@ -636,7 +636,7 @@ func TestClaude_PreToolUse_FreshPayloadInventorySupersedesCache(t *testing.T) {
 func TestClaude_PreToolUse_StaleReplayDoesNotOverrideCache(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
@@ -703,7 +703,7 @@ func (c mcpGetErrorCache) Get(ctx context.Context, key string, value any) error 
 func TestClaude_PreToolUse_CacheTransportErrorFailsClosedDespiteReplay(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
@@ -775,7 +775,7 @@ func TestMergeClaudeAuthContextMetadata_DoesNotSelectUserID(t *testing.T) {
 func TestClaude_RecordHook_PersistsAuthContextProjectOverCachedMetadata(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -843,7 +843,7 @@ func TestClaude_RecordHook_BuffersAuthContextCacheMissWithoutPayloadEmail(t *tes
 func TestClaude_RecordHook_DoesNotUseAuthUserIDWhenPayloadEmailDoesNotResolve(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -946,7 +946,7 @@ func TestClaude_ContinuesWhenPluginAuthFails(t *testing.T) {
 func TestClaude_PreToolUse_DeniesMCPWhenNoAuthAndNoCachedMetadata(t *testing.T) {
 	t.Parallel()
 	_, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 
 	bareCtx := t.Context()
 	sessionID := uuid.NewString()
@@ -977,7 +977,7 @@ func TestClaude_PreToolUse_DeniesMCPWhenNoAuthAndNoCachedMetadata(t *testing.T) 
 func TestClaude_PreToolUse_DeniesMCPWhenResolvedMetadataHasNoUserEmail(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

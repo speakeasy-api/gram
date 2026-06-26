@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -20,6 +21,19 @@ func (alwaysEnabledFeatures) IsFeatureEnabled(_ context.Context, _ string, _ pro
 	return true, nil
 }
 
+func enableSessionCapture(ti *testInstance) {
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.eventWriter.productFeatures = alwaysEnabledFeatures{}
+}
+
+func writeClaudeHookForTest(t *testing.T, ctx context.Context, ti *testInstance, payload *gen.ClaudePayload, metadata *SessionMetadata) {
+	t.Helper()
+	ev, err := ti.service.normalizeClaudeHookEvent(ctx, payload, time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, ev)
+	require.NoError(t, ti.service.eventWriter.Write(ctx, ev, metadata, WriteOptions{BlockReason: "", SkipChat: false}))
+}
+
 // TestClaudeHookSource_ConsistentAcrossAllWrites asserts that every
 // chat_messages row produced by a single Claude Code session carries the same
 // Source value, regardless of which hook handler wrote it. This guards
@@ -31,7 +45,7 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 
 	// The feature flag check short-circuits writes when productFeatures is nil
 	// (the default in newTestHooksService). Swap in a stub that enables it.
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -65,43 +79,43 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 	// Each of these is a distinct write path that previously either used
 	// metadata.ServiceName or a hardcoded string. The fix unified them — this
 	// test asserts the unification stays unified.
-	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+	writeClaudeHookForTest(t, ctx, ti, &gen.ClaudePayload{
 		HookEventName: "UserPromptSubmit",
 		SessionID:     &sessionID,
 		Prompt:        &prompt,
-	}, metadata))
+	}, metadata)
 
-	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+	writeClaudeHookForTest(t, ctx, ti, &gen.ClaudePayload{
 		HookEventName:        "Stop",
 		SessionID:            &sessionID,
 		LastAssistantMessage: &lastAssistantMessage,
 		Model:                &model,
-	}, metadata))
+	}, metadata)
 
-	require.NoError(t, ti.service.writeToolCallRequestToPG(ctx, &gen.ClaudePayload{
+	writeClaudeHookForTest(t, ctx, ti, &gen.ClaudePayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
 		ToolInput:     map[string]any{"file_path": "/tmp/x.go"},
 		Model:         &model,
-	}, metadata))
+	}, metadata)
 
-	require.NoError(t, ti.service.writeToolCallResultToPG(ctx, &gen.ClaudePayload{
+	writeClaudeHookForTest(t, ctx, ti, &gen.ClaudePayload{
 		HookEventName: "PostToolUse",
 		SessionID:     &sessionID,
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
 		ToolResponse:  toolResponse,
-	}, metadata))
+	}, metadata)
 
-	require.NoError(t, ti.service.writeToolCallResultToPG(ctx, &gen.ClaudePayload{
+	writeClaudeHookForTest(t, ctx, ti, &gen.ClaudePayload{
 		HookEventName: "PostToolUseFailure",
 		SessionID:     &sessionID,
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
 		Error:         errorData,
-	}, metadata))
+	}, metadata)
 
 	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
 		ChatID:    chatID,
@@ -123,7 +137,7 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 func TestClaudeUserPromptSubmitDoesNotPersistPromptIDAsMessageID(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -147,14 +161,14 @@ func TestClaudeUserPromptSubmitDoesNotPersistPromptIDAsMessageID(t *testing.T) {
 	}
 	prompt := "hello"
 
-	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+	writeClaudeHookForTest(t, ctx, ti, &gen.ClaudePayload{
 		HookEventName: "UserPromptSubmit",
 		SessionID:     &sessionID,
 		Prompt:        &prompt,
 		AdditionalData: map[string]any{
 			"promptId": wantPromptID,
 		},
-	}, metadata))
+	}, metadata)
 
 	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
 		ChatID:    chatID,
@@ -170,7 +184,7 @@ func TestClaudeUserPromptSubmitDoesNotPersistPromptIDAsMessageID(t *testing.T) {
 func TestClaudeStopBackfillsLatestUserPromptID(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -196,14 +210,14 @@ func TestClaudeStopBackfillsLatestUserPromptID(t *testing.T) {
 	prompt := "hello"
 	lastAssistantMessage := "ok"
 
-	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+	writeClaudeHookForTest(t, ctx, ti, &gen.ClaudePayload{
 		HookEventName: "UserPromptSubmit",
 		SessionID:     &sessionID,
 		Prompt:        &prompt,
 		AdditionalData: map[string]any{
 			"promptId": stalePromptID,
 		},
-	}, metadata))
+	}, metadata)
 
 	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
 		ChatID:    chatID,
@@ -214,14 +228,14 @@ func TestClaudeStopBackfillsLatestUserPromptID(t *testing.T) {
 	require.Equal(t, "user", msgs[0].Role)
 	require.False(t, msgs[0].MessageID.Valid, "UserPromptSubmit promptId must not be persisted directly")
 
-	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+	writeClaudeHookForTest(t, ctx, ti, &gen.ClaudePayload{
 		HookEventName:        "Stop",
 		SessionID:            &sessionID,
 		LastAssistantMessage: &lastAssistantMessage,
 		AdditionalData: map[string]any{
 			"LastUserPromptID": wantPromptID,
 		},
-	}, metadata))
+	}, metadata)
 
 	msgs, err = chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
 		ChatID:    chatID,

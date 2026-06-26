@@ -2,24 +2,17 @@ package hooks
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
-	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	codexevents "github.com/speakeasy-api/gram/server/internal/hookevents/adapters/codex"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *gen.CodexHookResult, err error) {
@@ -156,7 +149,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 		}
 	}
 
-	s.recordCodexHook(ctx, payload, metadata, blockReason)
+	s.recordCodexHook(ctx, hookEvent, payload, metadata, blockReason)
 
 	if blockReason != "" {
 		// Return the Codex hook JSON shape (decision=deny + reason) so the
@@ -175,7 +168,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	}, nil
 }
 
-func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata, blockReason string) {
+func (s *Service) recordCodexHook(ctx context.Context, hookEvent any, payload *gen.CodexPayload, metadata *SessionMetadata, blockReason string) {
 	// Skip persistence for a redelivery (the token was claimed in Codex()).
 	if s.isHookDuplicate(ctx) {
 		return
@@ -195,25 +188,15 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 		s.refreshMCPListTTL(ctx, metadata.SessionID)
 	}
 
-	s.writeCodexHookToClickHouse(ctx, payload, metadata, blockReason)
-
-	switch payload.HookEventName {
-	case "PreToolUse":
-		if err := s.writeCodexToolCallRequestToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex tool call request", attr.SlogError(err))
-		}
-	case "PostToolUse":
-		if err := s.writeCodexToolCallResultToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex tool call result", attr.SlogError(err))
-		}
-	case "UserPromptSubmit":
-		if err := s.writeCodexUserPromptToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex user prompt", attr.SlogError(err))
-		}
-	case "Stop":
-		if err := s.writeCodexAssistantResponseToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex assistant response", attr.SlogError(err))
-		}
+	if hookEvent == nil {
+		return
+	}
+	if s.eventWriter == nil {
+		return
+	}
+	ctx = context.WithoutCancel(ctx)
+	if err := s.eventWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: blockReason, SkipChat: false}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to persist Codex hook event", attr.SlogError(err))
 	}
 }
 
@@ -269,322 +252,4 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 	}
 
 	return metadata
-}
-
-func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata, blockReason string) {
-	attrs := s.buildCodexTelemetryAttributes(ctx, payload, metadata)
-	if blockReason != "" {
-		attrs[attr.HookBlockReasonKey] = blockReason
-	}
-	toolName, _ := attrs[attr.ToolNameKey].(string)
-
-	parsedProjectID, err := uuid.Parse(metadata.ProjectID)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "invalid project ID for Codex hook", attr.SlogError(err))
-		return
-	}
-
-	toolInfo := telemetry.ToolInfo{
-		Name:           toolName,
-		OrganizationID: metadata.GramOrgID,
-		ProjectID:      parsedProjectID.String(),
-		ID:             "",
-		URN:            "",
-		DeploymentID:   "",
-		FunctionID:     nil,
-	}
-
-	if s.telemetryLogger != nil {
-		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp:  time.Now(),
-			ToolInfo:   toolInfo,
-			UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
-			Attributes: attrs,
-		})
-
-		s.logger.DebugContext(ctx, "wrote Codex hook to ClickHouse",
-			attr.SlogEvent("codex_hook_written"),
-		)
-	}
-}
-
-func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) map[attr.Key]any {
-	toolName := conv.PtrValOr(payload.ToolName, "")
-
-	attrs := map[attr.Key]any{
-		attr.EventSourceKey:    string(telemetry.EventSourceHook),
-		attr.ToolNameKey:       toolName,
-		attr.HookEventKey:      payload.HookEventName,
-		attr.SpanIDKey:         generateSpanID(),
-		attr.TraceIDKey:        generateTraceID(),
-		attr.LogBodyKey:        fmt.Sprintf("Hook: %s", payload.HookEventName),
-		attr.ProjectIDKey:      metadata.ProjectID,
-		attr.OrganizationIDKey: metadata.GramOrgID,
-		attr.HookSourceKey:     "codex",
-	}
-
-	if payload.Model != nil && *payload.Model != "" {
-		attrs[attr.GenAIResponseModelKey] = *payload.Model
-	}
-
-	if payload.SessionID != nil && *payload.SessionID != "" {
-		attrs[attr.GenAIConversationIDKey] = *payload.SessionID
-		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(*payload.SessionID)
-	}
-
-	if payload.HookEventName == "UserPromptSubmit" && payload.Prompt != nil && *payload.Prompt != "" {
-		attrs[attr.LogBodyKey] = *payload.Prompt
-	}
-
-	// Stringify ToolInput / ToolOutput to prevent ClickHouse key explosion.
-	if payload.ToolInput != nil {
-		if jsonBytes, err := json.Marshal(payload.ToolInput); err == nil {
-			attrs[attr.GenAIToolCallArgumentsKey] = string(jsonBytes)
-		} else {
-			s.logger.WarnContext(ctx, "failed to marshal Codex ToolInput", attr.SlogError(err))
-		}
-	}
-	if payload.ToolOutput != nil {
-		if jsonBytes, err := json.Marshal(payload.ToolOutput); err == nil {
-			attrs[attr.GenAIToolCallResultKey] = string(jsonBytes)
-		} else {
-			s.logger.WarnContext(ctx, "failed to marshal Codex ToolOutput", attr.SlogError(err))
-		}
-	}
-
-	// Parse MCP tool names using the mcp__<server>__<tool> convention.
-	if server, fn, ok := toolref.AttributeTool(toolName); ok {
-		attrs[attr.ToolCallSourceKey] = server
-		attrs[attr.ToolNameKey] = fn
-		// Enrich with the cached MCP inventory: recover the true server/tool
-		// split for sanitized prefixes (which can themselves contain "__"),
-		// the resolved match key, and inventory attributes.
-		if metadata.SessionID != "" {
-			if entries, err := s.getCachedMCPList(ctx, metadata.SessionID); err == nil {
-				matched := matchCodexCachedMCPEntry(entries, toolName)
-				if matched != nil && matched.ToolPrefix != "" {
-					// Sanitized prefixes can contain "__", in which case
-					// the naive split misattributes part of the server
-					// name to the tool — recompute from the full prefix.
-					if rest, ok := strings.CutPrefix(toolName, "mcp__"+matched.ToolPrefix+"__"); ok {
-						attrs[attr.ToolCallSourceKey] = matched.ToolPrefix
-						attrs[attr.ToolNameKey] = rest
-					}
-				}
-				if v := resolvedMCPMatch(matched, server); v != "" {
-					attrs[attr.MCPMatchKey] = v
-				}
-				applyMCPInventoryAttrs(attrs, matched)
-			}
-		}
-	}
-
-	return attrs
-}
-
-func (s *Service) writeCodexToolCallRequestToPG(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) error {
-	if metadata.SessionID == "" {
-		return nil
-	}
-
-	projectID, err := uuid.Parse(metadata.ProjectID)
-	if err != nil {
-		return fmt.Errorf("invalid project ID: %w", err)
-	}
-
-	chatID := sessionIDToUUID(metadata.SessionID)
-
-	toolCalls := []map[string]any{{
-		"id":   conv.PtrValOr(payload.ToolName, ""),
-		"type": "function",
-		"function": map[string]any{
-			"name":      conv.PtrValOr(payload.ToolName, ""),
-			"arguments": marshalToJSON(payload.ToolInput),
-		},
-	}}
-
-	toolCallsJSON, err := json.Marshal(toolCalls)
-	if err != nil {
-		return fmt.Errorf("marshal tool_calls: %w", err)
-	}
-
-	msgParams := chatRepo.CreateChatMessageParams{
-		ChatID:           chatID,
-		ProjectID:        projectID,
-		Role:             "assistant",
-		Content:          "",
-		Model:            conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, "")),
-		UserID:           conv.ToPGTextEmpty(metadata.UserID),
-		Source:           conv.ToPGText("Codex"),
-		ToolCalls:        toolCallsJSON,
-		FinishReason:     conv.ToPGText("tool_calls"),
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		TotalTokens:      0,
-		ContentRaw:       nil,
-		ContentAssetUrl:  conv.ToPGTextEmpty(""),
-		StorageError:     conv.ToPGTextEmpty(""),
-		MessageID:        conv.ToPGTextEmpty(""),
-		ToolCallID:       conv.ToPGTextEmpty(""),
-		ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
-		Origin:           conv.ToPGTextEmpty(""),
-		UserAgent:        conv.ToPGTextEmpty(""),
-		IpAddress:        conv.ToPGTextEmpty(""),
-		ContentHash:      nil,
-		Generation:       0,
-	}
-
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle)
-}
-
-func (s *Service) writeCodexToolCallResultToPG(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) error {
-	if metadata.SessionID == "" {
-		return nil
-	}
-
-	if payload.ToolOutput == nil {
-		return nil
-	}
-
-	projectID, err := uuid.Parse(metadata.ProjectID)
-	if err != nil {
-		return fmt.Errorf("invalid project ID: %w", err)
-	}
-
-	chatID := sessionIDToUUID(metadata.SessionID)
-
-	msgParams := chatRepo.CreateChatMessageParams{
-		ChatID:           chatID,
-		ProjectID:        projectID,
-		Role:             "tool",
-		Content:          marshalToJSON(payload.ToolOutput),
-		UserID:           conv.ToPGTextEmpty(metadata.UserID),
-		Source:           conv.ToPGText("Codex"),
-		ToolCallID:       conv.ToPGTextEmpty(conv.PtrValOr(payload.ToolName, "")),
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		TotalTokens:      0,
-		ContentRaw:       nil,
-		ContentAssetUrl:  conv.ToPGTextEmpty(""),
-		StorageError:     conv.ToPGTextEmpty(""),
-		MessageID:        conv.ToPGTextEmpty(""),
-		ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
-		FinishReason:     conv.ToPGTextEmpty(""),
-		ToolCalls:        nil,
-		Model:            conv.ToPGTextEmpty(""),
-		Origin:           conv.ToPGTextEmpty(""),
-		UserAgent:        conv.ToPGTextEmpty(""),
-		IpAddress:        conv.ToPGTextEmpty(""),
-		ContentHash:      nil,
-		Generation:       0,
-	}
-
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle)
-}
-
-func (s *Service) writeCodexUserPromptToPG(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) error {
-	if metadata.SessionID == "" {
-		return nil
-	}
-
-	content := conv.PtrValOr(payload.Prompt, "")
-	if content == "" {
-		return nil
-	}
-
-	projectID, err := uuid.Parse(metadata.ProjectID)
-	if err != nil {
-		return fmt.Errorf("invalid project ID for Codex user prompt: %w", err)
-	}
-
-	chatID := sessionIDToUUID(metadata.SessionID)
-
-	msgParams := chatRepo.CreateChatMessageParams{
-		ChatID:           chatID,
-		ProjectID:        projectID,
-		Role:             "user",
-		Content:          content,
-		Model:            conv.ToPGTextEmpty(""),
-		UserID:           conv.ToPGTextEmpty(metadata.UserID),
-		Source:           conv.ToPGText("Codex"),
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		TotalTokens:      0,
-		ContentRaw:       nil,
-		ContentAssetUrl:  conv.ToPGTextEmpty(""),
-		StorageError:     conv.ToPGTextEmpty(""),
-		MessageID:        conv.ToPGTextEmpty(""),
-		ToolCallID:       conv.ToPGTextEmpty(""),
-		ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
-		FinishReason:     conv.ToPGTextEmpty(""),
-		ToolCalls:        nil,
-		Origin:           conv.ToPGTextEmpty(""),
-		UserAgent:        conv.ToPGTextEmpty(""),
-		IpAddress:        conv.ToPGTextEmpty(""),
-		ContentHash:      nil,
-		Generation:       0,
-	}
-
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle)
-}
-
-func (s *Service) writeCodexAssistantResponseToPG(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) error {
-	if metadata.SessionID == "" {
-		return nil
-	}
-
-	content := conv.PtrValOr(payload.LastAssistantMessage, "")
-	if content == "" {
-		return nil
-	}
-
-	projectID, err := uuid.Parse(metadata.ProjectID)
-	if err != nil {
-		return fmt.Errorf("invalid project ID for Codex assistant response: %w", err)
-	}
-
-	chatID := sessionIDToUUID(metadata.SessionID)
-
-	msgParams := chatRepo.CreateChatMessageParams{
-		ChatID:           chatID,
-		ProjectID:        projectID,
-		Role:             "assistant",
-		Content:          content,
-		Model:            conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, "")),
-		UserID:           conv.ToPGTextEmpty(metadata.UserID),
-		Source:           conv.ToPGText("Codex"),
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		TotalTokens:      0,
-		ContentRaw:       nil,
-		ContentAssetUrl:  conv.ToPGTextEmpty(""),
-		StorageError:     conv.ToPGTextEmpty(""),
-		MessageID:        conv.ToPGTextEmpty(""),
-		ToolCallID:       conv.ToPGTextEmpty(""),
-		ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
-		FinishReason:     conv.ToPGTextEmpty(""),
-		ToolCalls:        nil,
-		Origin:           conv.ToPGTextEmpty(""),
-		UserAgent:        conv.ToPGTextEmpty(""),
-		IpAddress:        conv.ToPGTextEmpty(""),
-		ContentHash:      nil,
-		Generation:       0,
-	}
-
-	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle); err != nil {
-		return err
-	}
-
-	if s.chatTitleGenerator != nil {
-		if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
-			context.WithoutCancel(ctx),
-			chatID.String(),
-			metadata.GramOrgID,
-			projectID.String(),
-		); err != nil {
-			s.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
-		}
-	}
-
-	return nil
 }

@@ -31,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
-	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
 // decodeBodySampleLimit caps how many bytes of a failing request body get
@@ -296,8 +295,6 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		ctx = withHookDuplicate(ctx)
 	}
 
-	s.recordHook(ctx, payload)
-
 	hookEvent, err := s.normalizeClaudeHookEvent(ctx, payload, time.Now())
 	if err != nil {
 		return nil, err
@@ -306,6 +303,8 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
 		return makeHookResult(payload.HookEventName), nil
 	}
+
+	s.recordHook(ctx, hookEvent)
 
 	// Route to appropriate handler based on hook type
 	var (
@@ -338,8 +337,11 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 	return result, err
 }
 
-func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.ClaudePayload, timestamp time.Time) (any, error) {
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
+func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.ClaudePayload, timestamp time.Time) (hookevents.Eventer, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok {
+		authCtx = nil
+	}
 	eventContext := hookevents.EventContext{
 		OrganizationID: "",
 		ProjectID:      uuid.Nil,
@@ -362,7 +364,11 @@ func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.Cla
 		if err != nil {
 			return nil, fmt.Errorf("normalize claude hook event: %w", err)
 		}
-		return event, nil
+		eventer, ok := event.(hookevents.Eventer)
+		if !ok {
+			return nil, nil
+		}
+		return eventer, nil
 	}
 
 	sessionID := conv.PtrValOr(payload.SessionID, "")
@@ -386,11 +392,18 @@ func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.Cla
 	if err != nil {
 		return nil, fmt.Errorf("normalize claude hook event: %w", err)
 	}
-	return event, nil
+	eventer, ok := event.(hookevents.Eventer)
+	if !ok {
+		return nil, nil
+	}
+	return eventer, nil
 }
 
 func claudePayloadFromEvent(ev hookevents.Event) *gen.ClaudePayload {
-	payload, _ := ev.Raw.(*gen.ClaudePayload)
+	payload, ok := ev.Raw.(*gen.ClaudePayload)
+	if !ok {
+		return nil
+	}
 	return payload
 }
 
@@ -652,13 +665,18 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 	return ctx, nil
 }
 
-func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
+func (s *Service) recordHook(ctx context.Context, hookEvent hookevents.Eventer) {
+	event := hookEvent.HookEvent()
+	payload := claudePayloadFromEvent(event)
+	if payload == nil {
+		return
+	}
 	logger := s.withAuthContext(ctx, s.logger.With(
 		attr.SlogHookSource("claude"),
-		attr.SlogHookEvent(payload.HookEventName),
+		attr.SlogHookEvent(event.RawEventType),
 	))
 
-	if payload.SessionID == nil || *payload.SessionID == "" {
+	if event.ConversationID == "" {
 		logger.WarnContext(ctx, "Tool event called without session ID",
 			attr.SlogEvent("claude_hook_no_session"),
 		)
@@ -675,7 +693,7 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	// cancel the in-flight INSERT and drop the chat message.
 	ctx = context.WithoutCancel(ctx)
 
-	sessionID := *payload.SessionID
+	sessionID := event.ConversationID
 	logger = logger.With(attr.SlogGenAIConversationID(sessionID))
 
 	// Every hook event for this session is a heartbeat — extend the MCP
@@ -704,12 +722,12 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 		// response (Stop especially — the client closes the connection
 		// immediately on the response). Run it detached so the response
 		// returns promptly and the work completes in the background.
-		go s.persistHook(ctx, payload, &metadata)
+		go s.persistHook(ctx, hookEvent, &metadata)
 		return
 	}
 
 	if hasAuthMetadata && payloadUserEmail != "" {
-		go s.persistHook(ctx, payload, &authMetadata)
+		go s.persistHook(ctx, hookEvent, &authMetadata)
 		return
 	}
 
@@ -770,28 +788,26 @@ func (s *Service) resolveClaudeSessionMetadata(ctx context.Context, sessionID, u
 	return SessionMetadata{}, err
 }
 
-func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) {
+func (s *Service) persistHook(ctx context.Context, hookEvent hookevents.Eventer, metadata *SessionMetadata) {
+	event := hookEvent.HookEvent()
 	metadata.UserEmail = strings.TrimSpace(metadata.UserEmail)
 	if metadata.UserEmail == "" {
 		s.logger.WarnContext(ctx, "skipping claude hook persistence without user email",
 			attr.SlogEvent("claude_hook_persist_no_user_email"),
 			attr.SlogHookSource("claude"),
-			attr.SlogHookEvent(payload.HookEventName),
-			attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
+			attr.SlogHookEvent(event.RawEventType),
+			attr.SlogGenAIConversationID(event.ConversationID),
 		)
 		return
 	}
 
 	metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 
-	if isConversationEvent(payload.HookEventName) {
-		if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist conversation event", attr.SlogError(err))
-		}
-	} else {
-		if err := s.persistToolCallEvent(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist tool call event", attr.SlogError(err))
-		}
+	if s.eventWriter == nil {
+		return
+	}
+	if err := s.eventWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: "", SkipChat: false}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to persist Claude hook event", attr.SlogError(err))
 	}
 }
 
@@ -826,7 +842,10 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	allow := "allow"
 	deny := "deny"
 	result := makeHookResult(payload.HookEventName)
-	output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	if !ok {
+		output = nil
+	}
 	denyUnverifiedMCP := func(code string) (*gen.ClaudeHookResult, error) {
 		reason := fmt.Sprintf("%s (err code: %s)", claudeShadowMCPMetadataUnavailableReason, code)
 		result.SystemMessage = &reason
@@ -1176,34 +1195,21 @@ func (s *Service) recordShadowMCPBlockFinding(
 // gram.hook.block_reason. trace_summaries_mv aggregates with max(), so the
 // trace will surface as blocked regardless of which row arrives first.
 func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, reason string) {
-	if s.telemetryLogger == nil || reason == "" || s.isHookDuplicate(ctx) {
+	if reason == "" || s.isHookDuplicate(ctx) {
 		return
 	}
 
-	attrs := s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata)
-	attrs[attr.HookBlockReasonKey] = reason
-	toolName, _ := attrs[attr.ToolNameKey].(string)
-
-	projectID, err := uuid.Parse(metadata.ProjectID)
+	hookEvent, err := s.normalizeClaudeHookEvent(ctx, payload, time.Now())
 	if err != nil {
-		s.logger.WarnContext(ctx, "invalid project ID for Claude block log", attr.SlogError(err))
+		s.logger.WarnContext(ctx, "failed to normalize Claude block hook for telemetry", attr.SlogError(err))
 		return
 	}
-
-	s.telemetryLogger.Log(ctx, telemetry.LogParams{
-		Timestamp: time.Now(),
-		ToolInfo: telemetry.ToolInfo{
-			Name:           toolName,
-			OrganizationID: metadata.GramOrgID,
-			ProjectID:      projectID.String(),
-			ID:             "",
-			URN:            "",
-			DeploymentID:   "",
-			FunctionID:     nil,
-		},
-		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
-		Attributes: attrs,
-	})
+	if s.eventWriter == nil {
+		return
+	}
+	if err := s.eventWriter.Write(ctx, hookEvent, metadata, WriteOptions{BlockReason: reason, SkipChat: true}); err != nil {
+		s.logger.WarnContext(ctx, "failed to write Claude block telemetry", attr.SlogError(err))
+	}
 }
 
 func (s *Service) handlePostToolUseFailure(ctx context.Context, ev *hookevents.AfterToolUseFailure) (*gen.ClaudeHookResult, error) {

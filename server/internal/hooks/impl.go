@@ -42,6 +42,7 @@ type Service struct {
 	logger             *slog.Logger
 	db                 *pgxpool.Pool
 	telemetryLogger    *telemetry.Logger
+	eventWriter        *EventWriter
 	auth               authorizer
 	authz              *authz.Engine
 	cache              cache.Cache
@@ -119,6 +120,7 @@ func NewService(
 		logger:             logger.With(attr.SlogComponent("hooks")),
 		db:                 db,
 		telemetryLogger:    telemetryLogger,
+		eventWriter:        NewEventWriter(logger, db, cacheAdapter, telemetryLogger, writer, pfClient, chatTitleGenerator),
 		auth:               auth.New(logger, db, sessionsMgr, authz),
 		authz:              authz,
 		cache:              cacheAdapter,

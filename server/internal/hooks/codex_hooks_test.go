@@ -140,6 +140,62 @@ func TestBuildCodexTelemetryAttributes_UsesPayloadUserEmail(t *testing.T) {
 	require.NotContains(t, attrs, attr.UserEmailKey)
 }
 
+func TestBuildCodexTelemetryAttributes_DerivesToolCallID(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+
+	sessionID := "codex-session-tool-correlation"
+	toolName := "mcp__linear__list_issues"
+	email := "dev@example.com"
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "Codex",
+		UserEmail:   email,
+		UserID:      "",
+		ClaudeOrgID: "",
+		GramOrgID:   "org-id",
+		ProjectID:   "project-id",
+	}
+
+	first := ti.service.buildCodexTelemetryAttributes(t.Context(), &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &email,
+		ToolName:      &toolName,
+		ToolInput:     map[string]any{"query": "urgent"},
+	}, metadata)
+	second := ti.service.buildCodexTelemetryAttributes(t.Context(), &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &email,
+		ToolName:      &toolName,
+		ToolInput:     map[string]any{"query": "backlog"},
+	}, metadata)
+
+	firstID, ok := first[attr.GenAIToolCallIDKey].(string)
+	require.True(t, ok)
+	require.NotEmpty(t, firstID)
+	require.NotEqual(t, toolName, firstID)
+
+	secondID, ok := second[attr.GenAIToolCallIDKey].(string)
+	require.True(t, ok)
+	require.NotEmpty(t, secondID)
+	require.NotEqual(t, firstID, secondID)
+
+	result := "ok"
+	post := ti.service.buildCodexTelemetryAttributes(t.Context(), &gen.CodexPayload{
+		HookEventName: "PostToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &email,
+		ToolName:      &toolName,
+		ToolInput:     map[string]any{"query": "urgent"},
+		ToolOutput:    map[string]any{"result": result},
+	}, metadata)
+	postID, ok := post[attr.GenAIToolCallIDKey].(string)
+	require.True(t, ok)
+	require.Equal(t, firstID, postID)
+}
+
 func TestCodex_SessionStart_CapturesMCPInventory(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

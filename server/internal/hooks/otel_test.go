@@ -337,6 +337,7 @@ func enableHookTelemetryLogger(t *testing.T, ctx context.Context, ti *testInstan
 
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
 	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), chConn, enabled, enabled, nil)
+	ti.service.eventWriter.telemetryLogger = ti.service.telemetryLogger
 	return telemetryrepo.New(chConn)
 }
 

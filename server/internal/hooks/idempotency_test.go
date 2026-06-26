@@ -21,7 +21,7 @@ import (
 func TestClaudeHookIdempotency_DeliveredTwiceStoredOnce(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = alwaysEnabledFeatures{}
+	enableSessionCapture(ti)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
