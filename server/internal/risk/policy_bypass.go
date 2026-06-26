@@ -83,7 +83,7 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeUnexpected, nil, "risk policy bypass request tokens are not configured").LogError(ctx, s.logger)
 	}
 
-	claims, err := parsePolicyBypassRequestToken(s.jwtSecret, payload.RequestToken)
+	claims, err := parsePolicyBypassRequestToken(ctx, s.cache, s.jwtSecret, payload.RequestToken)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass request token")
 	}

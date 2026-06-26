@@ -37,7 +37,7 @@ func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params sha
 }
 
 func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadowMCPRequestLinkParams) (string, bool) {
-	if s.siteURL == nil || strings.TrimSpace(s.jwtSecret) == "" {
+	if s.siteURL == nil || s.cache == nil {
 		return "", false
 	}
 
@@ -46,7 +46,7 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 		return "", false
 	}
 
-	requestURL, _, err := risk.GeneratePolicyBypassRequestURL(s.siteURL, s.jwtSecret, risk.PolicyBypassRequestTokenInput{
+	requestURL, _, err := risk.GeneratePolicyBypassRequestURL(ctx, s.cache, s.siteURL, risk.PolicyBypassRequestTokenInput{
 		OrganizationID:         params.OrganizationID,
 		ProjectID:              params.ProjectID,
 		RequesterUserID:        params.RequesterUserID,
