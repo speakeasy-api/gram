@@ -120,13 +120,13 @@ func insertTokenUsageRow(t *testing.T, conn driver.Conn, projectID string, times
 		"gen_ai.usage.input_tokens":  totalTokens / 2,
 		"gen_ai.usage.output_tokens": totalTokens - totalTokens/2,
 		"gen_ai.usage.total_tokens":  totalTokens,
-		"gram.resource.urn":          "agents:chat:completion",
+		"gram.resource.urn":          "chat:completion",
 	}
 	if chatID != "" {
 		attributes["gen_ai.conversation.id"] = chatID
 	}
 
-	insertTelemetryRow(t, conn, projectID, timestamp, "agents:chat:completion", attributes)
+	insertTelemetryRow(t, conn, projectID, timestamp, "chat:completion", attributes)
 }
 
 // insertToolCallRow inserts a tool-call row tied to a chat — non-metrics
@@ -146,7 +146,7 @@ func insertToolCallRow(t *testing.T, conn driver.Conn, projectID string, timesta
 func insertChatEventRow(t *testing.T, conn driver.Conn, projectID string, timestamp time.Time, chatID string) {
 	t.Helper()
 
-	insertTelemetryRow(t, conn, projectID, timestamp, "agents:chat:message", map[string]any{
+	insertTelemetryRow(t, conn, projectID, timestamp, "chat:message", map[string]any{
 		"gen_ai.conversation.id": chatID,
 	})
 }

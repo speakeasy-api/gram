@@ -74,6 +74,29 @@ jobs:
               - "!server/internal/**/repo/**"
               - "!server/internal/testenv/testrepo/**"
 
+      - name: "Require mig: prefix for migration PRs"
+        if: ${{ github.event_name != 'merge_group' && steps.filter.outputs.db-migrations == 'true' }}
+        shell: bash
+        env:
+          MIG_FILES: ${{ steps.filter.outputs.db-migrations_files }}
+        run: |
+          if [[ "$PR_TITLE" =~ ^mig(\([a-zA-Z0-9_-]+\))?!?:\ [a-zA-Z] ]]; then
+            echo "PR title is correctly qualified with 'mig:'."
+            exit 0
+          fi
+
+          echo "❌ This PR includes PostgreSQL or ClickHouse migration changes,"
+          echo "so its title must be qualified with the 'mig:' type (not 'feat', 'fix', or 'chore')."
+          echo ""
+          echo "Migration files changed:"
+          echo "$MIG_FILES" | jq -r '.[]' | sed 's/^/  - /'
+          echo ""
+          echo 'Example: "mig: add supports_dcr column to deployments"'
+          echo 'Example: "mig(catalog): version registry cache key"'
+          echo ""
+          echo "Got: $PR_TITLE"
+          exit 1
+
       - name: Validate migration PR does not mix server changes
         if: ${{ github.event_name != 'merge_group' && steps.filter.outputs.database-changes == 'true' && steps.filter-internal.outputs.server-internal == 'true' }}
         shell: bash

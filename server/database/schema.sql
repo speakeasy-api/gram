@@ -91,6 +91,9 @@ CREATE TABLE IF NOT EXISTS billing_metadata (
   -- Day of month (1-31) the billing cycle starts at 00:00 UTC. Clamped to the
   -- last day of shorter months when computing cycle boundaries.
   billing_cycle_anchor_day INT NOT NULL DEFAULT 1,
+  -- Contracted org-level cap for tunnelled MCP server sources. NULL means use
+  -- the plan default, not unlimited.
+  tunnelled_mcp_server_limit INT CHECK (tunnelled_mcp_server_limit IS NULL OR tunnelled_mcp_server_limit >= 0),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -102,6 +105,8 @@ CREATE TABLE IF NOT EXISTS billing_metadata (
 
 CREATE UNIQUE INDEX IF NOT EXISTS billing_metadata_organization_id_key
 ON billing_metadata (organization_id);
+
+COMMENT ON COLUMN billing_metadata.tunnelled_mcp_server_limit IS 'Contracted org-level cap for tunnelled MCP server sources. NULL means use the finite plan default.';
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_slug_key
 ON organization_metadata (slug);
@@ -2641,9 +2646,67 @@ CREATE UNIQUE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id
 ON remote_mcp_server_headers (remote_mcp_server_id, name)
 WHERE deleted IS FALSE;
 
+-- Customer-hosted MCP servers connected through outbound tunnels. Gram stores
+-- the durable management/source record; live connection routing is cached in
+-- Redis by the tunnel gateway.
+CREATE TABLE IF NOT EXISTS tunnelled_mcp_servers (
+  -- Stable UUID for the tunnelled MCP source. Used by management APIs,
+  -- dashboard routes, and Redis connection cache keys.
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  -- Project that owns this source. All management queries are project-scoped.
+  project_id uuid NOT NULL,
+  -- User-facing display name for the tunnelled MCP source.
+  name TEXT NOT NULL CHECK (name <> ''),
+  -- Hash of the one-time tunnel key. The plaintext key is not stored.
+  key_hash TEXT NOT NULL CHECK (key_hash <> ''),
+  -- Non-secret key prefix shown in the UI for user-side key identification.
+  key_prefix TEXT NOT NULL CHECK (key_prefix <> ''),
+  -- Durable source lifecycle. Live connection state is derived from Redis.
+  status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'active', 'revoked')),
+  -- Last persisted tunnel agent version reported for this source.
+  agent_version TEXT CHECK (agent_version IS NULL OR agent_version <> ''),
+  -- Most recent persisted heartbeat time, used when Redis liveness data is absent.
+  last_seen_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT tunnelled_mcp_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT tunnelled_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS tunnelled_mcp_servers_project_id_idx
+ON tunnelled_mcp_servers (project_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS tunnelled_mcp_servers_project_id_name_key
+ON tunnelled_mcp_servers (project_id, name)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS tunnelled_mcp_servers_key_hash_key
+ON tunnelled_mcp_servers (key_hash)
+WHERE deleted IS FALSE;
+
+COMMENT ON TABLE tunnelled_mcp_servers IS 'Customer-hosted MCP server sources that connect to Gram through outbound tunnels.';
+COMMENT ON COLUMN tunnelled_mcp_servers.id IS 'Stable UUID for the tunnelled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.';
+COMMENT ON COLUMN tunnelled_mcp_servers.project_id IS 'Project that owns this tunnelled MCP source. All management queries are scoped by project_id.';
+COMMENT ON COLUMN tunnelled_mcp_servers.name IS 'User-facing display name for the tunnelled MCP source.';
+COMMENT ON COLUMN tunnelled_mcp_servers.key_hash IS 'Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.';
+COMMENT ON COLUMN tunnelled_mcp_servers.key_prefix IS 'Non-secret prefix of the tunnel key shown in the UI so users can identify which key/source they are using.';
+COMMENT ON COLUMN tunnelled_mcp_servers.status IS 'Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.';
+COMMENT ON COLUMN tunnelled_mcp_servers.agent_version IS 'Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.';
+COMMENT ON COLUMN tunnelled_mcp_servers.last_seen_at IS 'Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.';
+COMMENT ON COLUMN tunnelled_mcp_servers.created_at IS 'Time when the tunnelled MCP source was created.';
+COMMENT ON COLUMN tunnelled_mcp_servers.updated_at IS 'Time when the durable tunnelled MCP source record was last updated.';
+COMMENT ON COLUMN tunnelled_mcp_servers.deleted_at IS 'Soft-delete timestamp for the tunnelled MCP source. NULL means the source is active.';
+COMMENT ON COLUMN tunnelled_mcp_servers.deleted IS 'Generated soft-delete flag derived from deleted_at and used by partial indexes.';
+
 -- MCP Servers: user-facing MCP server configurations that link an MCP
--- backend (either a toolset or a remote MCP server) to environment and
--- OAuth settings. Each server is addressable via one or more mcp_endpoints.
+-- backend (a toolset, a remote MCP server, or a tunnelled MCP server) to
+-- environment and OAuth settings. Each server is addressable via one or more
+-- mcp_endpoints.
 CREATE TABLE IF NOT EXISTS mcp_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -2653,6 +2716,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   environment_id uuid,
   user_session_issuer_id uuid,
   remote_mcp_server_id uuid,
+  tunnelled_mcp_server_id uuid,
   toolset_id uuid,
   -- Optionally enables a variations group for runtime filtering and
   -- modifications. Otherwise defaults to project global (source-level)
@@ -2670,10 +2734,11 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
   CONSTRAINT mcp_servers_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT mcp_servers_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers (id) ON DELETE RESTRICT,
+  CONSTRAINT mcp_servers_tunnelled_mcp_server_id_fkey FOREIGN KEY (tunnelled_mcp_server_id) REFERENCES tunnelled_mcp_servers (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
-  -- Exactly one backend must be set: either a remote MCP server or a toolset.
-  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK ((remote_mcp_server_id IS NULL) != (toolset_id IS NULL))
+  -- Exactly one backend must be set.
+  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunnelled_mcp_server_id, toolset_id) = 1)
 );
 
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
@@ -2687,6 +2752,12 @@ WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS mcp_servers_remote_mcp_server_id_idx
 ON mcp_servers (remote_mcp_server_id)
 WHERE remote_mcp_server_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS mcp_servers_tunnelled_mcp_server_id_idx
+ON mcp_servers (tunnelled_mcp_server_id)
+WHERE tunnelled_mcp_server_id IS NOT NULL;
+
+COMMENT ON COLUMN mcp_servers.tunnelled_mcp_server_id IS 'Optional backend reference to a tunnelled MCP source. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be set.';
 
 CREATE INDEX IF NOT EXISTS mcp_servers_toolset_id_idx
 ON mcp_servers (toolset_id)

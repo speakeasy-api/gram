@@ -43146,6 +43146,10 @@ components:
         connected:
           type: boolean
           description: Whether this project has a GitHub connection.
+        last_published_at:
+          type: string
+          description: When the project was last published to GitHub. Absent when the project is not connected.
+          format: date-time
         marketplace_url:
           type: string
           description: Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.
@@ -43158,6 +43162,9 @@ components:
         repo_url:
           type: string
           description: Full GitHub repository URL, if connected.
+        up_to_date:
+          type: boolean
+          description: Whether the project's current plugin state matches what was last published to GitHub. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).
       required:
         - configured
         - connected
@@ -46858,12 +46865,16 @@ components:
           type: integer
           description: Number of tool usage events observed for the hosted MCP server
           format: int64
+        toolset_name:
+          type: string
+          description: Hosted MCP toolset display name
         toolset_slug:
           type: string
           description: Hosted MCP toolset slug
       description: Hosted MCP server filter option with usage in the selected time window
       required:
         - toolset_slug
+        - toolset_name
         - event_count
     ToolUsageShadowServerFilterOption:
       type: object

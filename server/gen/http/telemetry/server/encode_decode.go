@@ -5448,6 +5448,7 @@ func marshalTelemetryToolUsageTraceLogGroupToToolUsageTraceLogGroupResponseBody(
 func marshalTelemetryToolUsageHostedServerFilterOptionToToolUsageHostedServerFilterOptionResponseBody(v *telemetry.ToolUsageHostedServerFilterOption) *ToolUsageHostedServerFilterOptionResponseBody {
 	res := &ToolUsageHostedServerFilterOptionResponseBody{
 		ToolsetSlug: v.ToolsetSlug,
+		ToolsetName: v.ToolsetName,
 		EventCount:  v.EventCount,
 	}
 

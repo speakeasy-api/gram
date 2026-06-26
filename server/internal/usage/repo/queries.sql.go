@@ -13,7 +13,7 @@ import (
 )
 
 const getBillingMetadata = `-- name: GetBillingMetadata :one
-SELECT id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, created_at, updated_at
+SELECT id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunnelled_mcp_server_limit, created_at, updated_at
 FROM billing_metadata
 WHERE organization_id = $1
 `
@@ -27,6 +27,7 @@ func (q *Queries) GetBillingMetadata(ctx context.Context, organizationID string)
 		&i.TumMonthlyTokenLimit,
 		&i.AlertEmail,
 		&i.BillingCycleAnchorDay,
+		&i.TunnelledMcpServerLimit,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -92,7 +93,7 @@ ON CONFLICT (organization_id) DO UPDATE SET
   , alert_email = EXCLUDED.alert_email
   , billing_cycle_anchor_day = EXCLUDED.billing_cycle_anchor_day
   , updated_at = clock_timestamp()
-RETURNING id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, created_at, updated_at
+RETURNING id, organization_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunnelled_mcp_server_limit, created_at, updated_at
 `
 
 type UpsertBillingMetadataParams struct {
@@ -116,6 +117,7 @@ func (q *Queries) UpsertBillingMetadata(ctx context.Context, arg UpsertBillingMe
 		&i.TumMonthlyTokenLimit,
 		&i.AlertEmail,
 		&i.BillingCycleAnchorDay,
+		&i.TunnelledMcpServerLimit,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
