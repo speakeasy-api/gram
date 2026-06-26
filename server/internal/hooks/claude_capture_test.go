@@ -12,7 +12,9 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 type failingFeatures struct{}
@@ -257,6 +259,102 @@ func TestClaudeMessages_SkipsToolMessageWithoutToolCallID(t *testing.T) {
 		})
 		return err == nil && len(got) > 0
 	}, 500*time.Millisecond, 50*time.Millisecond, "tool messages without tool_call_id must be skipped")
+}
+
+func TestClaudeMessages_FlushesPendingShadowMCPBlockFinding(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	policyID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	_, err := riskRepo.New(ti.conn).CreateRiskPolicy(ctx, riskRepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Name:           "shadow-mcp-block",
+		Sources:        []string{"shadow_mcp"},
+		Enabled:        true,
+		Action:         "block",
+		AudienceType:   "everyone",
+		AutoName:       false,
+	})
+	require.NoError(t, err)
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__mise__install_tool"
+	toolUseID := "toolu_pending_shadow_mcp"
+	userEmail := "claude-shadow-buffer@example.com"
+	seedCaptureSession(t, ctx, ti, sessionID, "shadow-buffer-user", userEmail)
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
+		sessionMCPListTTL,
+	))
+
+	version := claudeHookStopCollectionVersion
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{"package": "node"},
+		HookVersion:   &version,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	var pending []pendingShadowMCPBlockFinding
+	require.Eventually(t, func() bool {
+		pending = nil
+		err := ti.service.cache.ListRange(ctx, shadowMCPBlockFindingsPendingCacheKey(sessionID), 0, -1, &pending)
+		return err == nil && len(pending) == 1
+	}, 500*time.Millisecond, 50*time.Millisecond)
+	require.Equal(t, toolUseID, pending[0].ToolCallID)
+	require.Equal(t, policyID.String(), pending[0].PolicyID)
+
+	assistantContent := ""
+	require.NoError(t, ti.service.ClaudeMessages(ctx, &gen.ClaudeMessagesPayload{
+		SessionID: sessionID,
+		Messages: []*gen.ClaudeCapturedMessage{{
+			ExternalID: uuid.NewString(),
+			Role:       "assistant",
+			Content:    &assistantContent,
+			ToolCalls: []any{map[string]any{
+				"id":   toolUseID,
+				"type": "function",
+				"function": map[string]any{
+					"name":      toolName,
+					"arguments": `{"package":"node"}`,
+				},
+			}},
+		}},
+	}))
+
+	require.Eventually(t, func() bool {
+		_, err := ti.service.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
+			ProjectID:  uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+			ChatID:     sessionIDToUUID(sessionID),
+			ToolCallID: toolUseID,
+		})
+		return err == nil
+	}, time.Second, 50*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		got, err := riskRepo.New(ti.conn).CountRiskResultsByPolicyID(ctx, riskRepo.CountRiskResultsByPolicyIDParams{
+			RiskPolicyID: policyID,
+			ProjectID:    *authCtx.ProjectID,
+		})
+		return err == nil && got >= 1
+	}, time.Second, 50*time.Millisecond)
+
+	pending = nil
+	require.NoError(t, ti.service.cache.ListRange(ctx, shadowMCPBlockFindingsPendingCacheKey(sessionID), 0, -1, &pending))
+	require.Empty(t, pending)
 }
 
 // TestClaudeHookVersion_StopCollectionSkipsPerEventPersist verifies the version

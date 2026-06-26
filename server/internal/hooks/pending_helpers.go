@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -637,5 +638,96 @@ func (s *Service) flushPendingClaudeMessages(ctx context.Context, sessionID stri
 
 	if err := s.cache.Delete(ctx, key); err != nil {
 		s.logger.ErrorContext(ctx, "Failed to delete claude message capture buffer", attr.SlogError(err))
+	}
+}
+
+func (s *Service) bufferShadowMCPBlockFinding(ctx context.Context, sessionID string, finding pendingShadowMCPBlockFinding) error {
+	if sessionID == "" || finding.ToolCallID == "" {
+		return nil
+	}
+	item := map[string]any{
+		"tool_call_id":        finding.ToolCallID,
+		"policy_id":           finding.PolicyID,
+		"risk_policy_version": finding.RiskPolicyVersion,
+		"description":         finding.Description,
+		"match":               finding.Match,
+	}
+	if err := s.cache.ListAppend(context.WithoutCancel(ctx), shadowMCPBlockFindingsPendingCacheKey(sessionID), item, 5*time.Minute); err != nil {
+		return fmt.Errorf("append shadow-mcp block finding to list: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) flushPendingShadowMCPBlockFindings(ctx context.Context, sessionID string, metadata *SessionMetadata) {
+	if s.repo == nil || sessionID == "" || metadata == nil {
+		return
+	}
+
+	projectID, err := uuid.Parse(metadata.ProjectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "shadow-mcp block: invalid project id while flushing pending findings",
+			attr.SlogEvent("claude_hook_block_finding_flush_skip"),
+			attr.SlogError(err),
+		)
+		return
+	}
+	chatID := sessionIDToUUID(sessionID)
+
+	var findings []pendingShadowMCPBlockFinding
+	key := shadowMCPBlockFindingsPendingCacheKey(sessionID)
+	if err := s.cache.ListRange(ctx, key, 0, -1, &findings); err != nil {
+		s.logger.DebugContext(ctx, "No pending shadow-mcp block findings to flush or error reading list", attr.SlogError(err))
+		return
+	}
+	if len(findings) == 0 {
+		return
+	}
+
+	failed := false
+	for i := range findings {
+		finding := findings[i]
+		if finding.ToolCallID == "" || finding.PolicyID == "" {
+			continue
+		}
+		policyID, err := uuid.Parse(finding.PolicyID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "shadow-mcp block: invalid policy id while flushing pending finding",
+				attr.SlogEvent("claude_hook_block_finding_flush_skip"),
+				attr.SlogError(err),
+			)
+			continue
+		}
+
+		msgID, err := s.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
+			ProjectID:  uuid.NullUUID{UUID: projectID, Valid: true},
+			ChatID:     chatID,
+			ToolCallID: finding.ToolCallID,
+		})
+		if err != nil {
+			failed = true
+			s.logger.DebugContext(ctx, "shadow-mcp block: chat_message still missing while flushing pending finding",
+				attr.SlogEvent("claude_hook_block_finding_flush_no_message"),
+				attr.SlogError(err),
+			)
+			continue
+		}
+
+		if err := s.insertShadowMCPBlockFinding(ctx, metadata, projectID, policyID, msgID, finding); err != nil {
+			failed = true
+			s.logger.WarnContext(ctx, "shadow-mcp block: failed to insert pending risk_result",
+				attr.SlogEvent("claude_hook_block_finding_flush_insert_failed"),
+				attr.SlogError(err),
+			)
+		}
+	}
+
+	if failed {
+		s.logger.WarnContext(ctx, "keeping pending shadow-mcp block finding buffer after replay failure",
+			attr.SlogEvent("claude_hook_block_finding_flush_failed"),
+		)
+		return
+	}
+	if err := s.cache.Delete(ctx, key); err != nil {
+		s.logger.ErrorContext(ctx, "Failed to delete shadow-mcp block finding buffer", attr.SlogError(err))
 	}
 }

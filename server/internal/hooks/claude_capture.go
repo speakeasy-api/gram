@@ -198,6 +198,7 @@ func (s *Service) persistClaudeMessages(ctx context.Context, payload *gen.Claude
 		attr.SlogProjectID(metadata.ProjectID),
 		attr.SlogHookMessagesCaptured(int(stored)),
 	)
+	s.flushPendingShadowMCPBlockFindings(ctx, sessionID, &metadata)
 
 	// New assistant content can change the inferred chat title; schedule a refresh
 	// once per batch rather than per message.

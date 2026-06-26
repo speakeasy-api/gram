@@ -414,7 +414,11 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, "")))
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, ""))); err != nil {
+		return err
+	}
+	s.flushPendingShadowMCPBlockFindings(ctx, conv.PtrValOr(payload.SessionID, ""), metadata)
+	return nil
 }
 
 // writeToolCallResultToPG writes a tool result message to PostgreSQL.

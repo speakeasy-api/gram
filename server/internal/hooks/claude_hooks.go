@@ -34,6 +34,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
+type pendingShadowMCPBlockFinding struct {
+	ToolCallID        string `json:"tool_call_id"`
+	PolicyID          string `json:"policy_id"`
+	RiskPolicyVersion int64  `json:"risk_policy_version"`
+	Description       string `json:"description"`
+	Match             string `json:"match"`
+}
+
 // decodeBodySampleLimit caps how many bytes of a failing request body get
 // logged, so we don't dump megabytes of OTLP into the logs on every bad
 // payload.
@@ -1085,12 +1093,12 @@ func (s *Service) handlePostToolUse(ctx context.Context, ev *hookevents.AfterToo
 	return makeHookResult(ev.RawEventType), nil
 }
 
-// recordShadowMCPBlockFinding writes a risk_results row so the Recent
-// Findings table reflects live hook-time blocks alongside batch-scanner
-// findings. Best-effort: the block decision has already been made and
-// returned to the user, so failures here just log. The chat_message_id
-// FK requires that recordHook successfully persisted the tool-call
-// message (gated by FeatureSessionCapture) — when it didn't, we skip.
+// recordShadowMCPBlockFinding writes a risk_results row so the Recent Findings
+// table reflects live hook-time blocks alongside batch-scanner findings.
+// Best-effort: the block decision has already been made and returned to the
+// user, so failures here just log. If the matching chat_message is not present
+// yet, buffer the finding and attach it after the per-event write or Stop batch
+// persists the real assistant tool-call row.
 func (s *Service) recordShadowMCPBlockFinding(
 	ctx context.Context,
 	payload *gen.ClaudePayload,
@@ -1117,6 +1125,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 		return
 	}
 
+	pending := buildPendingShadowMCPBlockFinding(*payload.ToolUseID, policy, matched, serverPrefix, detail)
 	chatID := sessionIDToUUID(*payload.SessionID)
 	msgID, err := s.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
 		ProjectID:  uuid.NullUUID{UUID: projectID, Valid: true},
@@ -1124,41 +1133,63 @@ func (s *Service) recordShadowMCPBlockFinding(
 		ToolCallID: *payload.ToolUseID,
 	})
 	if err != nil {
-		// Most common cause: SessionCapture feature flag is off, so the
-		// tool-call chat_message was never persisted. The ClickHouse path
-		// still records the block; only the Recent Findings surfacing is
-		// skipped.
-		s.logger.DebugContext(ctx, "shadow-mcp block: no chat_message found for tool_use_id; skipping risk_result write",
+		if bErr := s.bufferShadowMCPBlockFinding(ctx, *payload.SessionID, pending); bErr != nil {
+			s.logger.WarnContext(ctx, "shadow-mcp block: failed to buffer risk_result pending chat_message",
+				attr.SlogEvent("claude_hook_block_finding_buffer_failed"),
+				attr.SlogError(bErr),
+			)
+			return
+		}
+		s.logger.DebugContext(ctx, "shadow-mcp block: no chat_message found for tool_use_id; buffered risk_result",
 			attr.SlogEvent("claude_hook_block_finding_no_message"),
 			attr.SlogError(err),
 		)
 		return
 	}
 
-	// match identifies the server in the dashboard's Recent Findings row and
-	// is also the value the "Exclude from policy" action sends back to
-	// approveShadowMCP. Prefer the URL for HTTP/SSE entries, then the stdio
-	// Command for local servers, and finally fall back to the server-prefix
-	// portion of the tool name (e.g. "mise" from "mcp__mise__run_task") when
-	// the snapshot didn't yield a matched entry — anything but the raw tool
-	// name, which is too granular to allowlist on.
-	match := ""
-	if matched != nil {
-		switch {
-		case matched.URL != "":
-			match = matched.URL
-		case matched.Command != "":
-			match = matched.Command
-		}
+	if err := s.insertShadowMCPBlockFinding(ctx, metadata, projectID, policyID, msgID, pending); err != nil {
+		s.logger.WarnContext(ctx, "shadow-mcp block: failed to insert risk_result",
+			attr.SlogEvent("claude_hook_block_finding_insert_failed"),
+			attr.SlogError(err),
+		)
 	}
-	if match == "" {
-		match = serverPrefix
-	}
+}
+
+func buildPendingShadowMCPBlockFinding(toolCallID string, policy *risk.ShadowMCPPolicy, matched *MCPServerEntry, serverPrefix string, detail string) pendingShadowMCPBlockFinding {
+	match := shadowMCPBlockFindingMatch(matched, serverPrefix)
 	description := detail
 	if matched != nil && matched.Name != "" {
 		description = fmt.Sprintf("%s (server: %s)", detail, matched.Name)
 	}
+	return pendingShadowMCPBlockFinding{
+		ToolCallID:        toolCallID,
+		PolicyID:          policy.ID,
+		RiskPolicyVersion: policy.Version,
+		Description:       description,
+		Match:             match,
+	}
+}
 
+func shadowMCPBlockFindingMatch(matched *MCPServerEntry, serverPrefix string) string {
+	if matched != nil {
+		switch {
+		case matched.URL != "":
+			return matched.URL
+		case matched.Command != "":
+			return matched.Command
+		}
+	}
+	return serverPrefix
+}
+
+func (s *Service) insertShadowMCPBlockFinding(
+	ctx context.Context,
+	metadata *SessionMetadata,
+	projectID uuid.UUID,
+	policyID uuid.UUID,
+	msgID uuid.UUID,
+	finding pendingShadowMCPBlockFinding,
+) error {
 	// Use UUIDv7 so the row sorts in insertion order alongside scanner
 	// findings: ListRiskResultsByProjectFound paginates with ORDER BY id
 	// DESC, which only behaves as "most recent first" when every inserted
@@ -1167,27 +1198,23 @@ func (s *Service) recordShadowMCPBlockFinding(
 	// table.
 	resultID, err := uuid.NewV7()
 	if err != nil {
-		s.logger.WarnContext(ctx, "shadow-mcp block: failed to generate uuidv7",
-			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
-		return
+		return fmt.Errorf("generate uuidv7: %w", err)
 	}
 	insertParams := repo.InsertShadowMCPBlockResultParams{
 		ID:                resultID,
 		ProjectID:         projectID,
 		OrganizationID:    metadata.GramOrgID,
 		RiskPolicyID:      policyID,
-		RiskPolicyVersion: policy.Version,
+		RiskPolicyVersion: finding.RiskPolicyVersion,
 		ChatMessageID:     msgID,
-		Description:       pgtype.Text{String: description, Valid: description != ""},
-		Match:             pgtype.Text{String: match, Valid: match != ""},
+		Description:       pgtype.Text{String: finding.Description, Valid: finding.Description != ""},
+		Match:             pgtype.Text{String: finding.Match, Valid: finding.Match != ""},
 		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
 	}
 	if err := s.repo.InsertShadowMCPBlockResult(ctx, insertParams); err != nil {
-		s.logger.WarnContext(ctx, "shadow-mcp block: failed to insert risk_result",
-			attr.SlogEvent("claude_hook_block_finding_insert_failed"),
-			attr.SlogError(err),
-		)
+		return fmt.Errorf("insert shadow-mcp block result: %w", err)
 	}
+	return nil
 }
 
 // writeClaudeBlockToClickHouse writes a companion ClickHouse log entry for a
