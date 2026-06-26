@@ -30,12 +30,11 @@ export type Measures = {
   tokens: number;
 };
 
-// The suggested top-down chain an admin walks. "Team" maps to WorkOS groups[]
-// (no dedicated team dimension yet); "User" is email; "Agent" is hook_source.
+// The suggested top-down chain an admin walks. "User" is email; "Agent" is
+// hook_source.
 const CHAIN: DimMeta[] = [
   { dim: Dimension.DivisionName, label: "Division" },
   { dim: Dimension.DepartmentName, label: "Department" },
-  { dim: Dimension.Group, label: "Team" },
   { dim: Dimension.Email, label: "User" },
   { dim: Dimension.HookSource, label: "Agent" },
 ];
@@ -73,7 +72,6 @@ export function isSessionLeaf(dim: Dimension): boolean {
 const SESSION_WIDGET_DIMS = new Set<Dimension>([
   Dimension.DivisionName,
   Dimension.DepartmentName,
-  Dimension.Group,
   Dimension.Email,
 ]);
 export function showsTopSessionsWidget(entity: Crumb | null): boolean {
@@ -147,7 +145,6 @@ const DIM_ATTRIBUTE_KEY: Partial<Record<Dimension, string>> = {
   [Dimension.EmployeeType]: "user.attributes.employee_type",
   [Dimension.CostCenterName]: "user.attributes.cost_center_name",
   [Dimension.Email]: "user.email",
-  [Dimension.Group]: "user.groups",
   [Dimension.Role]: "user.roles",
   [Dimension.Model]: "gen_ai.response.model",
   [Dimension.HookSource]: "gram.hook.source",
