@@ -34821,6 +34821,9 @@ components:
           type: string
           description: Creation timestamp.
           format: date-time
+        created_by_user_id:
+          type: string
+          description: The ID of the user who created the assistant, if known.
         id:
           type: string
           description: The assistant ID.

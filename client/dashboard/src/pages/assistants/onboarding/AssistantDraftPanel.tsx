@@ -1,3 +1,4 @@
+import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantSessionsList } from "@/components/assistants/sessions-list";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { EditInstructionsDialog } from "@/components/assistants/edit-instructions-dialog";
@@ -145,6 +146,12 @@ export function AssistantDraftPanel(): JSX.Element {
                 </Row>
                 <Row label="Model">
                   <code className="text-xs">{a.model}</code>
+                </Row>
+                <Row label="Owner">
+                  <AssistantOwner
+                    createdByUserId={a.createdByUserId}
+                    variant="row"
+                  />
                 </Row>
                 <Row label="Concurrency">
                   <Type small>{a.maxConcurrency}</Type>

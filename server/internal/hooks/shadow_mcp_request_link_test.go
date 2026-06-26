@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -20,6 +21,7 @@ func TestShadowMCPApprovalRequestURLUsesFragmentToken(t *testing.T) {
 		logger:    testenv.NewLogger(t),
 		siteURL:   siteURL,
 		jwtSecret: "test-jwt-secret",
+		cache:     cache.NoopCache,
 	}
 
 	requestURL, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
@@ -48,8 +50,8 @@ func TestShadowMCPApprovalRequestURLUsesFragmentToken(t *testing.T) {
 	fragment, err := url.ParseQuery(parsed.Fragment)
 	require.NoError(t, err)
 	require.NotContains(t, requestURL, "?request_token=")
-	require.Contains(t, fragment.Get("request_token"), "rpbr1.")
-	require.Less(t, len(requestURL), 1200, "approval link should not embed full tool input")
+	require.Contains(t, fragment.Get("request_token"), "rpbr2.")
+	require.Less(t, len(requestURL), 120, "approval link should be a short cache-backed id, not embedded state")
 }
 
 func TestShadowMCPApprovalRequestURLRequiresEvidence(t *testing.T) {
@@ -61,6 +63,7 @@ func TestShadowMCPApprovalRequestURLRequiresEvidence(t *testing.T) {
 		logger:    testenv.NewLogger(t),
 		siteURL:   siteURL,
 		jwtSecret: "test-jwt-secret",
+		cache:     cache.NoopCache,
 	}
 
 	_, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
@@ -83,6 +86,7 @@ func TestShadowMCPApprovalRequestURLAllowsServerIdentityEvidence(t *testing.T) {
 		logger:    testenv.NewLogger(t),
 		siteURL:   siteURL,
 		jwtSecret: "test-jwt-secret",
+		cache:     cache.NoopCache,
 	}
 
 	requestURL, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
@@ -99,7 +103,7 @@ func TestShadowMCPApprovalRequestURLAllowsServerIdentityEvidence(t *testing.T) {
 		RiskPolicyID: "00000000-0000-0000-0000-000000000002",
 	})
 	require.True(t, ok)
-	require.Contains(t, requestURL, "/risk-policy-bypass/request#request_token=rpbr1.")
+	require.Contains(t, requestURL, "/risk-policy-bypass/request#request_token=rpbr2.")
 }
 
 func TestObservedShadowMCPName_HumanizesServerIdentity(t *testing.T) {
