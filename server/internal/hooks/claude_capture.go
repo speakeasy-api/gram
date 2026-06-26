@@ -126,14 +126,14 @@ func (s *Service) persistClaudeMessages(ctx context.Context, payload *gen.Claude
 	// instant the hook returns, which would otherwise cancel the in-flight writes.
 	ctx = context.WithoutCancel(ctx)
 
-	var mergedSubagents []gen.ClaudeMessagesPayload
 	if !isSubagentClaudeMessagesPayload(payload) {
 		merged, subagents, err := s.mergePendingSubagentClaudeMessages(ctx, sessionID, payload)
 		if err != nil {
 			return err
 		}
-		payload = merged
-		mergedSubagents = subagents
+		if len(subagents) > 0 {
+			*payload = *merged
+		}
 	}
 
 	chatID := sessionIDToUUID(sessionID)
@@ -222,7 +222,6 @@ func (s *Service) persistClaudeMessages(ctx context.Context, payload *gen.Claude
 
 	stored, err := s.writer.WriteExternal(ctx, projectID, params)
 	if err != nil {
-		s.restorePendingSubagentClaudeMessages(ctx, sessionID, mergedSubagents, logger)
 		return fmt.Errorf("write captured claude messages: %w", err)
 	}
 
@@ -295,14 +294,6 @@ func (s *Service) mergePendingSubagentClaudeMessages(ctx context.Context, sessio
 		}
 	})
 	return &merged, subagentPayloads, nil
-}
-
-func (s *Service) restorePendingSubagentClaudeMessages(ctx context.Context, sessionID string, payloads []gen.ClaudeMessagesPayload, logger *slog.Logger) {
-	for i := range payloads {
-		if err := s.bufferSubagentClaudeMessages(ctx, sessionID, &payloads[i]); err != nil {
-			logger.ErrorContext(ctx, "Failed to restore pending claude subagent message capture", attr.SlogError(err))
-		}
-	}
 }
 
 func claudeCapturedMessageTimestamp(msg *gen.ClaudeCapturedMessage) (time.Time, bool) {
