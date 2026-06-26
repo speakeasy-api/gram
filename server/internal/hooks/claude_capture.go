@@ -117,6 +117,7 @@ func (s *Service) persistClaudeMessages(ctx context.Context, payload *gen.Claude
 
 	params := make([]chatRepo.CreateExternalChatMessageParams, 0, len(payload.Messages))
 	hasAssistant := false
+	hasUser := false
 	for _, msg := range payload.Messages {
 		if msg == nil || strings.TrimSpace(msg.ExternalID) == "" {
 			continue
@@ -148,6 +149,9 @@ func (s *Service) persistClaudeMessages(ctx context.Context, payload *gen.Claude
 
 		if msg.Role == "assistant" {
 			hasAssistant = true
+		}
+		if msg.Role == "user" {
+			hasUser = true
 		}
 
 		params = append(params, chatRepo.CreateExternalChatMessageParams{
@@ -201,6 +205,9 @@ func (s *Service) persistClaudeMessages(ctx context.Context, payload *gen.Claude
 		if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(ctx, chatID.String(), metadata.GramOrgID, metadata.ProjectID); err != nil {
 			logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
 		}
+	}
+	if hasUser && stored > 0 {
+		s.scheduleClaudePromptCorrelation(ctx, projectID, chatID, sessionID)
 	}
 
 	return nil
