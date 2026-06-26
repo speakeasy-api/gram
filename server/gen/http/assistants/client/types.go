@@ -82,6 +82,8 @@ type GetAssistantResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID owning the assistant.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -109,6 +111,8 @@ type CreateAssistantResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID owning the assistant.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -136,6 +140,8 @@ type UpdateAssistantResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID owning the assistant.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -175,6 +181,8 @@ type GetManagedAssistantResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID owning the assistant.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -202,6 +210,8 @@ type EnsureManagedAssistantResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID owning the assistant.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -1714,6 +1724,8 @@ type AssistantResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID owning the assistant.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -1985,16 +1997,17 @@ func NewListAssistantsGatewayError(body *ListAssistantsGatewayErrorResponseBody)
 // endpoint result from a HTTP "OK" response.
 func NewGetAssistantAssistantOK(body *GetAssistantResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:             *body.ID,
-		ProjectID:      *body.ProjectID,
-		Name:           *body.Name,
-		Model:          *body.Model,
-		Instructions:   *body.Instructions,
-		WarmTTLSeconds: *body.WarmTTLSeconds,
-		MaxConcurrency: *body.MaxConcurrency,
-		Status:         *body.Status,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		CreatedByUserID: body.CreatedByUserID,
+		Name:            *body.Name,
+		Model:           *body.Model,
+		Instructions:    *body.Instructions,
+		WarmTTLSeconds:  *body.WarmTTLSeconds,
+		MaxConcurrency:  *body.MaxConcurrency,
+		Status:          *body.Status,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -2162,16 +2175,17 @@ func NewGetAssistantGatewayError(body *GetAssistantGatewayErrorResponseBody) *go
 // "createAssistant" endpoint result from a HTTP "OK" response.
 func NewCreateAssistantAssistantOK(body *CreateAssistantResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:             *body.ID,
-		ProjectID:      *body.ProjectID,
-		Name:           *body.Name,
-		Model:          *body.Model,
-		Instructions:   *body.Instructions,
-		WarmTTLSeconds: *body.WarmTTLSeconds,
-		MaxConcurrency: *body.MaxConcurrency,
-		Status:         *body.Status,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		CreatedByUserID: body.CreatedByUserID,
+		Name:            *body.Name,
+		Model:           *body.Model,
+		Instructions:    *body.Instructions,
+		WarmTTLSeconds:  *body.WarmTTLSeconds,
+		MaxConcurrency:  *body.MaxConcurrency,
+		Status:          *body.Status,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -2339,16 +2353,17 @@ func NewCreateAssistantGatewayError(body *CreateAssistantGatewayErrorResponseBod
 // "updateAssistant" endpoint result from a HTTP "OK" response.
 func NewUpdateAssistantAssistantOK(body *UpdateAssistantResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:             *body.ID,
-		ProjectID:      *body.ProjectID,
-		Name:           *body.Name,
-		Model:          *body.Model,
-		Instructions:   *body.Instructions,
-		WarmTTLSeconds: *body.WarmTTLSeconds,
-		MaxConcurrency: *body.MaxConcurrency,
-		Status:         *body.Status,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		CreatedByUserID: body.CreatedByUserID,
+		Name:            *body.Name,
+		Model:           *body.Model,
+		Instructions:    *body.Instructions,
+		WarmTTLSeconds:  *body.WarmTTLSeconds,
+		MaxConcurrency:  *body.MaxConcurrency,
+		Status:          *body.Status,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -2828,16 +2843,17 @@ func NewSendMessageGatewayError(body *SendMessageGatewayErrorResponseBody) *goa.
 // "getManagedAssistant" endpoint result from a HTTP "OK" response.
 func NewGetManagedAssistantAssistantOK(body *GetManagedAssistantResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:             *body.ID,
-		ProjectID:      *body.ProjectID,
-		Name:           *body.Name,
-		Model:          *body.Model,
-		Instructions:   *body.Instructions,
-		WarmTTLSeconds: *body.WarmTTLSeconds,
-		MaxConcurrency: *body.MaxConcurrency,
-		Status:         *body.Status,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		CreatedByUserID: body.CreatedByUserID,
+		Name:            *body.Name,
+		Model:           *body.Model,
+		Instructions:    *body.Instructions,
+		WarmTTLSeconds:  *body.WarmTTLSeconds,
+		MaxConcurrency:  *body.MaxConcurrency,
+		Status:          *body.Status,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -3005,16 +3021,17 @@ func NewGetManagedAssistantGatewayError(body *GetManagedAssistantGatewayErrorRes
 // "ensureManagedAssistant" endpoint result from a HTTP "OK" response.
 func NewEnsureManagedAssistantAssistantOK(body *EnsureManagedAssistantResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:             *body.ID,
-		ProjectID:      *body.ProjectID,
-		Name:           *body.Name,
-		Model:          *body.Model,
-		Instructions:   *body.Instructions,
-		WarmTTLSeconds: *body.WarmTTLSeconds,
-		MaxConcurrency: *body.MaxConcurrency,
-		Status:         *body.Status,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		CreatedByUserID: body.CreatedByUserID,
+		Name:            *body.Name,
+		Model:           *body.Model,
+		Instructions:    *body.Instructions,
+		WarmTTLSeconds:  *body.WarmTTLSeconds,
+		MaxConcurrency:  *body.MaxConcurrency,
+		Status:          *body.Status,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {

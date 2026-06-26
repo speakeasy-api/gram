@@ -3,6 +3,7 @@ import { Page } from "@/components/page-layout";
 import { getGradientColors } from "@/components/gradient-colors";
 import { RequireScope } from "@/components/require-scope";
 import { AssistantActivitySparkline } from "@/components/assistants/activity-sparkline";
+import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Badge } from "@/components/ui/badge";
@@ -393,6 +394,10 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
               </Type>
             </div>
             <AssistantToolsets assistant={assistant} />
+            <AssistantOwner
+              createdByUserId={assistant.createdByUserId}
+              variant="card"
+            />
           </div>
 
           {/* Footer row: status toggle + activity sparkline + last updated */}

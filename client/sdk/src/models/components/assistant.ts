@@ -31,6 +31,10 @@ export type Assistant = {
    */
   createdAt: Date;
   /**
+   * The ID of the user who created the assistant, if known.
+   */
+  createdByUserId?: string | undefined;
+  /**
    * The assistant ID.
    */
   id: string;
@@ -85,6 +89,7 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      created_by_user_id: z.optional(z.string()),
       id: z.string(),
       instructions: z.string(),
       max_concurrency: z.int(),
@@ -102,6 +107,7 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
     z.transform((v) => {
       return remap$(v, {
         "created_at": "createdAt",
+        "created_by_user_id": "createdByUserId",
         "max_concurrency": "maxConcurrency",
         "project_id": "projectId",
         "updated_at": "updatedAt",

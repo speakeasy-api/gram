@@ -1741,16 +1741,17 @@ func EncodeEnsureManagedAssistantError(encoder func(context.Context, http.Respon
 // *AssistantResponseBody from a value of type *types.Assistant.
 func marshalTypesAssistantToAssistantResponseBody(v *types.Assistant) *AssistantResponseBody {
 	res := &AssistantResponseBody{
-		ID:             v.ID,
-		ProjectID:      v.ProjectID,
-		Name:           v.Name,
-		Model:          v.Model,
-		Instructions:   v.Instructions,
-		WarmTTLSeconds: v.WarmTTLSeconds,
-		MaxConcurrency: v.MaxConcurrency,
-		Status:         v.Status,
-		CreatedAt:      v.CreatedAt,
-		UpdatedAt:      v.UpdatedAt,
+		ID:              v.ID,
+		ProjectID:       v.ProjectID,
+		CreatedByUserID: v.CreatedByUserID,
+		Name:            v.Name,
+		Model:           v.Model,
+		Instructions:    v.Instructions,
+		WarmTTLSeconds:  v.WarmTTLSeconds,
+		MaxConcurrency:  v.MaxConcurrency,
+		Status:          v.Status,
+		CreatedAt:       v.CreatedAt,
+		UpdatedAt:       v.UpdatedAt,
 	}
 	if v.Toolsets != nil {
 		res.Toolsets = make([]*AssistantToolsetRefResponseBody, len(v.Toolsets))
