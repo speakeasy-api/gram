@@ -5,7 +5,6 @@ import type {
 import type { MultiSelectGroup } from "@/components/ui/multi-select";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import type {
-  ToolsetEntry,
   ToolUsageHostedServerFilterOption,
   ToolUsageShadowServerFilterOption,
 } from "@gram/client/models/components";
@@ -90,13 +89,11 @@ export function toTargetTypes(
 }
 
 export function buildServerOptionGroups({
-  hostedToolsets,
   hostedServers,
   shadowServers,
   activeFilters,
   serverNameMappings,
 }: {
-  hostedToolsets: ToolsetEntry[];
   hostedServers: ToolUsageHostedServerFilterOption[];
   shadowServers: ToolUsageShadowServerFilterOption[];
   activeFilters: FilterChip[];
@@ -104,15 +101,11 @@ export function buildServerOptionGroups({
 }): MultiSelectGroup[] {
   const hosted = new Map<string, { label: string; count: number }>();
   const shadow = new Map<string, { label: string; count: number }>();
-  const hostedCounts = new Map(
-    hostedServers.map((server) => [server.toolsetSlug, server.eventCount]),
-  );
 
-  for (const toolset of hostedToolsets) {
-    if (!toolset.mcpEnabled) continue;
-    hosted.set(encodeHostedServerFilter(toolset.slug), {
-      label: toolset.name || toolset.slug,
-      count: hostedCounts.get(toolset.slug) ?? 0,
+  for (const server of hostedServers) {
+    hosted.set(encodeHostedServerFilter(server.toolsetSlug), {
+      label: server.toolsetName || server.toolsetSlug,
+      count: server.eventCount,
     });
   }
 

@@ -4861,6 +4861,8 @@ type ToolUsageTraceLogGroupResponseBody struct {
 type ToolUsageHostedServerFilterOptionResponseBody struct {
 	// Hosted MCP toolset slug
 	ToolsetSlug string `form:"toolset_slug" json:"toolset_slug" xml:"toolset_slug"`
+	// Hosted MCP toolset display name
+	ToolsetName string `form:"toolset_name" json:"toolset_name" xml:"toolset_name"`
 	// Number of tool usage events observed for the hosted MCP server
 	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
 }

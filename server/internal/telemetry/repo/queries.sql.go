@@ -1965,6 +1965,7 @@ type ToolUsageUserFilter struct {
 // HostedMCPMatcher maps hook-observed hosted MCP identifiers to a hosted toolset.
 type HostedMCPMatcher struct {
 	ToolsetSlug string
+	ToolsetName string
 	McpSlug     string
 }
 
