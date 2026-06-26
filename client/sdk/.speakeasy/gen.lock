@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: b97bd891de46611c296911e79a780569
+  docChecksum: 8dc92baaa366115939393d9e59962d1e
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -87,7 +87,7 @@ trackedFiles:
   docs/models/components/asset.md:
     last_write_checksum: sha1:3da48f7c0a6c8e83a69059b082816228dd56dc70
   docs/models/components/assistant.md:
-    last_write_checksum: sha1:9e8c1acaf5c7760be77b4d3c54df40c2ec004cce
+    last_write_checksum: sha1:1a21431e7a6a73f15c6040f1399c32c3ede53109
   docs/models/components/assistantmemory.md:
     last_write_checksum: sha1:31592db2d3510f660efc60f7a41c8501d487aed7
   docs/models/components/assistantstatus.md:
@@ -4331,7 +4331,7 @@ trackedFiles:
   src/models/components/asset.ts:
     last_write_checksum: sha1:8acb541aa089a73038818ff795e737d854dd4060
   src/models/components/assistant.ts:
-    last_write_checksum: sha1:bc418e769e7b5a753c75eed6c40326a97b3daf49
+    last_write_checksum: sha1:a7506843e52ccc968d10897e2496b31e11bae102
   src/models/components/assistantmemory.ts:
     last_write_checksum: sha1:6ac1b0cd71f9ca9cec1ea28146dd81b46d5d14a2
   src/models/components/assistanttoolsetref.ts:
