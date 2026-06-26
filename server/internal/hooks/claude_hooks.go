@@ -816,8 +816,36 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			// Surface the block reason on the trace summary so the dashboard
 			// shows why the call was denied. Always store the technical reason
 			// — the user_message override is for the agent-facing response only.
-			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+			metadata, metaErr := s.getSessionMetadata(ctx, *payload.SessionID)
+			if metaErr == nil {
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+			}
+			if blockID, err := uuid.NewV7(); err == nil {
+				userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+				// Prefer the email from the session metadata fetched above,
+				// falling back to the raw payload when it wasn't cached.
+				userEmail := conv.PtrValOr(payload.UserEmail, "")
+				if metaErr == nil && strings.TrimSpace(metadata.UserEmail) != "" {
+					userEmail = metadata.UserEmail
+				}
+				asyncCtx := context.WithoutCancel(ctx)
+				// Resolve the owning user inside the goroutine so the DB lookup
+				// stays off the deny hot path (a plain `go s.insert(...)` would
+				// evaluate the resolveUserByEmail argument synchronously).
+				go func() {
+					s.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
+						Provider:       "claude",
+						OrganizationID: ev.Context.OrganizationID,
+						ProjectID:      ev.Context.ProjectID,
+						Reason:         auditReason,
+						ToolName:       ev.ToolName,
+						UserID:         s.resolveUserByEmail(asyncCtx, userEmail, ev.Context.OrganizationID),
+						RiskPolicyID:   conv.StringToNullUUID(scanResult.PolicyID),
+						RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+						ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
+						ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					})
+				}()
 			}
 			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}
@@ -1041,8 +1069,41 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	// Surface the block in the Recent Findings table (risk_results)
 	// alongside batch-scanner findings, with the URL in the match
 	// column so the dashboard can filter and offer "Exclude from
-	// policy" actions against the URL itself.
-	s.recordShadowMCPBlockFinding(ctx, payload, &metadata, policy, matched, serverPrefix, detail)
+	// policy" actions against the URL itself. The persisted row also
+	// backs the durable block page: when it is written we append a
+	// signed link to that page so the agent (and user) can open the
+	// block, read the reason, and leave feedback.
+	// Pre-mint the durable block id so its URL goes in the deny response
+	// immediately, then persist the Recent Findings row and the block row off
+	// the hot path. The page becomes valid within moments — well before a human
+	// opens the link.
+	// Only mint the durable block URL when the project id parses: an invalid id
+	// would make insertToolCallBlock (and recordShadowMCPBlockFinding) skip the
+	// write, leaving the appended /blocks/<id> link pointing at a page with no
+	// backing row.
+	if projectUUID, parseErr := uuid.Parse(metadata.ProjectID); parseErr != nil {
+		s.logger.WarnContext(ctx, "tool call block: invalid project id; skipping durable block link",
+			attr.SlogEvent("claude_hook_block_invalid_project"), attr.SlogError(parseErr))
+	} else if blockID, err := uuid.NewV7(); err == nil {
+		userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+		asyncCtx := context.WithoutCancel(ctx)
+		metaCopy := metadata
+		go func() {
+			resultID, msgID, _ := s.recordShadowMCPBlockFinding(asyncCtx, payload, &metaCopy, policy, matched, serverPrefix, detail)
+			s.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
+				Provider:       "claude",
+				OrganizationID: metaCopy.GramOrgID,
+				ProjectID:      projectUUID,
+				Reason:         auditReason,
+				ToolName:       mcpToolName,
+				UserID:         metaCopy.UserID,
+				RiskPolicyID:   conv.StringToNullUUID(policy.ID),
+				RiskResultID:   conv.NilableToNullUUID(resultID),
+				ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
+				ChatMessageID:  conv.NilableToNullUUID(msgID),
+			})
+		}()
+	}
 
 	return constructBlockResponse(payload.HookEventName, userReason), nil
 }
@@ -1078,22 +1139,22 @@ func (s *Service) recordShadowMCPBlockFinding(
 	matched *MCPServerEntry,
 	serverPrefix string,
 	detail string,
-) {
+) (uuid.UUID, uuid.UUID, bool) {
 	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) {
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: invalid project id",
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 	policyID, err := uuid.Parse(policy.ID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: invalid policy id",
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 
 	chatID := sessionIDToUUID(*payload.SessionID)
@@ -1111,7 +1172,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 			attr.SlogEvent("claude_hook_block_finding_no_message"),
 			attr.SlogError(err),
 		)
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 
 	// match identifies the server in the dashboard's Recent Findings row and
@@ -1148,7 +1209,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 	if err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: failed to generate uuidv7",
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
-		return
+		return uuid.Nil, uuid.Nil, false
 	}
 	insertParams := repo.InsertShadowMCPBlockResultParams{
 		ID:                resultID,
@@ -1166,7 +1227,9 @@ func (s *Service) recordShadowMCPBlockFinding(
 			attr.SlogEvent("claude_hook_block_finding_insert_failed"),
 			attr.SlogError(err),
 		)
+		return uuid.Nil, uuid.Nil, false
 	}
+	return resultID, msgID, true
 }
 
 // writeClaudeBlockToClickHouse writes a companion ClickHouse log entry for a

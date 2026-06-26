@@ -1,5 +1,6 @@
-import { Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { type ReactElement, type ReactNode, useMemo } from "react";
+import { Link } from "react-router";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import type { RiskResult } from "@gram/client/models/components";
 import {
@@ -218,6 +219,22 @@ export function RiskBadge({
                   <p className="text-muted-foreground mt-1 text-xs">
                     {r.description}
                   </p>
+                )}
+                {/* When a durable tool call block was recorded for this
+                 * finding's message (any agent — Claude, Cursor, Codex), link
+                 * to its block page where the viewer can read the full reason
+                 * and leave 👍/👎 feedback. */}
+                {r.blockId && (
+                  <Link
+                    to={`/blocks/${r.blockId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-primary mt-1.5 inline-flex items-center gap-1 text-xs hover:underline"
+                  >
+                    <ArrowRight className="size-3" />
+                    More Info
+                  </Link>
                 )}
                 {spans.length > 0 && (
                   <div className="mt-1 flex flex-col gap-1">

@@ -24325,6 +24325,98 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskDenyPolicyBypassRequest
                 type: mutation
+    /rpc/risk.getBlock:
+        get:
+            description: Get a tool call block by its risk result ID for the durable block page.
+            operationId: getRiskBlock
+            parameters:
+                - allowEmptyValue: true
+                  description: The block ID (the underlying risk result ID).
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The block ID (the underlying risk result ID).
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskBlock'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getRiskBlock risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.blocks
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: RiskGetBlock
+                type: query
     /rpc/risk.listExclusions:
         get:
             description: List risk exclusions for the current project. Optionally filter to a single policy.
@@ -26313,6 +26405,95 @@ paths:
             x-speakeasy-name-override: test
             x-speakeasy-react-hook:
                 name: RiskTestDetectionRule
+                type: mutation
+    /rpc/risk.submitBlockFeedback:
+        put:
+            description: Record thumbs-up/thumbs-down feedback for a tool call block from the block page.
+            operationId: submitRiskBlockFeedback
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SubmitRiskBlockFeedbackRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskBlock'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: submitRiskBlockFeedback risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.blocks
+            x-speakeasy-name-override: submitFeedback
+            x-speakeasy-react-hook:
+                name: RiskSubmitBlockFeedback
                 type: mutation
     /rpc/risk.updateExclusions:
         put:
@@ -44259,6 +44440,42 @@ components:
             description: Result type for revoking all of a client's remote_sessions.
             required:
                 - revoked_count
+        RiskBlock:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the block occurred.
+                    format: date-time
+                feedback:
+                    type: string
+                    description: Existing feedback sentiment recorded for this block, when any.
+                    enum:
+                        - up
+                        - down
+                id:
+                    type: string
+                    description: The block ID (the underlying risk result ID).
+                    format: uuid
+                policy_name:
+                    type: string
+                    description: Name of the risk policy that blocked the call.
+                project_id:
+                    type: string
+                    description: The project the block belongs to.
+                    format: uuid
+                reason:
+                    type: string
+                    description: Human-readable reason the tool call was blocked.
+                tool_name:
+                    type: string
+                    description: Name of the tool that was blocked, when known.
+            required:
+                - id
+                - project_id
+                - reason
+                - policy_name
+                - created_at
         RiskCategoriesResult:
             type: object
             properties:
@@ -44816,6 +45033,10 @@ components:
         RiskResult:
             type: object
             properties:
+                block_id:
+                    type: string
+                    description: ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.
+                    format: uuid
                 chat_id:
                     type: string
                     description: The chat session containing the message.
@@ -46573,6 +46794,22 @@ components:
             required:
                 - id
                 - feedback
+        SubmitRiskBlockFeedbackRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The block ID (the underlying risk result ID).
+                    format: uuid
+                sentiment:
+                    type: string
+                    description: Feedback sentiment.
+                    enum:
+                        - up
+                        - down
+            required:
+                - id
+                - sentiment
         SuggestCustomDetectionRuleRequestBody:
             type: object
             properties:

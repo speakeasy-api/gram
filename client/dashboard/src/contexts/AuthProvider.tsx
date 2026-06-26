@@ -50,12 +50,14 @@ const UNAUTHENTICATED_PATHS = [
   "/book-demo",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
+  "/blocks",
 ];
 
 const SLUG_EXEMPT_PATHS = [
   "/switch-org",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
+  "/blocks",
 ];
 
 export const AuthProvider = ({
