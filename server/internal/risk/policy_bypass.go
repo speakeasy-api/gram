@@ -3,6 +3,7 @@ package risk
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -85,6 +86,12 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 
 	claims, err := parsePolicyBypassRequestToken(ctx, s.cache, s.jwtSecret, payload.RequestToken)
 	if err != nil {
+		// A failure to reach the cache backing the link is an infrastructure
+		// problem, not a bad token: surface it as a server error and log it
+		// rather than telling the user their link is invalid.
+		if errors.Is(err, errPolicyBypassRequestStoreUnavailable) {
+			return nil, oops.E(oops.CodeUnexpected, err, "load risk policy bypass request").LogError(ctx, s.logger)
+		}
 		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass request token")
 	}
 	if claims.OrganizationID != authCtx.ActiveOrganizationID {

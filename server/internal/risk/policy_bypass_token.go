@@ -8,18 +8,27 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
 	"strings"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
+
+// errPolicyBypassRequestStoreUnavailable marks a failure to reach the cache
+// backing rpbr2 links (connection drop, timeout, etc.) as distinct from a
+// genuine cache miss. A miss means the link is expired or never existed (a
+// client error); an unavailable store is an operational failure the caller
+// must surface as a server error and log, not collapse into "invalid token".
+var errPolicyBypassRequestStoreUnavailable = errors.New("risk policy bypass request store unavailable")
 
 const (
 	policyBypassRequestTokenIssuer  = "gram"
@@ -194,7 +203,13 @@ func lookupPolicyBypassRequestClaims(ctx context.Context, c cache.Cache, tokenSt
 	}
 	var record policyBypassRequestRecord
 	if err := c.Get(ctx, policyBypassRequestCacheKey(id), &record); err != nil {
-		return nil, fmt.Errorf("risk policy bypass request not found or expired: %w", err)
+		// A miss means the link expired or never existed — a client-side
+		// invalid token. Any other error is the cache being unreachable, which
+		// must not masquerade as an invalid token.
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			return nil, fmt.Errorf("risk policy bypass request not found or expired: %w", err)
+		}
+		return nil, fmt.Errorf("%w: %w", errPolicyBypassRequestStoreUnavailable, err)
 	}
 	claims := &policyBypassRequestClaims{
 		OrganizationID:         record.OrganizationID,
