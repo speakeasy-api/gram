@@ -9330,8 +9330,8 @@ func ValidateGetToolUsageSummaryRequestBody(body *GetToolUsageSummaryRequestBody
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.TargetTypes {
-		if !(e == "hosted_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		if !(e == "hosted_mcp_server" || e == "tunnelled_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunnelled_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
 	for _, e := range body.UserFilters {
@@ -9360,8 +9360,8 @@ func ValidateListToolUsageTracesRequestBody(body *ListToolUsageTracesRequestBody
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.TargetTypes {
-		if !(e == "hosted_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		if !(e == "hosted_mcp_server" || e == "tunnelled_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunnelled_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
 		}
 	}
 	for _, e := range body.UserFilters {

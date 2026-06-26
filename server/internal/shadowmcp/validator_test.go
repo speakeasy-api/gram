@@ -269,6 +269,44 @@ func TestValidateRemoteMCPServerCall_ServerInOtherProject(t *testing.T) {
 	assert.Contains(t, detail, "not found in this project")
 }
 
+func TestValidateRemoteMCPServerCall_TunnelledServerSuccess(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	// Tunnel-backed MCP servers reuse the shadow-MCP interceptor stack
+	// with their tunnelled_mcp_servers id, which has no remote_mcp_servers
+	// row. The echoed tunnel id must validate against the tunnelled source
+	// table rather than being rejected as "not found".
+	serverID := f.createTunnelledMCPServer(t, "tnl-"+uuid.NewString()[:8])
+
+	detail, denied := f.client.ValidateRemoteMCPServerCall(
+		t.Context(),
+		map[string]any{shadowmcp.XGramToolsetIDField: serverID.String()},
+		"arbitrary-tool-name",
+		f.projectID.String(),
+	)
+	require.False(t, denied, detail)
+	require.Empty(t, detail)
+}
+
+func TestValidateRemoteMCPServerCall_TunnelledServerInOtherProject(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	serverID := f.createTunnelledMCPServer(t, "tnl-"+uuid.NewString()[:8])
+
+	// The tunnelled lookup is project-scoped too, so a cross-project echo
+	// of a real tunnel id is still rejected.
+	detail, denied := f.client.ValidateRemoteMCPServerCall(
+		t.Context(),
+		map[string]any{shadowmcp.XGramToolsetIDField: serverID.String()},
+		"tool",
+		uuid.New().String(),
+	)
+	assert.True(t, denied)
+	assert.Contains(t, detail, "not found in this project")
+}
+
 func TestValidateRemoteMCPServerCall_EmptyToolName(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

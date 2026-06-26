@@ -108,6 +108,15 @@ GRAM_HOST = "localhost" # Only needed for local development. In production, you 
 GRAM_SITE_PORT = "5173"
 GRAM_SITE_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SITE_PORT}}"
 GRAM_SERVER_URL = "https://{{env.GRAM_HOST}}:{{env.GRAM_SERVER_PORT}}"
+## Local-only single-origin proxy. `./zero` can set GRAM_SERVER_URL and
+## GRAM_SITE_URL to GRAM_LOCAL_PROXY_URL while these backend URLs keep the proxy
+## talking to the actual server/dashboard dev ports.
+GRAM_LOCAL_PROXY_HOST = "gram.local"
+GRAM_LOCAL_PROXY_BIND_ADDRESS = "127.0.0.1"
+GRAM_LOCAL_PROXY_PORT = "8443"
+GRAM_LOCAL_PROXY_URL = "https://{{env.GRAM_LOCAL_PROXY_HOST}}:{{env.GRAM_LOCAL_PROXY_PORT}}"
+GRAM_SERVER_BACKEND_URL = "https://localhost:{{env.GRAM_SERVER_PORT}}"
+GRAM_SITE_BACKEND_URL = "https://localhost:{{env.GRAM_SITE_PORT}}"
 GRAM_ASSETS_BACKEND = "fs"
 GRAM_ASSETS_URI = ".assets"
 ## The following variable is used to encrypt env vars stored in the database.

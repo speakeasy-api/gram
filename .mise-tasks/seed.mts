@@ -12,6 +12,7 @@ import { intro, log, outro } from "@clack/prompts";
 import { GramCore } from "@gram/client/core.js";
 import { assetsUploadFunctions } from "@gram/client/funcs/assetsUploadFunctions.js";
 import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
+import { accessEnableRBAC } from "@gram/client/funcs/accessEnableRBAC.js";
 import { authInfo } from "@gram/client/funcs/authInfo.js";
 import { deploymentsEvolveDeployment } from "@gram/client/funcs/deploymentsEvolveDeployment.js";
 import { deploymentsGetById } from "@gram/client/funcs/deploymentsGetById.js";
@@ -23,6 +24,7 @@ import { mcpEndpointsCreate } from "@gram/client/funcs/mcpEndpointsCreate.js";
 import { mcpEndpointsList } from "@gram/client/funcs/mcpEndpointsList.js";
 import { mcpServersCreate } from "@gram/client/funcs/mcpServersCreate.js";
 import { mcpServersList } from "@gram/client/funcs/mcpServersList.js";
+import { mcpServersUpdate } from "@gram/client/funcs/mcpServersUpdate.js";
 import { projectsCreate } from "@gram/client/funcs/projectsCreate.js";
 import { projectsRead } from "@gram/client/funcs/projectsRead.js";
 import { resourcesList } from "@gram/client/funcs/resourcesList.js";
@@ -31,6 +33,8 @@ import { tunnelledMcpListServers } from "@gram/client/funcs/tunnelledMcpListServ
 import { toolsList } from "@gram/client/funcs/toolsList.js";
 import { toolsetsCreate } from "@gram/client/funcs/toolsetsCreate.js";
 import { toolsetsUpdateBySlug } from "@gram/client/funcs/toolsetsUpdateBySlug.js";
+import { userSessionIssuersCreate } from "@gram/client/funcs/userSessionIssuersCreate.js";
+import { userSessionIssuersList } from "@gram/client/funcs/userSessionIssuersList.js";
 import { environmentsCreate } from "@gram/client/funcs/environmentsCreate.js";
 import { environmentsList } from "@gram/client/funcs/environmentsList.js";
 import { ServiceError } from "@gram/client/models/errors";
@@ -53,8 +57,6 @@ type Asset = {
 const PLAYGROUND_MCP_APP_SLUG = "playground-mcp-app";
 const PLAYGROUND_MCP_APP_TOOL_NAME = "show_dashboard";
 const PLAYGROUND_MCP_APP_RESOURCE_URI = `ui://${PLAYGROUND_MCP_APP_SLUG}/dashboard`;
-const DEFAULT_LOCAL_TUNNEL_KEY =
-  "gram_tunnel_localpostgresmcpseedkey000000000000000000000000000000";
 
 const SEED_PROJECTS: {
   name: string;
@@ -171,6 +173,11 @@ async function seed() {
   if (!activeOrgID) {
     abort("Active organization ID not found", sessionJSON);
   }
+  const activeUserID = sessionInfo.result.userId;
+  if (!activeUserID) {
+    abort("Active user ID not found", sessionJSON);
+  }
+  await seedCurrentUserSuperAdmin(activeUserID);
 
   const orgs = sessionInfo.result.organizations;
   const org = orgs.find(
@@ -380,7 +387,131 @@ async function seed() {
     );
   }
 
+  const enableRBACRes = await accessEnableRBAC(gram, undefined, {
+    sessionHeaderGramSession: sessionId,
+  });
+  if (!enableRBACRes.ok) {
+    abort("Failed to enable RBAC and seed system roles", enableRBACRes.error);
+  }
+  log.info("Enabled RBAC and seeded system roles");
+
+  await seedCurrentUserAdminRole({
+    organizationId: activeOrgID,
+    userId: activeUserID,
+  });
+
   success = true;
+}
+
+async function seedCurrentUserAdminRole(init: {
+  organizationId: string;
+  userId: string;
+}): Promise<void> {
+  const { organizationId, userId } = init;
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const sql = `
+WITH admin_role AS (
+  SELECT id
+  FROM global_roles
+  WHERE workos_slug = 'admin'
+    AND deleted IS FALSE
+    AND workos_deleted IS FALSE
+  LIMIT 1
+),
+active_user AS (
+  SELECT users.id AS user_id, users.workos_id, our.workos_membership_id
+  FROM users
+  JOIN organization_user_relationships AS our
+    ON our.user_id = users.id
+  WHERE users.id = :'user_id'
+    AND our.organization_id = :'organization_id'
+    AND users.workos_id IS NOT NULL
+    AND our.deleted IS FALSE
+  LIMIT 1
+),
+upserted AS (
+  INSERT INTO organization_role_assignments (
+    organization_id,
+    workos_user_id,
+    user_id,
+    role_urn,
+    workos_membership_id,
+    workos_updated_at,
+    workos_last_event_id
+  )
+  SELECT
+    :'organization_id',
+    active_user.workos_id,
+    active_user.user_id,
+    'role:global:' || admin_role.id::text,
+    active_user.workos_membership_id,
+    clock_timestamp(),
+    NULL
+  FROM active_user
+  CROSS JOIN admin_role
+  ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL
+  DO UPDATE SET
+    user_id = EXCLUDED.user_id,
+    workos_membership_id = EXCLUDED.workos_membership_id,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = NULL,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+  RETURNING id
+)
+SELECT COUNT(*) FROM upserted;
+`;
+  const result = await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v organization_id=${organizationId} -v user_id=${userId} -tA -f -`.quiet();
+
+  if (result.stdout.trim() !== "1") {
+    abort("Failed to assign current user to seeded Admin role", {
+      organizationId,
+      userId,
+      assignments: result.stdout.trim(),
+    });
+  }
+  log.info("Assigned current user to seeded Admin role");
+}
+
+async function seedCurrentUserSuperAdmin(userId: string): Promise<void> {
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const sql = `
+WITH updated AS (
+  UPDATE users
+  SET admin = TRUE,
+      updated_at = clock_timestamp()
+  WHERE id = :'user_id'
+  RETURNING id
+)
+SELECT COALESCE((SELECT id FROM updated), '');
+`;
+  const result = await $({
+    input: sql,
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v user_id=${userId} -tA -f -`.quiet();
+
+  if (result.stdout.trim() !== userId) {
+    abort("Failed to mark current user as super admin", {
+      userId,
+      updatedUserId: result.stdout.trim(),
+    });
+  }
+
+  try {
+    const redisPassword = process.env.GRAM_REDIS_CACHE_PASSWORD || "xi9XILbY";
+    await $`docker compose exec gram-cache redis-cli -p 35299 -a ${redisPassword} DEL ${`userInfo:${userId}:`}`.quiet();
+  } catch (e: unknown) {
+    const err = e as { stderr?: string; message?: string };
+    log.warn(
+      `Marked current user as super admin, but failed to clear user info cache: ${err.message || err.stderr || JSON.stringify(e)}`,
+    );
+    return;
+  }
+
+  log.info("Marked current user as super admin");
 }
 
 async function initAPIKey(init: {
@@ -496,7 +627,12 @@ async function seedTunnelledMcpSource(init: {
   };
   const sourceName = "Seeded Local Postgres MCP";
   const mcpServerName = "Seeded Local Postgres MCP";
-  const endpointSlug = `${orgSlug ?? projectSlug}-seed-postgres-mcp`;
+  const endpointSlug = `${orgSlug ?? projectSlug}-gram-postgres-mcp`;
+  const userSessionIssuer = await getOrCreateSeededUserSessionIssuer({
+    gram,
+    security,
+    slug: `${endpointSlug}-issuer`,
+  });
 
   const listSourcesRes = await tunnelledMcpListServers(
     gram,
@@ -555,6 +691,7 @@ async function seedTunnelledMcpSource(init: {
         createMcpServerForm: {
           name: mcpServerName,
           tunnelledMcpServerId: source.id,
+          userSessionIssuerId: userSessionIssuer.id,
           visibility: "private",
         },
       },
@@ -573,6 +710,33 @@ async function seedTunnelledMcpSource(init: {
   } else {
     log.info(
       `Found existing MCP server '${mcpServer.name}' for tunnelled source (id = ${mcpServer.id})`,
+    );
+  }
+  if (mcpServer.userSessionIssuerId !== userSessionIssuer.id) {
+    const updateMcpServerRes = await mcpServersUpdate(
+      gram,
+      {
+        updateMcpServerForm: {
+          id: mcpServer.id,
+          name: mcpServer.name ?? mcpServerName,
+          environmentId: mcpServer.environmentId ?? undefined,
+          toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
+          tunnelledMcpServerId: source.id,
+          userSessionIssuerId: userSessionIssuer.id,
+          visibility: "private",
+        },
+      },
+      security,
+    );
+    if (!updateMcpServerRes.ok) {
+      abort(
+        "Failed to attach seeded tunnelled MCP server to a user session issuer",
+        updateMcpServerRes.error,
+      );
+    }
+    mcpServer = updateMcpServerRes.value;
+    log.info(
+      `Attached MCP server '${mcpServer.name}' to user session issuer '${userSessionIssuer.slug}'`,
     );
   }
 
@@ -613,18 +777,65 @@ async function seedTunnelledMcpSource(init: {
     }
   }
 
-  await seedTunnelledRuntimeState(source.id);
+  const tunnelKey = localTunnelKey(source.id);
+  await seedTunnelledRuntimeState(source.id, tunnelKey);
   await setLocalTunnelEnv({
     sourceId: source.id,
-    tunnelKey: localTunnelKey(),
+    tunnelKey,
     endpointSlug,
     mcpServerId: mcpServer.id,
   });
   log.info("Seeded tunnelled MCP runtime state and Redis connections");
 }
 
-async function seedTunnelledRuntimeState(tunnelledMcpServerId: string) {
-  process.env.TUNNEL_LOCAL_KEY = localTunnelKey();
+async function getOrCreateSeededUserSessionIssuer(init: {
+  gram: GramCore;
+  security: {
+    option1: {
+      sessionHeaderGramSession: string;
+      projectSlugHeaderGramProject: string;
+    };
+  };
+  slug: string;
+}) {
+  const { gram, security, slug } = init;
+  const issuers = await userSessionIssuersList(gram, { limit: 100 }, security);
+  for await (const page of issuers) {
+    if (!page.ok) {
+      abort("Failed to list user session issuers", page.error);
+    }
+    const existing = page.value.result.items.find(
+      (issuer) => issuer.slug === slug,
+    );
+    if (existing) {
+      log.info(`Found existing user session issuer '${existing.slug}'`);
+      return existing;
+    }
+  }
+
+  const createRes = await userSessionIssuersCreate(
+    gram,
+    {
+      createUserSessionIssuerForm: {
+        slug,
+        authnChallengeMode: "interactive",
+        sessionDurationHours: 24 * 14,
+      },
+    },
+    security,
+  );
+  if (!createRes.ok) {
+    abort("Failed to create user session issuer", createRes.error);
+  }
+  log.info(`Created user session issuer '${createRes.value.slug}'`);
+  return createRes.value;
+}
+
+async function seedTunnelledRuntimeState(
+  tunnelledMcpServerId: string,
+  tunnelKey: string,
+) {
+  process.env.TUNNEL_LOCAL_KEY = tunnelKey;
   await $`go run .mise-tasks/seed_tunnelled_mcp_runtime.go ${tunnelledMcpServerId}`.quiet();
 }
 
@@ -641,8 +852,12 @@ async function setLocalTunnelEnv(init: {
   await $`mise set --file mise.local.toml TUNNEL_LOCAL_MCP_SERVER_ID=${mcpServerId}`;
 }
 
-function localTunnelKey(): string {
-  return process.env.TUNNEL_LOCAL_KEY || DEFAULT_LOCAL_TUNNEL_KEY;
+function localTunnelKey(tunnelledMcpServerId: string): string {
+  const digest = crypto
+    .createHash("sha256")
+    .update(tunnelledMcpServerId)
+    .digest("hex");
+  return `gram_tunnel_${digest}`;
 }
 
 async function getOrCreateProject(init: {
