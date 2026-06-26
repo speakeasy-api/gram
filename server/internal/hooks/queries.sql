@@ -107,6 +107,8 @@ VALUES (
 -- Records a durable block row at hook-time deny. The reason is captured verbatim
 -- so the block page renders from this row alone; the risk_result_id / chat
 -- foreign keys are optional enrichment set when those rows are known synchronously.
+-- user_id is the Gram user whose agent was blocked (empty string when unresolved)
+-- and is used to authorize the block page.
 INSERT INTO tool_call_blocks (
     id
   , organization_id
@@ -118,6 +120,7 @@ INSERT INTO tool_call_blocks (
   , risk_result_id
   , chat_id
   , chat_message_id
+  , user_id
 ) VALUES (
     sqlc.arg(id)
   , sqlc.arg(organization_id)
@@ -129,4 +132,5 @@ INSERT INTO tool_call_blocks (
   , sqlc.narg(risk_result_id)
   , sqlc.narg(chat_id)
   , sqlc.narg(chat_message_id)
+  , sqlc.arg(user_id)
 );

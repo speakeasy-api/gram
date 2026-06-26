@@ -16,8 +16,16 @@ import (
 )
 
 // seedToolCallBlock inserts a durable block row (the same write the hook deny
-// path performs) so the risk block endpoints have something to read.
+// path performs) so the risk block endpoints have something to read. The block
+// has no recorded owner (empty user_id), so access falls back to org membership.
 func seedToolCallBlock(t *testing.T, ti *testInstance, orgID string, projectID uuid.UUID, reason, toolName string) uuid.UUID {
+	t.Helper()
+	return seedToolCallBlockOwnedBy(t, ti, orgID, projectID, "", reason, toolName)
+}
+
+// seedToolCallBlockOwnedBy inserts a durable block row whose user_id records the
+// owning user, exercising the owner-or-project-admin authorization path.
+func seedToolCallBlockOwnedBy(t *testing.T, ti *testInstance, orgID string, projectID uuid.UUID, userID, reason, toolName string) uuid.UUID {
 	t.Helper()
 
 	id, err := uuid.NewV7()
@@ -30,6 +38,7 @@ func seedToolCallBlock(t *testing.T, ti *testInstance, orgID string, projectID u
 		Provider:       "claude",
 		Reason:         reason,
 		ToolName:       pgtype.Text{String: toolName, Valid: toolName != ""},
+		UserID:         userID,
 		RiskPolicyID:   uuid.NullUUID{},
 		RiskResultID:   uuid.NullUUID{},
 		ChatID:         uuid.NullUUID{},
@@ -39,48 +48,10 @@ func seedToolCallBlock(t *testing.T, ti *testInstance, orgID string, projectID u
 	return id
 }
 
-// seedChatAndBlock creates a persisted chat owned by chatUserID and a block
-// linked to it, mirroring a session-capture-on deny: the block page then
-// tightens access to the chat owner or a project admin.
-func seedChatAndBlock(t *testing.T, ti *testInstance, orgID string, projectID uuid.UUID, chatUserID string) uuid.UUID {
-	t.Helper()
-
-	chatID, err := uuid.NewV7()
-	require.NoError(t, err)
-
-	_, err = hooksrepo.New(ti.conn).UpsertClaudeCodeSession(t.Context(), hooksrepo.UpsertClaudeCodeSessionParams{
-		ID:             chatID,
-		ProjectID:      projectID,
-		OrganizationID: orgID,
-		UserID:         pgtype.Text{String: chatUserID, Valid: chatUserID != ""},
-		ExternalUserID: pgtype.Text{},
-		Title:          pgtype.Text{String: "Test Session", Valid: true},
-	})
-	require.NoError(t, err)
-
-	blockID, err := uuid.NewV7()
-	require.NoError(t, err)
-
-	require.NoError(t, hooksrepo.New(ti.conn).InsertToolCallBlock(t.Context(), hooksrepo.InsertToolCallBlockParams{
-		ID:             blockID,
-		OrganizationID: orgID,
-		ProjectID:      projectID,
-		Provider:       "claude",
-		Reason:         "blocked",
-		ToolName:       pgtype.Text{String: "Bash", Valid: true},
-		RiskPolicyID:   uuid.NullUUID{},
-		RiskResultID:   uuid.NullUUID{},
-		ChatID:         uuid.NullUUID{UUID: chatID, Valid: true},
-		ChatMessageID:  uuid.NullUUID{},
-	}))
-
-	return blockID
-}
-
-// TestGetRiskBlock_OwnerCanReadWhenChatPersisted: when the session was captured,
-// the chat's owning user can always open their own block page — no admin grant
-// needed. This is the primary use case (the AI user clicking their block link).
-func TestGetRiskBlock_OwnerCanReadWhenChatPersisted(t *testing.T) {
+// TestGetRiskBlock_OwnerCanRead: the user whose agent was blocked can always
+// open their own block page — no admin grant needed. This is the primary use
+// case (the AI user clicking their block link).
+func TestGetRiskBlock_OwnerCanRead(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -88,8 +59,8 @@ func TestGetRiskBlock_OwnerCanReadWhenChatPersisted(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// Chat owned by the viewer themselves.
-	blockID := seedChatAndBlock(t, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID)
+	// Block owned by the viewer themselves.
+	blockID := seedToolCallBlockOwnedBy(t, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "blocked", "Bash")
 
 	// Enterprise account with zero grants: the owner must still get through
 	// purely on the owner match, without any project grant.
@@ -100,10 +71,10 @@ func TestGetRiskBlock_OwnerCanReadWhenChatPersisted(t *testing.T) {
 	require.Equal(t, blockID.String(), block.ID)
 }
 
-// TestGetRiskBlock_NonOwnerMemberDeniedWhenChatPersisted: once a chat backs the
-// block, a plain org member who is neither the session owner nor a project admin
-// is refused, even though bare membership would otherwise grant access.
-func TestGetRiskBlock_NonOwnerMemberDeniedWhenChatPersisted(t *testing.T) {
+// TestGetRiskBlock_NonOwnerMemberDenied: when the block has an owner, a plain
+// org member who is neither that owner nor a project admin is refused, even
+// though bare membership would otherwise grant access.
+func TestGetRiskBlock_NonOwnerMemberDenied(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -111,8 +82,8 @@ func TestGetRiskBlock_NonOwnerMemberDeniedWhenChatPersisted(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// Chat owned by a different user; viewer is a member but not the owner.
-	blockID := seedChatAndBlock(t, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, uuid.NewString())
+	// Block owned by a different user; viewer is a member but not the owner.
+	blockID := seedToolCallBlockOwnedBy(t, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, uuid.NewString(), "blocked", "Bash")
 
 	// Enterprise account with zero grants: no project:write, so the owner-or-
 	// admin gate must refuse.
@@ -126,9 +97,9 @@ func TestGetRiskBlock_NonOwnerMemberDeniedWhenChatPersisted(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-// TestGetRiskBlock_ProjectAdminCanReadWhenChatPersisted: a non-owner who holds
-// project:write (project admin) on the block's project can read it.
-func TestGetRiskBlock_ProjectAdminCanReadWhenChatPersisted(t *testing.T) {
+// TestGetRiskBlock_ProjectAdminCanRead: a non-owner who holds project:write
+// (project admin) on the block's project can read it.
+func TestGetRiskBlock_ProjectAdminCanRead(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -136,7 +107,7 @@ func TestGetRiskBlock_ProjectAdminCanReadWhenChatPersisted(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	blockID := seedChatAndBlock(t, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, uuid.NewString())
+	blockID := seedToolCallBlockOwnedBy(t, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, uuid.NewString(), "blocked", "Bash")
 
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())},
@@ -147,9 +118,9 @@ func TestGetRiskBlock_ProjectAdminCanReadWhenChatPersisted(t *testing.T) {
 	require.Equal(t, blockID.String(), block.ID)
 }
 
-// TestSubmitRiskBlockFeedback_NonOwnerMemberDeniedWhenChatPersisted: the mutate
-// path enforces the same owner-or-project-admin rule as the read path.
-func TestSubmitRiskBlockFeedback_NonOwnerMemberDeniedWhenChatPersisted(t *testing.T) {
+// TestSubmitRiskBlockFeedback_NonOwnerMemberDenied: the mutate path enforces the
+// same owner-or-project-admin rule as the read path.
+func TestSubmitRiskBlockFeedback_NonOwnerMemberDenied(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -157,7 +128,7 @@ func TestSubmitRiskBlockFeedback_NonOwnerMemberDeniedWhenChatPersisted(t *testin
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	blockID := seedChatAndBlock(t, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, uuid.NewString())
+	blockID := seedToolCallBlockOwnedBy(t, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, uuid.NewString(), "blocked", "Bash")
 
 	ctx = withExactAccessGrants(t, ctx, ti.conn)
 

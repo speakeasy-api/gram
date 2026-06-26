@@ -47,7 +47,7 @@ func (s *Service) GetRiskBlock(ctx context.Context, payload *gen.GetRiskBlockPay
 		return nil, oops.E(oops.CodeUnexpected, err, "load block").LogError(ctx, s.logger)
 	}
 
-	if err := s.authorizeBlockView(ctx, authCtx, row.ProjectID, row.ChatPersisted, row.ChatUserID); err != nil {
+	if err := s.authorizeBlockView(ctx, authCtx, row.ProjectID, row.UserID); err != nil {
 		return nil, err
 	}
 
@@ -94,7 +94,7 @@ func (s *Service) SubmitRiskBlockFeedback(ctx context.Context, payload *gen.Subm
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "load block").LogError(ctx, s.logger)
 	}
-	if err := s.authorizeBlockView(ctx, authCtx, block.ProjectID, block.ChatPersisted, block.ChatUserID); err != nil {
+	if err := s.authorizeBlockView(ctx, authCtx, block.ProjectID, block.UserID); err != nil {
 		return nil, err
 	}
 
@@ -136,22 +136,21 @@ func (s *Service) authorizeBlockAccess(ctx context.Context) (*contextvalues.Auth
 	return authCtx, nil
 }
 
-// authorizeBlockView tightens block access beyond bare org membership when the
-// blocked session was persisted (session capture on). In that case the chat's
-// owning user may always view their own block, and any other viewer must hold
-// project-admin (project:write) on the block's project. When no chat backs the
-// block, access falls back to the org membership already enforced by the block
-// queries — so a block whose session was never captured stays readable by any
-// member of the owning org, preserving the original behavior.
+// authorizeBlockView tightens block access beyond bare org membership using the
+// owning user recorded on the block at deny time. The owner may always view
+// their own block; any other viewer must hold project-admin (project:write) on
+// the block's project. When no owner was recorded (empty user_id — e.g. the user
+// could not be resolved at deny time), access falls back to the org membership
+// already enforced by the block queries.
 //
 // When RBAC is disabled for the org the project:write check is a no-op (allow),
 // which is consistent with how the rest of the platform degrades to
 // membership-level access without RBAC.
-func (s *Service) authorizeBlockView(ctx context.Context, authCtx *contextvalues.AuthContext, projectID uuid.UUID, chatPersisted bool, chatUserID pgtype.Text) error {
-	if !chatPersisted {
+func (s *Service) authorizeBlockView(ctx context.Context, authCtx *contextvalues.AuthContext, projectID uuid.UUID, blockUserID string) error {
+	if strings.TrimSpace(blockUserID) == "" {
 		return nil
 	}
-	if chatUserID.Valid && chatUserID.String != "" && chatUserID.String == authCtx.UserID {
+	if blockUserID == authCtx.UserID {
 		return nil
 	}
 	if err := s.authz.Require(ctx, authz.Check{

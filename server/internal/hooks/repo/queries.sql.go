@@ -157,6 +157,7 @@ INSERT INTO tool_call_blocks (
   , risk_result_id
   , chat_id
   , chat_message_id
+  , user_id
 ) VALUES (
     $1
   , $2
@@ -168,6 +169,7 @@ INSERT INTO tool_call_blocks (
   , $8
   , $9
   , $10
+  , $11
 )
 `
 
@@ -182,11 +184,14 @@ type InsertToolCallBlockParams struct {
 	RiskResultID   uuid.NullUUID
 	ChatID         uuid.NullUUID
 	ChatMessageID  uuid.NullUUID
+	UserID         string
 }
 
 // Records a durable block row at hook-time deny. The reason is captured verbatim
 // so the block page renders from this row alone; the risk_result_id / chat
 // foreign keys are optional enrichment set when those rows are known synchronously.
+// user_id is the Gram user whose agent was blocked (empty string when unresolved)
+// and is used to authorize the block page.
 func (q *Queries) InsertToolCallBlock(ctx context.Context, arg InsertToolCallBlockParams) error {
 	_, err := q.db.Exec(ctx, insertToolCallBlock,
 		arg.ID,
@@ -199,6 +204,7 @@ func (q *Queries) InsertToolCallBlock(ctx context.Context, arg InsertToolCallBlo
 		arg.RiskResultID,
 		arg.ChatID,
 		arg.ChatMessageID,
+		arg.UserID,
 	)
 	return err
 }

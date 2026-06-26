@@ -20,10 +20,13 @@ type toolCallBlockParams struct {
 	ProjectID      uuid.UUID
 	Reason         string
 	ToolName       string
-	RiskPolicyID   uuid.NullUUID
-	RiskResultID   uuid.NullUUID
-	ChatID         uuid.NullUUID
-	ChatMessageID  uuid.NullUUID
+	// UserID is the Gram user whose agent was blocked, used to authorize the
+	// block page. Empty string when the user could not be resolved at deny time.
+	UserID        string
+	RiskPolicyID  uuid.NullUUID
+	RiskResultID  uuid.NullUUID
+	ChatID        uuid.NullUUID
+	ChatMessageID uuid.NullUUID
 }
 
 // blockViewURL builds the durable block-page URL for a pre-minted block id. The
@@ -52,6 +55,7 @@ func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p 
 		Provider:       p.Provider,
 		Reason:         strings.TrimSpace(p.Reason),
 		ToolName:       conv.ToPGTextEmpty(p.ToolName),
+		UserID:         strings.TrimSpace(p.UserID),
 		RiskPolicyID:   p.RiskPolicyID,
 		RiskResultID:   p.RiskResultID,
 		ChatID:         p.ChatID,

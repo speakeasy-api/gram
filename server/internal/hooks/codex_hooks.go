@@ -175,6 +175,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			ProjectID:      *authCtx.ProjectID,
 			Reason:         blockReason,
 			ToolName:       blockToolName,
+			UserID:         metadata.UserID,
 			RiskPolicyID:   conv.StringToNullUUID(blockPolicyID),
 			RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			ChatID:         chatIDForBlock(metadata.SessionID),
