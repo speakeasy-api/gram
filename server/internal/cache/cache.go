@@ -41,6 +41,9 @@ type Cache interface {
 	// List operations for atomic append/read
 	ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error
 	ListRange(ctx context.Context, key string, start, stop int64, value any) error
+	// ListDrain atomically reads and deletes the full list at key. Concurrent
+	// appends after the drain starts create/extend a new list and are not removed.
+	ListDrain(ctx context.Context, key string, value any) error
 	DeleteByPrefix(ctx context.Context, prefix string) error
 }
 

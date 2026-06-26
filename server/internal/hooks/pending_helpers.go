@@ -605,7 +605,7 @@ func (s *Service) flushPendingClaudeMessages(ctx context.Context, sessionID stri
 	var payloads []gen.ClaudeMessagesPayload
 	key := claudeMessagesPendingCacheKey(sessionID)
 
-	if err := s.cache.ListRange(ctx, key, 0, -1, &payloads); err != nil {
+	if err := s.cache.ListDrain(ctx, key, &payloads); err != nil {
 		s.logger.DebugContext(ctx, "No pending claude message captures to flush or error reading list", attr.SlogError(err))
 		return
 	}
@@ -619,15 +619,20 @@ func (s *Service) flushPendingClaudeMessages(ctx context.Context, sessionID stri
 		attr.SlogHookEvent("ClaudeMessages"),
 		attr.SlogGenAIConversationID(sessionID),
 	)
-	failed := false
+	failedPayloads := make([]gen.ClaudeMessagesPayload, 0)
 	for i := range payloads {
 		if err := s.persistClaudeMessages(ctx, &payloads[i], *metadata, logger); err != nil {
 			logger.ErrorContext(ctx, "Failed to persist pending claude message capture", attr.SlogError(err))
-			failed = true
+			failedPayloads = append(failedPayloads, payloads[i])
 		}
 	}
 
-	if failed {
+	if len(failedPayloads) > 0 {
+		for i := range failedPayloads {
+			if err := s.bufferClaudeMessages(ctx, sessionID, &failedPayloads[i]); err != nil {
+				logger.ErrorContext(ctx, "Failed to restore pending claude message capture", attr.SlogError(err))
+			}
+		}
 		logger.WarnContext(ctx, "keeping pending claude message capture buffer after replay failure",
 			attr.SlogEvent("claude_messages_pending_flush_failed"),
 		)
@@ -635,10 +640,6 @@ func (s *Service) flushPendingClaudeMessages(ctx context.Context, sessionID stri
 	}
 
 	s.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending claude message captures", len(payloads)))
-
-	if err := s.cache.Delete(ctx, key); err != nil {
-		s.logger.ErrorContext(ctx, "Failed to delete claude message capture buffer", attr.SlogError(err))
-	}
 }
 
 func (s *Service) bufferShadowMCPBlockFinding(ctx context.Context, sessionID string, finding pendingShadowMCPBlockFinding) error {
@@ -693,7 +694,7 @@ func (s *Service) flushPendingShadowMCPBlockFindings(ctx context.Context, sessio
 
 	var findings []pendingShadowMCPBlockFinding
 	key := shadowMCPBlockFindingsPendingCacheKey(sessionID)
-	if err := s.cache.ListRange(ctx, key, 0, -1, &findings); err != nil {
+	if err := s.cache.ListDrain(ctx, key, &findings); err != nil {
 		s.logger.DebugContext(ctx, "No pending shadow-mcp block findings to flush or error reading list", attr.SlogError(err))
 		return
 	}
@@ -701,7 +702,7 @@ func (s *Service) flushPendingShadowMCPBlockFindings(ctx context.Context, sessio
 		return
 	}
 
-	failed := false
+	failedFindings := make([]pendingShadowMCPBlockFinding, 0)
 	for i := range findings {
 		finding := findings[i]
 		if finding.ToolCallID == "" || finding.PolicyID == "" {
@@ -722,7 +723,7 @@ func (s *Service) flushPendingShadowMCPBlockFindings(ctx context.Context, sessio
 			ToolCallID: finding.ToolCallID,
 		})
 		if err != nil {
-			failed = true
+			failedFindings = append(failedFindings, finding)
 			s.logger.DebugContext(ctx, "shadow-mcp block: chat_message still missing while flushing pending finding",
 				attr.SlogEvent("claude_hook_block_finding_flush_no_message"),
 				attr.SlogError(err),
@@ -731,7 +732,7 @@ func (s *Service) flushPendingShadowMCPBlockFindings(ctx context.Context, sessio
 		}
 
 		if err := s.insertShadowMCPBlockFinding(ctx, metadata, projectID, policyID, msgID, finding); err != nil {
-			failed = true
+			failedFindings = append(failedFindings, finding)
 			s.logger.WarnContext(ctx, "shadow-mcp block: failed to insert pending risk_result",
 				attr.SlogEvent("claude_hook_block_finding_flush_insert_failed"),
 				attr.SlogError(err),
@@ -739,13 +740,15 @@ func (s *Service) flushPendingShadowMCPBlockFindings(ctx context.Context, sessio
 		}
 	}
 
-	if failed {
+	if len(failedFindings) > 0 {
+		for i := range failedFindings {
+			if err := s.bufferShadowMCPBlockFinding(ctx, sessionID, failedFindings[i]); err != nil {
+				s.logger.ErrorContext(ctx, "Failed to restore pending shadow-mcp block finding", attr.SlogError(err))
+			}
+		}
 		s.logger.WarnContext(ctx, "keeping pending shadow-mcp block finding buffer after replay failure",
 			attr.SlogEvent("claude_hook_block_finding_flush_failed"),
 		)
 		return
-	}
-	if err := s.cache.Delete(ctx, key); err != nil {
-		s.logger.ErrorContext(ctx, "Failed to delete shadow-mcp block finding buffer", attr.SlogError(err))
 	}
 }

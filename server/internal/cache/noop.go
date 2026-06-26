@@ -42,6 +42,11 @@ func (s *noopCache) ListRange(ctx context.Context, key string, start int64, stop
 	return nil
 }
 
+// ListDrain implements [Cache].
+func (s *noopCache) ListDrain(ctx context.Context, key string, value any) error {
+	return nil
+}
+
 // Set implements [Cache].
 func (s *noopCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	return nil

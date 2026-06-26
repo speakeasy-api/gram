@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
@@ -21,6 +22,20 @@ type failingFeatures struct{}
 
 func (failingFeatures) IsFeatureEnabled(_ context.Context, _ string, _ productfeatures.Feature) (bool, error) {
 	return false, errors.New("feature lookup unavailable")
+}
+
+type blockingPromptScanner struct{}
+
+func (blockingPromptScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
+	return &risk.ScanResult{PolicyName: "blocked-prompt", Description: "prompt matched test policy"}, nil
+}
+
+func (blockingPromptScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ string, _ uuid.UUID, _ string) (*risk.ShadowMCPPolicy, error) {
+	return nil, nil
+}
+
+func (blockingPromptScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {
+	return false, nil
 }
 
 // seedCaptureSession wires up an attributed Claude session for capture tests:
@@ -465,4 +480,40 @@ func TestClaudeHookVersion_StopCollectionSkipsPerEventPersist(t *testing.T) {
 		})
 		return err == nil && len(got) > 0
 	}, 500*time.Millisecond, 50*time.Millisecond, "Stop-collection UserPromptSubmit must not persist per-event")
+}
+
+func TestClaudeHookVersion_BlockedPromptPersistsWithoutStopBatch(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = blockingPromptScanner{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	seedCaptureSession(t, ctx, ti, sessionID, "blocked-prompt-user", "blocked-prompt@example.com")
+
+	version := claudeHookStopCollectionVersion
+	prompt := "this prompt should be blocked and still captured"
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		Prompt:        &prompt,
+		HookVersion:   &version,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Decision)
+	require.Equal(t, "block", *result.Decision)
+
+	require.Eventually(t, func() bool {
+		got, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+			ChatID:    chatID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		return err == nil && len(got) == 1 && got[0].Content == prompt
+	}, time.Second, 50*time.Millisecond)
 }

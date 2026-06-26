@@ -774,6 +774,10 @@ func (c *memoryCache) ListRange(_ context.Context, _ string, _, _ int64, _ any) 
 	return errors.New("not implemented")
 }
 
+func (c *memoryCache) ListDrain(_ context.Context, _ string, _ any) error {
+	return errors.New("not implemented")
+}
+
 func (c *memoryCache) DeleteByPrefix(_ context.Context, prefix string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -827,6 +831,10 @@ func (c *nonMutatingMemoryCache) ListAppend(ctx context.Context, key string, val
 
 func (c *nonMutatingMemoryCache) ListRange(ctx context.Context, key string, start, stop int64, value any) error {
 	return c.inner.ListRange(ctx, key, start, stop, value)
+}
+
+func (c *nonMutatingMemoryCache) ListDrain(ctx context.Context, key string, value any) error {
+	return c.inner.ListDrain(ctx, key, value)
 }
 
 func (c *nonMutatingMemoryCache) DeleteByPrefix(ctx context.Context, prefix string) error {

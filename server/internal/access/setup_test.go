@@ -184,6 +184,13 @@ func (p prefixedTestCache) ListRange(ctx context.Context, key string, start, sto
 	return nil
 }
 
+func (p prefixedTestCache) ListDrain(ctx context.Context, key string, value any) error {
+	if err := p.cache.ListDrain(ctx, p.key(key), value); err != nil {
+		return fmt.Errorf("drain prefixed test cache list: %w", err)
+	}
+	return nil
+}
+
 func (p prefixedTestCache) DeleteByPrefix(ctx context.Context, prefix string) error {
 	if err := p.cache.DeleteByPrefix(ctx, p.key(prefix)); err != nil {
 		return fmt.Errorf("delete prefixed test cache by prefix: %w", err)
