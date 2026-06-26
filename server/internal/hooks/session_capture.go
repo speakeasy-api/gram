@@ -181,6 +181,7 @@ func (s *Service) persistBlockedClaudePrompt(ctx context.Context, payload *gen.C
 	if payload == nil || payload.SessionID == nil || *payload.SessionID == "" {
 		return
 	}
+	ctx = context.WithoutCancel(ctx)
 	metadata, err := s.resolveClaudeSessionMetadata(ctx, *payload.SessionID, conv.PtrValOr(payload.UserEmail, ""))
 	if err != nil {
 		s.logger.WarnContext(ctx, "skipping blocked claude prompt persistence without session metadata",
@@ -189,7 +190,7 @@ func (s *Service) persistBlockedClaudePrompt(ctx context.Context, payload *gen.C
 		)
 		return
 	}
-	if err := s.persistConversationEvent(context.WithoutCancel(ctx), payload, &metadata); err != nil {
+	if err := s.persistConversationEvent(ctx, payload, &metadata); err != nil {
 		s.logger.ErrorContext(ctx, "Failed to persist blocked claude prompt",
 			attr.SlogEvent("claude_blocked_prompt_persist_failed"),
 			attr.SlogError(err),
