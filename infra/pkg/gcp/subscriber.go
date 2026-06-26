@@ -5,11 +5,36 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"sync"
+	"time"
 
 	"cloud.google.com/go/pubsub/v2"
 	"github.com/speakeasy-api/gram/infra/internal/attr"
 	"google.golang.org/protobuf/proto"
 )
+
+const (
+	// defaultBatchMaxMessages is the buffer size used by ReceiveBatch when
+	// BatchReceiveSettings.MaxMessages is unset.
+	defaultBatchMaxMessages = 100
+	// defaultBatchMaxLatency is the maximum time a partial batch waits before
+	// being flushed when BatchReceiveSettings.MaxLatency is unset.
+	defaultBatchMaxLatency = time.Second
+)
+
+// BatchReceiveSettings tunes how Subscriber.ReceiveBatch groups messages. A
+// batch is flushed when either MaxMessages have buffered or MaxLatency elapses,
+// whichever happens first.
+type BatchReceiveSettings struct {
+	// MaxMessages is the number of buffered messages that triggers a flush. A
+	// value <= 0 falls back to defaultBatchMaxMessages.
+	MaxMessages int
+	// MaxLatency is how long a partial batch waits before being flushed. A value
+	// <= 0 falls back to defaultBatchMaxLatency. It must stay well below the
+	// subscription's ack deadline (and the receiver's MaxExtension) since
+	// buffered messages remain outstanding until the batch is acked.
+	MaxLatency time.Duration
+}
 
 type SubscriberBroker interface {
 	SubscriberForMessage(ctx context.Context, msg proto.Message, subscription proto.Message) (*pubsub.Subscriber, error)
@@ -57,6 +82,7 @@ type MessageMetadata struct {
 
 type Subscriber[M proto.Message] interface {
 	Receive(context.Context, func(context.Context, M, MessageMetadata) error) error
+	ReceiveBatch(context.Context, BatchReceiveSettings, func(context.Context, []M, []MessageMetadata) error) error
 }
 
 // incomingMessage decouples per-message processing from the concrete
@@ -135,6 +161,183 @@ func (s *psSubscriber[M]) handle(ctx context.Context, m incomingMessage, f func(
 		DeliveryAttempt: m.deliveryAttempt,
 	}); err != nil {
 		m.nack()
+		return
+	}
+}
+
+// ReceiveBatch consumes messages and delivers them to f in batches. The
+// underlying pubsub client only delivers one message per callback, so messages
+// are buffered here and flushed as a slice once settings.MaxMessages are
+// buffered or settings.MaxLatency elapses, whichever comes first.
+//
+// Ack/nack is all-or-nothing: when f returns nil the whole batch is acked; when
+// f returns an error (or panics) the whole batch is nacked. Messages that fail
+// to unmarshal are nacked individually and excluded from the batch handed to f.
+func (s *psSubscriber[M]) ReceiveBatch(ctx context.Context, settings BatchReceiveSettings, f func(context.Context, []M, []MessageMetadata) error) error {
+	return s.batchLoop(ctx, settings, func(ctx context.Context, deliver func(incomingMessage)) error {
+		return s.sub.Receive(ctx, func(_ context.Context, m *pubsub.Message) {
+			deliver(incomingMessage{
+				id:              m.ID,
+				data:            m.Data,
+				attributes:      m.Attributes,
+				deliveryAttempt: m.DeliveryAttempt,
+				ack:             m.Ack,
+				nack:            m.Nack,
+			})
+		})
+	}, f)
+}
+
+// batchLoop holds the buffering, size/latency flushing, and drain logic shared
+// by ReceiveBatch. The delivery source is abstracted behind receive so the loop
+// can be exercised in tests (with a synthetic source and a fake clock) without a
+// live pubsub subscriber: receive must call deliver once per incoming message
+// and return when ctx is cancelled (or on a terminal error).
+func (s *psSubscriber[M]) batchLoop(
+	ctx context.Context,
+	settings BatchReceiveSettings,
+	receive func(ctx context.Context, deliver func(incomingMessage)) error,
+	f func(context.Context, []M, []MessageMetadata) error,
+) error {
+	size := settings.MaxMessages
+	if size <= 0 {
+		size = defaultBatchMaxMessages
+	}
+	latency := settings.MaxLatency
+	if latency <= 0 {
+		latency = defaultBatchMaxLatency
+	}
+
+	newBuf := func() []incomingMessage { return make([]incomingMessage, 0, size) }
+
+	var mu sync.Mutex
+	pending := newBuf()
+
+	take := func() []incomingMessage {
+		mu.Lock()
+		defer mu.Unlock()
+		batch := pending
+		pending = newBuf()
+		return batch
+	}
+
+	flush := func() {
+		if batch := take(); len(batch) > 0 {
+			s.handleBatch(ctx, batch, f)
+		}
+	}
+
+	// Flush partial batches on a timer so messages are not held longer than the
+	// configured latency (and beyond their ack deadline) under low throughput.
+	ticker := time.NewTicker(latency)
+	defer ticker.Stop()
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				flush()
+			}
+		}
+	}()
+
+	err := receive(ctx, func(m incomingMessage) {
+		mu.Lock()
+		pending = append(pending, m)
+		var batch []incomingMessage
+		if len(pending) >= size {
+			batch = pending
+			pending = newBuf()
+		}
+		mu.Unlock()
+
+		if len(batch) > 0 {
+			s.handleBatch(ctx, batch, f)
+		}
+	})
+
+	// Drain any messages still buffered when receive returns so they are acked
+	// or nacked rather than silently dropped.
+	flush()
+
+	if err != nil {
+		return fmt.Errorf("receive batch: %w", err)
+	}
+
+	return nil
+}
+
+func (s *psSubscriber[M]) handleBatch(ctx context.Context, batch []incomingMessage, f func(context.Context, []M, []MessageMetadata) error) {
+	msgs := make([]M, 0, len(batch))
+	metas := make([]MessageMetadata, 0, len(batch))
+	valid := make([]incomingMessage, 0, len(batch))
+
+	logger := s.logger.With(
+		attr.SlogTopicProtoName(s.topicProtoName),
+		attr.SlogSubscriptionProtoName(s.subscriptionProtoName),
+	)
+
+	for _, m := range batch {
+		msg := s.new()
+		if err := proto.Unmarshal(m.data, msg); err != nil {
+			logger.ErrorContext(
+				ctx,
+				"failed to unmarshal pubsub message",
+				attr.SlogError(err),
+				attr.SlogSubscriberMessageID(m.id),
+				attr.SlogSubscriberDeliveryAttempt(m.deliveryAttempt),
+			)
+			m.nack()
+			continue
+		}
+		msgs = append(msgs, msg)
+		metas = append(metas, MessageMetadata{
+			ID:              m.id,
+			Attributes:      m.attributes,
+			DeliveryAttempt: m.deliveryAttempt,
+		})
+		valid = append(valid, m)
+	}
+
+	if len(valid) == 0 {
+		return
+	}
+
+	ackAll := func() {
+		for _, m := range valid {
+			m.ack()
+		}
+	}
+	nackAll := func() {
+		for _, m := range valid {
+			m.nack()
+		}
+	}
+
+	// Registered first so it runs last: on the happy path it acks the batch, and
+	// after a nack it is a no-op since pubsub honours the first ack/nack per
+	// message.
+	defer ackAll()
+
+	defer func() {
+		if r := recover(); r != nil {
+			logger.ErrorContext(ctx, "panic recovered while processing pubsub message batch",
+				attr.SlogErrorMessage(fmt.Sprintf("%v", r)),
+				attr.SlogErrorStack(string(debug.Stack())),
+				attr.SlogTopicProtoName(s.topicProtoName),
+				attr.SlogSubscriptionProtoName(s.subscriptionProtoName),
+				attr.SlogSubscriberMessageID(valid[0].id),
+				attr.SlogSubscriberBatchSize(len(valid)),
+			)
+			nackAll()
+		}
+	}()
+
+	if err := f(ctx, msgs, metas); err != nil {
+		nackAll()
 		return
 	}
 }
