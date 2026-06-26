@@ -1296,8 +1296,29 @@ func (s *Service) SetPinned(ctx context.Context, payload *gen.SetPinnedPayload) 
 		return oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
 	}
 
-	// Project-scoped: a pin against a missing or cross-project chat is a no-op
-	// success, matching DeleteChat's project-scoped behavior. Idempotent.
+	// Load the chat to verify access before mutating it.
+	chat, err := s.repo.GetChat(ctx, chatID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.C(oops.CodeNotFound)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
+	}
+
+	if chat.ProjectID != *authCtx.ProjectID {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	// Off-dashboard callers must match the chat owner unless they're the
+	// managed-assistant runtime (see LoadChat).
+	if authCtx.SessionID == nil {
+		if _, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx); !isAssistantCall {
+			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
+				return oops.C(oops.CodeUnauthorized)
+			}
+		}
+	}
+
 	if err := s.repo.SetChatPinned(ctx, repo.SetChatPinnedParams{
 		Pinned:    payload.Pinned,
 		ID:        chatID,

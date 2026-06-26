@@ -3,6 +3,7 @@ package chat_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
@@ -60,6 +61,16 @@ func TestService_SetPinned_InvalidID(t *testing.T) {
 	ctx := initSessionCtx(t, ti)
 	err := ti.service.SetPinned(ctx, &gen.SetPinnedPayload{ID: "not-a-uuid", Pinned: true})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// A chat the caller can't see (here: absent) is rejected rather than silently
+// no-op'd, so the access check can't be probed by UUID.
+func TestService_SetPinned_MissingChat(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	err := ti.service.SetPinned(ctx, &gen.SetPinnedPayload{ID: uuid.NewString(), Pinned: true})
+	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
 // The listChats pinned filter splits chats into pinned and unpinned sets, which

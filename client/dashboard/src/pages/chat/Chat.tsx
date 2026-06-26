@@ -672,7 +672,9 @@ function PinButton({
         "text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 rounded p-1 transition-opacity",
         pinned
           ? "text-foreground"
-          : "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100",
+          : // Visible by default (touch has no hover to reveal it); only fade-until-hover
+            // on devices that actually support hover.
+            "focus-visible:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/row:opacity-100",
       )}
     >
       <Pin className={cn("size-3.5", pinned && "fill-current")} aria-hidden />
