@@ -311,6 +311,60 @@ func TestListSessions_CrossRowDirectoryAndHookFilters(t *testing.T) {
 	require.Equal(t, int64(1), session.MessageCount)
 }
 
+func TestListSessions_IncludesCostBearingAssistantChatCompletions(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Now().UTC()
+	chatID := uuid.NewString()
+	insertListSessionRawChatCompletionLog(t, ctx, listSessionLogParams{
+		projectID:    projectID,
+		timestamp:    now.Add(-5 * time.Minute),
+		chatID:       chatID,
+		email:        "assistant@example.com",
+		department:   "Engineering",
+		roles:        []string{"dev"},
+		hookSource:   "assistants",
+		model:        "openai/gpt-5.4",
+		inputTokens:  40,
+		outputTokens: 10,
+		totalTokens:  50,
+		cost:         0.33,
+	})
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	res := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		From:   from,
+		To:     to,
+		SortBy: "total_cost",
+		Limit:  10,
+	}, func(res *gen.ListSessionsResult) bool {
+		return len(res.Sessions) == 1 && res.Sessions[0].GramChatID == chatID
+	})
+
+	require.Len(t, res.Sessions, 1)
+	session := res.Sessions[0]
+	require.Equal(t, chatID, session.GramChatID)
+	require.NotNil(t, session.HookSource)
+	require.Equal(t, "assistants", *session.HookSource)
+	require.Equal(t, int64(40), session.TotalInputTokens)
+	require.Equal(t, int64(10), session.TotalOutputTokens)
+	require.Equal(t, int64(50), session.TotalTokens)
+	require.InDelta(t, 0.33, session.TotalCost, 1e-9)
+}
+
 func TestListSessions_CursorPagination(t *testing.T) {
 	t.Parallel()
 
@@ -483,7 +537,7 @@ func insertListSessionCompletionLog(t *testing.T, ctx context.Context, p listSes
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), p.timestamp.UnixNano(), p.timestamp.UnixNano(), "INFO", "chat completion",
 		nil, nil, string(attrsJSON), "{}",
-		p.projectID, usageURN, "gram-agents", p.chatID)
+		p.projectID, usageURN, "gram-server", p.chatID)
 	require.NoError(t, err)
 }
 
@@ -527,7 +581,7 @@ func insertListSessionToolLog(t *testing.T, ctx context.Context, p listSessionLo
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), p.timestamp.UnixNano(), p.timestamp.UnixNano(), "INFO", "tool call",
 		nil, nil, string(attrsJSON), "{}",
-		p.projectID, hookURN, "gram-agents", p.chatID)
+		p.projectID, hookURN, "gram-server", p.chatID)
 	require.NoError(t, err)
 }
 
@@ -542,13 +596,26 @@ func insertListSessionRawChatCompletionLog(t *testing.T, ctx context.Context, p 
 
 	attributes := map[string]any{
 		"gen_ai.conversation.id":          p.chatID,
+		"gen_ai.operation.name":           "chat",
 		"gen_ai.response.id":              uuid.NewString(),
 		"gen_ai.response.model":           p.model,
 		"gram.hook.source":                p.hookSource,
-		"gram.resource.urn":               "agents:chat:completion",
+		"gram.resource.urn":               "assistants:chat:completion",
 		"user.email":                      p.email,
 		"user.attributes.department_name": p.department,
 		"user.roles":                      p.roles,
+	}
+	if p.inputTokens > 0 {
+		attributes["gen_ai.usage.input_tokens"] = p.inputTokens
+	}
+	if p.outputTokens > 0 {
+		attributes["gen_ai.usage.output_tokens"] = p.outputTokens
+	}
+	if p.totalTokens > 0 {
+		attributes["gen_ai.usage.total_tokens"] = p.totalTokens
+	}
+	if p.cost > 0 {
+		attributes["gen_ai.usage.cost"] = p.cost
 	}
 	attrsJSON, err := json.Marshal(attributes)
 	require.NoError(t, err)
@@ -561,6 +628,6 @@ func insertListSessionRawChatCompletionLog(t *testing.T, ctx context.Context, p 
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), p.timestamp.UnixNano(), p.timestamp.UnixNano(), "INFO", "raw chat completion",
 		nil, nil, string(attrsJSON), "{}",
-		p.projectID, "agents:chat:completion", "gram-agents", p.chatID)
+		p.projectID, "assistants:chat:completion", "gram-server", p.chatID)
 	require.NoError(t, err)
 }

@@ -422,7 +422,7 @@ func insertResolutionLog(t *testing.T, ctx context.Context, projectID, deploymen
 	attributes := map[string]any{
 		"gen_ai.conversation.id":        chatID,
 		"gen_ai.conversation.duration":  30.0, // 30 seconds
-		"gram.resource.urn":             "agents:chat:resolution",
+		"gram.resource.urn":             "chat:resolution",
 		"evaluation.score":              score,
 		"gen_ai.evaluation.score.label": resolution, // This feeds the MATERIALIZED column
 	}
@@ -439,7 +439,7 @@ func insertResolutionLog(t *testing.T, ctx context.Context, projectID, deploymen
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat resolution",
 		nil, nil, string(attrsJSON), "{}",
-		projectID, deploymentID, "agents:chat:resolution", chatID,
-		"gram-agents")
+		projectID, deploymentID, "chat:resolution", chatID,
+		"gram-server")
 	require.NoError(t, err)
 }
