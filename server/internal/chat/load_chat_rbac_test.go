@@ -1,7 +1,6 @@
 package chat_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -49,7 +48,7 @@ func TestLoadChat_RBAC_MemberSelfAccess(t *testing.T) {
 	_, err = ti.service.LoadChat(selfCtx, loadPayload(other.String()))
 	require.Error(t, err)
 	var shareable *oops.ShareableError
-	require.True(t, errors.As(err, &shareable))
+	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeForbidden, shareable.Code)
 }
 

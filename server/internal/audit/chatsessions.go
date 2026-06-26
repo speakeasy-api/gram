@@ -26,8 +26,9 @@ type LogChatSessionAccessEvent struct {
 	ChatSessionURN urn.ChatSession
 	ChatTitle      string
 	// OwnerUserID is the user id of the session owner, recorded so reviewers can
-	// see whose session was accessed even when the accessor differs.
-	OwnerUserID string
+	// see whose session was accessed even when the accessor differs. It is the
+	// raw WorkOS user id (stored as the subject slug), not a URN subject.
+	OwnerUserID string //nolint:glint // owner user id is auxiliary context, not the audit subject (which is ChatSessionURN)
 }
 
 // LogChatSessionAccess records that a chat session transcript was read. Unlike
