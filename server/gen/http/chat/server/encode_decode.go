@@ -41,6 +41,7 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		var (
 			search            *string
 			externalUserID    *string
+			agentType         *string
 			assistantID       *string
 			hasRisk           *string
 			pinned            *string
@@ -64,6 +65,10 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		externalUserIDRaw := qp.Get("external_user_id")
 		if externalUserIDRaw != "" {
 			externalUserID = &externalUserIDRaw
+		}
+		agentTypeRaw := qp.Get("agent_type")
+		if agentTypeRaw != "" {
+			agentType = &agentTypeRaw
 		}
 		assistantIDRaw := qp.Get("assistant_id")
 		if assistantIDRaw != "" {
@@ -184,7 +189,7 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListChatsPayload(search, externalUserID, assistantID, hasRisk, pinned, minRiskScore, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewListChatsPayload(search, externalUserID, agentType, assistantID, hasRisk, pinned, minRiskScore, from, to, limit, offset, sortBy, sortOrder, sessionToken, projectSlugInput, chatSessionsToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

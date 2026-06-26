@@ -335,6 +335,10 @@ type ListChatsPayload struct {
 	Search *string
 	// Filter by external user ID
 	ExternalUserID *string
+	// Filter by agent type. Comma-separated list of agent type keys (e.g.
+	// 'claude,codex,cursor') matched against each session's inferred source; empty
+	// for no filter.
+	AgentType *string
 	// Filter to chats produced by this assistant
 	AssistantID *string
 	// Filter by whether chat has risk findings: 'true', 'false', or empty for no

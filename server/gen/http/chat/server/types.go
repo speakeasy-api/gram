@@ -2673,10 +2673,11 @@ func NewSubmitFeedbackGatewayErrorResponseBody(res *goa.ServiceError) *SubmitFee
 }
 
 // NewListChatsPayload builds a chat service listChats endpoint payload.
-func NewListChatsPayload(search *string, externalUserID *string, assistantID *string, hasRisk *string, pinned *string, minRiskScore *int, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
+func NewListChatsPayload(search *string, externalUserID *string, agentType *string, assistantID *string, hasRisk *string, pinned *string, minRiskScore *int, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
 	v := &chat.ListChatsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
+	v.AgentType = agentType
 	v.AssistantID = assistantID
 	v.HasRisk = hasRisk
 	v.Pinned = pinned

@@ -23,6 +23,7 @@ var _ = Service("chat", func() {
 			security.ChatSessionsTokenPayload()
 			Attribute("search", String, "Search query (searches chat ID, user ID, and title)")
 			Attribute("external_user_id", String, "Filter by external user ID")
+			Attribute("agent_type", String, "Filter by agent type. Comma-separated list of agent type keys (e.g. 'claude,codex,cursor') matched against each session's inferred source; empty for no filter.")
 			Attribute("assistant_id", String, "Filter to chats produced by this assistant", func() {
 				Format(FormatUUID)
 			})
@@ -66,6 +67,7 @@ var _ = Service("chat", func() {
 			GET("/rpc/chat.list")
 			Param("search")
 			Param("external_user_id")
+			Param("agent_type")
 			Param("assistant_id")
 			Param("has_risk")
 			Param("pinned")

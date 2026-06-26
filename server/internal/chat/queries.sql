@@ -266,6 +266,17 @@ candidate_chats AS (
       @min_risk_score::int < 0
       OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
     )
+    AND (
+      cardinality(@source_patterns::text[]) = 0
+      OR (
+        SELECT cmsrc.source
+        FROM chat_messages cmsrc
+        WHERE cmsrc.chat_id = c.id
+          AND cmsrc.source IS NOT NULL
+        ORDER BY cmsrc.created_at DESC
+        LIMIT 1
+      ) ILIKE ANY (@source_patterns::text[])
+    )
 ),
 chat_activity AS (
   SELECT
@@ -338,6 +349,17 @@ candidate_chats AS (
     AND (
       @min_risk_score::int < 0
       OR COALESCE(rc.cnt, 0) >= @min_risk_score::int
+    )
+    AND (
+      cardinality(@source_patterns::text[]) = 0
+      OR (
+        SELECT cmsrc.source
+        FROM chat_messages cmsrc
+        WHERE cmsrc.chat_id = c.id
+          AND cmsrc.source IS NOT NULL
+        ORDER BY cmsrc.created_at DESC
+        LIMIT 1
+      ) ILIKE ANY (@source_patterns::text[])
     )
 ),
 chat_stats AS (

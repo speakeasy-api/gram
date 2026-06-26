@@ -96,6 +96,17 @@ candidate_chats AS (
       $10::int < 0
       OR COALESCE(rc.cnt, 0) >= $10::int
     )
+    AND (
+      cardinality($11::text[]) = 0
+      OR (
+        SELECT cmsrc.source
+        FROM chat_messages cmsrc
+        WHERE cmsrc.chat_id = c.id
+          AND cmsrc.source IS NOT NULL
+        ORDER BY cmsrc.created_at DESC
+        LIMIT 1
+      ) ILIKE ANY ($11::text[])
+    )
 ),
 chat_activity AS (
   SELECT
@@ -122,6 +133,7 @@ type CountChatsParams struct {
 	AssistantID    interface{}
 	HasRiskFilter  string
 	MinRiskScore   int32
+	SourcePatterns []string
 }
 
 // risk_counts pre-aggregates active findings per chat once for the whole
@@ -139,6 +151,7 @@ func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, 
 		arg.AssistantID,
 		arg.HasRiskFilter,
 		arg.MinRiskScore,
+		arg.SourcePatterns,
 	)
 	var total int64
 	err := row.Scan(&total)
@@ -1490,6 +1503,17 @@ candidate_chats AS (
       $8::int < 0
       OR COALESCE(rc.cnt, 0) >= $8::int
     )
+    AND (
+      cardinality($9::text[]) = 0
+      OR (
+        SELECT cmsrc.source
+        FROM chat_messages cmsrc
+        WHERE cmsrc.chat_id = c.id
+          AND cmsrc.source IS NOT NULL
+        ORDER BY cmsrc.created_at DESC
+        LIMIT 1
+      ) ILIKE ANY ($9::text[])
+    )
 ),
 chat_stats AS (
   SELECT
@@ -1513,8 +1537,8 @@ filtered_chats AS (
     cc.risk_findings_count
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
-  WHERE ($9::timestamptz IS NULL OR cs.last_message_timestamp >= $9)
-    AND ($10::timestamptz IS NULL OR cs.last_message_timestamp <= $10)
+  WHERE ($10::timestamptz IS NULL OR cs.last_message_timestamp >= $10)
+    AND ($11::timestamptz IS NULL OR cs.last_message_timestamp <= $11)
 ),
 limited_chats AS (
   SELECT
@@ -1530,14 +1554,14 @@ limited_chats AS (
     fc.risk_findings_count
   FROM filtered_chats fc
   ORDER BY
-    CASE WHEN $11 = 'last_message_timestamp' AND $12 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-    CASE WHEN $11 = 'last_message_timestamp' AND $12 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
-    CASE WHEN $11 = 'num_messages' AND $12 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
-    CASE WHEN $11 = 'num_messages' AND $12 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
+    CASE WHEN $12 = 'last_message_timestamp' AND $13 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+    CASE WHEN $12 = 'last_message_timestamp' AND $13 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+    CASE WHEN $12 = 'num_messages' AND $13 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
+    CASE WHEN $12 = 'num_messages' AND $13 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
     fc.last_message_timestamp DESC,
     fc.id DESC
-  LIMIT $14
-  OFFSET $13
+  LIMIT $15
+  OFFSET $14
 )
 SELECT
   lc.id,
@@ -1562,6 +1586,7 @@ type ListChatsParams struct {
 	AssistantID    interface{}
 	HasRiskFilter  string
 	MinRiskScore   int32
+	SourcePatterns []string
 	FromTime       pgtype.Timestamptz
 	ToTime         pgtype.Timestamptz
 	SortBy         interface{}
@@ -1597,6 +1622,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.AssistantID,
 		arg.HasRiskFilter,
 		arg.MinRiskScore,
+		arg.SourcePatterns,
 		arg.FromTime,
 		arg.ToTime,
 		arg.SortBy,

@@ -287,6 +287,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		HasRiskFilter:  hasRiskFilter,
 		MinRiskScore:   minRiskScore,
 		Pinned:         conv.PtrValOr(payload.Pinned, ""),
+		SourcePatterns: agentTypeSourcePatterns(conv.PtrValOr(payload.AgentType, "")),
 	}
 
 	total, err := s.repo.CountChats(ctx, baseParams)
@@ -305,6 +306,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		HasRiskFilter:  baseParams.HasRiskFilter,
 		MinRiskScore:   baseParams.MinRiskScore,
 		Pinned:         baseParams.Pinned,
+		SourcePatterns: baseParams.SourcePatterns,
 		SortBy:         payload.SortBy,
 		SortOrder:      payload.SortOrder,
 		PageLimit:      conv.SafeInt32(payload.Limit),
@@ -344,6 +346,51 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	}
 
 	return &gen.ListChatsResult{Chats: result, Total: int(total)}, nil
+}
+
+// agentTypeSourcePatterns maps the comma-separated agent-type keys from the
+// listChats filter into the case-insensitive ILIKE patterns matched against a
+// chat's inferred source. The keys and patterns mirror the agent type
+// categories surfaced in the dashboard (see HookSourceIcon) so the filter stays
+// consistent with the icon shown for each session. Unknown keys fall back to
+// matching the key itself as a substring, so new agent types work without a
+// server change.
+func agentTypeSourcePatterns(agentType string) []string {
+	if strings.TrimSpace(agentType) == "" {
+		return nil
+	}
+	patternsByType := map[string][]string{
+		"claude":     {"%claude%", "%cowork%"},
+		"codex":      {"%codex%"},
+		"cursor":     {"%cursor%"},
+		"copilot":    {"%copilot%", "%microsoft%"},
+		"gemini":     {"%gemini%"},
+		"glean":      {"%glean%"},
+		"bedrock":    {"%bedrock%", "%aws%"},
+		"playground": {"%playground%"},
+		"elements":   {"%elements%"},
+		"assistant":  {"%assistant%"},
+	}
+	seen := make(map[string]struct{})
+	var patterns []string
+	for _, raw := range strings.Split(agentType, ",") {
+		key := strings.ToLower(strings.TrimSpace(raw))
+		if key == "" {
+			continue
+		}
+		pats, ok := patternsByType[key]
+		if !ok {
+			pats = []string{"%" + key + "%"}
+		}
+		for _, p := range pats {
+			if _, dup := seen[p]; dup {
+				continue
+			}
+			seen[p] = struct{}{}
+			patterns = append(patterns, p)
+		}
+	}
+	return patterns
 }
 
 func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*gen.Chat, error) {

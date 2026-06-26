@@ -80,6 +80,12 @@ const SESSION_FILTERS = defineFilters([
     pinned: true,
     defaultPreset: "30d",
   },
+  {
+    id: "agent_type",
+    label: "Agent type",
+    kind: "multiselect",
+    allLabel: "All",
+  },
   { id: "has_risk", label: "Risk", kind: "select", allLabel: "All" },
   {
     id: "min_risk_score",
@@ -90,11 +96,25 @@ const SESSION_FILTERS = defineFilters([
   },
 ]);
 
-const HAS_RISK_OPTIONS: OptionsById = {
+const AGENT_TYPE_OPTIONS = [
+  { value: "claude", label: "Claude" },
+  { value: "codex", label: "Codex" },
+  { value: "cursor", label: "Cursor" },
+  { value: "copilot", label: "Copilot" },
+  { value: "gemini", label: "Gemini" },
+  { value: "glean", label: "Glean" },
+  { value: "bedrock", label: "Bedrock" },
+  { value: "playground", label: "Playground" },
+  { value: "elements", label: "Elements" },
+  { value: "assistant", label: "Project Assistant" },
+];
+
+const SESSION_FILTER_OPTIONS: OptionsById = {
   has_risk: [
     { value: "true", label: "With Risk" },
     { value: "false", label: "No Risk" },
   ],
+  agent_type: AGENT_TYPE_OPTIONS,
 };
 
 export function LogsAgentsContent(): JSX.Element {
@@ -147,6 +167,7 @@ export function LogsAgentsContent(): JSX.Element {
   const urlSearch = searchParams.get("search");
   const urlChatId = searchParams.get("chatId");
   const urlHasRisk = searchParams.get("has_risk");
+  const urlAgentType = searchParams.get("agent_type");
   const urlMinRiskScore = searchParams.get("min_risk_score");
   const urlAssistantId = searchParams.get("assistantId");
   const urlSort = searchParams.get("sort") as SortField | null;
@@ -161,6 +182,16 @@ export function LogsAgentsContent(): JSX.Element {
   const minRiskScore = useMemo(
     () => parseMinRiskScore(urlMinRiskScore),
     [urlMinRiskScore],
+  );
+  const agentTypes = useMemo<string[]>(
+    () =>
+      urlAgentType
+        ? urlAgentType
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : [],
+    [urlAgentType],
   );
 
   const customRange = useMemo(() => {
@@ -255,6 +286,15 @@ export function LogsAgentsContent(): JSX.Element {
     [updateSearchParams],
   );
 
+  const setAgentTypes = useCallback(
+    (values: string[]) => {
+      updateSearchParams({
+        agent_type: values.length ? values.join(",") : null,
+      });
+    },
+    [updateSearchParams],
+  );
+
   const setMinRiskScore = useCallback(
     (value: number | null) => {
       // A threshold below 1 ("≥ 0" = everything) is meaningless, so treat it as
@@ -280,6 +320,7 @@ export function LogsAgentsContent(): JSX.Element {
       from: null,
       to: null,
       has_risk: null,
+      agent_type: null,
       min_risk_score: null,
     });
   }, [updateSearchParams]);
@@ -314,6 +355,7 @@ export function LogsAgentsContent(): JSX.Element {
             minRiskScore !== undefined ? undefined : toApiHasRisk(hasRisk),
           minRiskScore,
           assistantId: assistantId || undefined,
+          agentType: agentTypes.length ? agentTypes.join(",") : undefined,
           from: timeRange.from,
           to: timeRange.to,
           sortBy: toApiSortBy(sortField),
@@ -406,6 +448,8 @@ export function LogsAgentsContent(): JSX.Element {
         setSearchQuery={setSearchQuery}
         hasRisk={hasRisk}
         setHasRisk={setHasRisk}
+        agentTypes={agentTypes}
+        setAgentTypes={setAgentTypes}
         minRiskScore={minRiskScore}
         setMinRiskScore={setMinRiskScore}
         clearAllFilters={clearAllFilters}
@@ -444,6 +488,8 @@ function AgentSessionsPageContent({
   setSearchQuery,
   hasRisk,
   setHasRisk,
+  agentTypes,
+  setAgentTypes,
   minRiskScore,
   setMinRiskScore,
   clearAllFilters,
@@ -477,6 +523,8 @@ function AgentSessionsPageContent({
   setSearchQuery: (value: string) => void;
   hasRisk: string;
   setHasRisk: (value: string) => void;
+  agentTypes: string[];
+  setAgentTypes: (values: string[]) => void;
   minRiskScore: number | undefined;
   setMinRiskScore: (value: number | null) => void;
   clearAllFilters: () => void;
@@ -573,9 +621,10 @@ function AgentSessionsPageContent({
                   customLabel: null,
                 },
                 has_risk: hasRisk || null,
+                agent_type: agentTypes,
                 min_risk_score: minRiskScore ?? null,
               }}
-              optionsById={HAS_RISK_OPTIONS}
+              optionsById={SESSION_FILTER_OPTIONS}
               onChange={(id: string, value: FilterValue) => {
                 if (id === "date") {
                   const dateValue = value as {
@@ -594,6 +643,8 @@ function AgentSessionsPageContent({
                   }
                 } else if (id === "has_risk") {
                   setHasRisk((value as string | null) ?? "");
+                } else if (id === "agent_type") {
+                  setAgentTypes((value as string[]) ?? []);
                 } else if (id === "min_risk_score") {
                   setMinRiskScore(value as number | null);
                 }
@@ -603,6 +654,8 @@ function AgentSessionsPageContent({
                   setDateRangeParam("30d");
                 } else if (id === "has_risk") {
                   setHasRisk("");
+                } else if (id === "agent_type") {
+                  setAgentTypes([]);
                 } else if (id === "min_risk_score") {
                   setMinRiskScore(null);
                 }

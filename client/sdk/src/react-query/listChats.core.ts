@@ -46,6 +46,7 @@ export function buildListChatsQuery(
     queryKey: queryKeyListChats({
       search: request?.search,
       externalUserId: request?.externalUserId,
+      agentType: request?.agentType,
       assistantId: request?.assistantId,
       hasRisk: request?.hasRisk,
       pinned: request?.pinned,
@@ -86,6 +87,7 @@ export function queryKeyListChats(
   parameters: {
     search?: string | undefined;
     externalUserId?: string | undefined;
+    agentType?: string | undefined;
     assistantId?: string | undefined;
     hasRisk?: operations.HasRisk | undefined;
     pinned?: operations.Pinned | undefined;
