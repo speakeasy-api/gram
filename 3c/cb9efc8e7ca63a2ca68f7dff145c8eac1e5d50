@@ -1,0 +1,47 @@
+server/cmd/seedriskclusters/main.go
+  s_37e0ba1c864701::t_c1efe8e1b64a04 79-82,85,87-89,91
+  s_37e0ba1c864701::t_d3e331422eaf2e 472
+  s_37e0ba1c864701::t_e65ac7b945184a 99-103,105
+  s_37e0ba1c864701::t_366f9c4dcb7bdc 484
+  s_37e0ba1c864701::t_a881563162bfe8 209-224
+  s_37e0ba1c864701::t_dd7ea5b806fbea 4,7,29-30,32-64,66-78,83-84,86,90,92-98,104,106-112,114-115,118-120,122,124-164,167-175,243-246,291-293,329,377,440,467,475,555-568
+  s_37e0ba1c864701::t_c72ed8c06a2d73 476
+  s_37e0ba1c864701::t_b6e560e45dccf8 1-3,5-6,8-28,31,65,113,116-117,121,123,165-166,176-208,225-242,247-290,294-328,330-376,378-439,441-460,462-466,468-471,473-474,477-479,481-483,485-554
+  s_37e0ba1c864701::t_fa1bcbc3120da2 461
+  s_37e0ba1c864701::t_3b0dae6c4bcbd4 480
+server/design/risk/design.go
+  s_37e0ba1c864701::t_864528f2bd849a 1179-1203
+  s_37e0ba1c864701::t_3ca0cba4d7948e 343-381
+client/dashboard/src/pages/security/RiskClusters.tsx
+  s_37e0ba1c864701::t_5a4ff381df737a 1-84,86-243
+  s_37e0ba1c864701::t_9c051f00932bc6 85
+client/dashboard/src/pages/security/RiskEvents.tsx
+  s_37e0ba1c864701::t_504431ddaf1af4 38-39
+  s_37e0ba1c864701::t_a7b9f860d05a98 211-220
+  s_37e0ba1c864701::t_d0037f2aa3fd47 295-306
+  s_37e0ba1c864701::t_02fa1156824fb0 177
+  s_37e0ba1c864701::t_d4aaf4919c9643 71
+  s_37e0ba1c864701::t_c500a1065c6603 21-28
+  s_37e0ba1c864701::t_817d913265617c 270
+  s_37e0ba1c864701::t_3a286b43cd009a 263-267
+server/internal/risk/clusters_poc.go
+  s_37e0ba1c864701::t_67be5c1bd4f92c 1-100,102-106,108-112,114-157,159-160,162-176,179-261,263-270,272-370,372-375,377-404,406-513,515-541
+  s_37e0ba1c864701::t_c8ccd6eb4d5f7e 101,113
+  s_37e0ba1c864701::t_9c051f00932bc6 107,158,161,177-178,262,271,371,376,405,514,542-543
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "3ccb9efc8e7ca63a2ca68f7dff145c8eac1e5d50",
+  "prompts": {},
+  "sessions": {
+    "s_37e0ba1c864701": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "75eb1a56-8dd2-4126-bde7-9b483d40e48a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
