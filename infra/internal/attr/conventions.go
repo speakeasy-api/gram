@@ -29,6 +29,9 @@ const (
 	GCPSubscriptionQualifiedNameKey = attribute.Key("gram.subscription.qualified_name")
 	TopicProtoNameKey               = attribute.Key("gram.topic.proto_name")
 	SubscriptionProtoNameKey        = attribute.Key("gram.subscription.proto_name")
+	SubscriberBatchSizeKey          = attribute.Key("gram.subscriber.batch_size")
+	SubscriberMessageIDKey          = attribute.Key("gram.subscriber.message_id")
+	SubscriberDeliveryAttemptKey    = attribute.Key("gram.subscriber.delivery_attempt")
 )
 
 func Error(v error) attribute.KeyValue { return ErrorMessageKey.String(v.Error()) }
@@ -105,4 +108,28 @@ func SubscriptionProtoName[S ~string](v S) attribute.KeyValue {
 }
 func SlogSubscriptionProtoName[S ~string](v S) slog.Attr {
 	return slog.String(string(SubscriptionProtoNameKey), string(v))
+}
+
+func SubscriberBatchSize(v int) attribute.KeyValue { return SubscriberBatchSizeKey.Int(v) }
+func SlogSubscriberBatchSize(v int) slog.Attr      { return slog.Int(string(SubscriberBatchSizeKey), v) }
+
+func SubscriberMessageID[S ~string](v S) attribute.KeyValue {
+	return SubscriberMessageIDKey.String(string(v))
+}
+func SlogSubscriberMessageID[S ~string](v S) slog.Attr {
+	return slog.String(string(SubscriberMessageIDKey), string(v))
+}
+
+func SubscriberDeliveryAttempt(v *int) attribute.KeyValue {
+	if v == nil {
+		return SubscriberDeliveryAttemptKey.Int(-1)
+	}
+
+	return SubscriberDeliveryAttemptKey.Int(*v)
+}
+func SlogSubscriberDeliveryAttempt(v *int) slog.Attr {
+	if v == nil {
+		return slog.Int(string(SubscriberDeliveryAttemptKey), -1)
+	}
+	return slog.Int(string(SubscriberDeliveryAttemptKey), *v)
 }
