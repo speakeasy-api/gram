@@ -279,6 +279,7 @@ export * from "./serveimage.js";
 export * from "./serveopenapiv3.js";
 export * from "./sessioninfo.js";
 export * from "./setbillingmetadata.js";
+export * from "./setchatpinned.js";
 export * from "./setmcpmetadata.js";
 export * from "./setorganizationwhitelist.js";
 export * from "./setpluginassignments.js";

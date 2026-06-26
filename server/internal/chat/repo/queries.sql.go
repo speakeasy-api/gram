@@ -68,28 +68,33 @@ candidate_chats AS (
     AND ($4 = '' OR c.external_user_id = $4)
     AND ($5 = '' OR c.user_id = $5)
     AND (
-      $6 = ''
-      OR c.id::text ILIKE '%' || $6 || '%'
-      OR c.external_user_id ILIKE '%' || $6 || '%'
-      OR c.title ILIKE '%' || $6 || '%'
+      $6::text = ''
+      OR ($6::text = 'true' AND c.pinned_at IS NOT NULL)
+      OR ($6::text = 'false' AND c.pinned_at IS NULL)
     )
     AND (
       $7 = ''
+      OR c.id::text ILIKE '%' || $7 || '%'
+      OR c.external_user_id ILIKE '%' || $7 || '%'
+      OR c.title ILIKE '%' || $7 || '%'
+    )
+    AND (
+      $8 = ''
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
-          AND at.assistant_id = $7::uuid
+          AND at.assistant_id = $8::uuid
           AND at.deleted IS FALSE
       )
     )
     AND (
-      $8::text = ''
-      OR ($8::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
-      OR ($8::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+      $9::text = ''
+      OR ($9::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR ($9::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
     )
     AND (
-      $9::int < 0
-      OR COALESCE(rc.cnt, 0) >= $9::int
+      $10::int < 0
+      OR COALESCE(rc.cnt, 0) >= $10::int
     )
 ),
 chat_activity AS (
@@ -112,6 +117,7 @@ type CountChatsParams struct {
 	ProjectID      uuid.UUID
 	ExternalUserID interface{}
 	UserID         interface{}
+	Pinned         string
 	Search         interface{}
 	AssistantID    interface{}
 	HasRiskFilter  string
@@ -128,6 +134,7 @@ func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, 
 		arg.ProjectID,
 		arg.ExternalUserID,
 		arg.UserID,
+		arg.Pinned,
 		arg.Search,
 		arg.AssistantID,
 		arg.HasRiskFilter,
@@ -1455,28 +1462,33 @@ candidate_chats AS (
     AND ($2 = '' OR c.external_user_id = $2)
     AND ($3 = '' OR c.user_id = $3)
     AND (
-      $4 = ''
-      OR c.id::text ILIKE '%' || $4 || '%'
-      OR c.external_user_id ILIKE '%' || $4 || '%'
-      OR c.title ILIKE '%' || $4 || '%'
+      $4::text = ''
+      OR ($4::text = 'true' AND c.pinned_at IS NOT NULL)
+      OR ($4::text = 'false' AND c.pinned_at IS NULL)
     )
     AND (
       $5 = ''
+      OR c.id::text ILIKE '%' || $5 || '%'
+      OR c.external_user_id ILIKE '%' || $5 || '%'
+      OR c.title ILIKE '%' || $5 || '%'
+    )
+    AND (
+      $6 = ''
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
-          AND at.assistant_id = $5::uuid
+          AND at.assistant_id = $6::uuid
           AND at.deleted IS FALSE
       )
     )
     AND (
-      $6::text = ''
-      OR ($6::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
-      OR ($6::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
+      $7::text = ''
+      OR ($7::text = 'true' AND COALESCE(rc.cnt, 0) > 0)
+      OR ($7::text = 'false' AND COALESCE(rc.cnt, 0) = 0)
     )
     AND (
-      $7::int < 0
-      OR COALESCE(rc.cnt, 0) >= $7::int
+      $8::int < 0
+      OR COALESCE(rc.cnt, 0) >= $8::int
     )
 ),
 chat_stats AS (
@@ -1501,8 +1513,8 @@ filtered_chats AS (
     cc.risk_findings_count
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
-  WHERE ($8::timestamptz IS NULL OR cs.last_message_timestamp >= $8)
-    AND ($9::timestamptz IS NULL OR cs.last_message_timestamp <= $9)
+  WHERE ($9::timestamptz IS NULL OR cs.last_message_timestamp >= $9)
+    AND ($10::timestamptz IS NULL OR cs.last_message_timestamp <= $10)
 ),
 limited_chats AS (
   SELECT
@@ -1518,14 +1530,14 @@ limited_chats AS (
     fc.risk_findings_count
   FROM filtered_chats fc
   ORDER BY
-    CASE WHEN $10 = 'last_message_timestamp' AND $11 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-    CASE WHEN $10 = 'last_message_timestamp' AND $11 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
-    CASE WHEN $10 = 'num_messages' AND $11 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
-    CASE WHEN $10 = 'num_messages' AND $11 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
+    CASE WHEN $11 = 'last_message_timestamp' AND $12 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+    CASE WHEN $11 = 'last_message_timestamp' AND $12 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+    CASE WHEN $11 = 'num_messages' AND $12 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
+    CASE WHEN $11 = 'num_messages' AND $12 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
     fc.last_message_timestamp DESC,
     fc.id DESC
-  LIMIT $13
-  OFFSET $12
+  LIMIT $14
+  OFFSET $13
 )
 SELECT
   lc.id,
@@ -1545,6 +1557,7 @@ type ListChatsParams struct {
 	ProjectID      uuid.UUID
 	ExternalUserID interface{}
 	UserID         interface{}
+	Pinned         string
 	Search         interface{}
 	AssistantID    interface{}
 	HasRiskFilter  string
@@ -1579,6 +1592,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.ProjectID,
 		arg.ExternalUserID,
 		arg.UserID,
+		arg.Pinned,
 		arg.Search,
 		arg.AssistantID,
 		arg.HasRiskFilter,
@@ -2214,6 +2228,27 @@ UPDATE assistants SET deleted_at = clock_timestamp() WHERE id = $1
 // its threads behind).
 func (q *Queries) SeedSoftDeleteAssistant(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, seedSoftDeleteAssistant, id)
+	return err
+}
+
+const setChatPinned = `-- name: SetChatPinned :exec
+UPDATE chats
+SET pinned_at = CASE WHEN $1::boolean THEN COALESCE(pinned_at, NOW()) ELSE NULL END,
+    updated_at = NOW()
+WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+`
+
+type SetChatPinnedParams struct {
+	Pinned    bool
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Pin or unpin a chat. Project-scoped so a pin can never touch another
+// project's chat. COALESCE preserves the original pin time when re-pinning an
+// already-pinned chat; unpinning clears it.
+func (q *Queries) SetChatPinned(ctx context.Context, arg SetChatPinnedParams) error {
+	_, err := q.db.Exec(ctx, setChatPinned, arg.Pinned, arg.ID, arg.ProjectID)
 	return err
 }
 

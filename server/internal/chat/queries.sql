@@ -238,6 +238,11 @@ candidate_chats AS (
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
     AND (@user_id = '' OR c.user_id = @user_id)
     AND (
+      @pinned::text = ''
+      OR (@pinned::text = 'true' AND c.pinned_at IS NOT NULL)
+      OR (@pinned::text = 'false' AND c.pinned_at IS NULL)
+    )
+    AND (
       @search = ''
       OR c.id::text ILIKE '%' || @search || '%'
       OR c.external_user_id ILIKE '%' || @search || '%'
@@ -305,6 +310,11 @@ candidate_chats AS (
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
     AND (@user_id = '' OR c.user_id = @user_id)
+    AND (
+      @pinned::text = ''
+      OR (@pinned::text = 'true' AND c.pinned_at IS NOT NULL)
+      OR (@pinned::text = 'false' AND c.pinned_at IS NULL)
+    )
     AND (
       @search = ''
       OR c.id::text ILIKE '%' || @search || '%'
@@ -614,6 +624,15 @@ WHERE id = @id AND title_manually_set IS FALSE;
 UPDATE chats
 SET title = sqlc.narg('title'),
     title_manually_set = @title_manually_set,
+    updated_at = NOW()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: SetChatPinned :exec
+-- Pin or unpin a chat. Project-scoped so a pin can never touch another
+-- project's chat. COALESCE preserves the original pin time when re-pinning an
+-- already-pinned chat; unpinning clears it.
+UPDATE chats
+SET pinned_at = CASE WHEN @pinned::boolean THEN COALESCE(pinned_at, NOW()) ELSE NULL END,
     updated_at = NOW()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 

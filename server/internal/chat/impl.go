@@ -286,6 +286,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		AssistantID:    assistantID,
 		HasRiskFilter:  hasRiskFilter,
 		MinRiskScore:   minRiskScore,
+		Pinned:         conv.PtrValOr(payload.Pinned, ""),
 	}
 
 	total, err := s.repo.CountChats(ctx, baseParams)
@@ -303,6 +304,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		AssistantID:    baseParams.AssistantID,
 		HasRiskFilter:  baseParams.HasRiskFilter,
 		MinRiskScore:   baseParams.MinRiskScore,
+		Pinned:         baseParams.Pinned,
 		SortBy:         payload.SortBy,
 		SortOrder:      payload.SortOrder,
 		PageLimit:      conv.SafeInt32(payload.Limit),
@@ -1278,6 +1280,51 @@ func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload
 	}
 	if !res.Deleted && res.BacksLiveThread {
 		return oops.E(oops.CodeConflict, nil, "cannot delete a chat that backs an assistant thread").LogError(ctx, s.logger)
+	}
+
+	return nil
+}
+
+func (s *Service) SetPinned(ctx context.Context, payload *gen.SetPinnedPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
+	}
+
+	// Load the chat to verify access before mutating it.
+	chat, err := s.repo.GetChat(ctx, chatID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.C(oops.CodeNotFound)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
+	}
+
+	if chat.ProjectID != *authCtx.ProjectID {
+		return oops.C(oops.CodeUnauthorized)
+	}
+
+	// Off-dashboard callers must match the chat owner unless they're the
+	// managed-assistant runtime (see LoadChat).
+	if authCtx.SessionID == nil {
+		if _, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx); !isAssistantCall {
+			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
+				return oops.C(oops.CodeUnauthorized)
+			}
+		}
+	}
+
+	if err := s.repo.SetChatPinned(ctx, repo.SetChatPinnedParams{
+		Pinned:    payload.Pinned,
+		ID:        chatID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "set chat pinned").LogError(ctx, s.logger)
 	}
 
 	return nil
