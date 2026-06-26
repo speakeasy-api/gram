@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -46,6 +47,10 @@ func (s *Service) GetRiskBlock(ctx context.Context, payload *gen.GetRiskBlockPay
 		return nil, oops.E(oops.CodeUnexpected, err, "load block").LogError(ctx, s.logger)
 	}
 
+	if err := s.authorizeBlockView(ctx, authCtx, row.ProjectID, row.ChatPersisted, row.ChatUserID); err != nil {
+		return nil, err
+	}
+
 	return &gen.RiskBlock{
 		ID:         row.ID.String(),
 		ProjectID:  row.ProjectID.String(),
@@ -74,6 +79,23 @@ func (s *Service) SubmitRiskBlockFeedback(ctx context.Context, payload *gen.Subm
 	blockID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid block id")
+	}
+
+	// Authorize against the same owner-or-project-admin rule as the read path
+	// before mutating: load the block (which also enforces the org-membership
+	// floor) and run the access check on it.
+	block, err := s.repo.GetToolCallBlock(ctx, repo.GetToolCallBlockParams{
+		ID:           blockID,
+		ViewerUserID: authCtx.UserID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load block").LogError(ctx, s.logger)
+	}
+	if err := s.authorizeBlockView(ctx, authCtx, block.ProjectID, block.ChatPersisted, block.ChatUserID); err != nil {
+		return nil, err
 	}
 
 	row, err := s.repo.UpdateToolCallBlockFeedback(ctx, repo.UpdateToolCallBlockFeedbackParams{
@@ -112,6 +134,35 @@ func (s *Service) authorizeBlockAccess(ctx context.Context) (*contextvalues.Auth
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	return authCtx, nil
+}
+
+// authorizeBlockView tightens block access beyond bare org membership when the
+// blocked session was persisted (session capture on). In that case the chat's
+// owning user may always view their own block, and any other viewer must hold
+// project-admin (project:write) on the block's project. When no chat backs the
+// block, access falls back to the org membership already enforced by the block
+// queries — so a block whose session was never captured stays readable by any
+// member of the owning org, preserving the original behavior.
+//
+// When RBAC is disabled for the org the project:write check is a no-op (allow),
+// which is consistent with how the rest of the platform degrades to
+// membership-level access without RBAC.
+func (s *Service) authorizeBlockView(ctx context.Context, authCtx *contextvalues.AuthContext, projectID uuid.UUID, chatPersisted bool, chatUserID pgtype.Text) error {
+	if !chatPersisted {
+		return nil
+	}
+	if chatUserID.Valid && chatUserID.String != "" && chatUserID.String == authCtx.UserID {
+		return nil
+	}
+	if err := s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeProjectWrite,
+		ResourceKind: "",
+		ResourceID:   projectID.String(),
+		Dimensions:   nil,
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func blockReason(reason string) string {

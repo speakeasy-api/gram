@@ -597,7 +597,7 @@ var _ = Service("risk", func() {
 		Result(RiskBlock)
 
 		HTTP(func() {
-			POST("/rpc/risk.submitBlockFeedback")
+			PUT("/rpc/risk.submitBlockFeedback")
 			security.SessionHeader()
 			Response(StatusOK)
 		})

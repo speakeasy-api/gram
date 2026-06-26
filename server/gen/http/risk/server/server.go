@@ -97,7 +97,7 @@ func New(
 			{"GetRiskPolicyStatus", "GET", "/rpc/risk.policies.status"},
 			{"CreateRiskPolicyBypassRequest", "POST", "/rpc/risk.createPolicyBypassRequest"},
 			{"GetRiskBlock", "GET", "/rpc/risk.getBlock"},
-			{"SubmitRiskBlockFeedback", "POST", "/rpc/risk.submitBlockFeedback"},
+			{"SubmitRiskBlockFeedback", "PUT", "/rpc/risk.submitBlockFeedback"},
 			{"ListRiskPolicyBypassRequests", "GET", "/rpc/risk.listPolicyBypassRequests"},
 			{"ApproveRiskPolicyBypassRequest", "POST", "/rpc/risk.approvePolicyBypassRequest"},
 			{"DenyRiskPolicyBypassRequest", "POST", "/rpc/risk.denyPolicyBypassRequest"},
@@ -1094,7 +1094,7 @@ func MountSubmitRiskBlockFeedbackHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/risk.submitBlockFeedback", f)
+	mux.Handle("PUT", "/rpc/risk.submitBlockFeedback", f)
 }
 
 // NewSubmitRiskBlockFeedbackHandler creates a HTTP handler which loads the

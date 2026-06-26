@@ -135,7 +135,10 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 				ProjectID:      *authCtx.ProjectID,
 				Reason:         auditReason,
 				ToolName:       strings.TrimPrefix(ev.ToolName, "MCP:"),
-				RiskPolicyID:   nullableUUIDFromString(scanResult.PolicyID),
+				RiskPolicyID:   conv.StringToNullUUID(scanResult.PolicyID),
+				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ChatID:         chatIDForBlock(conv.PtrValOr(payload.ConversationID, "")),
+				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			}); bURL != "" {
 				userReason = appendBlockURL(userReason, bURL)
 			}
@@ -180,7 +183,10 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 				ProjectID:      *authCtx.ProjectID,
 				Reason:         auditReason,
 				ToolName:       toolName,
-				RiskPolicyID:   nullableUUIDFromString(policy.ID),
+				RiskPolicyID:   conv.StringToNullUUID(policy.ID),
+				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ChatID:         chatIDForBlock(conv.PtrValOr(payload.ConversationID, "")),
+				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			}); bURL != "" {
 				userReason = appendBlockURL(userReason, bURL)
 			}
@@ -212,7 +218,10 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 				ProjectID:      *authCtx.ProjectID,
 				Reason:         auditReason,
 				ToolName:       toolName,
-				RiskPolicyID:   nullableUUIDFromString(scanResult.PolicyID),
+				RiskPolicyID:   conv.StringToNullUUID(scanResult.PolicyID),
+				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ChatID:         chatIDForBlock(conv.PtrValOr(payload.ConversationID, "")),
+				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			}); bURL != "" {
 				userReason = appendBlockURL(userReason, bURL)
 			}

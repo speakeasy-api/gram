@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: a169a8e4da3bce671264e1b3d1c4cba1
+  docChecksum: bd926693b6b12a60f4fa82c35faf1ca3
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -3467,7 +3467,7 @@ trackedFiles:
   docs/sdks/auth/README.md:
     last_write_checksum: sha1:18384a8309d0bb0622755466208f0a551404762f
   docs/sdks/blocks/README.md:
-    last_write_checksum: sha1:fd44dde3dce79970534de556e1e86380c248f80c
+    last_write_checksum: sha1:0c16a018e000cc74e973eb2c6804e9b3ca4602f1
   docs/sdks/categories/README.md:
     last_write_checksum: sha1:1c455de965567c85a0f47659a2ca4913f6c560aa
   docs/sdks/chat/README.md:
@@ -4031,7 +4031,7 @@ trackedFiles:
   src/funcs/riskBlocksGet.ts:
     last_write_checksum: sha1:7308d533a93043bef2210235b3e3e78b8e37b41a
   src/funcs/riskBlocksSubmitFeedback.ts:
-    last_write_checksum: sha1:3fb5e7e27c7ae930433eed85a14d896ba15381fb
+    last_write_checksum: sha1:49bc90afb12697697446e7d2450ac8fce1573ae7
   src/funcs/riskCategoriesList.ts:
     last_write_checksum: sha1:264faa0baa71ef4bde67cb85c901a3cbfd725040
   src/funcs/riskCustomRulesCreate.ts:

@@ -1227,9 +1227,12 @@ SELECT
     b.tool_name,
     b.feedback,
     b.created_at,
-    rp.name AS policy_name
+    rp.name AS policy_name,
+    c.user_id AS chat_user_id,
+    (c.id IS NOT NULL)::boolean AS chat_persisted
 FROM tool_call_blocks b
 LEFT JOIN risk_policies rp ON rp.id = b.risk_policy_id AND rp.deleted IS FALSE
+LEFT JOIN chats c ON c.id = b.chat_id AND c.deleted IS FALSE
 WHERE b.id = $1
   AND b.deleted IS FALSE
   AND EXISTS (
@@ -1249,13 +1252,15 @@ type GetToolCallBlockParams struct {
 }
 
 type GetToolCallBlockRow struct {
-	ID         uuid.UUID
-	ProjectID  uuid.UUID
-	Reason     string
-	ToolName   pgtype.Text
-	Feedback   pgtype.Text
-	CreatedAt  pgtype.Timestamptz
-	PolicyName pgtype.Text
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	Reason        string
+	ToolName      pgtype.Text
+	Feedback      pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	PolicyName    pgtype.Text
+	ChatUserID    pgtype.Text
+	ChatPersisted bool
 }
 
 // Loads a durable tool call block for the block page. Scoped to the viewer's
@@ -1263,6 +1268,13 @@ type GetToolCallBlockRow struct {
 // link an agent embeds in its block message, often by a non-admin member, so it
 // is readable by any active member of the organization that owns it. The policy
 // name is joined for display when the policy still exists.
+//
+// The chats join surfaces the session owner so the caller can tighten access
+// beyond bare membership when the session was persisted (session capture on):
+// chat_persisted reports whether a (non-deleted) chat backs the block, and
+// chat_user_id is that session's owning user. The handler uses these to require
+// owner-or-project-admin when a chat exists, and falls back to membership when
+// it doesn't.
 func (q *Queries) GetToolCallBlock(ctx context.Context, arg GetToolCallBlockParams) (GetToolCallBlockRow, error) {
 	row := q.db.QueryRow(ctx, getToolCallBlock, arg.ID, arg.ViewerUserID)
 	var i GetToolCallBlockRow
@@ -1274,6 +1286,8 @@ func (q *Queries) GetToolCallBlock(ctx context.Context, arg GetToolCallBlockPara
 		&i.Feedback,
 		&i.CreatedAt,
 		&i.PolicyName,
+		&i.ChatUserID,
+		&i.ChatPersisted,
 	)
 	return i, err
 }

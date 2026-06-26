@@ -827,7 +827,10 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 					ProjectID:      ev.Context.ProjectID,
 					Reason:         auditReason,
 					ToolName:       ev.ToolName,
-					RiskPolicyID:   nullableUUIDFromString(scanResult.PolicyID),
+					RiskPolicyID:   conv.StringToNullUUID(scanResult.PolicyID),
+					RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
+					ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 				})
 			}
 			return constructBlockResponse(payload.HookEventName, userReason), nil
@@ -1079,9 +1082,10 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 				ProjectID:      projectUUID,
 				Reason:         auditReason,
 				ToolName:       mcpToolName,
-				RiskPolicyID:   nullableUUIDFromString(policy.ID),
-				RiskResultID:   nullableUUID(resultID),
-				ChatMessageID:  nullableUUID(msgID),
+				RiskPolicyID:   conv.StringToNullUUID(policy.ID),
+				RiskResultID:   conv.NilableToNullUUID(resultID),
+				ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
+				ChatMessageID:  conv.NilableToNullUUID(msgID),
 			})
 		}()
 	}

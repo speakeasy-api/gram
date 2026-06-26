@@ -78,11 +78,22 @@ func (s *Service) recordToolCallBlockAsync(ctx context.Context, p toolCallBlockP
 	}
 	blockID, err := uuid.NewV7()
 	if err != nil {
-		s.logger.WarnContext(ctx, "tool call block: failed to generate id", attr.SlogError(err))
+		s.logger.ErrorContext(ctx, "tool call block: failed to generate id", attr.SlogError(err))
 		return ""
 	}
 	go s.insertToolCallBlock(context.WithoutCancel(ctx), blockID, p)
 	return s.blockViewURL(blockID)
+}
+
+// chatIDForBlock derives the chat a blocked tool call belongs to from its
+// session/conversation id, using the same deterministic mapping as the hook PG
+// write paths so the block row links to the chat the call is recorded under.
+// Returns an invalid NullUUID when no session id is available.
+func chatIDForBlock(sessionID string) uuid.NullUUID {
+	if strings.TrimSpace(sessionID) == "" {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: sessionIDToUUID(sessionID), Valid: true}
 }
 
 // appendBlockURL appends the durable block link to an agent-facing block
@@ -92,19 +103,4 @@ func appendBlockURL(message, blockURL string) string {
 		return message
 	}
 	return strings.TrimSpace(message) + "\n\nView information about why we blocked this request and leave feedback:\n" + blockURL
-}
-
-func nullableUUIDFromString(s string) uuid.NullUUID {
-	id, err := uuid.Parse(strings.TrimSpace(s))
-	if err != nil {
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	}
-	return uuid.NullUUID{UUID: id, Valid: true}
-}
-
-func nullableUUID(id uuid.UUID) uuid.NullUUID {
-	if id == uuid.Nil {
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	}
-	return uuid.NullUUID{UUID: id, Valid: true}
 }

@@ -3934,7 +3934,7 @@ func DecodeGetRiskBlockResponse(decoder func(*http.Response) goahttp.Decoder, re
 // endpoint
 func (c *Client) BuildSubmitRiskBlockFeedbackRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SubmitRiskBlockFeedbackRiskPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
+	req, err := http.NewRequest("PUT", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("risk", "submitRiskBlockFeedback", u.String(), err)
 	}

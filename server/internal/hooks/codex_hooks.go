@@ -175,7 +175,10 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			ProjectID:      *authCtx.ProjectID,
 			Reason:         blockReason,
 			ToolName:       blockToolName,
-			RiskPolicyID:   nullableUUIDFromString(blockPolicyID),
+			RiskPolicyID:   conv.StringToNullUUID(blockPolicyID),
+			RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ChatID:         chatIDForBlock(metadata.SessionID),
+			ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		}); bURL != "" {
 			userReason = appendBlockURL(userReason, bURL)
 		}
