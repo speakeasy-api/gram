@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -11,7 +12,14 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
+
+type failingFeatures struct{}
+
+func (failingFeatures) IsFeatureEnabled(_ context.Context, _ string, _ productfeatures.Feature) (bool, error) {
+	return false, errors.New("feature lookup unavailable")
+}
 
 // seedCaptureSession wires up an attributed Claude session for capture tests:
 // a connected user plus cached session metadata so resolveClaudeSessionMetadata
@@ -142,6 +150,41 @@ func TestClaudeMessages_BufferedUntilSessionMetadataResolves(t *testing.T) {
 	var after []gen.ClaudeMessagesPayload
 	require.NoError(t, ti.service.cache.ListRange(ctx, claudeMessagesPendingCacheKey(sessionID), 0, -1, &after))
 	require.Empty(t, after, "buffer should be deleted after flush")
+}
+
+func TestClaudeMessages_PendingBufferSurvivesReplayFailure(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = failingFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := uuid.NewString()
+	userContent := "keep me buffered"
+	payload := &gen.ClaudeMessagesPayload{
+		SessionID: sessionID,
+		Messages: []*gen.ClaudeCapturedMessage{
+			{ExternalID: uuid.NewString(), Role: "user", Content: &userContent},
+		},
+	}
+	require.NoError(t, ti.service.bufferClaudeMessages(ctx, sessionID, payload))
+
+	metadata := SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		UserEmail:   "buffered-capture@example.com",
+		UserID:      "buffered-capture-user",
+		ClaudeOrgID: authCtx.ActiveOrganizationID,
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+
+	ti.service.flushPendingClaudeMessages(ctx, sessionID, &metadata)
+
+	var buffered []gen.ClaudeMessagesPayload
+	require.NoError(t, ti.service.cache.ListRange(ctx, claudeMessagesPendingCacheKey(sessionID), 0, -1, &buffered))
+	require.Len(t, buffered, 1, "failed replay must keep the pending batch for a later flush")
 }
 
 func TestClaudeMessages_SkipsToolMessageWithoutToolCallID(t *testing.T) {

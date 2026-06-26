@@ -618,10 +618,19 @@ func (s *Service) flushPendingClaudeMessages(ctx context.Context, sessionID stri
 		attr.SlogHookEvent("ClaudeMessages"),
 		attr.SlogGenAIConversationID(sessionID),
 	)
+	failed := false
 	for i := range payloads {
 		if err := s.persistClaudeMessages(ctx, &payloads[i], *metadata, logger); err != nil {
 			logger.ErrorContext(ctx, "Failed to persist pending claude message capture", attr.SlogError(err))
+			failed = true
 		}
+	}
+
+	if failed {
+		logger.WarnContext(ctx, "keeping pending claude message capture buffer after replay failure",
+			attr.SlogEvent("claude_messages_pending_flush_failed"),
+		)
+		return
 	}
 
 	s.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending claude message captures", len(payloads)))

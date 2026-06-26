@@ -929,6 +929,11 @@ func TestClaudeObservabilityHookEventsRegistersToolFailureEvent(t *testing.T) {
 	require.Contains(t, ClaudeObservabilityHookEvents, "PostToolUseFailure")
 }
 
+func TestClaudeObservabilityHookEventsRegistersSubagentStop(t *testing.T) {
+	t.Parallel()
+	require.Contains(t, ClaudeObservabilityHookEvents, "SubagentStop")
+}
+
 func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
