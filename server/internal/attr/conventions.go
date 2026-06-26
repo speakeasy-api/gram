@@ -106,7 +106,7 @@ const (
 
 	TopicProtoNameKey        = attribute.Key("gram.topic.proto_name")
 	SubscriptionProtoNameKey = attribute.Key("gram.subscription.proto_name")
-	PubSubBatchSizeKey       = attribute.Key("gram.pubsub.batch_size")
+	SubscriberBatchSizeKey   = attribute.Key("gram.subscriber.batch_size")
 
 	AssetIDKey                     = attribute.Key("gram.asset.id")
 	AssetURLKey                    = attribute.Key("gram.asset.url")
@@ -687,8 +687,8 @@ func SlogSubscriptionProtoName[S ~string](v S) slog.Attr {
 	return slog.String(string(SubscriptionProtoNameKey), string(v))
 }
 
-func PubSubBatchSize(v int64) attribute.KeyValue { return PubSubBatchSizeKey.Int64(v) }
-func SlogPubSubBatchSize(v int64) slog.Attr      { return slog.Int64(string(PubSubBatchSizeKey), v) }
+func SubscriberBatchSize(v int) attribute.KeyValue { return SubscriberBatchSizeKey.Int(v) }
+func SlogSubscriberBatchSize(v int) slog.Attr      { return slog.Int(string(SubscriberBatchSizeKey), v) }
 
 func AssetID(v string) attribute.KeyValue { return AssetIDKey.String(v) }
 func SlogAssetID(v string) slog.Attr      { return slog.String(string(AssetIDKey), v) }

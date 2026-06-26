@@ -502,5 +502,5 @@ func TestHandle_DeliveryAttemptOmittedWhenNil(t *testing.T) {
 	})
 
 	require.True(t, cap.nacked)
-	require.True(t, strings.Contains(buf.String(), "delivery_attempt=0"), "nil delivery attempt should log as 0")
+	require.True(t, strings.Contains(buf.String(), "delivery_attempt=-1"), "nil delivery attempt should log as the -1 sentinel")
 }
