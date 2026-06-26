@@ -140,6 +140,7 @@ func CreateIssuerGatedToolset(
 
 	rsc, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:        conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID: rsi.ID,
 		ClientID:              clientID,
 		ClientSecretEncrypted: conv.ToPGText(encSecret),

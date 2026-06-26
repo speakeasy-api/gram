@@ -900,6 +900,7 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgissuersgen.Creat
 
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               clientProjectID,
+		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuerID,
 		ClientID:                clientID,
 		ClientSecretEncrypted:   secretCiphertext,

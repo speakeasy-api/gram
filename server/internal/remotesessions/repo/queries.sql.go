@@ -82,6 +82,7 @@ func (q *Queries) CountRemoteSessionClientsByIssuerID(ctx context.Context, remot
 const createRemoteSessionClient = `-- name: CreateRemoteSessionClient :one
 INSERT INTO remote_session_clients (
     project_id,
+    organization_id,
     remote_session_issuer_id,
     client_id,
     client_secret_encrypted,
@@ -100,15 +101,17 @@ VALUES (
     $5,
     $6,
     $7,
-    $8::text[],
-    $9,
-    $10
+    $8,
+    $9::text[],
+    $10,
+    $11
 )
 RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRemoteSessionClientParams struct {
 	ProjectID               uuid.NullUUID
+	OrganizationID          pgtype.Text
 	RemoteSessionIssuerID   uuid.UUID
 	ClientID                string
 	ClientSecretEncrypted   pgtype.Text
@@ -123,6 +126,7 @@ type CreateRemoteSessionClientParams struct {
 func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemoteSessionClientParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, createRemoteSessionClient,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.RemoteSessionIssuerID,
 		arg.ClientID,
 		arg.ClientSecretEncrypted,
