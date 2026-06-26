@@ -24,7 +24,6 @@ import {
   Network,
   Shield,
   UserRound,
-  Users,
   Wallet,
 } from "lucide-react";
 import { CostTable } from "./CostTable";
@@ -158,7 +157,6 @@ function entityPalette(name: string): { mesh: string } {
 const ENTITY_ICONS: Partial<Record<Dimension, LucideIcon>> = {
   [Dimension.DivisionName]: Network,
   [Dimension.DepartmentName]: Building,
-  [Dimension.Group]: Users,
   [Dimension.Email]: UserRound,
   [Dimension.HookSource]: Bot,
   [Dimension.JobTitle]: Briefcase,
@@ -259,7 +257,7 @@ export type EntityProfileProps = {
 
 /**
  * Generalized profile page for one node of the cost taxonomy. The same layout
- * renders the org root, a Division, a Team, a User, an Agent — driven entirely
+ * renders the org root, a Division, a Department, a User, an Agent — driven entirely
  * by props: a bold header (avatar + name + headline stats), the entity's own
  * attribute grid, and the grouped table of its children.
  */

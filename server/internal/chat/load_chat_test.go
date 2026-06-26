@@ -26,7 +26,22 @@ func loadPayload(id string) *gen.LoadChatPayload {
 		AfterSeq:          nil,
 		FromStart:         false,
 		RiskOnly:          false,
+		Query:             nil,
 	}
+}
+
+// seedMessageContent inserts one user message with explicit content (generation
+// 0) and returns its id, for exercising the text-search windowed view.
+func seedMessageContent(t *testing.T, ctx context.Context, ti *chatTestInstance, chatID uuid.UUID, content string) uuid.UUID {
+	t.Helper()
+	r := repo.New(ti.conn)
+	id, err := r.SeedChatMessageContent(ctx, repo.SeedChatMessageContentParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		Content:   content,
+	})
+	require.NoError(t, err)
+	return id
 }
 
 // seedNMessages inserts n minimal messages into a chat and returns their ids in
@@ -326,6 +341,126 @@ func TestLoadChat_RiskOnly_Empty(t *testing.T) {
 	require.Empty(t, res.RiskSegments)
 	require.False(t, res.HasMoreBefore)
 	require.False(t, res.HasMoreAfter)
+}
+
+// TestLoadChat_Search_Window seeds one matching message among context and
+// verifies the query view returns a single ±5 window, the right match seqs, and
+// case-insensitive matching.
+func TestLoadChat_Search_Window(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, ctx, ti, "u", "", "search chat")
+	// 30 messages; only position 13 (index 12) carries the needle.
+	var needleSeq int64
+	for i := 1; i <= 30; i++ {
+		content := "ordinary message"
+		if i == 13 {
+			content = "this line has a NEEDLE in it"
+		}
+		seedMessageContent(t, ctx, ti, chatID, content)
+	}
+
+	// Resolve the needle's seq by loading everything ascending.
+	allP := loadPayload(chatID.String())
+	allP.Limit = 200
+	all, err := ti.service.LoadChat(ctx, allP)
+	require.NoError(t, err)
+	require.Len(t, all.Messages, 30)
+	needleSeq = all.Messages[12].Seq
+
+	// Query is case-insensitive (ILIKE): "needle" matches "NEEDLE".
+	q := "needle"
+	p := loadPayload(chatID.String())
+	p.Query = &q
+	res, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+
+	// Window covers positions 8..18 (11 messages).
+	require.Len(t, res.Messages, 11)
+	require.Equal(t, all.Messages[7].Seq, res.Messages[0].Seq)
+	require.Equal(t, all.Messages[17].Seq, res.Messages[10].Seq)
+
+	require.Len(t, res.MatchSegments, 1)
+	seg := res.MatchSegments[0]
+	require.Equal(t, all.Messages[7].Seq, seg.FirstSeq)
+	require.Equal(t, all.Messages[17].Seq, seg.LastSeq)
+	require.True(t, seg.HasMoreBefore)
+	require.True(t, seg.HasMoreAfter)
+
+	// Only the needle is a match; context rows are not listed.
+	require.Equal(t, []int64{needleSeq}, res.MatchSeqs)
+	// Risk segments are absent in query mode.
+	require.Empty(t, res.RiskSegments)
+}
+
+// TestLoadChat_Search_Empty verifies a query with no matches returns nothing.
+func TestLoadChat_Search_Empty(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, ctx, ti, "u", "", "search chat")
+	for range 10 {
+		seedMessageContent(t, ctx, ti, chatID, "ordinary message")
+	}
+
+	q := "zzz-no-such-token"
+	p := loadPayload(chatID.String())
+	p.Query = &q
+	res, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+	require.Empty(t, res.Messages)
+	require.Empty(t, res.MatchSegments)
+	require.Empty(t, res.MatchSeqs)
+	require.False(t, res.HasMoreBefore)
+	require.False(t, res.HasMoreAfter)
+}
+
+// TestLoadChat_Search_MultipleSegments verifies disjoint matches produce
+// separate segments, each with its own cursors.
+func TestLoadChat_Search_MultipleSegments(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, ctx, ti, "u", "", "search chat")
+	// Matches on positions 13 and 25 → windows 8..18 and 20..30 (disjoint).
+	for i := 1; i <= 30; i++ {
+		content := "ordinary message"
+		if i == 13 || i == 25 {
+			content = "contains needle here"
+		}
+		seedMessageContent(t, ctx, ti, chatID, content)
+	}
+
+	q := "needle"
+	p := loadPayload(chatID.String())
+	p.Query = &q
+	res, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, res.MatchSegments, 2)
+	require.Len(t, res.MatchSeqs, 2)
+	require.False(t, res.MatchSegments[1].HasMoreAfter, "second window reaches the last message")
+}
+
+// TestLoadChat_Search_RiskOnlyMutuallyExclusive verifies the two windowed modes
+// can't be combined.
+func TestLoadChat_Search_RiskOnlyMutuallyExclusive(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, ctx, ti, "u", "", "search chat")
+	seedMessageContent(t, ctx, ti, chatID, "ordinary message")
+
+	q := "ordinary"
+	p := loadPayload(chatID.String())
+	p.Query = &q
+	p.RiskOnly = true
+	_, err := ti.service.LoadChat(ctx, p)
+	require.Error(t, err)
 }
 
 // TestLoadChat_EntryTotals verifies the whole-generation trace-entry totals are

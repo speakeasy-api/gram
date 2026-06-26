@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
@@ -44,28 +43,12 @@ type parsedJudgePrompt struct {
 	} `json:"message"`
 }
 
-func TestJudgeRateLimiterPerOrgIsolation(t *testing.T) {
-	t.Parallel()
-
-	l := newJudgeRateLimiter()
-	now := time.Now()
-
-	// The first burst of calls for one org all pass; the next is throttled.
-	for i := range judgeRateBurst {
-		require.True(t, l.allow("org-a", now), "call %d for org-a should be allowed", i)
-	}
-	require.False(t, l.allow("org-a", now), "org-a should be throttled once burst is exhausted")
-
-	// A different org has its own bucket and is unaffected.
-	require.True(t, l.allow("org-b", now), "org-b should have an independent bucket")
-}
-
 func TestJudgeRateLimitedFailOpenReturnsNil(t *testing.T) {
 	t.Parallel()
 
 	client := &countingCompletionClient{}
-	j := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client)
-	drainLimiter(j, "org-a")
+	j := newTestJudge(t, client)
+	drainLimiter(t, j, "org-a")
 
 	verdict := j.Evaluate(t.Context(), ra.JudgeInput{
 		OrgID:     "org-a",
@@ -83,8 +66,8 @@ func TestJudgeRateLimitedFailClosedReturnsVerdict(t *testing.T) {
 	t.Parallel()
 
 	client := &countingCompletionClient{}
-	j := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client)
-	drainLimiter(j, "org-a")
+	j := newTestJudge(t, client)
+	drainLimiter(t, j, "org-a")
 
 	verdict := j.Evaluate(t.Context(), ra.JudgeInput{
 		OrgID:     "org-a",
@@ -102,7 +85,7 @@ func TestJudgeEvaluatesEmptyBodyToolCall(t *testing.T) {
 	t.Parallel()
 
 	client := &countingCompletionClient{}
-	j := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client)
+	j := newTestJudge(t, client)
 
 	// Empty arguments but real MCP attribution: a tool-scoped policy ("flag any
 	// call to the github MCP server") must still get to run, so Evaluate must
@@ -123,7 +106,7 @@ func TestJudgeEvaluatesMultiToolCall(t *testing.T) {
 	t.Parallel()
 
 	client := &countingCompletionClient{}
-	j := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client)
+	j := newTestJudge(t, client)
 
 	// A multi-call message has an empty Body but carries ToolCalls; the empty-body
 	// guard must not skip it.
@@ -146,7 +129,7 @@ func TestJudgeSkipsTrulyEmptyMessage(t *testing.T) {
 	t.Parallel()
 
 	client := &countingCompletionClient{}
-	j := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client)
+	j := newTestJudge(t, client)
 
 	// No body, no tool attribution: nothing to judge, so skip before the client.
 	verdict := j.Evaluate(t.Context(), ra.JudgeInput{
@@ -161,11 +144,24 @@ func TestJudgeSkipsTrulyEmptyMessage(t *testing.T) {
 	require.Zero(t, client.calls.Load(), "a message with no content must not reach the client")
 }
 
-// drainLimiter exhausts the per-org token bucket so the next Evaluate is
+// newTestJudge builds a Judge with a Redis-backed judge limiter on its own
+// logical DB, isolated per test.
+func newTestJudge(t *testing.T, client openrouter.CompletionClient) *Judge {
+	t.Helper()
+	return New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, testJudgeLimiter(t))
+}
+
+// drainLimiter exhausts the org+model token bucket so the next Evaluate is
 // throttled.
-func drainLimiter(j *Judge, org string) {
-	now := time.Now()
-	for j.limiter.allow(org, now) {
+func drainLimiter(t *testing.T, j *Judge, org string) {
+	t.Helper()
+	key := openrouter.JudgeRateLimitKey(org, defaultJudgeModel)
+	for {
+		res, err := j.limiter.Allow(t.Context(), key)
+		require.NoError(t, err)
+		if !res.Allowed {
+			return
+		}
 	}
 }
 

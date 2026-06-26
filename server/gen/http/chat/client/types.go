@@ -19,6 +19,9 @@ import (
 type GenerateTitleRequestBody struct {
 	// The ID of the chat
 	ID string `form:"id" json:"id" xml:"id"`
+	// When present, sets the chat's title manually (empty string resets to
+	// auto-generated). When omitted, the current title is returned without changes.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 }
 
 // SubmitFeedbackRequestBody is the type of the "chat" service "submitFeedback"
@@ -63,6 +66,14 @@ type LoadChatResponseBody struct {
 	// messages, each spanning a risk finding and its surrounding context. Use each
 	// segment's cursors to expand it.
 	RiskSegments []*RiskSegmentResponseBody `form:"risk_segments,omitempty" json:"risk_segments,omitempty" xml:"risk_segments,omitempty"`
+	// Present only when `query` was requested: contiguous runs of returned
+	// messages, each spanning one or more query matches and their surrounding
+	// context. Use each segment's cursors to expand it.
+	MatchSegments []*RiskSegmentResponseBody `form:"match_segments,omitempty" json:"match_segments,omitempty" xml:"match_segments,omitempty"`
+	// Present only when `query` was requested: the `seq` of every message whose
+	// text matched the query, ascending. These are the jump-to-match navigation
+	// targets; surrounding-context messages in `messages` are not listed here.
+	MatchSeqs []int64 `form:"match_seqs,omitempty" json:"match_seqs,omitempty" xml:"match_seqs,omitempty"`
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsageResponseBody `form:"agent_usage,omitempty" json:"agent_usage,omitempty" xml:"agent_usage,omitempty"`
 	// Whole-generation trace-entry totals for the returned generation. Because
@@ -105,7 +116,7 @@ type LoadChatResponseBody struct {
 // GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
 // endpoint HTTP response body.
 type GenerateTitleResponseBody struct {
-	// The generated title
+	// The current title after the operation (empty when reset to auto-generated)
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 }
 
@@ -1376,7 +1387,8 @@ type ChatTotalsResponseBody struct {
 // the "generateTitle" endpoint of the "chat" service.
 func NewGenerateTitleRequestBody(p *chat.GenerateTitlePayload) *GenerateTitleRequestBody {
 	body := &GenerateTitleRequestBody{
-		ID: p.ID,
+		ID:    p.ID,
+		Title: p.Title,
 	}
 	return body
 }
@@ -1596,6 +1608,22 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 				continue
 			}
 			v.RiskSegments[i] = unmarshalRiskSegmentResponseBodyToChatRiskSegment(val)
+		}
+	}
+	if body.MatchSegments != nil {
+		v.MatchSegments = make([]*chat.RiskSegment, len(body.MatchSegments))
+		for i, val := range body.MatchSegments {
+			if val == nil {
+				v.MatchSegments[i] = nil
+				continue
+			}
+			v.MatchSegments[i] = unmarshalRiskSegmentResponseBodyToChatRiskSegment(val)
+		}
+	}
+	if body.MatchSeqs != nil {
+		v.MatchSeqs = make([]int64, len(body.MatchSeqs))
+		for i, val := range body.MatchSeqs {
+			v.MatchSeqs[i] = val
 		}
 	}
 	if body.AgentUsage != nil {
@@ -2447,6 +2475,13 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 		}
 	}
 	for _, e := range body.RiskSegments {
+		if e != nil {
+			if err2 := ValidateRiskSegmentResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.MatchSegments {
 		if e != nil {
 			if err2 := ValidateRiskSegmentResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)

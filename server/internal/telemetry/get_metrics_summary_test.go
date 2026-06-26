@@ -164,7 +164,7 @@ func insertChatCompletionLog(t *testing.T, ctx context.Context, projectID, deplo
 		"gen_ai.usage.total_tokens":      totalTokens,
 		"gen_ai.response.model":          model,
 		"gen_ai.provider.name":           provider,
-		"gram.resource.urn":              "agents:chat:completion",
+		"gram.resource.urn":              "chat:completion",
 	}
 
 	attrsJSON, err := json.Marshal(attributes)
@@ -178,7 +178,7 @@ func insertChatCompletionLog(t *testing.T, ctx context.Context, projectID, deplo
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat completion",
 		nil, nil, string(attrsJSON), "{}",
-		projectID, deploymentID, "agents:chat:completion", "gram-agents")
+		projectID, deploymentID, "chat:completion", "gram-server")
 	require.NoError(t, err)
 }
 

@@ -287,6 +287,7 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 		req.ExternalUserID,
 		req.UserEmail,
 		req.APIKeyID,
+		string(req.UsageSource),
 		response,
 	)
 }
@@ -702,6 +703,7 @@ func (c *ChatClient) emitGenAITelemetry(
 	ctx context.Context,
 	toolCalls []ToolCall,
 	orgID, projectID, chatID, userID, externalUserID, userEmail, apiKeyID string,
+	usageSource string,
 	result CompletionResponse,
 ) {
 	// Skip telemetry if no telemetry service configured
@@ -710,13 +712,14 @@ func (c *ChatClient) emitGenAITelemetry(
 	}
 
 	duration := float64(time.Since(result.StartTime).Seconds())
+	resourceURN, normalizedSource := completionTelemetryIdentity(usageSource)
 
 	// Build attributes map. Column-mapped keys are extracted to dedicated columns
 	// but remain in the attributes JSON. Resource attributes are auto-partitioned
 	// based on telemetry.ResourceAttributeKeys.
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey: string(telemetry.EventSourceChatCompletion),
-		attr.ResourceURNKey: "agents:chat:completion",
+		attr.ResourceURNKey: resourceURN,
 		attr.LogBodyKey: fmt.Sprintf("LLM chat completion: model=%s, input_tokens=%d, output_tokens=%d",
 			result.Model, result.Usage.PromptTokens, result.Usage.CompletionTokens),
 
@@ -732,8 +735,14 @@ func (c *ChatClient) emitGenAITelemetry(
 		attr.APIKeyIDKey:               apiKeyID,
 	}
 
+	if normalizedSource != "" {
+		attrs[attr.HookSourceKey] = normalizedSource
+	}
 	if result.MessageID != "" {
 		attrs[attr.GenAIResponseIDKey] = result.MessageID
+	}
+	if result.Usage.Cost != nil {
+		attrs[attr.GenAIUsageCostKey] = *result.Usage.Cost
 	}
 	if result.FinishReason != nil {
 		attrs[attr.GenAIResponseFinishReasonsKey] = []string{*result.FinishReason}
@@ -756,7 +765,7 @@ func (c *ChatClient) emitGenAITelemetry(
 
 	toolInfo := telemetry.ToolInfo{
 		ID:             chatID,
-		URN:            "agents:chat:completion",
+		URN:            resourceURN,
 		Name:           "",
 		ProjectID:      projectID,
 		DeploymentID:   "",
@@ -770,6 +779,17 @@ func (c *ChatClient) emitGenAITelemetry(
 		UserInfo:   telemetry.UserInfoByID(userID),
 		Attributes: attrs,
 	})
+}
+
+func completionTelemetryIdentity(source string) (resourceURN, normalizedSource string) {
+	switch source {
+	case "assistant", "assistants":
+		return "assistants:chat:completion", "assistants"
+	case "":
+		return "chat:completion", ""
+	default:
+		return "chat:completion", source
+	}
 }
 
 func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string, opts ...EmbeddingOption) ([][]float32, error) {

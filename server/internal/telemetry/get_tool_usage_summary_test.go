@@ -191,7 +191,6 @@ func TestGetToolUsageSummary_ClassifiesHookObservedHostedMCP(t *testing.T) {
 		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-
 	now := time.Now().UTC()
 	insertHookEvent(t, ctx, hookEventParams{
 		projectID:      projectID,
@@ -406,6 +405,7 @@ func TestGetToolUsageFilterOptions_ClassifiesHookObservedHostedMCP(t *testing.T)
 			return
 		}
 		assert.Equal(c, "hosted-payments", res.HostedServers[0].ToolsetSlug)
+		assert.Equal(c, "Hosted Payments", res.HostedServers[0].ToolsetName)
 		assert.Equal(c, int64(1), res.HostedServers[0].EventCount)
 		assert.Empty(c, res.ShadowServers)
 		if assert.Len(c, res.Users, 1) {

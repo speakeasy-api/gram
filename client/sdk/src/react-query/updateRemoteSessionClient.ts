@@ -52,7 +52,7 @@ export type UpdateRemoteSessionClientMutationError =
  * updateRemoteSessionClient remoteSessionClients
  *
  * @remarks
- * Rotate the client_secret or change the user_session_issuer_id linkage on an existing remote_session_client.
+ * Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.
  */
 export function useUpdateRemoteSessionClientMutation(
   options?: MutationHookOptions<

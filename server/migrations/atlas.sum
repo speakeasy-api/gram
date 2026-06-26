@@ -1,4 +1,4 @@
-h1:/7Gvld/p6NXfslOPHwEYC+rb2YoAn4ZDLYMpaTxqPOw=
+h1:2Yc3+5ImmZ4s6LNr1fG9nE9O37drdxHjsyzM1cvu+aM=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -224,4 +224,9 @@ h1:/7Gvld/p6NXfslOPHwEYC+rb2YoAn4ZDLYMpaTxqPOw=
 20260618194743_deployments-functions-add-infra-overrides.sql h1:MNR3+BYsl1tfjLes6MbKUWqGkw/nMs8HO2cfyZvTTPs=
 20260618215143_add_custom_rule_match_config.sql h1:ZALVgDTK3jWQrHREznqnbbQDNdfIuOZAWr3VnqLAgbo=
 20260620160523_policy-scope-columns.sql h1:Nd+/ilugIcMRbweLykPze7LzXxiEmd51qsfla1gj3Ig=
-20260626150022_presidio-score-threshold.sql h1:Nr4fUCl5z28T6LBXGLp1DFrl/7hK8pgDWngE2kGeQME=
+20260624180324_cimd_remote_session_columns.sql h1:IvfidH5cDs700T0nAh9ufTiLJwufUZDAt8NqsoYEWb4=
+20260624211929_chats-add-title-manually-set.sql h1:7cjkARyGrXzRenn0Ifk4n+oQLaR8hPYgWP4dJ7Oex4Y=
+20260625131148_remotesession-clients-drop-user-session-issuer-id.sql h1:ffRGv1Izk5BLMnzrMVnv7R+w3bIq71gwjCrOHq+xijs=
+20260625160759_add_tool_call_blocks.sql h1:7agv3Tm4njdomfkTZNzBM3Y4NO27t4bp3ZJoDp8l714=
+20260625174452_remote-session-clients-organization-id.sql h1:58GfJycQkGlaRJ0SVITo7f8+x+G9Vl7oRSHc4l5CpoU=
+20260626112524_tunnelled-mcp-servers.sql h1:GzNGqqfGvwSrCfPMbK5tU9orD2ZkobTkb1QzEQj+HFg=

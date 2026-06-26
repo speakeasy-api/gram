@@ -212,10 +212,11 @@ var ExternalMCPServerEntry = Type("ExternalMCPServerEntry", func() {
 	Attribute("meta", Any, "Opaque metadata from the registry")
 	Attribute("tool_count", Int, "Number of tools the server exposes")
 	Attribute("is_read_only", Boolean, "Whether every tool on the server is read-only")
+	Attribute("supports_dcr", Boolean, "Whether the server's OAuth authorization server advertises a dynamic client registration endpoint (RFC 7591). When false, connecting requires manual setup (static OAuth client credentials or API keys).")
 	Attribute("remotes", ArrayOf(ExternalMCPRemote), "Available remote endpoints for the server")
 
-	// tool_count and is_read_only are always computed for every catalog entry.
-	Required("registry_specifier", "version", "description", "tool_count", "is_read_only")
+	// tool_count, is_read_only, and supports_dcr are always computed for every catalog entry.
+	Required("registry_specifier", "version", "description", "tool_count", "is_read_only", "supports_dcr")
 })
 
 var MCPRegistry = Type("MCPRegistry", func() {

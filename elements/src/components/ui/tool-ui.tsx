@@ -10,6 +10,7 @@ import {
   EyeIcon,
   EyeOffIcon,
   LoaderIcon,
+  SearchIcon,
   TriangleAlertIcon,
   XIcon,
 } from "lucide-react";
@@ -90,6 +91,9 @@ interface SectionHighlight {
   /** Optional host-supplied badge rendered in the section header (e.g. a risk
    * pill). Replaces the default warning icon when present. */
   headerBadge?: React.ReactNode;
+  /** Mark colour: "risk" (red, default) for findings, "search" (yellow) for a
+   * text-search hit. */
+  tone?: "risk" | "search";
 }
 
 interface ToolUIProps {
@@ -111,6 +115,12 @@ interface ToolUIProps {
   requestHighlight?: SectionHighlight;
   /** Flag matches inside the output (risk review). */
   resultHighlight?: SectionHighlight;
+  /** When set, highlight occurrences of this query (case-insensitive) in the
+   * tool name — e.g. a thread search for "customer" lights up `get_customer`. */
+  nameQuery?: string;
+  /** Whether this tool holds the active thread-search match: bright highlights
+   * (name + sections) when true, pale when false. */
+  searchActive?: boolean;
   /** Additional class names */
   className?: string;
   /** MCP tool annotations */
@@ -134,6 +144,9 @@ interface ToolUISectionProps {
   language?: BundledLanguage;
   /** Flagged substrings — renders a navigable highlighted view + header icon. */
   highlight?: SectionHighlight;
+  /** Search tone only: whether this tool holds the active thread match (bright
+   * vs pale marks). */
+  searchActive?: boolean;
 }
 
 /* -----------------------------------------------------------------------------
@@ -343,16 +356,25 @@ interface MatchHit {
   matchIndex: number;
 }
 
-function findMatchHits(text: string, values: string[]): MatchHit[] {
+function findMatchHits(
+  text: string,
+  values: string[],
+  caseInsensitive = false,
+): MatchHit[] {
+  // Risk findings match an exact value; a text-search hit matches case-
+  // insensitively (the server search is ILIKE). Tool content is monospace
+  // code/JSON, so lowercasing doesn't shift offsets in practice.
+  const haystack = caseInsensitive ? text.toLowerCase() : text;
   const hits: MatchHit[] = [];
   values.forEach((value, matchIndex) => {
     if (!value) return;
+    const needle = caseInsensitive ? value.toLowerCase() : value;
     let from = 0;
-    let idx = text.indexOf(value, from);
+    let idx = haystack.indexOf(needle, from);
     while (idx !== -1) {
       hits.push({ start: idx, end: idx + value.length, matchIndex });
       from = idx + value.length;
-      idx = text.indexOf(value, from);
+      idx = haystack.indexOf(needle, from);
     }
   });
   hits.sort((a, b) => a.start - b.start);
@@ -378,18 +400,25 @@ function HighlightedCode({
   text,
   matches,
   masked,
+  tone = "risk",
+  searchActive = false,
 }: {
   text: string;
   matches: SectionMatch[];
   masked?: boolean;
+  tone?: "risk" | "search";
+  /** Search tone only: whether this tool holds the active thread match. Active
+   * → bright marks; inactive → pale. (Risk tone steps per-section instead.) */
+  searchActive?: boolean;
 }): React.JSX.Element {
   const hits = React.useMemo(
     () =>
       findMatchHits(
         text,
         matches.map((m) => m.value),
+        tone === "search",
       ),
-    [text, matches],
+    [text, matches, tone],
   );
   const count = hits.length;
   const [active, setActive] = useState(0);
@@ -435,13 +464,20 @@ function HighlightedCode({
           markRefs.current[i] = el;
         }}
         className={cn(
-          // Red chip, fixed-width mono, lightened for the dark code surface. The
-          // active (currently navigated) match pops so prev/next navigation +
-          // auto-scroll have a visible target; the rest stay a darker red.
+          // Fixed-width mono chip, lightened for the dark code surface. The active
+          // (currently navigated) match pops so prev/next navigation + auto-scroll
+          // have a visible target; the rest stay a darker shade. Risk findings are
+          // red; a plain text-search hit is yellow.
           "rounded-sm px-0.5 font-mono ring-1",
-          i === active
-            ? "bg-red-700 text-red-50 ring-red-400"
-            : "bg-red-900 text-red-300 ring-red-800",
+          tone === "search"
+            ? // Search nav is per-row, so all occurrences here share the row's
+              // active state: bright when this tool is the active match, else pale.
+              searchActive
+              ? "bg-yellow-400 text-yellow-950 ring-yellow-300"
+              : "bg-yellow-800/50 text-yellow-200/90 ring-yellow-700/50"
+            : i === active
+              ? "bg-red-700 text-red-50 ring-red-400"
+              : "bg-red-900 text-red-300 ring-red-800",
         )}
       >
         {masked && !revealed ? maskMatch(value) : value}
@@ -457,10 +493,17 @@ function HighlightedCode({
       {count > 0 && (
         <div className="flex items-center justify-between gap-3 bg-slate-900 px-4 py-2 text-xs text-slate-300">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="flex shrink-0 items-center gap-1.5 font-medium text-amber-400">
-              <TriangleAlertIcon className="size-3.5" />
-              {count} flagged {count === 1 ? "match" : "matches"}
-            </span>
+            {tone === "search" ? (
+              <span className="flex shrink-0 items-center gap-1.5 font-medium text-yellow-300">
+                <SearchIcon className="size-3.5" />
+                {count} {count === 1 ? "match" : "matches"}
+              </span>
+            ) : (
+              <span className="flex shrink-0 items-center gap-1.5 font-medium text-amber-400">
+                <TriangleAlertIcon className="size-3.5" />
+                {count} flagged {count === 1 ? "match" : "matches"}
+              </span>
+            )}
             {activeMatch?.label && (
               <span className="truncate rounded bg-slate-700/60 px-1.5 py-0.5 font-mono text-slate-300">
                 {activeMatch.label}
@@ -608,6 +651,7 @@ function ToolUISection({
   highlightSyntax = true,
   language = "json",
   highlight,
+  searchActive = false,
 }: ToolUISectionProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
@@ -624,7 +668,12 @@ function ToolUISection({
   let headerIndicator: React.ReactNode = null;
   if (highlight?.headerBadge) headerIndicator = highlight.headerBadge;
   else if (matchCount > 0)
-    headerIndicator = <TriangleAlertIcon className="size-3.5 text-amber-500" />;
+    headerIndicator =
+      highlight?.tone === "search" ? (
+        <SearchIcon className="size-3.5 text-yellow-500" />
+      ) : (
+        <TriangleAlertIcon className="size-3.5 text-amber-500" />
+      );
 
   return (
     <div data-slot="tool-ui-section" className="border-t border-border">
@@ -655,6 +704,8 @@ function ToolUISection({
               text={contentString}
               matches={highlight!.matches}
               masked={highlight?.masked}
+              tone={highlight?.tone}
+              searchActive={searchActive}
             />
           ) : isStructured ? (
             <StructuredResultContent content={content} />
@@ -677,6 +728,42 @@ type ApprovalMode = "one-time" | "for-session";
  * ToolUI - Main component
  * -------------------------------------------------------------------------- */
 
+// Highlight every case-insensitive occurrence of `query` in a short label (the
+// tool name), preserving original casing. Matches over the original string so
+// offsets stay aligned; escapes regex metacharacters in the user query.
+function highlightLabel(
+  text: string,
+  query?: string,
+  active = false,
+): React.ReactNode {
+  const q = query?.trim();
+  if (!q) return text;
+  const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+  // Active match bright, others pale.
+  const markClass = active
+    ? "rounded-sm bg-yellow-300/80 px-0.5 text-foreground"
+    : "rounded-sm bg-yellow-200/30 px-0.5 text-foreground";
+  const nodes: React.ReactNode[] = [];
+  let pos = 0;
+  let k = 0;
+  for (let m = re.exec(text); m !== null; m = re.exec(text)) {
+    if (m[0].length === 0) {
+      re.lastIndex++;
+      continue;
+    }
+    if (m.index > pos) nodes.push(text.slice(pos, m.index));
+    nodes.push(
+      <mark key={k++} className={markClass}>
+        {m[0]}
+      </mark>,
+    );
+    pos = m.index + m[0].length;
+  }
+  if (pos === 0) return text;
+  if (pos < text.length) nodes.push(text.slice(pos));
+  return nodes;
+}
+
 function ToolUI({
   name,
   icon,
@@ -687,6 +774,8 @@ function ToolUI({
   defaultExpanded = false,
   requestHighlight,
   resultHighlight,
+  nameQuery,
+  searchActive = false,
   className,
   annotations,
   onApproveOnce,
@@ -772,7 +861,7 @@ function ToolUI({
             !provider && isApprovalPending && "shimmer",
           )}
         >
-          {displayName}
+          {highlightLabel(displayName, nameQuery, searchActive)}
         </span>
         {hasContent && (
           <ChevronDownIcon
@@ -795,6 +884,7 @@ function ToolUI({
               highlightSyntax
               language="json"
               highlight={requestHighlight}
+              searchActive={searchActive}
               defaultExpanded={(requestHighlight?.matches?.length ?? 0) > 0}
             />
           )}
@@ -806,6 +896,7 @@ function ToolUI({
               highlightSyntax
               language="json"
               highlight={resultHighlight}
+              searchActive={searchActive}
               defaultExpanded={(resultHighlight?.matches?.length ?? 0) > 0}
             />
           )}

@@ -5361,6 +5361,7 @@ func unmarshalSessionSummaryResponseBodyToTelemetrySessionSummary(v *SessionSumm
 		UserEmail:         v.UserEmail,
 		HookSource:        v.HookSource,
 		Model:             v.Model,
+		Title:             v.Title,
 		StartTimeUnixNano: *v.StartTimeUnixNano,
 		EndTimeUnixNano:   *v.EndTimeUnixNano,
 		DurationSeconds:   *v.DurationSeconds,
@@ -5691,6 +5692,7 @@ func unmarshalToolUsageTraceLogGroupResponseBodyToTelemetryToolUsageTraceLogGrou
 func unmarshalToolUsageHostedServerFilterOptionResponseBodyToTelemetryToolUsageHostedServerFilterOption(v *ToolUsageHostedServerFilterOptionResponseBody) *telemetry.ToolUsageHostedServerFilterOption {
 	res := &telemetry.ToolUsageHostedServerFilterOption{
 		ToolsetSlug: *v.ToolsetSlug,
+		ToolsetName: *v.ToolsetName,
 		EventCount:  *v.EventCount,
 	}
 

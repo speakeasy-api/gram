@@ -415,7 +415,7 @@ func insertChatCompletionLogWithUser(t *testing.T, ctx context.Context, projectI
 		"gen_ai.usage.total_tokens":      totalTokens,
 		"gen_ai.response.model":          model,
 		"gen_ai.provider.name":           provider,
-		"gram.resource.urn":              "agents:chat:completion",
+		"gram.resource.urn":              "chat:completion",
 	}
 
 	if userID != "" {
@@ -436,7 +436,7 @@ func insertChatCompletionLogWithUser(t *testing.T, ctx context.Context, projectI
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat completion",
 		nil, nil, string(attrsJSON), "{}",
-		projectID, deploymentID, "agents:chat:completion", "gram-agents")
+		projectID, deploymentID, "chat:completion", "gram-server")
 	require.NoError(t, err)
 }
 

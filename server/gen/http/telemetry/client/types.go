@@ -4635,6 +4635,8 @@ type SessionSummaryResponseBody struct {
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 	// LLM model used in this chat session
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Chat title, when the session resolves to a named chat
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
 	StartTimeUnixNano *string `form:"start_time_unix_nano,omitempty" json:"start_time_unix_nano,omitempty" xml:"start_time_unix_nano,omitempty"`
 	// Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
@@ -4977,6 +4979,8 @@ type ToolUsageTraceLogGroupResponseBody struct {
 type ToolUsageHostedServerFilterOptionResponseBody struct {
 	// Hosted MCP toolset slug
 	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
+	// Hosted MCP toolset display name
+	ToolsetName *string `form:"toolset_name,omitempty" json:"toolset_name,omitempty" xml:"toolset_name,omitempty"`
 	// Number of tool usage events observed for the hosted MCP server
 	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
 }
@@ -15314,6 +15318,9 @@ func ValidateToolUsageTraceLogGroupResponseBody(body *ToolUsageTraceLogGroupResp
 func ValidateToolUsageHostedServerFilterOptionResponseBody(body *ToolUsageHostedServerFilterOptionResponseBody) (err error) {
 	if body.ToolsetSlug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_slug", "body"))
+	}
+	if body.ToolsetName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_name", "body"))
 	}
 	if body.EventCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))

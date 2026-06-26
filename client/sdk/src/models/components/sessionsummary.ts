@@ -62,6 +62,10 @@ export type SessionSummary = {
    */
   status: SessionSummaryStatus;
   /**
+   * Chat title, when the session resolves to a named chat
+   */
+  title?: string | undefined;
+  /**
    * Number of tool calls in this chat session
    */
   toolCallCount: number;
@@ -107,6 +111,7 @@ export const SessionSummary$inboundSchema: z.ZodMiniType<
     project_id: z.string(),
     start_time_unix_nano: z.string(),
     status: SessionSummaryStatus$inboundSchema,
+    title: z.optional(z.string()),
     tool_call_count: z.int(),
     total_cost: z.number(),
     total_input_tokens: z.int(),

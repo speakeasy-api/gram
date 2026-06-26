@@ -394,6 +394,12 @@ FROM limited_chats lc;
 -- name: GetChat :one
 SELECT * FROM chats WHERE id = @id AND deleted IS FALSE;
 
+-- name: GetChatTitlesByIDs :many
+SELECT id, title FROM chats
+WHERE id = ANY(@ids::uuid[])
+  AND project_id = ANY(@project_ids::uuid[])
+  AND deleted IS FALSE;
+
 -- name: ListChatMessages :many
 SELECT * FROM chat_messages 
 WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid) 
@@ -549,6 +555,45 @@ WHERE EXISTS (
 )
 ORDER BY o.seq ASC;
 
+-- name: ListSearchWindowedMessages :many
+-- Query-search view: same windowing as ListRiskWindowedMessages, but the seed
+-- rows are messages whose searchable text matches @query (case-insensitive
+-- substring over the narrative content, the tool-call name/arguments JSON, and
+-- any structured/multimodal content) instead of messages with a risk finding.
+-- Each match is padded with +/- @context_size ordinal positions. rn/total drive
+-- segment folding and the has_more flags; is_match flags the seed rows so the
+-- caller can return the explicit jump-to-match seq list (context rows are
+-- is_match = false). Seed matches are capped at @match_limit (earliest first by
+-- ordinal) to bound the response on broad queries. Asset-offloaded content (too
+-- large to store inline) is not searchable here.
+WITH ordered AS (
+  SELECT
+    cm.*,
+    row_number() OVER (ORDER BY cm.seq) AS rn,
+    count(*) OVER () AS total
+  FROM chat_messages cm
+  WHERE cm.chat_id = @chat_id
+    AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+    AND cm.generation = @generation::integer
+),
+match_rns AS (
+  SELECT o.rn FROM ordered o
+  WHERE o.content ILIKE '%' || @query::text || '%'
+     OR (o.tool_calls IS NOT NULL AND o.tool_calls::text ILIKE '%' || @query::text || '%')
+     OR (o.content_raw IS NOT NULL AND o.content_raw::text ILIKE '%' || @query::text || '%')
+  ORDER BY o.rn
+  LIMIT @match_limit::integer
+)
+SELECT
+  o.*,
+  EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn) AS is_match
+FROM ordered o
+WHERE EXISTS (
+  SELECT 1 FROM match_rns m
+  WHERE o.rn BETWEEN m.rn - @context_size::bigint AND m.rn + @context_size::bigint
+)
+ORDER BY o.seq ASC;
+
 -- name: ListChatMessagesForMatch :many
 SELECT id, role, content, tool_call_id, tool_calls
 FROM chat_messages
@@ -556,7 +601,21 @@ WHERE chat_id = @chat_id AND generation = @generation
 ORDER BY seq ASC;
 
 -- name: UpdateChatTitle :exec
-UPDATE chats SET title = @title, updated_at = NOW() WHERE id = @id;
+-- Auto-generated title write. Guarded on title_manually_set so a manual rename
+-- landing during title generation (between the activity's read and this write)
+-- is never clobbered: the row no longer matches and the update no-ops.
+UPDATE chats SET title = @title, updated_at = NOW()
+WHERE id = @id AND title_manually_set IS FALSE;
+
+-- name: RenameChat :exec
+-- Set or clear a chat's title and record whether a human chose it. Project-scoped
+-- so a manual rename can never touch another project's chat. A NULL title resets
+-- to auto-naming (paired with title_manually_set = false).
+UPDATE chats
+SET title = sqlc.narg('title'),
+    title_manually_set = @title_manually_set,
+    updated_at = NOW()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: GetFirstUserChatMessage :one
 SELECT content FROM chat_messages
@@ -854,6 +913,13 @@ RETURNING id;
 -- instead of relying on wall-clock gaps between inserts.
 INSERT INTO chat_messages (chat_id, project_id, role, content, created_at)
 VALUES (@chat_id, @project_id, 'user', 'test message', COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
+RETURNING id;
+
+-- name: SeedChatMessageContent :one
+-- Test fixture: insert a user chat message with explicit content and return its
+-- id, for exercising the text-search windowed view.
+INSERT INTO chat_messages (chat_id, project_id, role, content)
+VALUES (@chat_id, @project_id, 'user', @content)
 RETURNING id;
 
 -- name: SeedRiskPolicy :one

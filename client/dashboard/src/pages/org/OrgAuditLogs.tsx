@@ -125,66 +125,102 @@ function truncateMiddle(value: string, start = 18, end = 16) {
   return `${value.slice(0, start)}...${value.slice(-end)}`;
 }
 
+const SUBJECT_MONO_CLASS = "font-mono text-xs text-muted-foreground";
+
+// A subject rendered as a link to its detail page. Centralizes the mono styling
+// and hover affordance so every linked subject looks identical.
+function SubjectLink({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Link to={to} className={cn(SUBJECT_MONO_CLASS, "hover:underline")}>
+      {children}
+    </Link>
+  );
+}
+
+// Builds the dashboard path to an audit subject's detail page, or null when the
+// subject has no navigable page (or is missing the slug/id needed to route to
+// one). Single source of truth shared by the inline subject link and the
+// row-level "open" affordance, so the two can never point to different places.
+function subjectHref(log: AuditLog, orgSlug: string): string | null {
+  // Project-scoped subjects live under `/{org}/projects/{project}/…` and use the
+  // entry's own projectSlug — which may differ from the project currently in the
+  // URL, so we interpolate it rather than using the URL-bound route helpers.
+  const projectBase = log.projectSlug
+    ? `/${orgSlug}/projects/${log.projectSlug}`
+    : null;
+
+  switch (log.subjectType) {
+    case "deployment":
+      return projectBase ? `${projectBase}/deployments/${log.subjectId}` : null;
+    case "toolset":
+      return projectBase && log.subjectSlug
+        ? `${projectBase}/mcp/${log.subjectSlug}`
+        : null;
+    case "mcp_server":
+      return projectBase && log.subjectSlug
+        ? `${projectBase}/mcp/x/${log.subjectSlug}`
+        : null;
+    case "environment":
+      return projectBase && log.subjectSlug
+        ? `${projectBase}/environments/${log.subjectSlug}`
+        : null;
+    case "assistant":
+      return projectBase ? `${projectBase}/assistants/${log.subjectId}` : null;
+    case "risk_policy":
+      // PolicyCenter has no per-item route; `?policy=<id>` opens the policy.
+      return projectBase
+        ? `${projectBase}/risk-policies?policy=${log.subjectId}`
+        : null;
+    case "project":
+      return log.subjectSlug ? `/${orgSlug}/projects/${log.subjectSlug}` : null;
+    case "plugin":
+      return projectBase ? `${projectBase}/plugins/${log.subjectId}` : null;
+    // access_role and access_member are org-scoped (no project), so they route
+    // under `/{org}/access/…` rather than the project tree.
+    case "access_role":
+      // RolesTab opens a specific role's editor via the `?editRole=<id>` param.
+      return `/${orgSlug}/access/roles?editRole=${log.subjectId}`;
+    case "access_member":
+      return `/${orgSlug}/access/members`;
+    case "mcp_collection":
+      return log.subjectSlug
+        ? `/${orgSlug}/collections/${log.subjectSlug}`
+        : null;
+    case "api_key":
+      return `/${orgSlug}/api-keys`;
+    default:
+      return null;
+  }
+}
+
+// The text shown for a linked subject. Mirrors the identifier each subject type
+// is keyed on — slug where one exists, otherwise id or display name.
+function subjectLinkText(log: AuditLog): string {
+  switch (log.subjectType) {
+    case "deployment":
+      return log.subjectId;
+    case "toolset":
+    case "mcp_server":
+    case "environment":
+    case "project":
+    case "plugin":
+    case "mcp_collection":
+      return log.subjectSlug || log.subjectId;
+    default:
+      return getSubjectLabel(log);
+  }
+}
+
 function renderSubject(log: AuditLog, orgSlug: string) {
-  const monoClass = "font-mono text-xs text-muted-foreground";
+  const monoClass = SUBJECT_MONO_CLASS;
 
   if (log.subjectType === "organization_invitation") {
     return renderInviteSubject(log, monoClass);
   }
 
-  if (log.subjectType === "deployment" && log.projectSlug) {
-    return (
-      <Link
-        to={`/${orgSlug}/projects/${log.projectSlug}/deployments/${log.subjectId}`}
-        className={cn(monoClass, "hover:underline")}
-      >
-        {log.subjectId}
-      </Link>
-    );
-  }
-
-  if (log.subjectType === "toolset" && log.projectSlug && log.subjectSlug) {
-    return (
-      <Link
-        to={`/${orgSlug}/projects/${log.projectSlug}/mcp/${log.subjectSlug}`}
-        className={cn(monoClass, "hover:underline")}
-      >
-        {log.subjectSlug}
-      </Link>
-    );
-  }
-
-  if (log.subjectType === "project" && log.subjectSlug) {
-    return (
-      <Link
-        to={`/${orgSlug}/projects/${log.subjectSlug}`}
-        className={cn(monoClass, "hover:underline")}
-      >
-        {log.subjectSlug}
-      </Link>
-    );
-  }
-
-  if (log.subjectType === "plugin" && log.projectSlug) {
-    return (
-      <Link
-        to={`/${orgSlug}/projects/${log.projectSlug}/plugins/${log.subjectId}`}
-        className={cn(monoClass, "hover:underline")}
-      >
-        {log.subjectSlug || log.subjectId}
-      </Link>
-    );
-  }
-
-  if (log.subjectType === "api_key") {
-    return (
-      <Link
-        to={`/${orgSlug}/api-keys`}
-        className={cn(monoClass, "hover:underline")}
-      >
-        {getSubjectLabel(log)}
-      </Link>
-    );
+  const href = subjectHref(log, orgSlug);
+  if (href) {
+    return <SubjectLink to={href}>{subjectLinkText(log)}</SubjectLink>;
   }
 
   if (log.subjectType === "asset") {
@@ -249,9 +285,10 @@ function AuditLogRow({
 
   const actorLabel = getActorLabel(log);
   const verbText = renderVerb(log);
+  const subjectLink = subjectHref(log, orgSlug);
 
   const rowContent = (
-    <div className="flex items-start gap-3.5 px-4 py-2.5">
+    <div className="group flex items-start gap-3.5 px-4 py-2.5">
       <ActionDot action={log.action} />
       <ActionBadge action={log.action} />
       <div className="min-w-0 flex-1 text-sm leading-5">
@@ -277,6 +314,15 @@ function AuditLogRow({
       <span className="text-muted-foreground shrink-0 font-mono text-xs">
         {formatTimeOnly(log.createdAt, timestampMode)}
       </span>
+      {subjectLink && (
+        <Link
+          to={subjectLink}
+          aria-label={`Open ${getSubjectLabel(log)}`}
+          className="text-muted-foreground hover:text-foreground focus-visible:text-foreground shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+        >
+          <Icon name="arrow-right" className="size-4" />
+        </Link>
+      )}
     </div>
   );
 

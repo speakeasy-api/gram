@@ -56,7 +56,7 @@ export class Chat extends ClientSDK {
    * generateTitle chat
    *
    * @remarks
-   * Generate a title for a chat based on its messages
+   * Read or set a chat's title. Omit `title` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `title` to set a manual title that auto-generation will never overwrite; provide an empty `title` to clear the manual title and re-enable auto-generation.
    */
   async generateTitle(
     request: operations.GenerateTitleRequest,
@@ -94,7 +94,7 @@ export class Chat extends ClientSDK {
    * loadChat chat
    *
    * @remarks
-   * Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding.
+   * Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).
    */
   async load(
     request: operations.LoadChatRequest,

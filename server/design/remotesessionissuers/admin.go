@@ -135,6 +135,37 @@ func audienceAttribute() {
 	MaxLength(512)
 }
 
+// CreateOrganizationRemoteSessionClientForm registers a standalone
+// remote_session_client under an existing remote_session_issuer in the caller's
+// organization, with no user_session_issuer attachments. The client is always
+// project-scoped: it inherits the issuer's project for a project-specific
+// issuer, or the caller names a project when the issuer is organization-level
+// (there is no organization-level client). The caller supplies client_id (and
+// optional client_secret) obtained out-of-band, typically via Dynamic Client
+// Registration performed client-side. A supplied secret is encrypted before
+// persisting; the plaintext is never returned.
+var CreateOrganizationRemoteSessionClientForm = Type("CreateOrganizationRemoteSessionClientForm", func() {
+	Description("Form for an org admin to register a standalone remote_session_client under an existing issuer, with no user_session_issuer attachments.")
+
+	Attribute("remote_session_issuer_id", String, "The owning remote_session_issuer id; must belong to the caller's organization.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("project_id", String, "Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project; required when the issuer is organization-level.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("client_id", String, "client_id supplied by the caller, e.g. from Dynamic Client Registration.")
+	Attribute("client_secret", String, "Optional client_secret supplied by the caller. Gram encrypts before persisting; the plaintext is never returned.")
+	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", func() {
+		Enum("client_secret_basic", "client_secret_post", "none")
+	})
+	Attribute("scope", ArrayOf(String), func() {
+		scopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
+	})
+	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", audienceAttribute)
+
+	Required("remote_session_issuer_id", "client_id")
+})
+
 // UpdateOrganizationRemoteSessionClientForm patches the fields of a
 // remote_session_client from the org-admin Settings tab, including client
 // secret rotation. A supplied secret is re-encrypted with the project-scoped
@@ -146,9 +177,6 @@ var UpdateOrganizationRemoteSessionClientForm = Type("UpdateOrganizationRemoteSe
 		Format(FormatUUID)
 	})
 	Attribute("client_secret", String, "Rotate the client secret. Gram re-encrypts before persisting; the plaintext is never returned.")
-	Attribute("user_session_issuer_id", String, "Re-pair with a different user_session_issuer.", func() {
-		Format(FormatUUID)
-	})
 	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", func() {
 		Enum("client_secret_basic", "client_secret_post", "none")
 	})

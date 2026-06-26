@@ -50,7 +50,12 @@ migrations:
 
 database-changes:
   - "server/migrations/**"
-  - "server/clickhouse/**"
+  - "server/clickhouse/migrations/**"
+  - "server/clickhouse/schema.sql"
+
+db-migrations:
+  - "server/migrations/**"
+  - "server/clickhouse/migrations/**"
 
 plog:
   - "go.mod"

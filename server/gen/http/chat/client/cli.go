@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
 	goa "goa.design/goa/v3/pkg"
@@ -192,7 +193,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 
 // BuildLoadChatPayload builds the payload for the chat loadChat endpoint from
 // CLI flags.
-func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatFromStart string, chatLoadChatRiskOnly string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
+func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatFromStart string, chatLoadChatRiskOnly string, chatLoadChatQuery string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
 	var err error
 	var id string
 	{
@@ -286,6 +287,21 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 			}
 		}
 	}
+	var query *string
+	{
+		if chatLoadChatQuery != "" {
+			query = &chatLoadChatQuery
+			if utf8.RuneCountInString(*query) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("query", *query, utf8.RuneCountInString(*query), 1, true))
+			}
+			if utf8.RuneCountInString(*query) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("query", *query, utf8.RuneCountInString(*query), 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if chatLoadChatSessionToken != "" {
@@ -312,6 +328,7 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 	v.AfterSeq = afterSeq
 	v.FromStart = fromStart
 	v.RiskOnly = riskOnly
+	v.Query = query
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
@@ -327,7 +344,15 @@ func BuildGenerateTitlePayload(chatGenerateTitleBody string, chatGenerateTitleSe
 	{
 		err = json.Unmarshal([]byte(chatGenerateTitleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"abc123\",\n      \"title\": \"aaa\"\n   }'")
+		}
+		if body.Title != nil {
+			if utf8.RuneCountInString(*body.Title) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.title", *body.Title, utf8.RuneCountInString(*body.Title), 200, false))
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
@@ -349,7 +374,8 @@ func BuildGenerateTitlePayload(chatGenerateTitleBody string, chatGenerateTitleSe
 		}
 	}
 	v := &chat.GenerateTitlePayload{
-		ID: body.ID,
+		ID:    body.ID,
+		Title: body.Title,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

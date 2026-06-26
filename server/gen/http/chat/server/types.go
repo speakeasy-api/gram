@@ -9,6 +9,7 @@ package server
 
 import (
 	"encoding/json"
+	"unicode/utf8"
 
 	chat "github.com/speakeasy-api/gram/server/gen/chat"
 	goa "goa.design/goa/v3/pkg"
@@ -19,6 +20,9 @@ import (
 type GenerateTitleRequestBody struct {
 	// The ID of the chat
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// When present, sets the chat's title manually (empty string resets to
+	// auto-generated). When omitted, the current title is returned without changes.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 }
 
 // SubmitFeedbackRequestBody is the type of the "chat" service "submitFeedback"
@@ -63,6 +67,14 @@ type LoadChatResponseBody struct {
 	// messages, each spanning a risk finding and its surrounding context. Use each
 	// segment's cursors to expand it.
 	RiskSegments []*RiskSegmentResponseBody `form:"risk_segments,omitempty" json:"risk_segments,omitempty" xml:"risk_segments,omitempty"`
+	// Present only when `query` was requested: contiguous runs of returned
+	// messages, each spanning one or more query matches and their surrounding
+	// context. Use each segment's cursors to expand it.
+	MatchSegments []*RiskSegmentResponseBody `form:"match_segments,omitempty" json:"match_segments,omitempty" xml:"match_segments,omitempty"`
+	// Present only when `query` was requested: the `seq` of every message whose
+	// text matched the query, ascending. These are the jump-to-match navigation
+	// targets; surrounding-context messages in `messages` are not listed here.
+	MatchSeqs []int64 `form:"match_seqs,omitempty" json:"match_seqs,omitempty" xml:"match_seqs,omitempty"`
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsageResponseBody `form:"agent_usage,omitempty" json:"agent_usage,omitempty" xml:"agent_usage,omitempty"`
 	// Whole-generation trace-entry totals for the returned generation. Because
@@ -105,7 +117,7 @@ type LoadChatResponseBody struct {
 // GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
 // endpoint HTTP response body.
 type GenerateTitleResponseBody struct {
-	// The generated title
+	// The current title after the operation (empty when reset to auto-generated)
 	Title string `form:"title" json:"title" xml:"title"`
 }
 
@@ -1438,6 +1450,22 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 			body.RiskSegments[i] = marshalChatRiskSegmentToRiskSegmentResponseBody(val)
 		}
 	}
+	if res.MatchSegments != nil {
+		body.MatchSegments = make([]*RiskSegmentResponseBody, len(res.MatchSegments))
+		for i, val := range res.MatchSegments {
+			if val == nil {
+				body.MatchSegments[i] = nil
+				continue
+			}
+			body.MatchSegments[i] = marshalChatRiskSegmentToRiskSegmentResponseBody(val)
+		}
+	}
+	if res.MatchSeqs != nil {
+		body.MatchSeqs = make([]int64, len(res.MatchSeqs))
+		for i, val := range res.MatchSeqs {
+			body.MatchSeqs[i] = val
+		}
+	}
 	if res.AgentUsage != nil {
 		body.AgentUsage = marshalChatAgentUsageToAgentUsageResponseBody(res.AgentUsage)
 	}
@@ -2337,7 +2365,7 @@ func NewListChatsPayload(search *string, externalUserID *string, assistantID *st
 }
 
 // NewLoadChatPayload builds a chat service loadChat endpoint payload.
-func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64, afterSeq *int64, fromStart bool, riskOnly bool, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.LoadChatPayload {
+func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64, afterSeq *int64, fromStart bool, riskOnly bool, query *string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.LoadChatPayload {
 	v := &chat.LoadChatPayload{}
 	v.ID = id
 	v.Generation = generation
@@ -2346,6 +2374,7 @@ func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64,
 	v.AfterSeq = afterSeq
 	v.FromStart = fromStart
 	v.RiskOnly = riskOnly
+	v.Query = query
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
@@ -2356,7 +2385,8 @@ func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64,
 // NewGenerateTitlePayload builds a chat service generateTitle endpoint payload.
 func NewGenerateTitlePayload(body *GenerateTitleRequestBody, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.GenerateTitlePayload {
 	v := &chat.GenerateTitlePayload{
-		ID: *body.ID,
+		ID:    *body.ID,
+		Title: body.Title,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -2402,6 +2432,11 @@ func NewSubmitFeedbackPayload(body *SubmitFeedbackRequestBody, sessionToken *str
 func ValidateGenerateTitleRequestBody(body *GenerateTitleRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Title != nil {
+		if utf8.RuneCountInString(*body.Title) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.title", *body.Title, utf8.RuneCountInString(*body.Title), 200, false))
+		}
 	}
 	return
 }

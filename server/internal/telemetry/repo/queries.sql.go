@@ -31,6 +31,15 @@ func userIdentifierExpr(col string) string {
 	return "if(telemetry_logs." + col + " != '', telemetry_logs." + col + ", telemetry_logs.user_email)"
 }
 
+// SearchUsers powers employee enrollment lists, so internal users are grouped by
+// email first to collapse rows that mix email-only and opaque user.id identity.
+func searchUsersGroupExpr(groupBy string) string {
+	if groupBy == "external_user_id" {
+		return userIdentifierExpr("external_user_id")
+	}
+	return "if(telemetry_logs.user_email != '', telemetry_logs.user_email, telemetry_logs.user_id)"
+}
+
 // totalTokensExpr is a grouped-aggregate expression that yields a reliable total
 // token count. AI-coding providers like Claude Code report
 // gen_ai.usage.input_tokens and gen_ai.usage.output_tokens but never emit
@@ -1095,7 +1104,7 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 	}
 
 	sb := sq.Select(
-		"gram_chat_id",
+		"chat_id as gram_chat_id",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') as total_output_tokens",
 		totalTokensExpr+" as total_tokens",
@@ -1103,8 +1112,8 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
-		GroupBy("gram_chat_id")
+		Where(squirrel.Eq{"chat_id": arg.ChatIDs}).
+		GroupBy("chat_id")
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -1389,8 +1398,8 @@ type SearchUsersParams struct {
 
 // SearchUsers retrieves aggregated usage metrics grouped by user identifier.
 //
-// Groups telemetry logs by user_id or external_user_id and computes per-user
-// metrics including tokens, chats, and tool call breakdowns.
+// Groups telemetry logs by internal email/user_id or external_user_id and
+// computes per-user metrics including tokens, chats, and tool call breakdowns.
 // Pagination uses last_seen_unix_nano + the group column for stable cursor ordering.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
@@ -1399,7 +1408,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	if arg.GroupBy == "external_user_id" {
 		groupCol = "external_user_id"
 	}
-	groupExpr := userIdentifierExpr(groupCol)
+	groupExpr := searchUsersGroupExpr(arg.GroupBy)
 
 	tc := toolCallExprsFor(arg.EventSource)
 
@@ -1454,7 +1463,14 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		sb = sb.Where("hook_source = ?", arg.HookSource)
 	}
 	if len(arg.UserIDs) > 0 {
-		sb = sb.Where(squirrel.Eq{groupExpr: arg.UserIDs})
+		if arg.GroupBy == "external_user_id" {
+			sb = sb.Where(squirrel.Eq{groupExpr: arg.UserIDs})
+		} else {
+			sb = sb.Where(squirrel.Or{
+				squirrel.Eq{groupExpr: arg.UserIDs},
+				squirrel.Eq{userIdentifierExpr(groupCol): arg.UserIDs},
+			})
+		}
 	}
 
 	sb = sb.GroupBy(groupExpr)
@@ -1949,6 +1965,7 @@ type ToolUsageUserFilter struct {
 // HostedMCPMatcher maps hook-observed hosted MCP identifiers to a hosted toolset.
 type HostedMCPMatcher struct {
 	ToolsetSlug string
+	ToolsetName string
 	McpSlug     string
 }
 
@@ -4155,7 +4172,7 @@ func (q *Queries) GetTopUsers(ctx context.Context, arg GetTopUsersParams) ([]Top
 	var activityColumn string
 	if arg.SessionMode {
 		// Count chat completion messages
-		activityColumn = "countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') as activity_count"
+		activityColumn = "countIf(toString(attributes.gram.resource.urn) IN ('chat:completion', 'assistants:chat:completion')) as activity_count"
 	} else {
 		// Count tool calls
 		activityColumn = "countIf(startsWith(gram_urn, 'tools:')) as activity_count"
@@ -4291,7 +4308,7 @@ func (q *Queries) GetLLMClientBreakdown(ctx context.Context, arg GetLLMClientBre
 	var activityColumn string
 	if arg.SessionMode {
 		// Count chat completion messages
-		activityColumn = "countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') as activity_count"
+		activityColumn = "countIf(toString(attributes.gram.resource.urn) IN ('chat:completion', 'assistants:chat:completion')) as activity_count"
 	} else {
 		// Count tool calls
 		activityColumn = "countIf(startsWith(gram_urn, 'tools:')) as activity_count"
@@ -4370,7 +4387,7 @@ func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams
 	var userCountCondition string
 	if arg.SessionMode {
 		// Count users with chat completion messages
-		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND if(external_user_id != '', external_user_id, user_id) != '')"
+		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), toString(attributes.gram.resource.urn) IN ('chat:completion', 'assistants:chat:completion') AND if(external_user_id != '', external_user_id, user_id) != '')"
 	} else {
 		// Count users with tool calls
 		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), startsWith(gram_urn, 'tools:') AND if(external_user_id != '', external_user_id, user_id) != '')"

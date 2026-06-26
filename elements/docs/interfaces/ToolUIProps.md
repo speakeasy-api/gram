@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.37.1**](../README.md)
+[**@gram-ai/elements v1.38.1**](../README.md)
 
 ***
 
@@ -77,6 +77,24 @@ Flag matches inside the arguments (risk review).
 > `optional` **resultHighlight**: [`SectionHighlight`](SectionHighlight.md)
 
 Flag matches inside the output (risk review).
+
+***
+
+### nameQuery?
+
+> `optional` **nameQuery**: `string`
+
+When set, highlight occurrences of this query (case-insensitive) in the
+tool name — e.g. a thread search for "customer" lights up `get_customer`.
+
+***
+
+### searchActive?
+
+> `optional` **searchActive**: `boolean`
+
+Whether this tool holds the active thread-search match: bright highlights
+(name + sections) when true, pale when false.
 
 ***
 

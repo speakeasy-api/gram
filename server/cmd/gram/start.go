@@ -87,6 +87,7 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/resources"
@@ -862,7 +863,7 @@ func newStartCommand() *cli.Command {
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
-			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
+			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
@@ -962,8 +963,21 @@ func newStartCommand() *cli.Command {
 					h.ServeHTTP(w, r)
 				})
 			})
+			// Drop client-supplied baggage on public routes before otelhttp
+			// extracts inbound trace context, so untrusted baggage never enters
+			// the request context.
+			mux.Use(middleware.DropInboundOTelBaggage)
 			mux.Use(func(h http.Handler) http.Handler {
-				return otelhttp.NewHandler(h, "http", otelhttp.WithServerName("gram"))
+				return otelhttp.NewHandler(h, "http",
+					otelhttp.WithServerName("gram"),
+					// Public MCP/OAuth routes are reachable by any third party, so
+					// their inbound trace context is potentially untrusted input.
+					// Treat them as OTel public endpoints: start a fresh root span
+					// and record the inbound context as a span link rather than
+					// adopting it as the parent. Trusted first-party routes (/rpc,
+					// /admin) keep parent-child continuity.
+					otelhttp.WithPublicEndpointFn(middleware.IsOTelPublicEndpoint),
+				)
 			})
 			mux.Use(middleware.RouteLabelerMiddleware)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
@@ -984,9 +998,10 @@ func newStartCommand() *cli.Command {
 
 			// L1 prompt-injection engine is the LLM judge (POC-193). A completions
 			// client is always constructed, so the judge is always available.
-			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
+			hookJudgeLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
+			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Classify)
 
-			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient)
+			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter)
 			celEngine, err := celenv.New()
 			if err != nil {
 				return fmt.Errorf("create cel engine: %w", err)
@@ -1015,6 +1030,7 @@ func newStartCommand() *cli.Command {
 				logger,
 				db,
 				tracerProvider,
+				meterProvider,
 				telemLogger,
 				sessionManager,
 				hooksCache,
@@ -1186,7 +1202,7 @@ func newStartCommand() *cli.Command {
 						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 					}
 
-					piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
+					piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:                 guardianPolicy,
