@@ -136,6 +136,8 @@ export function FailedSourcesSection({
             break;
           case "remotemcp":
             break;
+          case "tunnelledmcp":
+            break;
         }
       }
 
