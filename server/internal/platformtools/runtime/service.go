@@ -133,6 +133,7 @@ func ManagedAssistantLogsTools(telemetrySvc platformtools.TelemetryService) []pl
 	return []platformtools.ExternalTool{
 		{Executor: platformlogs.NewSearchLogsTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewSearchToolCallsTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewGetToolUsageSummaryTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewSearchChatsTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewSearchUsersTool(telemetrySvc), RequiredFeature: ""},
 		{Executor: platformlogs.NewGetProjectMetricsSummaryTool(telemetrySvc), RequiredFeature: ""},

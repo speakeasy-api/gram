@@ -1101,6 +1101,11 @@ function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
         label: "Hosted MCP",
         className: "bg-primary/15 text-primary",
       };
+    case "tunnelled_mcp_server":
+      return {
+        label: "Tunnelled MCP",
+        className: "bg-primary/15 text-primary",
+      };
     case "shadow_mcp_server":
       return {
         label: "Shadow MCP",

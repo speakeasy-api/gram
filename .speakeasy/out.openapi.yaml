@@ -42217,6 +42217,7 @@ components:
             description: Tool usage target type
             enum:
               - hosted_mcp_server
+              - tunnelled_mcp_server
               - shadow_mcp_server
               - local_tool
               - skill
@@ -44059,6 +44060,7 @@ components:
             description: Tool usage target type
             enum:
               - hosted_mcp_server
+              - tunnelled_mcp_server
               - shadow_mcp_server
               - local_tool
               - skill
@@ -50464,6 +50466,7 @@ components:
           description: Tool usage target type
           enum:
             - hosted_mcp_server
+            - tunnelled_mcp_server
             - shadow_mcp_server
             - local_tool
             - skill
@@ -50514,6 +50517,7 @@ components:
           description: Tool usage target type
           enum:
             - hosted_mcp_server
+            - tunnelled_mcp_server
             - shadow_mcp_server
             - local_tool
             - skill
@@ -50563,6 +50567,7 @@ components:
           description: Tool usage target type
           enum:
             - hosted_mcp_server
+            - tunnelled_mcp_server
             - shadow_mcp_server
             - local_tool
             - skill
@@ -50698,6 +50703,7 @@ components:
           description: Tool usage target type
           enum:
             - hosted_mcp_server
+            - tunnelled_mcp_server
             - shadow_mcp_server
             - local_tool
             - skill
@@ -50894,6 +50900,7 @@ components:
           description: Tool usage target type
           enum:
             - hosted_mcp_server
+            - tunnelled_mcp_server
             - shadow_mcp_server
             - local_tool
             - skill

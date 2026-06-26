@@ -86,7 +86,7 @@ WHERE id = $1::uuid AND deleted IS FALSE
 	now := time.Now().UTC()
 	if err := route.NewRedis(rdb).PublishConnections(ctx, serverID, []route.Connection{
 		{
-			SessionID:              "seed-postgres-mcp-tunnel",
+			SessionID:              "gram-postgres-mcp-tunnel",
 			ServiceID:              "local-postgres-mcp",
 			ServiceSlug:            "postgres-mcp",
 			ServiceVersion:         "0.3.0",

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: aab7993aa12b82bf4f1780c26161f75a
+  docChecksum: 9cebefc3b91cf391c58671624ccd5f85
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -2773,7 +2773,7 @@ trackedFiles:
   docs/models/components/gettoolusagesummarypayload.md:
     last_write_checksum: sha1:89cb3338e19ab8983999d851a6006a7e900684c5
   docs/models/components/gettoolusagesummaryresult.md:
-    last_write_checksum: sha1:710d7cfe283c52734e0eaf13e1d73c5c771bb550
+    last_write_checksum: sha1:91e8e9487bd1e0122b0dc97914ed0fb9dc4ff882
   docs/models/components/getusermetricssummarypayload.md:
     last_write_checksum: sha1:b34170a37ea86e5b08296226724d1a5e053cac2d
   docs/models/components/getusermetricssummaryresult.md:
@@ -2947,7 +2947,7 @@ trackedFiles:
   docs/models/components/listtoolusagetracespayloadsort.md:
     last_write_checksum: sha1:f749513c8e9ab1cdac7d204a7b602921f5ca4aa6
   docs/models/components/listtoolusagetracespayloadtargettypes.md:
-    last_write_checksum: sha1:7e92308408472275935a519e3a0a2c177b0b63a0
+    last_write_checksum: sha1:8756ea886083d21d3d80e091940f1ff467897d54
   docs/models/components/listtoolusagetracesresult.md:
     last_write_checksum: sha1:4a78e8209cd1b50d37dc4f49e3adcdbcc424ab72
   docs/models/components/listtoolvariationgroupsresult.md:
@@ -3457,9 +3457,9 @@ trackedFiles:
   docs/models/components/targetkind.md:
     last_write_checksum: sha1:6d84c0f458af060e97c6f4980baf4af47b6d1dc6
   docs/models/components/targettype.md:
-    last_write_checksum: sha1:b835c27abc38d46e30a670c31e79a78ecbb0f4e6
+    last_write_checksum: sha1:32fef953ece0d42d67ed40c0a657dc21e15ea19b
   docs/models/components/targettypes.md:
-    last_write_checksum: sha1:cabf8331f9057ef933e8ad29ec92c9eb83475ff9
+    last_write_checksum: sha1:df0e07eb549affee13ac479fc88bb8f8b7d8f98c
   docs/models/components/telemetrylogrecord.md:
     last_write_checksum: sha1:4fde4c28dc8b97fd22c471c1496d617c0f9787cb
   docs/models/components/testdetectionrulematch.md:
@@ -3515,7 +3515,7 @@ trackedFiles:
   docs/models/components/toolusagetargetsummarytargetkind.md:
     last_write_checksum: sha1:42667508a8d54abf1809927425a54d6bf4af7cd6
   docs/models/components/toolusagetargetsummarytargettype.md:
-    last_write_checksum: sha1:d511c674834b2531f57db3319fedb72d9f274857
+    last_write_checksum: sha1:c4e5ab5db2ea04827c78e1b566cccf0ae0062153
   docs/models/components/toolusagetargettimeseriespoint.md:
     last_write_checksum: sha1:8d914165158a1af12eb25f3e973c9c7faec8554d
   docs/models/components/toolusagetargettoolbreakdownrow.md:
@@ -3523,7 +3523,7 @@ trackedFiles:
   docs/models/components/toolusagetargettoolbreakdownrowtargetkind.md:
     last_write_checksum: sha1:78768b231ce67d93aa832f595daa3c7fe8108bb3
   docs/models/components/toolusagetargettoolbreakdownrowtargettype.md:
-    last_write_checksum: sha1:bfb201c76d3ab28a88410af84ae04184bde268eb
+    last_write_checksum: sha1:5c4187590f6142507f88e9cf37211b69b258ca17
   docs/models/components/toolusagetotals.md:
     last_write_checksum: sha1:9dbec4f7d13f2e49f9a355cd934b164537bb3701
   docs/models/components/toolusagetraceloggroup.md:
@@ -3537,7 +3537,7 @@ trackedFiles:
   docs/models/components/toolusagetracesummarytargetkind.md:
     last_write_checksum: sha1:51faeff891fd224a2cc4d9eb3b63e5a2591d4d6a
   docs/models/components/toolusagetracesummarytargettype.md:
-    last_write_checksum: sha1:a1ec98865da563e02bacb9164a4a3be0e2caaf25
+    last_write_checksum: sha1:35d4d68d4b39109d4e8612621b13d74d0cbffb4a
   docs/models/components/toolusagetracesummaryuserkind.md:
     last_write_checksum: sha1:5d1fe1be07cb1e9dc54ae3e0ed53da568086e3b3
   docs/models/components/toolusageuserfilter.md:
@@ -3547,11 +3547,11 @@ trackedFiles:
   docs/models/components/toolusageuserfilteroption.md:
     last_write_checksum: sha1:edfc41558178a6bb1b2089b065da5b41e8f3164c
   docs/models/components/toolusageusersbytargetrow.md:
-    last_write_checksum: sha1:c926daa663651a7bfee8d24527c9abaa52f1809e
+    last_write_checksum: sha1:ff289445586f89474c603a772494641a3b6373fb
   docs/models/components/toolusageusersbytargetrowtargetkind.md:
     last_write_checksum: sha1:4fc7963aa9e5d58cdce183ae33408dc76e2a2cdc
   docs/models/components/toolusageusersbytargetrowtargettype.md:
-    last_write_checksum: sha1:54bb56fbd9e51d10d346cfaa57b3f001e9795b28
+    last_write_checksum: sha1:c54d125727f11904fdab2563212b9a52ea135061
   docs/models/components/toolusageusersbytargetrowuserkind.md:
     last_write_checksum: sha1:44680e7c7c3ff815e5e66a5d4ad10a73f2e751d0
   docs/models/components/toolusageusersummary.md:
@@ -7108,7 +7108,7 @@ trackedFiles:
   src/models/components/gettoolusagefilteroptionsresult.ts:
     last_write_checksum: sha1:b4ecf1868f80d016257deb9459306ef798ad5d99
   src/models/components/gettoolusagesummarypayload.ts:
-    last_write_checksum: sha1:0ee0dd083127a6b2df3b40e6736dea786bae8f74
+    last_write_checksum: sha1:5eb981708fc8704d6586c1d5c3d3558316329862
   src/models/components/gettoolusagesummaryresult.ts:
     last_write_checksum: sha1:051d645c74d5298c2a398a613fb45a30f120ad40
   src/models/components/getusermetricssummarypayload.ts:
@@ -7423,7 +7423,7 @@ trackedFiles:
   src/models/components/listtoolsresult.ts:
     last_write_checksum: sha1:bf250ba5854a75781df2885c958bbf0db58021e9
   src/models/components/listtoolusagetracespayload.ts:
-    last_write_checksum: sha1:16ede98f6d1dd64753b915ebbf3d07336c5af1a0
+    last_write_checksum: sha1:e95c0cb3fdfc981a3ae4b316a2b4662428c6938c
   src/models/components/listtoolusagetracesresult.ts:
     last_write_checksum: sha1:c941090445406af70bf5edb4e0f787ca7422cd47
   src/models/components/listtoolvariationgroupsresult.ts:
@@ -8257,23 +8257,23 @@ trackedFiles:
   src/models/components/toolusageshadowserverfilteroption.ts:
     last_write_checksum: sha1:0947a47bc6bcf2316d8bec8f7e02c028cce0ff57
   src/models/components/toolusagetargetsummary.ts:
-    last_write_checksum: sha1:0289ed52601b9f2ea07b8d2be6c2b20150638136
+    last_write_checksum: sha1:a378017fd018f494905fa1f5245b58cb1fd836aa
   src/models/components/toolusagetargettimeseriespoint.ts:
-    last_write_checksum: sha1:895b54a886185727952b53fcc123c45e1cf7231d
+    last_write_checksum: sha1:879d0d6e0d087da0a385aa356ff3a9d605946ff9
   src/models/components/toolusagetargettoolbreakdownrow.ts:
-    last_write_checksum: sha1:6bb4beee075636f54cbf5c0510f4b5239b61bd2d
+    last_write_checksum: sha1:9199534a9d5330c119ae023aed03ddb2b12e349a
   src/models/components/toolusagetotals.ts:
     last_write_checksum: sha1:b91488bcc42f0766e3d09e5b697b11b39cea0494
   src/models/components/toolusagetraceloggroup.ts:
     last_write_checksum: sha1:a6959ff4d94c378b75acaf27115f67b3e141ccb4
   src/models/components/toolusagetracesummary.ts:
-    last_write_checksum: sha1:6d7f33fab4ecf09351bf502063642b7c33b10b17
+    last_write_checksum: sha1:6b6d227db466f5767e54d5a42e7d1c4afad5d287
   src/models/components/toolusageuserfilter.ts:
     last_write_checksum: sha1:a3738caaaf62d90a1867890a412525942978a1d8
   src/models/components/toolusageuserfilteroption.ts:
     last_write_checksum: sha1:b73e8ac866f2e44fd3439ca3076d466d3350dd9f
   src/models/components/toolusageusersbytargetrow.ts:
-    last_write_checksum: sha1:3c3c99bf51d47ed87a13b467935b4ebe57a757f0
+    last_write_checksum: sha1:852062e21961c5f2a6b69bc1087dce3ab1b6ba29
   src/models/components/toolusageusersummary.ts:
     last_write_checksum: sha1:ebdc0c402ffc1d8acc34d92595ee46954937d7b0
   src/models/components/toolusageusertimeseriespoint.ts:
@@ -17275,15 +17275,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  setChatPinned:
-    speakeasy-default-set-chat-pinned:
-      requestBody:
-        application/json: {"id": "<id>", "pinned": true}
-      responses:
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   createOrganizationRemoteSessionClient:
     speakeasy-default-create-organization-remote-session-client:
       requestBody:
@@ -17295,38 +17286,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  getRiskBlock:
-    speakeasy-default-get-risk-block:
-      parameters:
-        query:
-          id: "0f863af5-e40c-4c8b-8530-39750944fa66"
-      responses:
-        "200":
-          application/json: {"created_at": "2024-08-16T18:02:26.505Z", "id": "f276027e-0697-41fa-ad37-15f1cb67bdd9", "policy_name": "<value>", "project_id": "4952ba23-310d-4247-9873-3ec74a01dc4e", "reason": "<value>"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  submitRiskBlockFeedback:
-    speakeasy-default-submit-risk-block-feedback:
-      requestBody:
-        application/json: {"id": "9cf38e99-3493-45be-93ba-587398f8938a", "sentiment": "down"}
-      responses:
-        "200":
-          application/json: {"created_at": "2024-10-16T22:19:49.098Z", "id": "284376c7-78da-447a-9118-4e3878ffafe9", "policy_name": "<value>", "project_id": "786dd539-154c-4dab-b209-7f7c084f5ad6", "reason": "<value>"}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  listChatSources:
-    speakeasy-default-list-chat-sources:
-      responses:
-        "200":
-          application/json: {"sources": ["<value 1>", "<value 2>", "<value 3>"]}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   createTunnelledMcpServer:
     speakeasy-default-create-tunnelled-mcp-server:
       requestBody:
@@ -17380,5 +17339,46 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listChatSources:
+    speakeasy-default-list-chat-sources:
+      responses:
+        "200":
+          application/json: {"sources": ["<value 1>", "<value 2>", "<value 3>"]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  setChatPinned:
+    speakeasy-default-set-chat-pinned:
+      requestBody:
+        application/json: {"id": "<id>", "pinned": true}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getRiskBlock:
+    speakeasy-default-get-risk-block:
+      parameters:
+        query:
+          id: "0f863af5-e40c-4c8b-8530-39750944fa66"
+      responses:
+        "200":
+          application/json: {"created_at": "2024-08-16T18:02:26.505Z", "id": "f276027e-0697-41fa-ad37-15f1cb67bdd9", "policy_name": "<value>", "project_id": "4952ba23-310d-4247-9873-3ec74a01dc4e", "reason": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  submitRiskBlockFeedback:
+    speakeasy-default-submit-risk-block-feedback:
+      requestBody:
+        application/json: {"id": "9cf38e99-3493-45be-93ba-587398f8938a", "sentiment": "down"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-10-16T22:19:49.098Z", "id": "284376c7-78da-447a-9118-4e3878ffafe9", "policy_name": "<value>", "project_id": "786dd539-154c-4dab-b209-7f7c084f5ad6", "reason": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

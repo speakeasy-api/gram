@@ -36,6 +36,7 @@ func TestManagedAssistantLogsToolsExposesObservabilityCatalog(t *testing.T) {
 	require.ElementsMatch(t, []string{
 		"platform_search_logs",
 		"platform_search_tool_calls",
+		"platform_get_tool_usage_summary",
 		"platform_search_chats",
 		"platform_search_users",
 		"platform_get_project_metrics_summary",
@@ -43,6 +44,21 @@ func TestManagedAssistantLogsToolsExposesObservabilityCatalog(t *testing.T) {
 		"platform_get_observability_overview",
 		"platform_list_attribute_keys",
 	}, got)
+}
+
+func TestManagedAssistantLogsToolsDescribesTunnelledMCPUsage(t *testing.T) {
+	t.Parallel()
+
+	tools := ManagedAssistantLogsTools(nil)
+	for _, tool := range tools {
+		if tool.Executor.Descriptor().Name != "platform_get_tool_usage_summary" {
+			continue
+		}
+		require.Contains(t, tool.Executor.Descriptor().Description, "tunnelled_mcp_server")
+		return
+	}
+
+	require.Fail(t, "platform_get_tool_usage_summary not registered")
 }
 
 func TestManagedAssistantChatsToolsExposesCatalog(t *testing.T) {
