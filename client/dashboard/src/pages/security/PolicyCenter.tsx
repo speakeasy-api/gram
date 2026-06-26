@@ -253,6 +253,16 @@ const HOOK_REQUIRED_CATEGORIES: Set<RuleCategory> = new Set([
   "destructive_tool",
 ]);
 
+/** Built-in detectors that run at the category level and have no individual
+ *  sub-rules in DETECTION_RULES (their rule list is intentionally empty).
+ *  Selecting one of these is enough to enable the policy on its own. */
+const CATEGORY_LEVEL_DETECTORS: Set<RuleCategory> = new Set([
+  "prompt_injection",
+  "shadow_mcp",
+  "destructive_tool",
+  "cli_destructive",
+]);
+
 /** One built-in detector as a toggleable card (Detect step). "Customize" opens
  *  a side-sheet to pick which rules in the category are active. */
 function DetectorCard({
@@ -1588,11 +1598,14 @@ function PolicyCenterContent() {
       ? selectedMessageTypes.size === 0
       : scopeInclude.trim() === "";
   // A standard policy needs at least one detector that will actually run: a
-  // custom rule, or a selected category with at least one of its rules enabled.
+  // custom rule, a category-level detector (no sub-rules to enable), or a
+  // selected category with at least one of its rules enabled.
   const hasEnabledDetector =
     selectedCustomRuleIds.size > 0 ||
-    [...selectedCategories].some((c) =>
-      DETECTION_RULES[c]?.some((r) => !r.hidden && !disabledRules.has(r.id)),
+    [...selectedCategories].some(
+      (c) =>
+        CATEGORY_LEVEL_DETECTORS.has(c) ||
+        DETECTION_RULES[c]?.some((r) => !r.hidden && !disabledRules.has(r.id)),
     );
   const continueDisabled =
     (wizardStep === 0 &&
