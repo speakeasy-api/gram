@@ -104,12 +104,12 @@ func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
 	return ctx
 }
 
-// grantOrgAdmin returns a context for an org admin who has ALSO been granted an
+// grantOrgAdminWithChatRead returns a context for an org admin who has ALSO been granted an
 // unrestricted chat:read, with RBAC enforcement active (enterprise). chat:read
 // is not a system-role default — it must be granted explicitly — and it, not
 // org:admin, is what drives chat session see-all visibility. These tests
 // exercise that chat:read-holder path.
-func grantOrgAdmin(t *testing.T, ctx context.Context) context.Context {
+func grantOrgAdminWithChatRead(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -230,13 +230,13 @@ func TestListChats_RegularUser_SeesOnlyOwnChats(t *testing.T) {
 	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
 }
 
-// TestListChats_OrgAdmin_SeesAllChats verifies that a customer org admin (holding
-// the org:admin RBAC scope, no platform-staff flag) can see all chats in the
+// TestListChats_ChatRead_SeesAllChats verifies that a caller holding an
+// unrestricted chat:read (here alongside org:admin) sees every chat in the
 // project, regardless of which user or external user owns them.
-func TestListChats_OrgAdmin_SeesAllChats(t *testing.T) {
+func TestListChats_ChatRead_SeesAllChats(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
-	ctx := grantOrgAdmin(t, initSessionCtx(t, ti))
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
 
 	seedChat(t, ctx, ti, "", "ext-aaa", "chat A")
 	seedChat(t, ctx, ti, "user-bbb", "", "chat B")
@@ -245,6 +245,33 @@ func TestListChats_OrgAdmin_SeesAllChats(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, result.Total)
 	require.Len(t, result.Chats, 2)
+}
+
+// TestListChats_OrgAdminWithoutChatRead_SeesOnlyOwnChats is the regression guard
+// for the blind spot in the see-all path: org:admin alone does NOT grant chat
+// session see-all visibility — only chat:read does. An admin without chat:read
+// is scoped to their own sessions like any other member.
+func TestListChats_OrgAdminWithoutChatRead_SeesOnlyOwnChats(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	// org:admin only — no chat:read.
+	ctx = authztest.WithExactGrants(
+		t,
+		ctx,
+		authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	)
+
+	seedChat(t, ctx, ti, authCtx.UserID, "", "own chat")
+	seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
 }
 
 // TestListChats_Member_SeesOnlyOwnChats verifies that a session user who holds
@@ -281,7 +308,7 @@ func TestListChats_RBACDisabled_SeesOnlyOwnChats(t *testing.T) {
 	ti := newTestChatServiceRBACDisabled(t)
 	// Mark the context enterprise + grant org:admin; with the org's RBAC
 	// feature flag off, ShouldEnforce still returns false and the grant is moot.
-	ctx := grantOrgAdmin(t, initSessionCtx(t, ti))
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
@@ -333,7 +360,7 @@ func TestLoadChat_ManagedAssistant_LoadsExternalUserChat(t *testing.T) {
 func TestListChats_OrgAdmin_FilterByExternalUserID(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
-	ctx := grantOrgAdmin(t, initSessionCtx(t, ti))
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
 
 	seedChat(t, ctx, ti, "", "ext-123", "chat for ext-123")
 	seedChat(t, ctx, ti, "", "ext-456", "chat for ext-456")
