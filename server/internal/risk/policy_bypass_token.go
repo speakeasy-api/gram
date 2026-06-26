@@ -125,6 +125,14 @@ func GeneratePolicyBypassRequestURL(ctx context.Context, c cache.Cache, siteURL 
 	requestURL := siteURL.JoinPath("risk-policy-bypass", "request")
 	query := url.Values{}
 	query.Set("request_token", token)
+	// Carry the token in the URL fragment, never the query string. The token
+	// is a bearer credential: whoever holds it can redeem the link. A fragment
+	// never leaves the browser, so it stays out of server access logs,
+	// proxy/load-balancer logs, and request telemetry — a query param would
+	// land in all of them. The dashboard route also sets `referrer=no-referrer`
+	// and strips the fragment from history after reading it. Shortening the
+	// token to an rpbr2 cache id (AIS-228) did not change this: a short id is
+	// no less a secret, so it still belongs in the fragment.
 	requestURL.Fragment = query.Encode()
 	return requestURL.String(), expiry, nil
 }

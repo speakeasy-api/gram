@@ -28,6 +28,10 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
   const { mutateAsync: createApprovalRequest } =
     useRiskCreatePolicyBypassRequestMutation();
 
+  // The request token is a bearer credential delivered in the URL fragment
+  // (see GeneratePolicyBypassRequestURL on the server) so it never hits server
+  // logs. Force no-referrer so it also can't leak via the Referer header to
+  // anything this page loads.
   useEffect(() => {
     const meta = document.createElement("meta");
     meta.name = "referrer";
@@ -41,6 +45,9 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
   useEffect(() => {
     if (requestToken) {
       setSubmissionResult("idle");
+      // Move the token out of the URL into sessionStorage and immediately strip
+      // the fragment from the address bar / history, so it isn't left sitting
+      // in a shared screen, browser history, or a copy-pasted URL.
       sessionStorage.setItem(REQUEST_TOKEN_STORAGE_KEY, requestToken);
       sessionStorage.removeItem(LEGACY_REQUEST_TOKEN_STORAGE_KEY);
       window.history.replaceState(null, "", window.location.pathname);
