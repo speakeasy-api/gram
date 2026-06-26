@@ -252,8 +252,10 @@ type BillingMetadatum struct {
 	TumMonthlyTokenLimit  pgtype.Int8
 	AlertEmail            pgtype.Text
 	BillingCycleAnchorDay int32
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
+	// Contracted org-level cap for tunnelled MCP server sources. NULL means use the finite plan default.
+	TunnelledMcpServerLimit pgtype.Int4
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
 }
 
 type Chat struct {
@@ -786,13 +788,15 @@ type McpRegistry struct {
 }
 
 type McpServer struct {
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	Name                  pgtype.Text
-	Slug                  pgtype.Text
-	EnvironmentID         uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	Name                pgtype.Text
+	Slug                pgtype.Text
+	EnvironmentID       uuid.NullUUID
+	UserSessionIssuerID uuid.NullUUID
+	RemoteMcpServerID   uuid.NullUUID
+	// Optional backend reference to a tunnelled MCP source. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be set.
+	TunnelledMcpServerID  uuid.NullUUID
 	ToolsetID             uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
@@ -1600,6 +1604,34 @@ type TriggerInstance struct {
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
+}
+
+// Customer-hosted MCP server sources that connect to Gram through outbound tunnels.
+type TunnelledMcpServer struct {
+	// Stable UUID for the tunnelled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.
+	ID uuid.UUID
+	// Project that owns this tunnelled MCP source. All management queries are scoped by project_id.
+	ProjectID uuid.UUID
+	// User-facing display name for the tunnelled MCP source.
+	Name string
+	// Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.
+	KeyHash string
+	// Non-secret prefix of the tunnel key shown in the UI so users can identify which key/source they are using.
+	KeyPrefix string
+	// Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.
+	Status string
+	// Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.
+	AgentVersion pgtype.Text
+	// Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.
+	LastSeenAt pgtype.Timestamptz
+	// Time when the tunnelled MCP source was created.
+	CreatedAt pgtype.Timestamptz
+	// Time when the durable tunnelled MCP source record was last updated.
+	UpdatedAt pgtype.Timestamptz
+	// Soft-delete timestamp for the tunnelled MCP source. NULL means the source is active.
+	DeletedAt pgtype.Timestamptz
+	// Generated soft-delete flag derived from deleted_at and used by partial indexes.
+	Deleted bool
 }
 
 type User struct {
