@@ -1205,6 +1205,9 @@ CREATE TABLE IF NOT EXISTS chats (
   -- True when a human explicitly renamed the chat. Auto title generation skips
   -- these so it never overwrites a manually chosen name.
   title_manually_set boolean NOT NULL DEFAULT false,
+  -- When a human pinned the chat (NULL = not pinned). Pinned chats surface in a
+  -- dedicated section above recents; the timestamp orders them by pin time.
+  pinned_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
