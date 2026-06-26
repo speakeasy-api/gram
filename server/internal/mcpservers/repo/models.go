@@ -10,13 +10,15 @@ import (
 )
 
 type McpServer struct {
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	Name                  pgtype.Text
-	Slug                  pgtype.Text
-	EnvironmentID         uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	Name                pgtype.Text
+	Slug                pgtype.Text
+	EnvironmentID       uuid.NullUUID
+	UserSessionIssuerID uuid.NullUUID
+	RemoteMcpServerID   uuid.NullUUID
+	// Optional backend reference to a tunnelled MCP source. Exactly one of remote_mcp_server_id, tunnelled_mcp_server_id, or toolset_id must be set.
+	TunnelledMcpServerID  uuid.NullUUID
 	ToolsetID             uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
