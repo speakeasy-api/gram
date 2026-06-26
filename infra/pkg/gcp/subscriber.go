@@ -36,7 +36,9 @@ type BatchReceiveSettings struct {
 	// MaxLatency is how long a partial batch waits before being flushed. A value
 	// <= 0 falls back to defaultBatchMaxLatency. It must stay well below the
 	// subscription's ack deadline (and the receiver's MaxExtension) since
-	// buffered messages remain outstanding until the batch is acked.
+	// buffered messages remain outstanding until the batch is acked; cross it and
+	// pubsub redelivers them before the batch flushes, so they get processed
+	// twice and the post-flush ack lands on a stale copy.
 	MaxLatency time.Duration
 }
 
