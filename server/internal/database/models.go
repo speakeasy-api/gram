@@ -1465,6 +1465,7 @@ type ToolCallBlock struct {
 	RiskResultID   uuid.NullUUID
 	ChatID         uuid.NullUUID
 	ChatMessageID  uuid.NullUUID
+	UserID         string
 	Feedback       pgtype.Text
 	FeedbackUserID pgtype.Text
 	FeedbackAt     pgtype.Timestamptz
