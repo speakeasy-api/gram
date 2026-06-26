@@ -325,18 +325,21 @@ export function MCPAuthenticationTab({
     );
 
     if (systemEntries.length > 0) {
-      updateEnvironmentMutation.mutate({
-        request: {
-          slug: selectedEnvironmentView,
-          updateEnvironmentRequestBody: {
-            entriesToUpdate: systemEntries.map((e) => ({
-              name: e.key,
-              value: e.value,
-            })),
-            entriesToRemove: [],
+      updateEnvironmentMutation.mutate(
+        {
+          request: {
+            slug: selectedEnvironmentView,
+            updateEnvironmentRequestBody: {
+              entriesToUpdate: systemEntries.map((e) => ({
+                name: e.key,
+                value: e.value,
+              })),
+              entriesToRemove: [],
+            },
           },
         },
-      });
+        { onSuccess: () => void toast.success("Variables added") },
+      );
 
       // Create environment entries for custom variables
       const existingEntries = mcpMetadata?.environmentConfigs || [];
@@ -367,8 +370,6 @@ export function MCPAuthenticationTab({
           });
         }
       }
-
-      toast.success("Variables added");
     }
 
     for (const entry of entries) {
