@@ -22,9 +22,13 @@ import (
 // at hook-time deny into tool_call_blocks, carrying the exact reason shown to
 // the agent. The block page is opened from the link an agent embeds in its deny
 // message, so access is intentionally NOT gated on org-admin — the person whose
-// agent was blocked is usually a regular member. Access is scoped to org
-// MEMBERSHIP (see the query below), so a block is readable by any signed-in
-// member of the organization that owns it, regardless of their active org.
+// agent was blocked is usually a regular member.
+//
+// Org MEMBERSHIP is the floor (see the query below): a block is loadable by any
+// signed-in member of the owning org, regardless of their active org.
+// authorizeBlockView then tightens that when the block records an owner: only
+// that owner, or a project admin (project:write), may view it. A block with no
+// recorded owner (empty user_id) stays readable by any member.
 func (s *Service) GetRiskBlock(ctx context.Context, payload *gen.GetRiskBlockPayload) (*gen.RiskBlock, error) {
 	authCtx, err := s.authorizeBlockAccess(ctx)
 	if err != nil {

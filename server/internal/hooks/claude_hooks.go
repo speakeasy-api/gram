@@ -816,23 +816,36 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			// Surface the block reason on the trace summary so the dashboard
 			// shows why the call was denied. Always store the technical reason
 			// — the user_message override is for the agent-facing response only.
-			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+			metadata, metaErr := s.getSessionMetadata(ctx, *payload.SessionID)
+			if metaErr == nil {
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
 			if blockID, err := uuid.NewV7(); err == nil {
 				userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
-				go s.insertToolCallBlock(context.WithoutCancel(ctx), blockID, toolCallBlockParams{
-					Provider:       "claude",
-					OrganizationID: ev.Context.OrganizationID,
-					ProjectID:      ev.Context.ProjectID,
-					Reason:         auditReason,
-					ToolName:       ev.ToolName,
-					UserID:         s.resolveUserByEmail(ctx, conv.PtrValOr(payload.UserEmail, ""), ev.Context.OrganizationID),
-					RiskPolicyID:   conv.StringToNullUUID(scanResult.PolicyID),
-					RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-					ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
-					ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				})
+				// Prefer the email from the session metadata fetched above,
+				// falling back to the raw payload when it wasn't cached.
+				userEmail := conv.PtrValOr(payload.UserEmail, "")
+				if metaErr == nil && strings.TrimSpace(metadata.UserEmail) != "" {
+					userEmail = metadata.UserEmail
+				}
+				asyncCtx := context.WithoutCancel(ctx)
+				// Resolve the owning user inside the goroutine so the DB lookup
+				// stays off the deny hot path (a plain `go s.insert(...)` would
+				// evaluate the resolveUserByEmail argument synchronously).
+				go func() {
+					s.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
+						Provider:       "claude",
+						OrganizationID: ev.Context.OrganizationID,
+						ProjectID:      ev.Context.ProjectID,
+						Reason:         auditReason,
+						ToolName:       ev.ToolName,
+						UserID:         s.resolveUserByEmail(asyncCtx, userEmail, ev.Context.OrganizationID),
+						RiskPolicyID:   conv.StringToNullUUID(scanResult.PolicyID),
+						RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+						ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
+						ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					})
+				}()
 			}
 			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}
