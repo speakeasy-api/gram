@@ -165,8 +165,13 @@ func (a *Agent) buildHandler(target *url.URL) http.Handler {
 	proxy.FlushInterval = -1 // stream SSE immediately
 	baseDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
+		originalPath := req.URL.Path
 		baseDirector(req)
 		req.Host = target.Host
+		if target.Path != "" && (originalPath == "" || originalPath == "/") {
+			req.URL.Path = target.Path
+			req.URL.RawPath = target.RawPath
+		}
 	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
 		a.logger.Warn("tunnel agent upstream error", slog.Any("error", err))

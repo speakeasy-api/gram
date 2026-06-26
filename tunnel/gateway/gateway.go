@@ -36,7 +36,7 @@ type Config struct {
 // maps internal forward requests onto substreams by tunnel ID.
 type Gateway struct {
 	cfg      Config
-	keys     *KeyStore
+	keys     KeyResolver
 	routes   route.Store
 	reg      *registry
 	logger   *slog.Logger
@@ -44,7 +44,7 @@ type Gateway struct {
 }
 
 // New builds a Gateway.
-func New(cfg Config, keys *KeyStore, routes route.Store, logger *slog.Logger) *Gateway {
+func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) *Gateway {
 	if cfg.MaxStreamsPerTunnel <= 0 {
 		cfg.MaxStreamsPerTunnel = 256
 	}
@@ -88,7 +88,12 @@ func (g *Gateway) SetAdvertiseAddr(addr string) { g.cfg.AdvertiseAddr = addr }
 // client session over it, registers the session, and keeps the route fresh
 // until the session closes.
 func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
-	tunnelID, ok := g.keys.Resolve(r.Header.Get("Authorization"))
+	tunnelID, ok, err := g.keys.Resolve(r.Context(), r.Header.Get("Authorization"))
+	if err != nil {
+		g.logger.ErrorContext(r.Context(), "tunnel connect key lookup failed", slog.Any("error", err))
+		http.Error(w, "tunnel key lookup failed", http.StatusServiceUnavailable)
+		return
+	}
 	if !ok {
 		g.logger.WarnContext(r.Context(), "tunnel connect rejected", slog.String("reason", "auth"))
 		http.Error(w, "unauthorized tunnel key", http.StatusUnauthorized)
@@ -307,10 +312,12 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 }
 
-// RevokeTunnel kills all sessions for a tunnel and clears its route. Exposed for
-// a revoke endpoint / test.
+// RevokeTunnel kills all sessions for a tunnel and clears its route. Durable
+// key state is owned by the resolver backing the gateway.
 func (g *Gateway) RevokeTunnel(ctx context.Context, tunnelID string) int {
-	g.keys.Revoke(tunnelID)
+	if revoker, ok := g.keys.(interface{ Revoke(string) }); ok {
+		revoker.Revoke(tunnelID)
+	}
 	_ = g.routes.Delete(ctx, tunnelID)
 	return g.reg.kill(tunnelID)
 }

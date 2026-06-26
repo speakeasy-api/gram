@@ -46,12 +46,12 @@ func TestTunnelEndToEnd(t *testing.T) {
 	}))
 	defer mcp.Close()
 
-	// Gateway with an in-memory route store and one seeded tunnel key.
+	// Test gateway with a process-local route store and one seeded tunnel key.
 	const tunnelID = "tunnel-1"
 	plaintext, _, err := wire.NewKey()
 	require.NoError(t, err)
 	routes := newSnapshotStore()
-	keys := gateway.NewKeyStore(map[string]string{tunnelID: plaintext})
+	keys := gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext})
 	gw := gateway.New(gateway.Config{}, keys, routes, logger)
 
 	gwServer := httptest.NewServer(gw.Handler())
@@ -154,7 +154,7 @@ func TestTunnelRevoke(t *testing.T) {
 	plaintext, _, err := wire.NewKey()
 	require.NoError(t, err)
 	routes := route.NewMemory()
-	gw := gateway.New(gateway.Config{}, gateway.NewKeyStore(map[string]string{tunnelID: plaintext}), routes, logger)
+	gw := gateway.New(gateway.Config{}, gateway.NewStaticKeyStore(map[string]string{tunnelID: plaintext}), routes, logger)
 	gwServer := httptest.NewServer(gw.Handler())
 	defer gwServer.Close()
 	gw.SetAdvertiseAddr(gwServer.Listener.Addr().String())

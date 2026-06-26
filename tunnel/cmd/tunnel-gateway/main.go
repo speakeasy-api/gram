@@ -1,11 +1,12 @@
 // Command tunnel-gateway terminates agent WebSocket upgrades, owns the yamux
 // sessions, and maps internal forward requests onto substreams by tunnel ID.
-// POC: route store is Redis (if TUNNEL_REDIS_ADDR set) or in-memory; tunnel keys
-// are seeded from TUNNEL_SEED_KEYS (no database).
+// The standalone process uses Postgres for key resolution and Redis for live
+// routes and connection snapshots.
 package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/speakeasy-api/gram/tunnel/gateway"
@@ -28,8 +30,17 @@ func main() {
 	// the pod IP + port via the downward API (see the manifest).
 	advertiseAddr := envOr("TUNNEL_GATEWAY_ADVERTISE_ADDR", "tunnel-gateway:8090")
 
-	routes := buildRouteStore(logger)
-	keys := gateway.NewKeyStore(parseSeedKeys(os.Getenv("TUNNEL_SEED_KEYS")))
+	routes, err := buildRouteStore(logger)
+	if err != nil {
+		logger.Error("tunnel-gateway route store init failed", slog.Any("error", err))
+		os.Exit(2)
+	}
+	keys, err := buildKeyResolver(context.Background())
+	if err != nil {
+		logger.Error("tunnel-gateway key resolver init failed", slog.Any("error", err))
+		os.Exit(2)
+	}
+	defer keys.Close()
 
 	gw := gateway.New(gateway.Config{
 		AdvertiseAddr:       advertiseAddr,
@@ -60,35 +71,33 @@ func main() {
 	}
 }
 
-func buildRouteStore(logger *slog.Logger) route.Store {
-	addr := os.Getenv("TUNNEL_REDIS_ADDR")
+func buildRouteStore(logger *slog.Logger) (route.Store, error) {
+	addr := strings.TrimSpace(os.Getenv("TUNNEL_REDIS_ADDR"))
 	if addr == "" {
-		logger.Info("tunnel-gateway using in-memory route store")
-		return route.NewMemory()
+		return nil, errors.New("TUNNEL_REDIS_ADDR is required")
 	}
 	client := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: os.Getenv("TUNNEL_REDIS_PASSWORD"),
 	})
 	logger.Info("tunnel-gateway using redis route store", slog.String("addr", addr))
-	return route.NewRedis(client)
+	return route.NewRedis(client), nil
 }
 
-// parseSeedKeys parses "tunnelID=gram_tunnel_xxx,tunnelID2=gram_tunnel_yyy".
-func parseSeedKeys(raw string) map[string]string {
-	out := map[string]string{}
-	for pair := range strings.SplitSeq(raw, ",") {
-		pair = strings.TrimSpace(pair)
-		if pair == "" {
-			continue
-		}
-		id, key, ok := strings.Cut(pair, "=")
-		if !ok {
-			continue
-		}
-		out[strings.TrimSpace(id)] = strings.TrimSpace(key)
+func buildKeyResolver(ctx context.Context) (*gateway.PostgresKeyResolver, error) {
+	dbURL := strings.TrimSpace(os.Getenv("TUNNEL_DATABASE_URL"))
+	if dbURL == "" {
+		return nil, errors.New("TUNNEL_DATABASE_URL is required")
 	}
-	return out
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		return nil, err
+	}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, err
+	}
+	return gateway.NewPostgresKeyResolver(pool), nil
 }
 
 func envOr(k, def string) string {

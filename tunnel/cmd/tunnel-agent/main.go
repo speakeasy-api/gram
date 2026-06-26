@@ -1,6 +1,6 @@
 // Command tunnel-agent is the customer-side agent. Outbound-only: it dials the
 // gateway WebSocket and reverse-proxies substream HTTP to one pinned local MCP
-// URL. POC config comes from env.
+// URL. Runtime config comes from env.
 package main
 
 import (

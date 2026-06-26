@@ -1,7 +1,7 @@
 // Package route is the tunnelID -> owning-gateway-pod address cache that lets a
 // separate gram-server pod find the gateway holding a given tunnel's session.
-// Per the design this is a TTL-heartbeated cache (Postgres is the durable truth
-// in prod; this POC skips the DB and uses only Redis or an in-memory map).
+// Postgres is the durable control-plane store; this package owns the live,
+// TTL-heartbeated routing and connection snapshots in Redis or test memory.
 package route
 
 import (
@@ -45,8 +45,7 @@ type ConnectionSnapshotStore interface {
 	DeleteConnections(ctx context.Context, tunnelID string) error
 }
 
-// Memory is a process-local Store. Sufficient when the gateway and the serve
-// path share a process, or for single-replica local runs.
+// Memory is a process-local Store for tests and in-process harnesses.
 type Memory struct {
 	mu     sync.RWMutex
 	routes map[string]memEntry
