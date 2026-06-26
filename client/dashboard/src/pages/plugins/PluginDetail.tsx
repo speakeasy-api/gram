@@ -350,32 +350,36 @@ export default function PluginDetail(): JSX.Element | null {
         </Stack>
 
         {/* Marketplace banner — durable path to the install instructions, so the
-            published marketplace URL is reachable without going back to the list. */}
-        {publishStatus?.connected &&
-          publishStatus.repoUrl &&
-          publishStatus.repoOwner &&
-          publishStatus.repoName && (
-            <div className="bg-muted/30 border-border/60 mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                  Marketplace
-                </span>
-                <a
-                  href={publishStatus.repoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-primary text-foreground font-mono text-sm hover:underline"
-                >
-                  {publishStatus.repoOwner}/{publishStatus.repoName}
-                </a>
-              </div>
+            published marketplace URL is reachable without going back to the list.
+            Gated only on a connected repo URL (mirrors the plugins list); the
+            owner/name display and install button degrade independently so partial
+            metadata never hides the whole entrypoint. */}
+        {publishStatus?.connected && publishStatus.repoUrl && (
+          <div className="bg-muted/30 border-border/60 mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                Marketplace
+              </span>
+              <a
+                href={publishStatus.repoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-primary text-foreground font-mono text-sm hover:underline"
+              >
+                {publishStatus.repoOwner && publishStatus.repoName
+                  ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
+                  : publishStatus.repoUrl}
+              </a>
+            </div>
+            {publishStatus.repoOwner && publishStatus.repoName && (
               <InstallInstructionsButton
                 repoOwner={publishStatus.repoOwner}
                 repoName={publishStatus.repoName}
                 marketplaceUrl={publishStatus.marketplaceUrl}
               />
-            </div>
-          )}
+            )}
+          </div>
+        )}
 
         {/* Servers section */}
         <Stack
@@ -672,7 +676,7 @@ function PublishFreshnessIndicator({
     );
   }
 
-  if (publishStatus.upToDate && publishStatus.lastPublishedAt) {
+  if (publishStatus.lastPublishedAt) {
     return (
       <Type muted small className="mt-2 block">
         Published{" "}
