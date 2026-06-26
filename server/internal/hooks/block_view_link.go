@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -10,6 +11,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 )
+
+// toolCallBlockWriteTimeout bounds the detached block-row insert. Callers run it
+// with a non-cancelable context (context.WithoutCancel) so the deny response
+// doesn't wait on it, which means a stalled DB/network call would otherwise leak
+// the goroutine indefinitely.
+const toolCallBlockWriteTimeout = 10 * time.Second
 
 // toolCallBlockParams describes a hook-time block to persist. Only the reason
 // and tenancy are required; the chat / finding / policy links are optional
@@ -48,6 +55,8 @@ func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p 
 	if s.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
 		return
 	}
+	ctx, cancel := context.WithTimeout(ctx, toolCallBlockWriteTimeout)
+	defer cancel()
 	if err := s.repo.InsertToolCallBlock(ctx, repo.InsertToolCallBlockParams{
 		ID:             blockID,
 		OrganizationID: p.OrganizationID,
