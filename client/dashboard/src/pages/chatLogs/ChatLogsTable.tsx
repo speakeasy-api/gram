@@ -8,12 +8,10 @@ import { Button, Icon } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { useCallback, useState } from "react";
 
-// Label for a session's owner. The caller's own sessions always show "You"
-// (matched by internal user id, or by external user id when it equals their
-// email — seeded/dashboard chats carry the email there). Other external
-// (Elements) sessions show the external user id; other internal members show
-// "Member" (the list has only their user id, not a display name); truly
-// ownerless sessions show "anonymous".
+// Label for a session's owner. The caller's own sessions show "You" (matched by
+// internal user id, or by external user id when it equals their email —
+// seeded/dashboard chats carry the email there). Everyone else falls back to the
+// external user id, or "anonymous" when there is none.
 function ownerLabel(
   chat: ChatOverview,
   user: { id: string; email: string },
@@ -22,9 +20,7 @@ function ownerLabel(
     (!!chat.userId && chat.userId === user.id) ||
     (!!chat.externalUserId && chat.externalUserId === user.email);
   if (isMe) return "You";
-  if (chat.externalUserId) return chat.externalUserId;
-  if (chat.userId) return "Member";
-  return "anonymous";
+  return chat.externalUserId || "anonymous";
 }
 
 interface ChatLogsTableProps {
