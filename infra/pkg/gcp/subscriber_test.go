@@ -592,6 +592,134 @@ func TestBatchLoop_NoFlushWhenIdle(t *testing.T) {
 	})
 }
 
+// TestBatchLoop_DrainsOnCancelBeforeReceiveReturns proves the cancellation drain
+// runs while the delivery source is still in flight, not after it returns. The
+// source mirrors Subscriber.Receive's graceful shutdown: it parks in receive
+// after ctx is cancelled and only returns once the test releases it. With a
+// 1h MaxLatency the timer cannot flush, so the batch can only be flushed and
+// acked by the on-cancel drainer — and the test asserts that happens before the
+// source is allowed to return. Draining after receive returned (the pre-fix
+// behaviour) would leave the batch un-flushed here.
+func TestBatchLoop_DrainsOnCancelBeforeReceiveReturns(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		s := newPanicSubscriber(slog.New(slog.DiscardHandler))
+
+		data, err := proto.Marshal(&emptypb.Empty{})
+		require.NoError(t, err)
+
+		m1, c1 := newBatchMessage("msg-1", data, nil)
+		m2, c2 := newBatchMessage("msg-2", data, nil)
+
+		// MaxMessages and MaxLatency far out of reach so only the cancellation
+		// drain can flush the buffered pair.
+		settings := BatchReceiveSettings{MaxMessages: 100, MaxBytes: 0, MaxLatency: time.Hour}
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		capt := &batchCapture{} //nolint:exhaustruct // zero values are the initial state under test
+
+		releaseReceive := make(chan struct{})
+		receive := func(ctx context.Context, deliver func(incomingMessage)) error {
+			deliver(m1)
+			deliver(m2)
+			<-ctx.Done()
+			// Stay inside receive until the test lets us return, the way the SDK's
+			// graceful shutdown blocks on outstanding messages.
+			<-releaseReceive
+			return nil
+		}
+
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- s.batchLoop(ctx, settings, receive, func(_ context.Context, _ []*emptypb.Empty, metas []MessageMetadata) error {
+				capt.record(metas)
+				return nil
+			})
+		}()
+
+		synctest.Wait()
+		require.Empty(t, capt.snapshot(), "nothing should flush before cancel with an hour-long latency window")
+
+		cancel()
+		synctest.Wait()
+		// receive is still parked on releaseReceive, yet the batch is already
+		// flushed and acked: the drain ran inside the live receive lifecycle.
+		require.Equal(t, [][]string{{"msg-1", "msg-2"}}, capt.snapshot(), "cancellation should drain the batch while receive is still in flight")
+		require.True(t, c1.isAcked())
+		require.True(t, c2.isAcked())
+
+		close(releaseReceive)
+		require.NoError(t, <-errCh)
+	})
+}
+
+// TestBatchLoop_FlushesInlineWhileDraining proves messages the source keeps
+// delivering during graceful shutdown are flushed inline rather than parked
+// behind the latency timer. With a 1h MaxLatency, a message delivered after
+// cancellation could only be acked promptly if draining forces an immediate
+// flush.
+func TestBatchLoop_FlushesInlineWhileDraining(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		s := newPanicSubscriber(slog.New(slog.DiscardHandler))
+
+		data, err := proto.Marshal(&emptypb.Empty{})
+		require.NoError(t, err)
+
+		m1, c1 := newBatchMessage("msg-1", data, nil)
+		m2, c2 := newBatchMessage("msg-2", data, nil)
+
+		settings := BatchReceiveSettings{MaxMessages: 100, MaxBytes: 0, MaxLatency: time.Hour}
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		capt := &batchCapture{} //nolint:exhaustruct // zero values are the initial state under test
+
+		releaseReceive := make(chan struct{})
+		receive := func(ctx context.Context, deliver func(incomingMessage)) error {
+			deliver(m1)
+			<-ctx.Done()
+			// The SDK scheduler can hand over an already-pulled message during
+			// graceful shutdown; this one must not wait out MaxLatency.
+			deliver(m2)
+			<-releaseReceive
+			return nil
+		}
+
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- s.batchLoop(ctx, settings, receive, func(_ context.Context, _ []*emptypb.Empty, metas []MessageMetadata) error {
+				capt.record(metas)
+				return nil
+			})
+		}()
+
+		synctest.Wait()
+		require.Empty(t, capt.snapshot(), "nothing should flush before cancel")
+
+		cancel()
+		synctest.Wait()
+		// Both the pre-cancel buffer (m1) and the post-cancel delivery (m2) are
+		// acked while receive is still parked, despite the hour-long latency window.
+		require.True(t, c1.isAcked(), "buffered message should drain on cancel")
+		require.True(t, c2.isAcked(), "message delivered during drain should flush inline, not wait for MaxLatency")
+
+		var got []string
+		for _, batch := range capt.snapshot() {
+			got = append(got, batch...)
+		}
+		require.ElementsMatch(t, []string{"msg-1", "msg-2"}, got, "both messages should be flushed during shutdown")
+
+		close(releaseReceive)
+		require.NoError(t, <-errCh)
+	})
+}
+
 func TestHandle_DeliveryAttemptOmittedWhenNil(t *testing.T) {
 	t.Parallel()
 

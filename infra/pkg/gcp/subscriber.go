@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"cloud.google.com/go/pubsub/v2"
@@ -27,11 +28,13 @@ const (
 // MaxBytes, or MaxLatency elapses, whichever happens first.
 type BatchReceiveSettings struct {
 	// MaxMessages is the number of buffered messages that triggers a flush. A
-	// value <= 0 falls back to defaultBatchMaxMessages. Keep it at or below the
-	// receiver's ReceiveSettings.MaxOutstandingMessages: buffered messages stay
-	// un-acked until their batch flushes, so if MaxMessages exceeds the
-	// outstanding limit the buffer can never reach the size threshold and every
-	// batch waits the full MaxLatency.
+	// value <= 0 falls back to defaultBatchMaxMessages. It bounds how many
+	// messages are held in memory, and left un-acked, per batch. It is
+	// independent of the receiver's ReceiveSettings.MaxOutstandingMessages: the
+	// underlying client releases that limit (really a concurrency cap on in-flight
+	// receive callbacks) when our callback returns after buffering, not when the
+	// message is acked, so buffering does not consume outstanding slots and the
+	// buffer can always reach MaxMessages regardless of the outstanding limit.
 	MaxMessages int
 	// MaxBytes is the combined size of buffered message payloads, in bytes, that
 	// triggers a flush. A value <= 0 disables byte-based flushing, leaving
@@ -43,10 +46,13 @@ type BatchReceiveSettings struct {
 	MaxBytes int
 	// MaxLatency is how long a partial batch waits before being flushed. A value
 	// <= 0 falls back to defaultBatchMaxLatency. It must stay well below the
-	// subscription's ack deadline (and the receiver's MaxExtension) since
-	// buffered messages remain outstanding until the batch is acked; cross it and
-	// pubsub redelivers them before the batch flushes, so they get processed
-	// twice and the post-flush ack lands on a stale copy.
+	// receiver's ReceiveSettings.MaxExtension (default 60m) — the ceiling up to
+	// which the client auto-extends a buffered message's ack deadline. The
+	// subscription's own ackDeadlineSeconds is not the limit: the client keeps
+	// the lease alive past it via modacks. But buffered messages remain leased
+	// (and un-acked) until their batch flushes, so once MaxLatency crosses
+	// MaxExtension the client stops extending, pubsub redelivers them before the
+	// batch flushes, and the eventual ack lands on a stale copy.
 	MaxLatency time.Duration
 }
 
@@ -201,10 +207,14 @@ func (s *psSubscriber[M]) ReceiveBatch(ctx context.Context, settings BatchReceiv
 // batchLoop holds the buffering, count/byte/latency flushing, and drain logic
 // shared by ReceiveBatch. The latency timer is armed when a message starts a new
 // batch and stopped when the batch is detached, so the window is measured from
-// each batch's first message. The delivery source is abstracted behind receive
-// so the loop can be exercised in tests (with a synthetic source and a fake
-// clock) without a live pubsub subscriber: receive must call deliver once per
-// incoming message and return when ctx is cancelled (or on a terminal error).
+// each batch's first message. On cancellation a drainer goroutine flushes the
+// in-flight batch while receive is still running, because ack/nack must reach
+// the live iterator: Subscriber.Receive only returns once every outstanding
+// message is acked/nacked, so the drain cannot wait until after it returns. The
+// delivery source is abstracted behind receive so the loop can be exercised in
+// tests (with a synthetic source and a fake clock) without a live pubsub
+// subscriber: receive must call deliver once per incoming message and return
+// when ctx is cancelled (or on a terminal error).
 func (s *psSubscriber[M]) batchLoop(
 	ctx context.Context,
 	settings BatchReceiveSettings,
@@ -277,11 +287,36 @@ func (s *psSubscriber[M]) batchLoop(
 	}
 	flush := func() { runBatch(take()) }
 
+	// draining is flipped on cancellation so that, during the underlying client's
+	// graceful shutdown, every message the receiver is still delivering flushes
+	// inline instead of waiting out MaxLatency. The cancellation drain itself MUST
+	// run while receive is still in flight: Subscriber.Receive does not return
+	// until every outstanding message is acked/nacked, and once it returns the
+	// iterator is torn down so ack/nack become no-ops. Draining only after receive
+	// returns would deadlock that wait until the messages expire (up to
+	// MaxExtension) and then redeliver the batch instead of acking it.
+	var draining atomic.Bool
+	stopDrainer := make(chan struct{})
+	drainerDone := make(chan struct{})
+	go func() {
+		defer close(drainerDone)
+		select {
+		case <-ctx.Done():
+			draining.Store(true)
+			flush()
+		case <-stopDrainer:
+			// receive returned without ctx being cancelled (e.g. a stream error);
+			// there is nothing to drain into a live iterator.
+		}
+	}()
+
 	err := receive(ctx, func(m incomingMessage) {
 		mu.Lock()
 		pending = append(pending, m)
 		pendingBytes += len(m.data)
-		full := len(pending) >= size || (maxBytes > 0 && pendingBytes >= maxBytes)
+		// draining.Load() forces an immediate flush so messages delivered during
+		// shutdown are acked inline rather than buffered behind the latency timer.
+		full := len(pending) >= size || (maxBytes > 0 && pendingBytes >= maxBytes) || draining.Load()
 		if !full && flushTimer == nil {
 			// This message starts a new batch: arm the timer for its lifetime. The
 			// callback captures its own timer and no-ops if a size/byte flush has
@@ -312,10 +347,10 @@ func (s *psSubscriber[M]) batchLoop(
 		}
 	})
 
-	// Stop a pending timer and wait for any in-flight callback to finish before
-	// draining, so handleBatch never runs after batchLoop returns and touches
-	// resources the caller tears down on shutdown. receive has returned, so no new
-	// timer can be armed past this point.
+	// receive has returned. Stop a pending timer and wait for any in-flight timer
+	// callback, then release and join the cancellation drainer, so no handleBatch
+	// runs after batchLoop returns and touches resources the caller tears down on
+	// shutdown. No new timer can be armed past this point.
 	mu.Lock()
 	if flushTimer != nil {
 		if flushTimer.Stop() {
@@ -326,9 +361,14 @@ func (s *psSubscriber[M]) batchLoop(
 	mu.Unlock()
 	timerWG.Wait()
 
-	// Drain any messages still buffered when receive returns so they are acked
-	// or nacked rather than silently dropped.
-	flush()
+	// On a cancelled shutdown the drainer already emptied the buffer while the
+	// iterator was alive, so closing stopDrainer is a no-op it never observes;
+	// joining it guarantees that drain completed. We deliberately do NOT flush
+	// here: on any non-cancellation return (e.g. a stream error) the iterator is
+	// torn down so ack/nack are no-ops, and flushing would only re-run handlers
+	// against messages pubsub will redeliver anyway.
+	close(stopDrainer)
+	<-drainerDone
 
 	if err != nil {
 		return fmt.Errorf("receive batch: %w", err)
