@@ -1104,7 +1104,7 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 	}
 
 	sb := sq.Select(
-		"gram_chat_id",
+		"chat_id as gram_chat_id",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') as total_output_tokens",
 		totalTokensExpr+" as total_tokens",
@@ -1112,8 +1112,8 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
-		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
-		GroupBy("gram_chat_id")
+		Where(squirrel.Eq{"chat_id": arg.ChatIDs}).
+		GroupBy("chat_id")
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -4171,7 +4171,7 @@ func (q *Queries) GetTopUsers(ctx context.Context, arg GetTopUsersParams) ([]Top
 	var activityColumn string
 	if arg.SessionMode {
 		// Count chat completion messages
-		activityColumn = "countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') as activity_count"
+		activityColumn = "countIf(toString(attributes.gram.resource.urn) IN ('chat:completion', 'assistants:chat:completion')) as activity_count"
 	} else {
 		// Count tool calls
 		activityColumn = "countIf(startsWith(gram_urn, 'tools:')) as activity_count"
@@ -4307,7 +4307,7 @@ func (q *Queries) GetLLMClientBreakdown(ctx context.Context, arg GetLLMClientBre
 	var activityColumn string
 	if arg.SessionMode {
 		// Count chat completion messages
-		activityColumn = "countIf(toString(attributes.gram.resource.urn) = 'agents:chat:completion') as activity_count"
+		activityColumn = "countIf(toString(attributes.gram.resource.urn) IN ('chat:completion', 'assistants:chat:completion')) as activity_count"
 	} else {
 		// Count tool calls
 		activityColumn = "countIf(startsWith(gram_urn, 'tools:')) as activity_count"
@@ -4386,7 +4386,7 @@ func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams
 	var userCountCondition string
 	if arg.SessionMode {
 		// Count users with chat completion messages
-		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), toString(attributes.gram.resource.urn) = 'agents:chat:completion' AND if(external_user_id != '', external_user_id, user_id) != '')"
+		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), toString(attributes.gram.resource.urn) IN ('chat:completion', 'assistants:chat:completion') AND if(external_user_id != '', external_user_id, user_id) != '')"
 	} else {
 		// Count users with tool calls
 		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), startsWith(gram_urn, 'tools:') AND if(external_user_id != '', external_user_id, user_id) != '')"

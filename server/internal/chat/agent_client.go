@@ -196,7 +196,7 @@ func (c *Client) AgentChat(
 			Temperature:               opts.Temperature,
 			Model:                     opts.Model,
 			Stream:                    false,
-			UsageSource:               billing.ModelUsageSourceAgents,
+			UsageSource:               billing.ModelUsageSourceAssistants,
 			ChatID:                    chatID,
 			UserID:                    "",
 			ExternalUserID:            "", // TODO
