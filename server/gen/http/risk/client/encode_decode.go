@@ -1999,6 +1999,258 @@ func DecodeListRiskResultsByChatResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildClusterRiskResultsRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "clusterRiskResults" endpoint
+func (c *Client) BuildClusterRiskResultsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ClusterRiskResultsRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "clusterRiskResults", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeClusterRiskResultsRequest returns an encoder for requests sent to the
+// risk clusterRiskResults server.
+func EncodeClusterRiskResultsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.ClusterRiskResultsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "clusterRiskResults", "*risk.ClusterRiskResultsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.Threshold != nil {
+			values.Add("threshold", fmt.Sprintf("%v", *p.Threshold))
+		}
+		if p.IncludeRule != nil {
+			values.Add("include_rule", fmt.Sprintf("%v", *p.IncludeRule))
+		}
+		if p.Refresh != nil {
+			values.Add("refresh", fmt.Sprintf("%v", *p.Refresh))
+		}
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeClusterRiskResultsResponse returns a decoder for responses returned by
+// the risk clusterRiskResults endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeClusterRiskResultsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeClusterRiskResultsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ClusterRiskResultsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "clusterRiskResults", err)
+			}
+			err = ValidateClusterRiskResultsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "clusterRiskResults", err)
+			}
+			res := NewClusterRiskResultsListRiskFindingClustersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ClusterRiskResultsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "clusterRiskResults", err)
+			}
+			err = ValidateClusterRiskResultsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "clusterRiskResults", err)
+			}
+			return nil, NewClusterRiskResultsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ClusterRiskResultsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "clusterRiskResults", err)
+			}
+			err = ValidateClusterRiskResultsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "clusterRiskResults", err)
+			}
+			return nil, NewClusterRiskResultsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ClusterRiskResultsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "clusterRiskResults", err)
+			}
+			err = ValidateClusterRiskResultsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "clusterRiskResults", err)
+			}
+			return nil, NewClusterRiskResultsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ClusterRiskResultsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "clusterRiskResults", err)
+			}
+			err = ValidateClusterRiskResultsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "clusterRiskResults", err)
+			}
+			return nil, NewClusterRiskResultsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ClusterRiskResultsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "clusterRiskResults", err)
+			}
+			err = ValidateClusterRiskResultsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "clusterRiskResults", err)
+			}
+			return nil, NewClusterRiskResultsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ClusterRiskResultsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "clusterRiskResults", err)
+			}
+			err = ValidateClusterRiskResultsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "clusterRiskResults", err)
+			}
+			return nil, NewClusterRiskResultsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ClusterRiskResultsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "clusterRiskResults", err)
+			}
+			err = ValidateClusterRiskResultsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "clusterRiskResults", err)
+			}
+			return nil, NewClusterRiskResultsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ClusterRiskResultsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "clusterRiskResults", err)
+				}
+				err = ValidateClusterRiskResultsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "clusterRiskResults", err)
+				}
+				return nil, NewClusterRiskResultsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ClusterRiskResultsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "clusterRiskResults", err)
+				}
+				err = ValidateClusterRiskResultsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "clusterRiskResults", err)
+				}
+				return nil, NewClusterRiskResultsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "clusterRiskResults", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ClusterRiskResultsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "clusterRiskResults", err)
+			}
+			err = ValidateClusterRiskResultsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "clusterRiskResults", err)
+			}
+			return nil, NewClusterRiskResultsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "clusterRiskResults", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetRiskOverviewRequest instantiates a HTTP request object with method
 // and path set to call the "risk" service "getRiskOverview" endpoint
 func (c *Client) BuildGetRiskOverviewRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -7777,6 +8029,42 @@ func unmarshalRiskChatSummaryResponseBodyToTypesRiskChatSummary(v *RiskChatSumma
 		UserID:         v.UserID,
 		FindingsCount:  *v.FindingsCount,
 		LatestDetected: *v.LatestDetected,
+	}
+
+	return res
+}
+
+// unmarshalRiskFindingClusterResponseBodyToRiskRiskFindingCluster builds a
+// value of type *risk.RiskFindingCluster from a value of type
+// *RiskFindingClusterResponseBody.
+func unmarshalRiskFindingClusterResponseBodyToRiskRiskFindingCluster(v *RiskFindingClusterResponseBody) *risk.RiskFindingCluster {
+	res := &risk.RiskFindingCluster{
+		ID:                 *v.ID,
+		Label:              v.Label,
+		Description:        v.Description,
+		Count:              *v.Count,
+		DistinctChats:      *v.DistinctChats,
+		BaselineGroupCount: v.BaselineGroupCount,
+	}
+	if v.Sources != nil {
+		res.Sources = make([]string, len(v.Sources))
+		for i, val := range v.Sources {
+			res.Sources[i] = val
+		}
+	}
+	if v.RuleIds != nil {
+		res.RuleIds = make([]string, len(v.RuleIds))
+		for i, val := range v.RuleIds {
+			res.RuleIds[i] = val
+		}
+	}
+	res.Members = make([]*types.RiskResult, len(v.Members))
+	for i, val := range v.Members {
+		if val == nil {
+			res.Members[i] = nil
+			continue
+		}
+		res.Members[i] = unmarshalRiskResultResponseBodyToTypesRiskResult(val)
 	}
 
 	return res

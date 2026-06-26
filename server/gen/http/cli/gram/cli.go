@@ -112,7 +112,7 @@ func UsageCommands() []string {
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer|list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|list-client-sessions|update-client|delete-client|remove-client-from-mcp-server|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|test-detection-rule)",
+		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|cluster-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|test-detection-rule)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|list-tool-usage-traces|get-tool-usage-filter-options|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
@@ -1536,6 +1536,15 @@ func ParseEndpoint(
 		riskListRiskResultsByChatSessionTokenFlag     = riskListRiskResultsByChatFlags.String("session-token", "", "")
 		riskListRiskResultsByChatProjectSlugInputFlag = riskListRiskResultsByChatFlags.String("project-slug-input", "", "")
 
+		riskClusterRiskResultsFlags                = flag.NewFlagSet("cluster-risk-results", flag.ExitOnError)
+		riskClusterRiskResultsThresholdFlag        = riskClusterRiskResultsFlags.String("threshold", "", "")
+		riskClusterRiskResultsIncludeRuleFlag      = riskClusterRiskResultsFlags.String("include-rule", "", "")
+		riskClusterRiskResultsRefreshFlag          = riskClusterRiskResultsFlags.String("refresh", "", "")
+		riskClusterRiskResultsLimitFlag            = riskClusterRiskResultsFlags.String("limit", "", "")
+		riskClusterRiskResultsApikeyTokenFlag      = riskClusterRiskResultsFlags.String("apikey-token", "", "")
+		riskClusterRiskResultsSessionTokenFlag     = riskClusterRiskResultsFlags.String("session-token", "", "")
+		riskClusterRiskResultsProjectSlugInputFlag = riskClusterRiskResultsFlags.String("project-slug-input", "", "")
+
 		riskGetRiskOverviewFlags                = flag.NewFlagSet("get-risk-overview", flag.ExitOnError)
 		riskGetRiskOverviewFromFlag             = riskGetRiskOverviewFlags.String("from", "", "")
 		riskGetRiskOverviewToFlag               = riskGetRiskOverviewFlags.String("to", "", "")
@@ -2462,6 +2471,7 @@ func ParseEndpoint(
 	riskListRiskResultsFlags.Usage = riskListRiskResultsUsage
 	riskListRiskResultsForAgentFlags.Usage = riskListRiskResultsForAgentUsage
 	riskListRiskResultsByChatFlags.Usage = riskListRiskResultsByChatUsage
+	riskClusterRiskResultsFlags.Usage = riskClusterRiskResultsUsage
 	riskGetRiskOverviewFlags.Usage = riskGetRiskOverviewUsage
 	riskListRiskCategoriesFlags.Usage = riskListRiskCategoriesUsage
 	riskCompileExprFlags.Usage = riskCompileExprUsage
@@ -3597,6 +3607,9 @@ func ParseEndpoint(
 
 			case "list-risk-results-by-chat":
 				epf = riskListRiskResultsByChatFlags
+
+			case "cluster-risk-results":
+				epf = riskClusterRiskResultsFlags
 
 			case "get-risk-overview":
 				epf = riskGetRiskOverviewFlags
@@ -4860,6 +4873,9 @@ func ParseEndpoint(
 			case "list-risk-results-by-chat":
 				endpoint = c.ListRiskResultsByChat()
 				data, err = riskc.BuildListRiskResultsByChatPayload(*riskListRiskResultsByChatCursorFlag, *riskListRiskResultsByChatLimitFlag, *riskListRiskResultsByChatApikeyTokenFlag, *riskListRiskResultsByChatSessionTokenFlag, *riskListRiskResultsByChatProjectSlugInputFlag)
+			case "cluster-risk-results":
+				endpoint = c.ClusterRiskResults()
+				data, err = riskc.BuildClusterRiskResultsPayload(*riskClusterRiskResultsThresholdFlag, *riskClusterRiskResultsIncludeRuleFlag, *riskClusterRiskResultsRefreshFlag, *riskClusterRiskResultsLimitFlag, *riskClusterRiskResultsApikeyTokenFlag, *riskClusterRiskResultsSessionTokenFlag, *riskClusterRiskResultsProjectSlugInputFlag)
 			case "get-risk-overview":
 				endpoint = c.GetRiskOverview()
 				data, err = riskc.BuildGetRiskOverviewPayload(*riskGetRiskOverviewFromFlag, *riskGetRiskOverviewToFlag, *riskGetRiskOverviewApikeyTokenFlag, *riskGetRiskOverviewSessionTokenFlag, *riskGetRiskOverviewProjectSlugInputFlag)
@@ -11116,6 +11132,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    list-risk-results: List risk analysis results for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-for-agent: List risk analysis results with the `+"`"+`match`+"`"+` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `+"`"+`match`+"`"+` value — a non-sensitive server URL or command identifier — is passed through verbatim.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-by-chat: List risk results grouped by chat session for the current project.`)
+	fmt.Fprintln(os.Stderr, `    cluster-risk-results: Experimental PoC: cluster the project's risk findings into groups by semantic similarity of their behavior context (embedding-based), returning labeled clusters plus the count of deterministic source|rule|span groups for comparison. Throwaway; admin-only.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-overview: Get risk overview metrics and trend data for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-categories: Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.`)
 	fmt.Fprintln(os.Stderr, `    compile-expr: Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).`)
@@ -11369,6 +11386,36 @@ func riskListRiskResultsByChatUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results-by-chat --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskClusterRiskResultsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk cluster-risk-results", os.Args[0])
+	fmt.Fprint(os.Stderr, " -threshold FLOAT64")
+	fmt.Fprint(os.Stderr, " -include-rule BOOL")
+	fmt.Fprint(os.Stderr, " -refresh BOOL")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Experimental PoC: cluster the project's risk findings into groups by semantic similarity of their behavior context (embedding-based), returning labeled clusters plus the count of deterministic source|rule|span groups for comparison. Throwaway; admin-only.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -threshold FLOAT64: `)
+	fmt.Fprintln(os.Stderr, `    -include-rule BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -refresh BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk cluster-risk-results --threshold 1 --include-rule false --refresh false --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskGetRiskOverviewUsage() {

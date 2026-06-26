@@ -18,7 +18,14 @@ import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { RefreshCw, Share2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
@@ -28,6 +35,8 @@ import {
   RevealAllToggle,
   RuleLabel,
 } from "./risk-ui";
+import { Switch } from "@/components/ui/switch";
+import { RiskClusters } from "./RiskClusters";
 
 const RISK_EVENTS_GRID =
   "grid grid-cols-[172px_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
@@ -59,6 +68,7 @@ export default function RiskEvents(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
   const containerRef = useRef<HTMLDivElement>(null);
+  const [grouped, setGrouped] = useState(false);
 
   const { values, setValue, clearValue, clearAll } =
     useFilterState(RISK_FILTERS);
@@ -164,6 +174,7 @@ export default function RiskEvents(): JSX.Element {
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: !grouped,
   });
 
   const results = useMemo(
@@ -197,6 +208,16 @@ export default function RiskEvents(): JSX.Element {
         description="Review policy findings across recent analyzed chats."
         actions={
           <div className="flex items-center gap-2">
+            <label className="flex cursor-pointer items-center gap-2 pr-1">
+              <Switch
+                checked={grouped}
+                onCheckedChange={setGrouped}
+                aria-label="Cluster view"
+              />
+              <span className="text-muted-foreground text-sm">
+                Cluster view
+              </span>
+            </label>
             <RevealAllToggle />
             <Button
               variant="secondary"
@@ -239,12 +260,14 @@ export default function RiskEvents(): JSX.Element {
           ) : null
         }
         header={
-          <div className="min-w-[1120px]">
-            <RiskEventsHeader />
-          </div>
+          grouped ? undefined : (
+            <div className="min-w-[1120px]">
+              <RiskEventsHeader />
+            </div>
+          )
         }
         footer={
-          results.length > 0 ? (
+          grouped ? null : results.length > 0 ? (
             <RiskEventsFooter
               count={results.length}
               totalCount={totalCount}
@@ -269,14 +292,18 @@ export default function RiskEvents(): JSX.Element {
         surfaceClassName="overflow-x-auto"
         contentClassName="min-w-[1120px]"
       >
-        <RiskEventsRows
-          error={resultsQuery.error}
-          isLoading={isInitialLoading}
-          results={results}
-          policyNameById={policyNameById}
-          scrollRef={containerRef}
-          onSelectChat={setSelectedChatId}
-        />
+        {grouped ? (
+          <RiskClusters onSelectChat={setSelectedChatId} />
+        ) : (
+          <RiskEventsRows
+            error={resultsQuery.error}
+            isLoading={isInitialLoading}
+            results={results}
+            policyNameById={policyNameById}
+            scrollRef={containerRef}
+            onSelectChat={setSelectedChatId}
+          />
+        )}
       </LogWorkbench>
     </RevealAllProvider>
   );

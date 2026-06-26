@@ -49,6 +49,10 @@ type Client struct {
 	// listRiskResultsByChat endpoint.
 	ListRiskResultsByChatDoer goahttp.Doer
 
+	// ClusterRiskResults Doer is the HTTP client used to make requests to the
+	// clusterRiskResults endpoint.
+	ClusterRiskResultsDoer goahttp.Doer
+
 	// GetRiskOverview Doer is the HTTP client used to make requests to the
 	// getRiskOverview endpoint.
 	GetRiskOverviewDoer goahttp.Doer
@@ -169,6 +173,7 @@ func NewClient(
 		ListRiskResultsDoer:                doer,
 		ListRiskResultsForAgentDoer:        doer,
 		ListRiskResultsByChatDoer:          doer,
+		ClusterRiskResultsDoer:             doer,
 		GetRiskOverviewDoer:                doer,
 		ListRiskCategoriesDoer:             doer,
 		CompileExprDoer:                    doer,
@@ -387,6 +392,30 @@ func (c *Client) ListRiskResultsByChat() goa.Endpoint {
 		resp, err := c.ListRiskResultsByChatDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "listRiskResultsByChat", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ClusterRiskResults returns an endpoint that makes HTTP requests to the risk
+// service clusterRiskResults server.
+func (c *Client) ClusterRiskResults() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeClusterRiskResultsRequest(c.encoder)
+		decodeResponse = DecodeClusterRiskResultsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildClusterRiskResultsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ClusterRiskResultsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "clusterRiskResults", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -229,6 +229,7 @@ export * from "./revokeUserSessionClient.js";
 export * from "./revokeUserSessionConsent.js";
 export * from "./riskApprovePolicyBypassRequest.js";
 export * from "./riskCategories.js";
+export * from "./riskClusterResults.js";
 export * from "./riskCompileExpr.js";
 export * from "./riskCreateCustomDetectionRule.js";
 export * from "./riskCreateExclusion.js";

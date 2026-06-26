@@ -513,6 +513,7 @@ run();
 ### [Risk.Results](docs/sdks/results/README.md)
 
 * [byChat](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
+* [cluster](docs/sdks/results/README.md#cluster) - clusterRiskResults risk
 * [list](docs/sdks/results/README.md#list) - listRiskResults risk
 * [listForAgent](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
 
@@ -898,6 +899,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskPolicyBypassRequestsList`](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
 - [`riskPolicyBypassRequestsRevoke`](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
 - [`riskResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
+- [`riskResultsCluster`](docs/sdks/results/README.md#cluster) - clusterRiskResults risk
 - [`riskResultsList`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`riskResultsListForAgent`](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
 - [`riskRulesTest`](docs/sdks/rules/README.md#test) - testDetectionRule risk
@@ -1228,6 +1230,7 @@ To learn about this feature and how to get started, check
 - [`useRevokeUserSessionMutation`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
 - [`useRiskApprovePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
 - [`useRiskCategories`](docs/sdks/categories/README.md#list) - listRiskCategories risk
+- [`useRiskClusterResults`](docs/sdks/results/README.md#cluster) - clusterRiskResults risk
 - [`useRiskCompileExpr`](docs/sdks/expr/README.md#compile) - compileExpr risk
 - [`useRiskCreateCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#create) - createCustomDetectionRule risk
 - [`useRiskCreateExclusionMutation`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk

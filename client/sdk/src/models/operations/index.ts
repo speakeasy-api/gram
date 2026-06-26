@@ -18,6 +18,7 @@ export * from "./clearmcpregistrycache.js";
 export * from "./cloneclientfromoauthproxyprovider.js";
 export * from "./cloneenvironment.js";
 export * from "./clonetoolset.js";
+export * from "./clusterriskresults.js";
 export * from "./compileexpr.js";
 export * from "./createapikey.js";
 export * from "./createassistant.js";

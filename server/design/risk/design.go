@@ -340,6 +340,45 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResultsByChat"}`)
 	})
 
+	Method("clusterRiskResults", func() {
+		Description("Experimental PoC: cluster the project's risk findings into groups by semantic similarity of their behavior context (embedding-based), returning labeled clusters plus the count of deterministic source|rule|span groups for comparison. Throwaway; admin-only.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("threshold", Float64, "Cosine-similarity threshold for single-linkage clustering. Higher = more, tighter clusters. Default 0.84.", func() {
+				Minimum(0)
+				Maximum(1)
+			})
+			Attribute("include_rule", Boolean, "If true, fold source/rule_id into the embed text so detector types never co-mingle. Default false (behavior-first).")
+			Attribute("refresh", Boolean, "If true, recompute embeddings instead of reusing the in-process cache.")
+			Attribute("limit", Int, "Maximum number of findings to cluster.", func() {
+				Minimum(1)
+				Maximum(5000)
+			})
+		})
+
+		Result(ListRiskFindingClustersResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.results.cluster")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("threshold")
+			Param("include_rule")
+			Param("refresh")
+			Param("limit")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "clusterRiskResults")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "cluster")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskClusterResults"}`)
+	})
+
 	Method("getRiskOverview", func() {
 		Description("Get risk overview metrics and trend data for the current project.")
 
@@ -1135,6 +1174,31 @@ var ListRiskResultsByChatResult = Type("ListRiskResultsByChatResult", func() {
 	Attribute("chats", ArrayOf(shared.RiskChatSummary), "Risk results grouped by chat.")
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 	Required("chats")
+})
+
+// RiskFindingCluster is one semantic group of risk findings produced by the
+// experimental clustering PoC.
+var RiskFindingCluster = Type("RiskFindingCluster", func() {
+	Attribute("id", String, "Synthetic cluster identifier within this response (e.g. 'c0').")
+	Attribute("label", String, "Short human label for the cluster (LLM-generated, best-effort).")
+	Attribute("description", String, "One-sentence description of what the cluster represents.")
+	Attribute("count", Int, "Number of findings in the cluster.")
+	Attribute("distinct_chats", Int, "Number of distinct chats the cluster's findings span.")
+	Attribute("sources", ArrayOf(String), "Distinct detection sources present in the cluster.")
+	Attribute("rule_ids", ArrayOf(String), "Distinct rule ids present in the cluster.")
+	Attribute("baseline_group_count", Int, "Distinct deterministic source|rule|span keys among the cluster's members: how many flat-list groups this one semantic cluster collapses.")
+	Attribute("members", ArrayOf(shared.RiskResult), "The findings in the cluster (raw match; mask client-side).")
+	Required("id", "count", "distinct_chats", "members")
+})
+
+var ListRiskFindingClustersResult = Type("ListRiskFindingClustersResult", func() {
+	Attribute("clusters", ArrayOf(RiskFindingCluster), "Semantic clusters, largest first.")
+	Attribute("total_findings", Int, "Total findings considered.")
+	Attribute("semantic_cluster_count", Int, "Number of semantic clusters produced.")
+	Attribute("baseline_group_count", Int, "Distinct deterministic source|rule|span groups across all findings: the flat-list baseline this is compared against.")
+	Attribute("threshold", Float64, "The clustering threshold used.")
+	Attribute("embed_mode", String, "Embed-text composition used ('behavior' or 'behavior+rule').")
+	Required("clusters", "total_findings", "semantic_cluster_count", "baseline_group_count")
 })
 
 var RiskOverviewResult = Type("RiskOverviewResult", func() {

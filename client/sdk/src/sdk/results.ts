@@ -3,6 +3,7 @@
  */
 
 import { riskResultsByChat } from "../funcs/riskResultsByChat.js";
+import { riskResultsCluster } from "../funcs/riskResultsCluster.js";
 import { riskResultsList } from "../funcs/riskResultsList.js";
 import { riskResultsListForAgent } from "../funcs/riskResultsListForAgent.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -23,6 +24,25 @@ export class Results extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListRiskResultsByChatResult> {
     return unwrapAsync(riskResultsByChat(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * clusterRiskResults risk
+   *
+   * @remarks
+   * Experimental PoC: cluster the project's risk findings into groups by semantic similarity of their behavior context (embedding-based), returning labeled clusters plus the count of deterministic source|rule|span groups for comparison. Throwaway; admin-only.
+   */
+  async cluster(
+    request?: operations.ClusterRiskResultsRequest | undefined,
+    security?: operations.ClusterRiskResultsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListRiskFindingClustersResult> {
+    return unwrapAsync(riskResultsCluster(
       this,
       request,
       security,

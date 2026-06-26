@@ -515,6 +515,24 @@ type ListRiskResultsByChatResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
+// ClusterRiskResultsResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body.
+type ClusterRiskResultsResponseBody struct {
+	// Semantic clusters, largest first.
+	Clusters []*RiskFindingClusterResponseBody `form:"clusters,omitempty" json:"clusters,omitempty" xml:"clusters,omitempty"`
+	// Total findings considered.
+	TotalFindings *int `form:"total_findings,omitempty" json:"total_findings,omitempty" xml:"total_findings,omitempty"`
+	// Number of semantic clusters produced.
+	SemanticClusterCount *int `form:"semantic_cluster_count,omitempty" json:"semantic_cluster_count,omitempty" xml:"semantic_cluster_count,omitempty"`
+	// Distinct deterministic source|rule|span groups across all findings: the
+	// flat-list baseline this is compared against.
+	BaselineGroupCount *int `form:"baseline_group_count,omitempty" json:"baseline_group_count,omitempty" xml:"baseline_group_count,omitempty"`
+	// The clustering threshold used.
+	Threshold *float64 `form:"threshold,omitempty" json:"threshold,omitempty" xml:"threshold,omitempty"`
+	// Embed-text composition used ('behavior' or 'behavior+rule').
+	EmbedMode *string `form:"embed_mode,omitempty" json:"embed_mode,omitempty" xml:"embed_mode,omitempty"`
+}
+
 // GetRiskOverviewResponseBody is the type of the "risk" service
 // "getRiskOverview" endpoint HTTP response body.
 type GetRiskOverviewResponseBody struct {
@@ -2392,6 +2410,190 @@ type ListRiskResultsByChatUnexpectedResponseBody struct {
 // service "listRiskResultsByChat" endpoint HTTP response body for the
 // "gateway_error" error.
 type ListRiskResultsByChatGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClusterRiskResultsUnauthorizedResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "unauthorized"
+// error.
+type ClusterRiskResultsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClusterRiskResultsForbiddenResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "forbidden" error.
+type ClusterRiskResultsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClusterRiskResultsBadRequestResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "bad_request" error.
+type ClusterRiskResultsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClusterRiskResultsNotFoundResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "not_found" error.
+type ClusterRiskResultsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClusterRiskResultsConflictResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "conflict" error.
+type ClusterRiskResultsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClusterRiskResultsUnsupportedMediaResponseBody is the type of the "risk"
+// service "clusterRiskResults" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ClusterRiskResultsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClusterRiskResultsInvalidResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "invalid" error.
+type ClusterRiskResultsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClusterRiskResultsInvariantViolationResponseBody is the type of the "risk"
+// service "clusterRiskResults" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ClusterRiskResultsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClusterRiskResultsUnexpectedResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "unexpected" error.
+type ClusterRiskResultsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ClusterRiskResultsGatewayErrorResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "gateway_error"
+// error.
+type ClusterRiskResultsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -6935,6 +7137,30 @@ type RiskChatSummaryResponseBody struct {
 	LatestDetected *string `form:"latest_detected,omitempty" json:"latest_detected,omitempty" xml:"latest_detected,omitempty"`
 }
 
+// RiskFindingClusterResponseBody is used to define fields on response body
+// types.
+type RiskFindingClusterResponseBody struct {
+	// Synthetic cluster identifier within this response (e.g. 'c0').
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Short human label for the cluster (LLM-generated, best-effort).
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// One-sentence description of what the cluster represents.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Number of findings in the cluster.
+	Count *int `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
+	// Number of distinct chats the cluster's findings span.
+	DistinctChats *int `form:"distinct_chats,omitempty" json:"distinct_chats,omitempty" xml:"distinct_chats,omitempty"`
+	// Distinct detection sources present in the cluster.
+	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
+	// Distinct rule ids present in the cluster.
+	RuleIds []string `form:"rule_ids,omitempty" json:"rule_ids,omitempty" xml:"rule_ids,omitempty"`
+	// Distinct deterministic source|rule|span keys among the cluster's members:
+	// how many flat-list groups this one semantic cluster collapses.
+	BaselineGroupCount *int `form:"baseline_group_count,omitempty" json:"baseline_group_count,omitempty" xml:"baseline_group_count,omitempty"`
+	// The findings in the cluster (raw match; mask client-side).
+	Members []*RiskResultResponseBody `form:"members,omitempty" json:"members,omitempty" xml:"members,omitempty"`
+}
+
 // RiskOverviewCategoryResponseBody is used to define fields on response body
 // types.
 type RiskOverviewCategoryResponseBody struct {
@@ -8912,6 +9138,178 @@ func NewListRiskResultsByChatUnexpected(body *ListRiskResultsByChatUnexpectedRes
 // NewListRiskResultsByChatGatewayError builds a risk service
 // listRiskResultsByChat endpoint gateway_error error.
 func NewListRiskResultsByChatGatewayError(body *ListRiskResultsByChatGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClusterRiskResultsListRiskFindingClustersResultOK builds a "risk" service
+// "clusterRiskResults" endpoint result from a HTTP "OK" response.
+func NewClusterRiskResultsListRiskFindingClustersResultOK(body *ClusterRiskResultsResponseBody) *risk.ListRiskFindingClustersResult {
+	v := &risk.ListRiskFindingClustersResult{
+		TotalFindings:        *body.TotalFindings,
+		SemanticClusterCount: *body.SemanticClusterCount,
+		BaselineGroupCount:   *body.BaselineGroupCount,
+		Threshold:            body.Threshold,
+		EmbedMode:            body.EmbedMode,
+	}
+	v.Clusters = make([]*risk.RiskFindingCluster, len(body.Clusters))
+	for i, val := range body.Clusters {
+		if val == nil {
+			v.Clusters[i] = nil
+			continue
+		}
+		v.Clusters[i] = unmarshalRiskFindingClusterResponseBodyToRiskRiskFindingCluster(val)
+	}
+
+	return v
+}
+
+// NewClusterRiskResultsUnauthorized builds a risk service clusterRiskResults
+// endpoint unauthorized error.
+func NewClusterRiskResultsUnauthorized(body *ClusterRiskResultsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClusterRiskResultsForbidden builds a risk service clusterRiskResults
+// endpoint forbidden error.
+func NewClusterRiskResultsForbidden(body *ClusterRiskResultsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClusterRiskResultsBadRequest builds a risk service clusterRiskResults
+// endpoint bad_request error.
+func NewClusterRiskResultsBadRequest(body *ClusterRiskResultsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClusterRiskResultsNotFound builds a risk service clusterRiskResults
+// endpoint not_found error.
+func NewClusterRiskResultsNotFound(body *ClusterRiskResultsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClusterRiskResultsConflict builds a risk service clusterRiskResults
+// endpoint conflict error.
+func NewClusterRiskResultsConflict(body *ClusterRiskResultsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClusterRiskResultsUnsupportedMedia builds a risk service
+// clusterRiskResults endpoint unsupported_media error.
+func NewClusterRiskResultsUnsupportedMedia(body *ClusterRiskResultsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClusterRiskResultsInvalid builds a risk service clusterRiskResults
+// endpoint invalid error.
+func NewClusterRiskResultsInvalid(body *ClusterRiskResultsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClusterRiskResultsInvariantViolation builds a risk service
+// clusterRiskResults endpoint invariant_violation error.
+func NewClusterRiskResultsInvariantViolation(body *ClusterRiskResultsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClusterRiskResultsUnexpected builds a risk service clusterRiskResults
+// endpoint unexpected error.
+func NewClusterRiskResultsUnexpected(body *ClusterRiskResultsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewClusterRiskResultsGatewayError builds a risk service clusterRiskResults
+// endpoint gateway_error error.
+func NewClusterRiskResultsGatewayError(body *ClusterRiskResultsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13126,6 +13524,31 @@ func ValidateListRiskResultsByChatResponseBody(body *ListRiskResultsByChatRespon
 	return
 }
 
+// ValidateClusterRiskResultsResponseBody runs the validations defined on
+// ClusterRiskResultsResponseBody
+func ValidateClusterRiskResultsResponseBody(body *ClusterRiskResultsResponseBody) (err error) {
+	if body.Clusters == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("clusters", "body"))
+	}
+	if body.TotalFindings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_findings", "body"))
+	}
+	if body.SemanticClusterCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("semantic_cluster_count", "body"))
+	}
+	if body.BaselineGroupCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("baseline_group_count", "body"))
+	}
+	for _, e := range body.Clusters {
+		if e != nil {
+			if err2 := ValidateRiskFindingClusterResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateGetRiskOverviewResponseBody runs the validations defined on
 // GetRiskOverviewResponseBody
 func ValidateGetRiskOverviewResponseBody(body *GetRiskOverviewResponseBody) (err error) {
@@ -15770,6 +16193,246 @@ func ValidateListRiskResultsByChatUnexpectedResponseBody(body *ListRiskResultsBy
 // ValidateListRiskResultsByChatGatewayErrorResponseBody runs the validations
 // defined on listRiskResultsByChat_gateway_error_response_body
 func ValidateListRiskResultsByChatGatewayErrorResponseBody(body *ListRiskResultsByChatGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClusterRiskResultsUnauthorizedResponseBody runs the validations
+// defined on clusterRiskResults_unauthorized_response_body
+func ValidateClusterRiskResultsUnauthorizedResponseBody(body *ClusterRiskResultsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClusterRiskResultsForbiddenResponseBody runs the validations defined
+// on clusterRiskResults_forbidden_response_body
+func ValidateClusterRiskResultsForbiddenResponseBody(body *ClusterRiskResultsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClusterRiskResultsBadRequestResponseBody runs the validations
+// defined on clusterRiskResults_bad_request_response_body
+func ValidateClusterRiskResultsBadRequestResponseBody(body *ClusterRiskResultsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClusterRiskResultsNotFoundResponseBody runs the validations defined
+// on clusterRiskResults_not_found_response_body
+func ValidateClusterRiskResultsNotFoundResponseBody(body *ClusterRiskResultsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClusterRiskResultsConflictResponseBody runs the validations defined
+// on clusterRiskResults_conflict_response_body
+func ValidateClusterRiskResultsConflictResponseBody(body *ClusterRiskResultsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClusterRiskResultsUnsupportedMediaResponseBody runs the validations
+// defined on clusterRiskResults_unsupported_media_response_body
+func ValidateClusterRiskResultsUnsupportedMediaResponseBody(body *ClusterRiskResultsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClusterRiskResultsInvalidResponseBody runs the validations defined
+// on clusterRiskResults_invalid_response_body
+func ValidateClusterRiskResultsInvalidResponseBody(body *ClusterRiskResultsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClusterRiskResultsInvariantViolationResponseBody runs the
+// validations defined on clusterRiskResults_invariant_violation_response_body
+func ValidateClusterRiskResultsInvariantViolationResponseBody(body *ClusterRiskResultsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClusterRiskResultsUnexpectedResponseBody runs the validations
+// defined on clusterRiskResults_unexpected_response_body
+func ValidateClusterRiskResultsUnexpectedResponseBody(body *ClusterRiskResultsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateClusterRiskResultsGatewayErrorResponseBody runs the validations
+// defined on clusterRiskResults_gateway_error_response_body
+func ValidateClusterRiskResultsGatewayErrorResponseBody(body *ClusterRiskResultsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -21559,6 +22222,31 @@ func ValidateRiskChatSummaryResponseBody(body *RiskChatSummaryResponseBody) (err
 	}
 	if body.LatestDetected != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.latest_detected", *body.LatestDetected, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRiskFindingClusterResponseBody runs the validations defined on
+// RiskFindingClusterResponseBody
+func ValidateRiskFindingClusterResponseBody(body *RiskFindingClusterResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Count == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
+	}
+	if body.DistinctChats == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("distinct_chats", "body"))
+	}
+	if body.Members == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("members", "body"))
+	}
+	for _, e := range body.Members {
+		if e != nil {
+			if err2 := ValidateRiskResultResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }

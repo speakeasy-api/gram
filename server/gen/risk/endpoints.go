@@ -24,6 +24,7 @@ type Endpoints struct {
 	ListRiskResults                goa.Endpoint
 	ListRiskResultsForAgent        goa.Endpoint
 	ListRiskResultsByChat          goa.Endpoint
+	ClusterRiskResults             goa.Endpoint
 	GetRiskOverview                goa.Endpoint
 	ListRiskCategories             goa.Endpoint
 	CompileExpr                    goa.Endpoint
@@ -62,6 +63,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListRiskResults:                NewListRiskResultsEndpoint(s, a.APIKeyAuth),
 		ListRiskResultsForAgent:        NewListRiskResultsForAgentEndpoint(s, a.APIKeyAuth),
 		ListRiskResultsByChat:          NewListRiskResultsByChatEndpoint(s, a.APIKeyAuth),
+		ClusterRiskResults:             NewClusterRiskResultsEndpoint(s, a.APIKeyAuth),
 		GetRiskOverview:                NewGetRiskOverviewEndpoint(s, a.APIKeyAuth),
 		ListRiskCategories:             NewListRiskCategoriesEndpoint(s, a.APIKeyAuth),
 		CompileExpr:                    NewCompileExprEndpoint(s, a.APIKeyAuth),
@@ -98,6 +100,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListRiskResults = m(e.ListRiskResults)
 	e.ListRiskResultsForAgent = m(e.ListRiskResultsForAgent)
 	e.ListRiskResultsByChat = m(e.ListRiskResultsByChat)
+	e.ClusterRiskResults = m(e.ClusterRiskResults)
 	e.GetRiskOverview = m(e.GetRiskOverview)
 	e.ListRiskCategories = m(e.ListRiskCategories)
 	e.CompileExpr = m(e.CompileExpr)
@@ -592,6 +595,65 @@ func NewListRiskResultsByChatEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.ListRiskResultsByChat(ctx, p)
+	}
+}
+
+// NewClusterRiskResultsEndpoint returns an endpoint function that calls the
+// method "clusterRiskResults" of service "risk".
+func NewClusterRiskResultsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ClusterRiskResultsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ClusterRiskResults(ctx, p)
 	}
 }
 

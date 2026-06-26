@@ -39,6 +39,11 @@ type Service interface {
 	ListRiskResultsForAgent(context.Context, *ListRiskResultsForAgentPayload) (res *ListRiskResultsForAgentResult, err error)
 	// List risk results grouped by chat session for the current project.
 	ListRiskResultsByChat(context.Context, *ListRiskResultsByChatPayload) (res *ListRiskResultsByChatResult, err error)
+	// Experimental PoC: cluster the project's risk findings into groups by
+	// semantic similarity of their behavior context (embedding-based), returning
+	// labeled clusters plus the count of deterministic source|rule|span groups for
+	// comparison. Throwaway; admin-only.
+	ClusterRiskResults(context.Context, *ClusterRiskResultsPayload) (res *ListRiskFindingClustersResult, err error)
 	// Get risk overview metrics and trend data for the current project.
 	GetRiskOverview(context.Context, *GetRiskOverviewPayload) (res *RiskOverviewResult, err error)
 	// Return the canonical risk category definitions: metadata
@@ -127,7 +132,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [31]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [32]string{"createRiskPolicy", "listRiskPolicies", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "clusterRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
 
 // ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
 // service approveRiskPolicyBypassRequest method.
@@ -140,6 +145,24 @@ type ApproveRiskPolicyBypassRequestPayload struct {
 	// Principal URNs to grant bypass access to. Defaults to the requester when
 	// omitted.
 	GrantedPrincipalUrns []string
+}
+
+// ClusterRiskResultsPayload is the payload type of the risk service
+// clusterRiskResults method.
+type ClusterRiskResultsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Cosine-similarity threshold for single-linkage clustering. Higher = more,
+	// tighter clusters. Default 0.84.
+	Threshold *float64
+	// If true, fold source/rule_id into the embed text so detector types never
+	// co-mingle. Default false (behavior-first).
+	IncludeRule *bool
+	// If true, recompute embeddings instead of reusing the in-process cache.
+	Refresh *bool
+	// Maximum number of findings to cluster.
+	Limit *int
 }
 
 // CompileExprPayload is the payload type of the risk service compileExpr
@@ -419,6 +442,24 @@ type ListRiskExclusionsResult struct {
 	Exclusions []*types.RiskExclusion
 }
 
+// ListRiskFindingClustersResult is the result type of the risk service
+// clusterRiskResults method.
+type ListRiskFindingClustersResult struct {
+	// Semantic clusters, largest first.
+	Clusters []*RiskFindingCluster
+	// Total findings considered.
+	TotalFindings int
+	// Number of semantic clusters produced.
+	SemanticClusterCount int
+	// Distinct deterministic source|rule|span groups across all findings: the
+	// flat-list baseline this is compared against.
+	BaselineGroupCount int
+	// The clustering threshold used.
+	Threshold *float64
+	// Embed-text composition used ('behavior' or 'behavior+rule').
+	EmbedMode *string
+}
+
 // ListRiskPoliciesPayload is the payload type of the risk service
 // listRiskPolicies method.
 type ListRiskPoliciesPayload struct {
@@ -597,6 +638,28 @@ type RiskCategoryDefinition struct {
 	// When non-empty, findings whose rule_id starts with this prefix belong to
 	// this category. The catch-all for a family (e.g. 'pii.').
 	RuleIDPrefix string
+}
+
+type RiskFindingCluster struct {
+	// Synthetic cluster identifier within this response (e.g. 'c0').
+	ID string
+	// Short human label for the cluster (LLM-generated, best-effort).
+	Label *string
+	// One-sentence description of what the cluster represents.
+	Description *string
+	// Number of findings in the cluster.
+	Count int
+	// Number of distinct chats the cluster's findings span.
+	DistinctChats int
+	// Distinct detection sources present in the cluster.
+	Sources []string
+	// Distinct rule ids present in the cluster.
+	RuleIds []string
+	// Distinct deterministic source|rule|span keys among the cluster's members:
+	// how many flat-list groups this one semantic cluster collapses.
+	BaselineGroupCount *int
+	// The findings in the cluster (raw match; mask client-side).
+	Members []*types.RiskResult
 }
 
 type RiskOverviewCategory struct {

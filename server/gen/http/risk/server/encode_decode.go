@@ -2026,6 +2026,293 @@ func EncodeListRiskResultsByChatError(encoder func(context.Context, http.Respons
 	}
 }
 
+// EncodeClusterRiskResultsResponse returns an encoder for responses returned
+// by the risk clusterRiskResults endpoint.
+func EncodeClusterRiskResultsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*risk.ListRiskFindingClustersResult)
+		enc := encoder(ctx, w)
+		body := NewClusterRiskResultsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeClusterRiskResultsRequest returns a decoder for requests sent to the
+// risk clusterRiskResults endpoint.
+func DecodeClusterRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*risk.ClusterRiskResultsPayload, error) {
+	return func(r *http.Request) (*risk.ClusterRiskResultsPayload, error) {
+		var payload *risk.ClusterRiskResultsPayload
+		var (
+			threshold        *float64
+			includeRule      *bool
+			refresh          *bool
+			limit            *int
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+			err              error
+		)
+		qp := r.URL.Query()
+		{
+			thresholdRaw := qp.Get("threshold")
+			if thresholdRaw != "" {
+				v, err2 := strconv.ParseFloat(thresholdRaw, 64)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("threshold", thresholdRaw, "float"))
+				}
+				threshold = &v
+			}
+		}
+		if threshold != nil {
+			if *threshold < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("threshold", *threshold, 0, true))
+			}
+		}
+		if threshold != nil {
+			if *threshold > 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("threshold", *threshold, 1, false))
+			}
+		}
+		{
+			includeRuleRaw := qp.Get("include_rule")
+			if includeRuleRaw != "" {
+				v, err2 := strconv.ParseBool(includeRuleRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("include_rule", includeRuleRaw, "boolean"))
+				}
+				includeRule = &v
+			}
+		}
+		{
+			refreshRaw := qp.Get("refresh")
+			if refreshRaw != "" {
+				v, err2 := strconv.ParseBool(refreshRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("refresh", refreshRaw, "boolean"))
+				}
+				refresh = &v
+			}
+		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw != "" {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				pv := int(v)
+				limit = &pv
+			}
+		}
+		if limit != nil {
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+		}
+		if limit != nil {
+			if *limit > 5000 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 5000, false))
+			}
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewClusterRiskResultsPayload(threshold, includeRule, refresh, limit, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeClusterRiskResultsError returns an encoder for errors returned by the
+// clusterRiskResults risk endpoint.
+func EncodeClusterRiskResultsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewClusterRiskResultsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewClusterRiskResultsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewClusterRiskResultsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewClusterRiskResultsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewClusterRiskResultsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewClusterRiskResultsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewClusterRiskResultsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewClusterRiskResultsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewClusterRiskResultsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewClusterRiskResultsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeGetRiskOverviewResponse returns an encoder for responses returned by
 // the risk getRiskOverview endpoint.
 func EncodeGetRiskOverviewResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -7598,6 +7885,46 @@ func marshalTypesRiskChatSummaryToRiskChatSummaryResponseBody(v *types.RiskChatS
 		UserID:         v.UserID,
 		FindingsCount:  v.FindingsCount,
 		LatestDetected: v.LatestDetected,
+	}
+
+	return res
+}
+
+// marshalRiskRiskFindingClusterToRiskFindingClusterResponseBody builds a value
+// of type *RiskFindingClusterResponseBody from a value of type
+// *risk.RiskFindingCluster.
+func marshalRiskRiskFindingClusterToRiskFindingClusterResponseBody(v *risk.RiskFindingCluster) *RiskFindingClusterResponseBody {
+	res := &RiskFindingClusterResponseBody{
+		ID:                 v.ID,
+		Label:              v.Label,
+		Description:        v.Description,
+		Count:              v.Count,
+		DistinctChats:      v.DistinctChats,
+		BaselineGroupCount: v.BaselineGroupCount,
+	}
+	if v.Sources != nil {
+		res.Sources = make([]string, len(v.Sources))
+		for i, val := range v.Sources {
+			res.Sources[i] = val
+		}
+	}
+	if v.RuleIds != nil {
+		res.RuleIds = make([]string, len(v.RuleIds))
+		for i, val := range v.RuleIds {
+			res.RuleIds[i] = val
+		}
+	}
+	if v.Members != nil {
+		res.Members = make([]*RiskResultResponseBody, len(v.Members))
+		for i, val := range v.Members {
+			if val == nil {
+				res.Members[i] = nil
+				continue
+			}
+			res.Members[i] = marshalTypesRiskResultToRiskResultResponseBody(val)
+		}
+	} else {
+		res.Members = []*RiskResultResponseBody{}
 	}
 
 	return res

@@ -517,6 +517,24 @@ type ListRiskResultsByChatResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
+// ClusterRiskResultsResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body.
+type ClusterRiskResultsResponseBody struct {
+	// Semantic clusters, largest first.
+	Clusters []*RiskFindingClusterResponseBody `form:"clusters" json:"clusters" xml:"clusters"`
+	// Total findings considered.
+	TotalFindings int `form:"total_findings" json:"total_findings" xml:"total_findings"`
+	// Number of semantic clusters produced.
+	SemanticClusterCount int `form:"semantic_cluster_count" json:"semantic_cluster_count" xml:"semantic_cluster_count"`
+	// Distinct deterministic source|rule|span groups across all findings: the
+	// flat-list baseline this is compared against.
+	BaselineGroupCount int `form:"baseline_group_count" json:"baseline_group_count" xml:"baseline_group_count"`
+	// The clustering threshold used.
+	Threshold *float64 `form:"threshold,omitempty" json:"threshold,omitempty" xml:"threshold,omitempty"`
+	// Embed-text composition used ('behavior' or 'behavior+rule').
+	EmbedMode *string `form:"embed_mode,omitempty" json:"embed_mode,omitempty" xml:"embed_mode,omitempty"`
+}
+
 // GetRiskOverviewResponseBody is the type of the "risk" service
 // "getRiskOverview" endpoint HTTP response body.
 type GetRiskOverviewResponseBody struct {
@@ -2394,6 +2412,190 @@ type ListRiskResultsByChatUnexpectedResponseBody struct {
 // service "listRiskResultsByChat" endpoint HTTP response body for the
 // "gateway_error" error.
 type ListRiskResultsByChatGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClusterRiskResultsUnauthorizedResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "unauthorized"
+// error.
+type ClusterRiskResultsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClusterRiskResultsForbiddenResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "forbidden" error.
+type ClusterRiskResultsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClusterRiskResultsBadRequestResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "bad_request" error.
+type ClusterRiskResultsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClusterRiskResultsNotFoundResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "not_found" error.
+type ClusterRiskResultsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClusterRiskResultsConflictResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "conflict" error.
+type ClusterRiskResultsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClusterRiskResultsUnsupportedMediaResponseBody is the type of the "risk"
+// service "clusterRiskResults" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ClusterRiskResultsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClusterRiskResultsInvalidResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "invalid" error.
+type ClusterRiskResultsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClusterRiskResultsInvariantViolationResponseBody is the type of the "risk"
+// service "clusterRiskResults" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ClusterRiskResultsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClusterRiskResultsUnexpectedResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "unexpected" error.
+type ClusterRiskResultsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ClusterRiskResultsGatewayErrorResponseBody is the type of the "risk" service
+// "clusterRiskResults" endpoint HTTP response body for the "gateway_error"
+// error.
+type ClusterRiskResultsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -6923,6 +7125,30 @@ type RiskChatSummaryResponseBody struct {
 	LatestDetected string `form:"latest_detected" json:"latest_detected" xml:"latest_detected"`
 }
 
+// RiskFindingClusterResponseBody is used to define fields on response body
+// types.
+type RiskFindingClusterResponseBody struct {
+	// Synthetic cluster identifier within this response (e.g. 'c0').
+	ID string `form:"id" json:"id" xml:"id"`
+	// Short human label for the cluster (LLM-generated, best-effort).
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// One-sentence description of what the cluster represents.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Number of findings in the cluster.
+	Count int `form:"count" json:"count" xml:"count"`
+	// Number of distinct chats the cluster's findings span.
+	DistinctChats int `form:"distinct_chats" json:"distinct_chats" xml:"distinct_chats"`
+	// Distinct detection sources present in the cluster.
+	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
+	// Distinct rule ids present in the cluster.
+	RuleIds []string `form:"rule_ids,omitempty" json:"rule_ids,omitempty" xml:"rule_ids,omitempty"`
+	// Distinct deterministic source|rule|span keys among the cluster's members:
+	// how many flat-list groups this one semantic cluster collapses.
+	BaselineGroupCount *int `form:"baseline_group_count,omitempty" json:"baseline_group_count,omitempty" xml:"baseline_group_count,omitempty"`
+	// The findings in the cluster (raw match; mask client-side).
+	Members []*RiskResultResponseBody `form:"members" json:"members" xml:"members"`
+}
+
 // RiskOverviewCategoryResponseBody is used to define fields on response body
 // types.
 type RiskOverviewCategoryResponseBody struct {
@@ -7417,6 +7643,31 @@ func NewListRiskResultsByChatResponseBody(res *risk.ListRiskResultsByChatResult)
 		}
 	} else {
 		body.Chats = []*RiskChatSummaryResponseBody{}
+	}
+	return body
+}
+
+// NewClusterRiskResultsResponseBody builds the HTTP response body from the
+// result of the "clusterRiskResults" endpoint of the "risk" service.
+func NewClusterRiskResultsResponseBody(res *risk.ListRiskFindingClustersResult) *ClusterRiskResultsResponseBody {
+	body := &ClusterRiskResultsResponseBody{
+		TotalFindings:        res.TotalFindings,
+		SemanticClusterCount: res.SemanticClusterCount,
+		BaselineGroupCount:   res.BaselineGroupCount,
+		Threshold:            res.Threshold,
+		EmbedMode:            res.EmbedMode,
+	}
+	if res.Clusters != nil {
+		body.Clusters = make([]*RiskFindingClusterResponseBody, len(res.Clusters))
+		for i, val := range res.Clusters {
+			if val == nil {
+				body.Clusters[i] = nil
+				continue
+			}
+			body.Clusters[i] = marshalRiskRiskFindingClusterToRiskFindingClusterResponseBody(val)
+		}
+	} else {
+		body.Clusters = []*RiskFindingClusterResponseBody{}
 	}
 	return body
 }
@@ -9059,6 +9310,148 @@ func NewListRiskResultsByChatUnexpectedResponseBody(res *goa.ServiceError) *List
 // service.
 func NewListRiskResultsByChatGatewayErrorResponseBody(res *goa.ServiceError) *ListRiskResultsByChatGatewayErrorResponseBody {
 	body := &ListRiskResultsByChatGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClusterRiskResultsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "clusterRiskResults" endpoint of the "risk" service.
+func NewClusterRiskResultsUnauthorizedResponseBody(res *goa.ServiceError) *ClusterRiskResultsUnauthorizedResponseBody {
+	body := &ClusterRiskResultsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClusterRiskResultsForbiddenResponseBody builds the HTTP response body
+// from the result of the "clusterRiskResults" endpoint of the "risk" service.
+func NewClusterRiskResultsForbiddenResponseBody(res *goa.ServiceError) *ClusterRiskResultsForbiddenResponseBody {
+	body := &ClusterRiskResultsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClusterRiskResultsBadRequestResponseBody builds the HTTP response body
+// from the result of the "clusterRiskResults" endpoint of the "risk" service.
+func NewClusterRiskResultsBadRequestResponseBody(res *goa.ServiceError) *ClusterRiskResultsBadRequestResponseBody {
+	body := &ClusterRiskResultsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClusterRiskResultsNotFoundResponseBody builds the HTTP response body from
+// the result of the "clusterRiskResults" endpoint of the "risk" service.
+func NewClusterRiskResultsNotFoundResponseBody(res *goa.ServiceError) *ClusterRiskResultsNotFoundResponseBody {
+	body := &ClusterRiskResultsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClusterRiskResultsConflictResponseBody builds the HTTP response body from
+// the result of the "clusterRiskResults" endpoint of the "risk" service.
+func NewClusterRiskResultsConflictResponseBody(res *goa.ServiceError) *ClusterRiskResultsConflictResponseBody {
+	body := &ClusterRiskResultsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClusterRiskResultsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "clusterRiskResults" endpoint of the "risk"
+// service.
+func NewClusterRiskResultsUnsupportedMediaResponseBody(res *goa.ServiceError) *ClusterRiskResultsUnsupportedMediaResponseBody {
+	body := &ClusterRiskResultsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClusterRiskResultsInvalidResponseBody builds the HTTP response body from
+// the result of the "clusterRiskResults" endpoint of the "risk" service.
+func NewClusterRiskResultsInvalidResponseBody(res *goa.ServiceError) *ClusterRiskResultsInvalidResponseBody {
+	body := &ClusterRiskResultsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClusterRiskResultsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "clusterRiskResults" endpoint of the "risk"
+// service.
+func NewClusterRiskResultsInvariantViolationResponseBody(res *goa.ServiceError) *ClusterRiskResultsInvariantViolationResponseBody {
+	body := &ClusterRiskResultsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClusterRiskResultsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "clusterRiskResults" endpoint of the "risk" service.
+func NewClusterRiskResultsUnexpectedResponseBody(res *goa.ServiceError) *ClusterRiskResultsUnexpectedResponseBody {
+	body := &ClusterRiskResultsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewClusterRiskResultsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "clusterRiskResults" endpoint of the "risk" service.
+func NewClusterRiskResultsGatewayErrorResponseBody(res *goa.ServiceError) *ClusterRiskResultsGatewayErrorResponseBody {
+	body := &ClusterRiskResultsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -12653,6 +13046,21 @@ func NewListRiskResultsForAgentPayload(policyID *string, chatID *string, categor
 func NewListRiskResultsByChatPayload(cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsByChatPayload {
 	v := &risk.ListRiskResultsByChatPayload{}
 	v.Cursor = cursor
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewClusterRiskResultsPayload builds a risk service clusterRiskResults
+// endpoint payload.
+func NewClusterRiskResultsPayload(threshold *float64, includeRule *bool, refresh *bool, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ClusterRiskResultsPayload {
+	v := &risk.ClusterRiskResultsPayload{}
+	v.Threshold = threshold
+	v.IncludeRule = includeRule
+	v.Refresh = refresh
 	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

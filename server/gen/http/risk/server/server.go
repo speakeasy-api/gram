@@ -27,6 +27,7 @@ type Server struct {
 	ListRiskResults                http.Handler
 	ListRiskResultsForAgent        http.Handler
 	ListRiskResultsByChat          http.Handler
+	ClusterRiskResults             http.Handler
 	GetRiskOverview                http.Handler
 	ListRiskCategories             http.Handler
 	CompileExpr                    http.Handler
@@ -87,6 +88,7 @@ func New(
 			{"ListRiskResults", "GET", "/rpc/risk.results.list"},
 			{"ListRiskResultsForAgent", "GET", "/rpc/risk.results.listForAgent"},
 			{"ListRiskResultsByChat", "GET", "/rpc/risk.results.byChat"},
+			{"ClusterRiskResults", "GET", "/rpc/risk.results.cluster"},
 			{"GetRiskOverview", "GET", "/rpc/risk.overview.get"},
 			{"ListRiskCategories", "GET", "/rpc/risk.categories"},
 			{"CompileExpr", "GET", "/rpc/risk.compileExpr"},
@@ -119,6 +121,7 @@ func New(
 		ListRiskResults:                NewListRiskResultsHandler(e.ListRiskResults, mux, decoder, encoder, errhandler, formatter),
 		ListRiskResultsForAgent:        NewListRiskResultsForAgentHandler(e.ListRiskResultsForAgent, mux, decoder, encoder, errhandler, formatter),
 		ListRiskResultsByChat:          NewListRiskResultsByChatHandler(e.ListRiskResultsByChat, mux, decoder, encoder, errhandler, formatter),
+		ClusterRiskResults:             NewClusterRiskResultsHandler(e.ClusterRiskResults, mux, decoder, encoder, errhandler, formatter),
 		GetRiskOverview:                NewGetRiskOverviewHandler(e.GetRiskOverview, mux, decoder, encoder, errhandler, formatter),
 		ListRiskCategories:             NewListRiskCategoriesHandler(e.ListRiskCategories, mux, decoder, encoder, errhandler, formatter),
 		CompileExpr:                    NewCompileExprHandler(e.CompileExpr, mux, decoder, encoder, errhandler, formatter),
@@ -158,6 +161,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListRiskResults = m(s.ListRiskResults)
 	s.ListRiskResultsForAgent = m(s.ListRiskResultsForAgent)
 	s.ListRiskResultsByChat = m(s.ListRiskResultsByChat)
+	s.ClusterRiskResults = m(s.ClusterRiskResults)
 	s.GetRiskOverview = m(s.GetRiskOverview)
 	s.ListRiskCategories = m(s.ListRiskCategories)
 	s.CompileExpr = m(s.CompileExpr)
@@ -196,6 +200,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListRiskResultsHandler(mux, h.ListRiskResults)
 	MountListRiskResultsForAgentHandler(mux, h.ListRiskResultsForAgent)
 	MountListRiskResultsByChatHandler(mux, h.ListRiskResultsByChat)
+	MountClusterRiskResultsHandler(mux, h.ClusterRiskResults)
 	MountGetRiskOverviewHandler(mux, h.GetRiskOverview)
 	MountListRiskCategoriesHandler(mux, h.ListRiskCategories)
 	MountCompileExprHandler(mux, h.CompileExpr)
@@ -627,6 +632,59 @@ func NewListRiskResultsByChatHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listRiskResultsByChat")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountClusterRiskResultsHandler configures the mux to serve the "risk"
+// service "clusterRiskResults" endpoint.
+func MountClusterRiskResultsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.results.cluster", f)
+}
+
+// NewClusterRiskResultsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "risk" service "clusterRiskResults" endpoint.
+func NewClusterRiskResultsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeClusterRiskResultsRequest(mux, decoder)
+		encodeResponse = EncodeClusterRiskResultsResponse(encoder)
+		encodeError    = EncodeClusterRiskResultsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "clusterRiskResults")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

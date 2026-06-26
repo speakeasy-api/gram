@@ -25555,6 +25555,139 @@ paths:
             x-speakeasy-name-override: byChat
             x-speakeasy-react-hook:
                 name: RiskListResultsByChat
+    /rpc/risk.results.cluster:
+        get:
+            description: 'Experimental PoC: cluster the project''s risk findings into groups by semantic similarity of their behavior context (embedding-based), returning labeled clusters plus the count of deterministic source|rule|span groups for comparison. Throwaway; admin-only.'
+            operationId: clusterRiskResults
+            parameters:
+                - allowEmptyValue: true
+                  description: Cosine-similarity threshold for single-linkage clustering. Higher = more, tighter clusters. Default 0.84.
+                  in: query
+                  name: threshold
+                  schema:
+                    description: Cosine-similarity threshold for single-linkage clustering. Higher = more, tighter clusters. Default 0.84.
+                    format: double
+                    maximum: 1
+                    minimum: 0
+                    type: number
+                - allowEmptyValue: true
+                  description: If true, fold source/rule_id into the embed text so detector types never co-mingle. Default false (behavior-first).
+                  in: query
+                  name: include_rule
+                  schema:
+                    description: If true, fold source/rule_id into the embed text so detector types never co-mingle. Default false (behavior-first).
+                    type: boolean
+                - allowEmptyValue: true
+                  description: If true, recompute embeddings instead of reusing the in-process cache.
+                  in: query
+                  name: refresh
+                  schema:
+                    description: If true, recompute embeddings instead of reusing the in-process cache.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Maximum number of findings to cluster.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum number of findings to cluster.
+                    format: int64
+                    maximum: 5000
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRiskFindingClustersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: clusterRiskResults risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.results
+            x-speakeasy-name-override: cluster
+            x-speakeasy-react-hook:
+                name: RiskClusterResults
     /rpc/risk.results.list:
         get:
             description: List risk analysis results for the current project.
@@ -40582,6 +40715,38 @@ components:
                     description: The list of risk exclusions.
             required:
                 - exclusions
+        ListRiskFindingClustersResult:
+            type: object
+            properties:
+                baseline_group_count:
+                    type: integer
+                    description: 'Distinct deterministic source|rule|span groups across all findings: the flat-list baseline this is compared against.'
+                    format: int64
+                clusters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskFindingCluster'
+                    description: Semantic clusters, largest first.
+                embed_mode:
+                    type: string
+                    description: Embed-text composition used ('behavior' or 'behavior+rule').
+                semantic_cluster_count:
+                    type: integer
+                    description: Number of semantic clusters produced.
+                    format: int64
+                threshold:
+                    type: number
+                    description: The clustering threshold used.
+                    format: double
+                total_findings:
+                    type: integer
+                    description: Total findings considered.
+                    format: int64
+            required:
+                - clusters
+                - total_findings
+                - semantic_cluster_count
+                - baseline_group_count
         ListRiskPoliciesResult:
             type: object
             properties:
@@ -44174,6 +44339,50 @@ components:
                 - enabled
                 - created_at
                 - updated_at
+        RiskFindingCluster:
+            type: object
+            properties:
+                baseline_group_count:
+                    type: integer
+                    description: 'Distinct deterministic source|rule|span keys among the cluster''s members: how many flat-list groups this one semantic cluster collapses.'
+                    format: int64
+                count:
+                    type: integer
+                    description: Number of findings in the cluster.
+                    format: int64
+                description:
+                    type: string
+                    description: One-sentence description of what the cluster represents.
+                distinct_chats:
+                    type: integer
+                    description: Number of distinct chats the cluster's findings span.
+                    format: int64
+                id:
+                    type: string
+                    description: Synthetic cluster identifier within this response (e.g. 'c0').
+                label:
+                    type: string
+                    description: Short human label for the cluster (LLM-generated, best-effort).
+                members:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskResult'
+                    description: The findings in the cluster (raw match; mask client-side).
+                rule_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Distinct rule ids present in the cluster.
+                sources:
+                    type: array
+                    items:
+                        type: string
+                    description: Distinct detection sources present in the cluster.
+            required:
+                - id
+                - count
+                - distinct_chats
+                - members
         RiskIDRequestBody:
             type: object
             properties:

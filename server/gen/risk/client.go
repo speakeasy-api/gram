@@ -24,6 +24,7 @@ type Client struct {
 	ListRiskResultsEndpoint                goa.Endpoint
 	ListRiskResultsForAgentEndpoint        goa.Endpoint
 	ListRiskResultsByChatEndpoint          goa.Endpoint
+	ClusterRiskResultsEndpoint             goa.Endpoint
 	GetRiskOverviewEndpoint                goa.Endpoint
 	ListRiskCategoriesEndpoint             goa.Endpoint
 	CompileExprEndpoint                    goa.Endpoint
@@ -50,7 +51,7 @@ type Client struct {
 }
 
 // NewClient initializes a "risk" service client given the endpoints.
-func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, getRiskOverview, listRiskCategories, compileExpr, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, createRiskPolicyBypassRequest, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, testDetectionRule goa.Endpoint) *Client {
+func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listRiskResults, listRiskResultsForAgent, listRiskResultsByChat, clusterRiskResults, getRiskOverview, listRiskCategories, compileExpr, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskPolicyStatus, createRiskPolicyBypassRequest, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, testDetectionRule goa.Endpoint) *Client {
 	return &Client{
 		CreateRiskPolicyEndpoint:               createRiskPolicy,
 		ListRiskPoliciesEndpoint:               listRiskPolicies,
@@ -60,6 +61,7 @@ func NewClient(createRiskPolicy, listRiskPolicies, getRiskPolicy, updateRiskPoli
 		ListRiskResultsEndpoint:                listRiskResults,
 		ListRiskResultsForAgentEndpoint:        listRiskResultsForAgent,
 		ListRiskResultsByChatEndpoint:          listRiskResultsByChat,
+		ClusterRiskResultsEndpoint:             clusterRiskResults,
 		GetRiskOverviewEndpoint:                getRiskOverview,
 		ListRiskCategoriesEndpoint:             listRiskCategories,
 		CompileExprEndpoint:                    compileExpr,
@@ -258,6 +260,29 @@ func (c *Client) ListRiskResultsByChat(ctx context.Context, p *ListRiskResultsBy
 		return
 	}
 	return ires.(*ListRiskResultsByChatResult), nil
+}
+
+// ClusterRiskResults calls the "clusterRiskResults" endpoint of the "risk"
+// service.
+// ClusterRiskResults may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ClusterRiskResults(ctx context.Context, p *ClusterRiskResultsPayload) (res *ListRiskFindingClustersResult, err error) {
+	var ires any
+	ires, err = c.ClusterRiskResultsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListRiskFindingClustersResult), nil
 }
 
 // GetRiskOverview calls the "getRiskOverview" endpoint of the "risk" service.

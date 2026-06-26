@@ -673,6 +673,102 @@ func BuildListRiskResultsByChatPayload(riskListRiskResultsByChatCursor string, r
 	return v, nil
 }
 
+// BuildClusterRiskResultsPayload builds the payload for the risk
+// clusterRiskResults endpoint from CLI flags.
+func BuildClusterRiskResultsPayload(riskClusterRiskResultsThreshold string, riskClusterRiskResultsIncludeRule string, riskClusterRiskResultsRefresh string, riskClusterRiskResultsLimit string, riskClusterRiskResultsApikeyToken string, riskClusterRiskResultsSessionToken string, riskClusterRiskResultsProjectSlugInput string) (*risk.ClusterRiskResultsPayload, error) {
+	var err error
+	var threshold *float64
+	{
+		if riskClusterRiskResultsThreshold != "" {
+			val, err := strconv.ParseFloat(riskClusterRiskResultsThreshold, 64)
+			threshold = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for threshold, must be FLOAT64")
+			}
+			if *threshold < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("threshold", *threshold, 0, true))
+			}
+			if *threshold > 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("threshold", *threshold, 1, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var includeRule *bool
+	{
+		if riskClusterRiskResultsIncludeRule != "" {
+			var val bool
+			val, err = strconv.ParseBool(riskClusterRiskResultsIncludeRule)
+			includeRule = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeRule, must be BOOL")
+			}
+		}
+	}
+	var refresh *bool
+	{
+		if riskClusterRiskResultsRefresh != "" {
+			var val bool
+			val, err = strconv.ParseBool(riskClusterRiskResultsRefresh)
+			refresh = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for refresh, must be BOOL")
+			}
+		}
+	}
+	var limit *int
+	{
+		if riskClusterRiskResultsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(riskClusterRiskResultsLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+			if *limit > 5000 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 5000, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskClusterRiskResultsApikeyToken != "" {
+			apikeyToken = &riskClusterRiskResultsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskClusterRiskResultsSessionToken != "" {
+			sessionToken = &riskClusterRiskResultsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskClusterRiskResultsProjectSlugInput != "" {
+			projectSlugInput = &riskClusterRiskResultsProjectSlugInput
+		}
+	}
+	v := &risk.ClusterRiskResultsPayload{}
+	v.Threshold = threshold
+	v.IncludeRule = includeRule
+	v.Refresh = refresh
+	v.Limit = limit
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetRiskOverviewPayload builds the payload for the risk getRiskOverview
 // endpoint from CLI flags.
 func BuildGetRiskOverviewPayload(riskGetRiskOverviewFrom string, riskGetRiskOverviewTo string, riskGetRiskOverviewApikeyToken string, riskGetRiskOverviewSessionToken string, riskGetRiskOverviewProjectSlugInput string) (*risk.GetRiskOverviewPayload, error) {
