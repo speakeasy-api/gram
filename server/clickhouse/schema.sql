@@ -432,8 +432,9 @@ SELECT
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
     ) AS total_tool_calls
 FROM telemetry_logs
--- Admit usage-metrics rows (the source of token/cost sums; the per-aggregate
--- `x != ''` guards stop non-usage rows from inflating cost) AND tool-call rows.
+-- Admit usage-metrics rows and cost-bearing chat-completion rows (the source of
+-- token/cost sums; the per-aggregate `x != ''` guards stop non-usage rows from
+-- inflating cost) AND tool-call rows.
 -- Tool calls are captured by the hook events' gram.tool.name, which covers all
 -- tools used in a session, not just Gram-proxied ones. The previous filter kept
 -- only usage rows, so total_tool_calls (counted from a separate event class) was
@@ -444,6 +445,7 @@ WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
     startsWith(gram_urn, 'claude-code:usage') OR
     startsWith(gram_urn, 'codex:usage') OR
     startsWith(gram_urn, 'cursor:usage') OR
+    (toString(attributes.gen_ai.operation.name) = 'chat' AND toString(attributes.gen_ai.usage.cost) != '') OR
     (toString(attributes.gram.tool.name) != '' AND
      toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')))
 GROUP BY
