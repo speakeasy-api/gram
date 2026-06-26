@@ -23,8 +23,8 @@ const (
 )
 
 // BatchReceiveSettings tunes how Subscriber.ReceiveBatch groups messages. A
-// batch is flushed when either MaxMessages have buffered or MaxLatency elapses,
-// whichever happens first.
+// batch is flushed when MaxMessages have buffered, the buffered payloads reach
+// MaxBytes, or MaxLatency elapses, whichever happens first.
 type BatchReceiveSettings struct {
 	// MaxMessages is the number of buffered messages that triggers a flush. A
 	// value <= 0 falls back to defaultBatchMaxMessages. Keep it at or below the
@@ -33,6 +33,14 @@ type BatchReceiveSettings struct {
 	// outstanding limit the buffer can never reach the size threshold and every
 	// batch waits the full MaxLatency.
 	MaxMessages int
+	// MaxBytes is the combined size of buffered message payloads, in bytes, that
+	// triggers a flush. A value <= 0 disables byte-based flushing, leaving
+	// MaxMessages and MaxLatency as the only triggers. Like MaxMessages it is a
+	// trigger, not a hard cap: a single payload at or above MaxBytes flushes on
+	// its own, and a batch can overshoot MaxBytes by up to the size of the
+	// message that crossed the threshold. Memory is bounded by the receiver's
+	// ReceiveSettings.MaxOutstandingBytes, not by this setting.
+	MaxBytes int
 	// MaxLatency is how long a partial batch waits before being flushed. A value
 	// <= 0 falls back to defaultBatchMaxLatency. It must stay well below the
 	// subscription's ack deadline (and the receiver's MaxExtension) since
@@ -169,7 +177,8 @@ func (s *psSubscriber[M]) handle(ctx context.Context, m incomingMessage, f func(
 // ReceiveBatch consumes messages and delivers them to f in batches. The
 // underlying pubsub client only delivers one message per callback, so messages
 // are buffered here and flushed as a slice once settings.MaxMessages are
-// buffered or settings.MaxLatency elapses, whichever comes first.
+// buffered, their payloads reach settings.MaxBytes, or settings.MaxLatency
+// elapses, whichever comes first.
 //
 // Ack/nack is all-or-nothing: when f returns nil the whole batch is acked; when
 // f returns an error (or panics) the whole batch is nacked. Messages that fail
@@ -189,11 +198,13 @@ func (s *psSubscriber[M]) ReceiveBatch(ctx context.Context, settings BatchReceiv
 	}, f)
 }
 
-// batchLoop holds the buffering, size/latency flushing, and drain logic shared
-// by ReceiveBatch. The delivery source is abstracted behind receive so the loop
-// can be exercised in tests (with a synthetic source and a fake clock) without a
-// live pubsub subscriber: receive must call deliver once per incoming message
-// and return when ctx is cancelled (or on a terminal error).
+// batchLoop holds the buffering, count/byte/latency flushing, and drain logic
+// shared by ReceiveBatch. The latency timer is armed when a message starts a new
+// batch and stopped when the batch is detached, so the window is measured from
+// each batch's first message. The delivery source is abstracted behind receive
+// so the loop can be exercised in tests (with a synthetic source and a fake
+// clock) without a live pubsub subscriber: receive must call deliver once per
+// incoming message and return when ctx is cancelled (or on a terminal error).
 func (s *psSubscriber[M]) batchLoop(
 	ctx context.Context,
 	settings BatchReceiveSettings,
@@ -208,15 +219,30 @@ func (s *psSubscriber[M]) batchLoop(
 	if latency <= 0 {
 		latency = defaultBatchMaxLatency
 	}
+	// maxBytes is an optional trigger: a value <= 0 leaves count and latency as
+	// the only flush conditions.
+	maxBytes := settings.MaxBytes
 
 	newBuf := func() []incomingMessage { return make([]incomingMessage, 0, size) }
 
 	var mu sync.Mutex
 	pending := newBuf()
+	pendingBytes := 0
+	// flushTimer bounds how long the oldest buffered message waits. It is armed
+	// when a message starts a new batch and stopped whenever the batch is
+	// detached, so the latency window is measured from the first message of each
+	// batch (matching google.golang.org/api/support/bundler) rather than from a
+	// free-running clock. A nil flushTimer means no batch is currently waiting.
+	var flushTimer *time.Timer
+	// timerWG tracks in-flight timer callbacks so shutdown can wait for one that
+	// is mid-flush before draining. Every armed timer adds one; the count is
+	// balanced either by the callback's deferred Done or, when Stop cancels the
+	// callback before it runs, by the stopping goroutine.
+	var timerWG sync.WaitGroup
 
-	// take detaches the buffered messages under the lock. It returns nil (without
-	// reallocating) when nothing is buffered so an idle latency tick does not
-	// churn a fresh size-capacity buffer every interval.
+	// take detaches the buffered messages under the lock and stops the latency
+	// timer. It returns nil (without reallocating) when nothing is buffered so a
+	// no-op flush does not churn a fresh size-capacity buffer.
 	take := func() []incomingMessage {
 		mu.Lock()
 		defer mu.Unlock()
@@ -225,15 +251,23 @@ func (s *psSubscriber[M]) batchLoop(
 		}
 		batch := pending
 		pending = newBuf()
+		pendingBytes = 0
+		if flushTimer != nil {
+			// Stop reports true when it cancels the callback before it runs; in that
+			// case balance the Add here since the callback's Done will not fire.
+			if flushTimer.Stop() {
+				timerWG.Done()
+			}
+			flushTimer = nil
+		}
 		return batch
 	}
 
-	// handlerMu serializes handleBatch so the latency goroutine and the
-	// size-trigger path never invoke f concurrently. Buffering (under mu)
+	// handlerMu serializes handleBatch so the latency callback and the
+	// size/byte-trigger path never invoke f concurrently. Buffering (under mu)
 	// continues while a batch is in flight; only the handler call is serialized.
 	var handlerMu sync.Mutex
-	flush := func() {
-		batch := take()
+	runBatch := func(batch []incomingMessage) {
 		if len(batch) == 0 {
 			return
 		}
@@ -241,28 +275,36 @@ func (s *psSubscriber[M]) batchLoop(
 		defer handlerMu.Unlock()
 		s.handleBatch(ctx, batch, f)
 	}
-
-	// Flush partial batches on a timer so messages are not held longer than the
-	// configured latency (and beyond their ack deadline) under low throughput.
-	ticker := time.NewTicker(latency)
-	defer ticker.Stop()
-	done := make(chan struct{})
-	var tickerWG sync.WaitGroup
-	tickerWG.Go(func() {
-		for {
-			select {
-			case <-done:
-				return
-			case <-ticker.C:
-				flush()
-			}
-		}
-	})
+	flush := func() { runBatch(take()) }
 
 	err := receive(ctx, func(m incomingMessage) {
 		mu.Lock()
 		pending = append(pending, m)
-		full := len(pending) >= size
+		pendingBytes += len(m.data)
+		full := len(pending) >= size || (maxBytes > 0 && pendingBytes >= maxBytes)
+		if !full && flushTimer == nil {
+			// This message starts a new batch: arm the timer for its lifetime. The
+			// callback captures its own timer and no-ops if a size/byte flush has
+			// since superseded it, so a stale firing never flushes the next batch
+			// early.
+			timerWG.Add(1)
+			var t *time.Timer
+			t = time.AfterFunc(latency, func() {
+				defer timerWG.Done()
+				mu.Lock()
+				if flushTimer != t || len(pending) == 0 {
+					mu.Unlock()
+					return
+				}
+				batch := pending
+				pending = newBuf()
+				pendingBytes = 0
+				flushTimer = nil
+				mu.Unlock()
+				runBatch(batch)
+			})
+			flushTimer = t
+		}
 		mu.Unlock()
 
 		if full {
@@ -270,11 +312,19 @@ func (s *psSubscriber[M]) batchLoop(
 		}
 	})
 
-	// Stop the latency goroutine and wait for any in-flight flush to finish
-	// before draining, so handleBatch never runs after batchLoop returns and
-	// touches resources the caller tears down on shutdown.
-	close(done)
-	tickerWG.Wait()
+	// Stop a pending timer and wait for any in-flight callback to finish before
+	// draining, so handleBatch never runs after batchLoop returns and touches
+	// resources the caller tears down on shutdown. receive has returned, so no new
+	// timer can be armed past this point.
+	mu.Lock()
+	if flushTimer != nil {
+		if flushTimer.Stop() {
+			timerWG.Done()
+		}
+		flushTimer = nil
+	}
+	mu.Unlock()
+	timerWG.Wait()
 
 	// Drain any messages still buffered when receive returns so they are acked
 	// or nacked rather than silently dropped.

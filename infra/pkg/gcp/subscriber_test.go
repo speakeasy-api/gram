@@ -339,7 +339,7 @@ func TestBatchLoop_FlushesOnLatency(t *testing.T) {
 
 		// MaxMessages far above the two delivered messages so only the latency
 		// timer can trigger a flush.
-		settings := BatchReceiveSettings{MaxMessages: 100, MaxLatency: time.Second}
+		settings := BatchReceiveSettings{MaxMessages: 100, MaxBytes: 0, MaxLatency: time.Second}
 
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
@@ -378,6 +378,63 @@ func TestBatchLoop_FlushesOnLatency(t *testing.T) {
 	})
 }
 
+// TestBatchLoop_LatencyArmsOnFirstMessage proves the timer is armed when a
+// message starts a batch, not free-running from loop start: a message delivered
+// partway into the first latency window must still wait a full window measured
+// from its own arrival. A free-running ticker would have flushed it early.
+func TestBatchLoop_LatencyArmsOnFirstMessage(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		s := newPanicSubscriber(slog.New(slog.DiscardHandler))
+
+		data, err := proto.Marshal(&emptypb.Empty{})
+		require.NoError(t, err)
+
+		m1, c1 := newBatchMessage("msg-1", data, nil)
+
+		settings := BatchReceiveSettings{MaxMessages: 100, MaxBytes: 0, MaxLatency: time.Second}
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		capt := &batchCapture{} //nolint:exhaustruct // zero values are the initial state under test
+
+		// Idle for 700ms before the first message, so the message arrives partway
+		// into the window a free-running ticker (started at loop start) would use.
+		receive := func(ctx context.Context, deliver func(incomingMessage)) error {
+			time.Sleep(700 * time.Millisecond) //nolint:forbidigo // GG013: advances the synctest fake clock instantly; valid ONLY within synctest.Test
+			deliver(m1)
+			<-ctx.Done()
+			return nil
+		}
+
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- s.batchLoop(ctx, settings, receive, func(_ context.Context, _ []*emptypb.Empty, metas []MessageMetadata) error {
+				capt.record(metas)
+				return nil
+			})
+		}()
+
+		// Advance to 1.1s: past the window measured from loop start (1.0s) but
+		// before the window measured from the message at 700ms (1.7s). A ticker
+		// would have flushed here; the per-batch timer must not have.
+		time.Sleep(1100 * time.Millisecond) //nolint:forbidigo // GG013: advances the synctest fake clock instantly; valid ONLY within synctest.Test
+		synctest.Wait()
+		require.Empty(t, capt.snapshot(), "timer should measure latency from the first message, not loop start")
+
+		// Advance past the message's own window (to ~1.8s) so the timer fires.
+		time.Sleep(700 * time.Millisecond) //nolint:forbidigo // GG013: advances the synctest fake clock instantly; valid ONLY within synctest.Test
+		synctest.Wait()
+		require.Equal(t, [][]string{{"msg-1"}}, capt.snapshot(), "timer should flush a full window after the first message")
+		require.True(t, c1.isAcked())
+
+		cancel()
+		require.NoError(t, <-errCh)
+	})
+}
+
 // TestBatchLoop_FlushesOnSizeAndDrains proves the two non-timer flush paths: a
 // full buffer flushes inline, and whatever remains is drained when the source
 // returns. A huge MaxLatency keeps the ticker out of the picture.
@@ -398,7 +455,7 @@ func TestBatchLoop_FlushesOnSizeAndDrains(t *testing.T) {
 
 		// MaxLatency far in the future so only the size threshold and the final
 		// drain produce batches.
-		settings := BatchReceiveSettings{MaxMessages: 3, MaxLatency: time.Hour}
+		settings := BatchReceiveSettings{MaxMessages: 3, MaxBytes: 0, MaxLatency: time.Hour}
 
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
@@ -438,6 +495,66 @@ func TestBatchLoop_FlushesOnSizeAndDrains(t *testing.T) {
 	})
 }
 
+// TestBatchLoop_FlushesOnBytes proves the byte-size trigger: with MaxMessages
+// and MaxLatency kept out of reach, the buffer flushes precisely when the
+// accumulated payload size reaches MaxBytes, and the remainder drains on
+// shutdown.
+func TestBatchLoop_FlushesOnBytes(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		s := newPanicSubscriber(slog.New(slog.DiscardHandler))
+
+		// Four bytes of valid wire format that decode as an Empty (the bytes are
+		// retained as unknown fields), so each message has a non-zero size for the
+		// byte trigger to accumulate.
+		data := []byte{0x08, 0x01, 0x10, 0x01}
+		require.NoError(t, proto.Unmarshal(data, &emptypb.Empty{}))
+
+		m1, c1 := newBatchMessage("msg-1", data, nil)
+		m2, c2 := newBatchMessage("msg-2", data, nil)
+		m3, c3 := newBatchMessage("msg-3", data, nil)
+
+		// MaxBytes flushes once two 4-byte payloads (8 bytes) buffer. MaxMessages
+		// and MaxLatency are kept out of reach so only the byte trigger fires.
+		settings := BatchReceiveSettings{MaxMessages: 100, MaxBytes: 8, MaxLatency: time.Hour}
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		capt := &batchCapture{} //nolint:exhaustruct // zero values are the initial state under test
+
+		receive := func(ctx context.Context, deliver func(incomingMessage)) error {
+			deliver(m1)
+			deliver(m2)
+			deliver(m3)
+			<-ctx.Done()
+			return nil
+		}
+
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- s.batchLoop(ctx, settings, receive, func(_ context.Context, _ []*emptypb.Empty, metas []MessageMetadata) error {
+				capt.record(metas)
+				return nil
+			})
+		}()
+
+		// m1 (4 bytes) stays under the threshold; m2 brings the buffer to 8 bytes
+		// and flushes the pair inline. m3 remains buffered.
+		synctest.Wait()
+		require.Equal(t, [][]string{{"msg-1", "msg-2"}}, capt.snapshot(), "buffer should flush once payloads reach MaxBytes")
+		require.True(t, c1.isAcked())
+		require.True(t, c2.isAcked())
+
+		// Cancelling ends the source; batchLoop drains the sub-threshold remainder.
+		cancel()
+		require.NoError(t, <-errCh)
+		require.Equal(t, [][]string{{"msg-1", "msg-2"}, {"msg-3"}}, capt.snapshot(), "remaining message should drain on shutdown")
+		require.True(t, c3.isAcked())
+	})
+}
+
 // TestBatchLoop_NoFlushWhenIdle confirms the latency ticker does not invoke the
 // handler when nothing is buffered.
 func TestBatchLoop_NoFlushWhenIdle(t *testing.T) {
@@ -446,7 +563,7 @@ func TestBatchLoop_NoFlushWhenIdle(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s := newPanicSubscriber(slog.New(slog.DiscardHandler))
 
-		settings := BatchReceiveSettings{MaxMessages: 10, MaxLatency: time.Second}
+		settings := BatchReceiveSettings{MaxMessages: 10, MaxBytes: 0, MaxLatency: time.Second}
 
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
