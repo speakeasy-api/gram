@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+#MISE description="Start local Postgres MCP behind a tunnel agent"
+#MISE dir="{{ config_root }}"
+
+set -euo pipefail
+
+if [[ -z "${TUNNEL_LOCAL_KEY:-}" ]]; then
+  echo "TUNNEL_LOCAL_KEY is not set. Run 'mise run seed' first." >&2
+  exit 2
+fi
+
+cleanup() {
+  docker compose --profile tunnel stop tunnel-agent tunnel-postgres-mcp >/dev/null 2>&1 || true
+}
+trap cleanup EXIT INT TERM
+
+docker compose --profile tunnel up --build tunnel-postgres-mcp tunnel-agent

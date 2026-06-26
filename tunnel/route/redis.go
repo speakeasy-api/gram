@@ -15,8 +15,9 @@ const keyPrefix = "tunnel_routes:"
 
 const connectionKeyPrefix = "tunnel_connections:"
 
-// Redis is a Store backed by go-redis. Loss of Redis only degrades routing (in
-// prod it would fall back to the DB); it is a cache, never the source of truth.
+// Redis is the live routing table and connection snapshot store. Postgres owns
+// durable tunnel source records; Redis owns the data-plane location of active
+// agent sessions.
 type Redis struct {
 	client redis.UniversalClient
 	cache  *redisCache.Cache

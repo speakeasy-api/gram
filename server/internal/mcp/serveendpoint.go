@@ -35,7 +35,7 @@ import (
 // ServeMCPEndpoint resolves the given mcp_endpoint slug to its mcp_server,
 // optionally runs the issuer gate, and dispatches to the appropriate
 // backend (remote_mcp_servers via the remotemcp proxy, tunnelled_mcp_servers
-// once the tunnel gateway exists, or toolsets via ServeToolsetResolved). It is
+// via the tunnel gateway, or toolsets via ServeToolsetResolved). It is
 // the unified runtime entry point used by both /mcp and /x/mcp.
 //
 // mcpRouteBase is the URL route segment the request arrived under ("mcp"
