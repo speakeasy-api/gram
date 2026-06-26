@@ -152,6 +152,49 @@ func TestClaudeMessages_BufferedUntilSessionMetadataResolves(t *testing.T) {
 	require.Empty(t, after, "buffer should be deleted after flush")
 }
 
+func TestClaudeMessages_UpdatesChatAttributionAfterInitialUnauthenticatedCapture(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	userContent := "captured before attribution"
+	payload := &gen.ClaudeMessagesPayload{
+		SessionID: sessionID,
+		Messages: []*gen.ClaudeCapturedMessage{
+			{ExternalID: uuid.NewString(), Role: "user", Content: &userContent},
+		},
+	}
+	baseMetadata := SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		UserEmail:   "",
+		UserID:      "",
+		ClaudeOrgID: authCtx.ActiveOrganizationID,
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	require.NoError(t, ti.service.persistClaudeMessages(ctx, payload, baseMetadata, ti.service.logger))
+
+	attributedMetadata := baseMetadata
+	attributedMetadata.UserEmail = "attributed@example.com"
+	attributedMetadata.UserID = "attributed-user"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, attributedMetadata.UserID, attributedMetadata.UserEmail)
+	require.NoError(t, ti.service.persistClaudeMessages(ctx, payload, attributedMetadata, ti.service.logger))
+
+	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	require.NoError(t, err)
+	require.Equal(t, attributedMetadata.UserID, chat.UserID.String)
+	require.True(t, chat.UserID.Valid)
+	require.Equal(t, attributedMetadata.UserEmail, chat.ExternalUserID.String)
+	require.True(t, chat.ExternalUserID.Valid)
+}
+
 func TestClaudeMessages_PendingBufferSurvivesReplayFailure(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

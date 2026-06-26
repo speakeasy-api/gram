@@ -1020,7 +1020,7 @@ func TestGenerateClaudeObservabilityBlockingEventsDefaultToSync(t *testing.T) {
 	var parsed claudeHooksConfig
 	require.NoError(t, json.Unmarshal(files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"], &parsed))
 
-	for _, event := range []string{"UserPromptSubmit", "PreToolUse", "Stop"} {
+	for _, event := range []string{"UserPromptSubmit", "PreToolUse", "Stop", "SubagentStop"} {
 		matchers, ok := parsed.Hooks[event]
 		require.True(t, ok, "%s must be registered", event)
 		require.NotNil(t, matchers[0].Hooks[0].Async)

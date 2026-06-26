@@ -118,7 +118,7 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 // for generator changes that alter behaviour in ways the placeholder
 // fingerprint pass can't observe. The Plugin Generate Check CI workflow
 // requires this to change whenever generate.go does.
-const pluginGeneratorVersion = "5"
+const pluginGeneratorVersion = "6"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -169,10 +169,10 @@ func PluginFingerprint(plugins []PluginInfo, cfg GenerateConfig) (string, error)
 
 // claudeHookAsyncFlag returns the async flag for a Claude hook event.
 // PreToolUse and UserPromptSubmit are blocking so Claude waits for the
-// deny/allow decision. Stop must also be blocking: when async=true,
-// Cowork (Claude Code) appears to skip dispatching the Stop hook entirely
-// — an apparent bug on the client side. Marking it synchronous is the
-// only reliable way to get Stop events to fire. All other events
+// deny/allow decision. Stop and SubagentStop must also be blocking: when
+// async=true, Cowork (Claude Code) appears to skip dispatching Stop-class hooks
+// entirely — an apparent bug on the client side. Marking them synchronous is the
+// only reliable way to get transcript-capture events to fire. All other events
 // (including ConfigChange, which has no allow/deny decision to honor)
 // return true for fire-and-forget telemetry so Claude is not held up while
 // the MCP inventory is re-synced mid-session.
@@ -187,7 +187,7 @@ func claudeHookAsyncFlag(event string, observabilityMode bool) *bool {
 		return &t
 	}
 	switch event {
-	case "UserPromptSubmit", "PreToolUse", "Stop":
+	case "UserPromptSubmit", "PreToolUse", "Stop", "SubagentStop":
 		f := false
 		return &f
 	default:

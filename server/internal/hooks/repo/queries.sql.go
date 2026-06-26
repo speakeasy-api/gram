@@ -221,7 +221,10 @@ VALUES (
     NOW(),
     NOW()
 )
-ON CONFLICT (id) DO UPDATE SET updated_at = NOW()
+ON CONFLICT (id) DO UPDATE SET
+    updated_at = NOW()
+  , user_id = COALESCE(NULLIF(EXCLUDED.user_id, ''), chats.user_id)
+  , external_user_id = COALESCE(NULLIF(EXCLUDED.external_user_id, ''), chats.external_user_id)
 RETURNING id
 `
 
