@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: b97bd891de46611c296911e79a780569
+  docChecksum: f7f0e8d34dfeea9a0ecb5fe4e4357d99
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -2427,7 +2427,7 @@ trackedFiles:
   docs/models/operations/listchallengessecurity.md:
     last_write_checksum: sha1:612e100b48e95978d1923e12137035d03b5d6e35
   docs/models/operations/listchatsrequest.md:
-    last_write_checksum: sha1:3d958703044cf83de3622f18389d2a650fd6d277
+    last_write_checksum: sha1:c92762dbe8525b4864b8ea3b5d41fafba9565e93
   docs/models/operations/listchatssecurity.md:
     last_write_checksum: sha1:c76573b8e0ebe2778bfa7b1a48723ab02d93df84
   docs/models/operations/listchatssecurityoption1.md:
@@ -3713,7 +3713,7 @@ trackedFiles:
   src/funcs/chatGenerateTitle.ts:
     last_write_checksum: sha1:d2ca1ce7fea23f14ce3fa0c0d5b7fbc3f5b83838
   src/funcs/chatList.ts:
-    last_write_checksum: sha1:39b0587c0b3519eafe53b47379d3b256f1f71cb2
+    last_write_checksum: sha1:a9daa4da11fc964617657a2654fdfacb42f809e6
   src/funcs/chatLoad.ts:
     last_write_checksum: sha1:5b65897909c848f826e811751b7fd0dcd59e0858
   src/funcs/chatSessionsCreate.ts:
@@ -5701,7 +5701,7 @@ trackedFiles:
   src/models/operations/listchallenges.ts:
     last_write_checksum: sha1:896d134449096d6fe8146621fa4d0ef257cfd16b
   src/models/operations/listchats.ts:
-    last_write_checksum: sha1:0196c10ae15917e31751117fca0447875fc73e68
+    last_write_checksum: sha1:e83a0f03e5378e514b8b3003855a6d757b3a43d1
   src/models/operations/listcollections.ts:
     last_write_checksum: sha1:7008055d09d615b4fe08ec3e801dc289b8cc34f3
   src/models/operations/listcollectionservers.ts:
@@ -6403,9 +6403,9 @@ trackedFiles:
   src/react-query/listAttributeKeys.ts:
     last_write_checksum: sha1:2f45a816099a6dab33e836b234b9d1489a6d6bd4
   src/react-query/listChats.core.ts:
-    last_write_checksum: sha1:18db9077b68cc68c9edf7b4054a8877d49e6ede7
+    last_write_checksum: sha1:e66cb800e9150d2a23e1e2ecaae19113cc3520db
   src/react-query/listChats.ts:
-    last_write_checksum: sha1:83544c25492eeacbc3385d3976abe6aabee89d9e
+    last_write_checksum: sha1:b6b0da378de7d2ba1cb39de9f1125f44a2c6ec87
   src/react-query/listCollections.core.ts:
     last_write_checksum: sha1:ffbfa28d9a9edac27a4609e5e61f8c5241af6bf0
   src/react-query/listCollections.ts:

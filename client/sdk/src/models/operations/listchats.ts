@@ -80,7 +80,7 @@ export type ListChatsRequest = {
    */
   externalUserId?: string | undefined;
   /**
-   * Filter by agent type (comma-separated list of agent-type keys)
+   * Filter by agent type. Comma-separated list of agent type keys (e.g. 'claude,codex,cursor') matched against each session's inferred source; empty for no filter.
    */
   agentType?: string | undefined;
   /**

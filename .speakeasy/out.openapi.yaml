@@ -6129,6 +6129,13 @@ paths:
             description: Filter by external user ID
             type: string
         - allowEmptyValue: true
+          description: Filter by agent type. Comma-separated list of agent type keys (e.g. 'claude,codex,cursor') matched against each session's inferred source; empty for no filter.
+          in: query
+          name: agent_type
+          schema:
+            description: Filter by agent type. Comma-separated list of agent type keys (e.g. 'claude,codex,cursor') matched against each session's inferred source; empty for no filter.
+            type: string
+        - allowEmptyValue: true
           description: Filter to chats produced by this assistant
           in: query
           name: assistant_id
