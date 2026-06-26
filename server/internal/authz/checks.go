@@ -80,44 +80,14 @@ func RiskPolicyApplies(policyID string, bypassDims RiskPolicyDimensions) GrantEx
 	}
 }
 
-// ChatReadCheck builds a Check authorizing read access to a single chat
-// session. ownerUserID carries the chat owner's user id as the user_id
-// dimension so a self-scoped grant (chat:read with user_id=<self>) matches only
-// the caller's own sessions, while an unconstrained chat:read grant (no user_id
-// key — held by admins) matches any owner.
-func ChatReadCheck(chatID, ownerUserID string) Check {
-	// Always carry the user_id dimension — even when empty — so a self-scoped
-	// grant's user_id constraint is enforced. Omitting it would let a member's
-	// {user_id:<self>} grant match a session with no owner (every external /
-	// Elements chat), because selector matching skips dimensions the check does
-	// not constrain. An empty owner only matches an unconstrained (admin) grant.
-	return Check{Scope: ScopeChatRead, ResourceKind: "", ResourceID: chatID, Dimensions: map[string]string{SelectorKeyUserID: ownerUserID}, selectorMatch: selectorMatchNormal, expanded: false}
-}
-
-// ChatReadAllCheck builds a Check that is satisfied only by an UNCONSTRAINED
-// chat:read grant (one with no user_id dimension, or user_id="*" — held by
-// admins). A member's self-scoped grant carries user_id=<self>, which does not
-// match the wildcard user_id this check carries, so the check fails for members.
-// Use it to decide list visibility: pass when the caller may see every owner's
-// sessions, fail when they are constrained to their own.
-//
-// resourceID is a placeholder that does not affect matching: every chat:read
-// grant wildcards resource_id, so any concrete (non-empty, non-"*") value works.
-func ChatReadAllCheck(resourceID string) Check {
-	return Check{Scope: ScopeChatRead, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyUserID: WildcardResource}, selectorMatch: selectorMatchNormal, expanded: false}
-}
-
-// ChatReadSelfGrant builds the synthetic grant that authorizes a user to read
-// their own chat sessions. It is injected into the request grant set so members
-// (whose role does not carry a wildcard chat:read) can still load sessions they
-// own, while admins additionally hold an unconstrained chat:read grant that
-// covers every owner.
-func ChatReadSelfGrant(userID string) Grant {
-	return NewGrantWithSelector(ScopeChatRead, Selector{
-		SelectorKeyResourceKind: ResourceKindChat,
-		SelectorKeyResourceID:   WildcardResource,
-		SelectorKeyUserID:       userID,
-	})
+// ChatReadCheck builds a Check authorizing read access to agent chat sessions.
+// It is satisfied only by an unrestricted chat:read grant (held by admins).
+// Members hold no chat:read grant; their access to sessions they own is granted
+// by owner-matching in the chat handlers, not by this scope. resourceID is a
+// placeholder that does not affect matching — every chat:read grant wildcards
+// resource_id — so any concrete value (the chat or project id) works.
+func ChatReadCheck(resourceID string) Check {
+	return Check{Scope: ScopeChatRead, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}
 }
 
 func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {

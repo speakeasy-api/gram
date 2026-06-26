@@ -216,15 +216,14 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 
 	// Whether the caller sees all project sessions or only their own is decided
 	// by the chat:read RBAC scope — this is a visibility choice, never a gate on
-	// the route, so a caller without unrestricted chat:read (or when the check
-	// can't be made) still gets a successful response scoped to their own
-	// sessions. The same chat:read grant gates the per-session chat.load route.
+	// the route, so a caller without chat:read (or when the check can't be made)
+	// still gets a successful response scoped to their own sessions.
 	//
-	// The probe carries a wildcard user_id, so only an unconstrained chat:read
-	// grant (admins) satisfies it; a member's self-scoped grant
-	// (chat:read user_id=<self>) does not match "*" and falls through to
-	// own-session visibility. This keeps the list SQL-paginated and its `total`
-	// correct, which a per-row authz.Filter pass over each page would not.
+	// Only admins hold a chat:read grant; members hold none and fall through to
+	// own-session visibility (filtered by user_id in SQL, which keeps the list
+	// paginated and its `total` correct — a per-row authz.Filter pass over each
+	// page would not). Members still read their own sessions; the per-session
+	// chat.load route grants that via owner-matching, not via chat:read.
 	//
 	// When RBAC is not enforced for the org we must NOT fall through to "see
 	// all" — Require short-circuits to allow when enforcement is off, so check
@@ -233,7 +232,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
 	} else if enforce {
-		err := s.authz.Require(ctx, authz.ChatReadAllCheck(authCtx.ProjectID.String()))
+		err := s.authz.Require(ctx, authz.ChatReadCheck(authCtx.ProjectID.String()))
 		var shareableErr *oops.ShareableError
 		switch {
 		case err == nil:
@@ -412,12 +411,14 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	}
 
 	// Gate dashboard access on chat:read. The check is a no-op unless RBAC is
-	// enforced for the org (enterprise + feature flag + session). Admins hold an
-	// unrestricted chat:read grant; members hold a self-scoped grant that matches
-	// only sessions they own (chat.UserID == self). The managed-assistant runtime
-	// is exempt — it consumes transcripts programmatically, not as a reviewer.
-	if !isAssistantCall {
-		if err := s.authz.Require(ctx, authz.ChatReadCheck(chat.ID.String(), chat.UserID.String)); err != nil {
+	// enforced for the org (enterprise + feature flag + session). Members can
+	// always read sessions they own, so bypass the scope check for the owner;
+	// reading anyone else's session requires an unrestricted chat:read grant,
+	// which only admins hold. The managed-assistant runtime is exempt — it
+	// consumes transcripts programmatically, not as a reviewer.
+	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
+	if !isAssistantCall && !isOwner {
+		if err := s.authz.Require(ctx, authz.ChatReadCheck(chat.ID.String())); err != nil {
 			return nil, err
 		}
 	}

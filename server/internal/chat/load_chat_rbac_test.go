@@ -13,9 +13,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// A member holding only a self-scoped chat:read grant can load their own
-// session — and the open is recorded in the audit log — but is forbidden from
-// loading another user's session.
+// A member holding no chat:read grant can still load their own session — via
+// owner-matching, and the open is recorded in the audit log — but is forbidden
+// from loading another user's session.
 func TestLoadChat_RBAC_MemberSelfAccess(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
@@ -26,7 +26,8 @@ func TestLoadChat_RBAC_MemberSelfAccess(t *testing.T) {
 	own := seedChat(t, ctx, ti, authCtx.UserID, "", "my session")
 	other := seedChat(t, ctx, ti, "someone-else", "", "their session")
 
-	selfCtx := authztest.WithExactGrants(t, ctx, authz.ChatReadSelfGrant(authCtx.UserID))
+	// RBAC active, no grants: the owner-bypass authorizes their own session.
+	selfCtx := authztest.WithExactGrants(t, ctx)
 
 	before, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
 	require.NoError(t, err)
@@ -107,7 +108,7 @@ func TestLoadChat_RBAC_PaginationNotReAudited(t *testing.T) {
 
 	own := seedChat(t, ctx, ti, authCtx.UserID, "", "my session")
 	ids := seedNMessages(t, ctx, ti, own, 5)
-	selfCtx := authztest.WithExactGrants(t, ctx, authz.ChatReadSelfGrant(authCtx.UserID))
+	selfCtx := authztest.WithExactGrants(t, ctx)
 
 	before, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
 	require.NoError(t, err)

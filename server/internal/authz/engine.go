@@ -157,14 +157,6 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, fmt.Errorf("load authz grants: %w", err)
 	}
 
-	// Every user may read their own chat sessions. The member system role does
-	// not carry a wildcard chat:read grant (that would expose every session), so
-	// inject a self-scoped grant constrained to the caller's user id. Admins
-	// additionally hold an unconstrained chat:read grant via SystemRoleGrants.
-	if authCtx.UserID != "" {
-		grants = append(grants, ChatReadSelfGrant(authCtx.UserID))
-	}
-
 	return GrantsToContext(ctx, grants), nil
 }
 

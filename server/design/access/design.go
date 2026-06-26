@@ -684,9 +684,6 @@ var SelectorModel = Type("Selector", func() {
 		Description("Server URL filter (risk policy scopes only). Include the URI scheme, for example https://api.example.com.")
 		Format(FormatURI)
 	})
-	Attribute("user_id", String, func() {
-		Description("Chat session owner filter (chat scopes only). Constrains a chat:read grant to sessions owned by this user; '*' or absent means any owner.")
-	})
 })
 
 var RoleGrantModel = Type("RoleGrant", func() {

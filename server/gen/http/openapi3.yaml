@@ -45626,9 +45626,6 @@ components:
                 tool:
                     type: string
                     description: Specific tool name filter (MCP scopes only).
-                user_id:
-                    type: string
-                    description: Chat session owner filter (chat scopes only). Constrains a chat:read grant to sessions owned by this user; '*' or absent means any owner.
             description: A constraint that narrows which resources a grant applies to.
             required:
                 - resource_kind

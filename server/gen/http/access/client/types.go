@@ -4671,9 +4671,6 @@ type SelectorResponseBody struct {
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
-	// Chat session owner filter (chat scopes only). Constrains a chat:read grant
-	// to sessions owned by this user; '*' or absent means any owner.
-	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 }
 
 // RoleGrantRequestBody is used to define fields on request body types.
@@ -4700,9 +4697,6 @@ type SelectorRequestBody struct {
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
-	// Chat session owner filter (chat scopes only). Constrains a chat:read grant
-	// to sessions owned by this user; '*' or absent means any owner.
-	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 }
 
 // ScopeDefinitionResponseBody is used to define fields on response body types.
