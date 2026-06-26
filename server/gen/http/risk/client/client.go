@@ -77,6 +77,14 @@ type Client struct {
 	// to the createRiskPolicyBypassRequest endpoint.
 	CreateRiskPolicyBypassRequestDoer goahttp.Doer
 
+	// GetRiskBlock Doer is the HTTP client used to make requests to the
+	// getRiskBlock endpoint.
+	GetRiskBlockDoer goahttp.Doer
+
+	// SubmitRiskBlockFeedback Doer is the HTTP client used to make requests to the
+	// submitRiskBlockFeedback endpoint.
+	SubmitRiskBlockFeedbackDoer goahttp.Doer
+
 	// ListRiskPolicyBypassRequests Doer is the HTTP client used to make requests
 	// to the listRiskPolicyBypassRequests endpoint.
 	ListRiskPolicyBypassRequestsDoer goahttp.Doer
@@ -176,6 +184,8 @@ func NewClient(
 		GetRiskRuleBreakdownDoer:           doer,
 		GetRiskPolicyStatusDoer:            doer,
 		CreateRiskPolicyBypassRequestDoer:  doer,
+		GetRiskBlockDoer:                   doer,
+		SubmitRiskBlockFeedbackDoer:        doer,
 		ListRiskPolicyBypassRequestsDoer:   doer,
 		ApproveRiskPolicyBypassRequestDoer: doer,
 		DenyRiskPolicyBypassRequestDoer:    doer,
@@ -555,6 +565,54 @@ func (c *Client) CreateRiskPolicyBypassRequest() goa.Endpoint {
 		resp, err := c.CreateRiskPolicyBypassRequestDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "createRiskPolicyBypassRequest", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRiskBlock returns an endpoint that makes HTTP requests to the risk
+// service getRiskBlock server.
+func (c *Client) GetRiskBlock() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRiskBlockRequest(c.encoder)
+		decodeResponse = DecodeGetRiskBlockResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRiskBlockRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRiskBlockDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "getRiskBlock", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SubmitRiskBlockFeedback returns an endpoint that makes HTTP requests to the
+// risk service submitRiskBlockFeedback server.
+func (c *Client) SubmitRiskBlockFeedback() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSubmitRiskBlockFeedbackRequest(c.encoder)
+		decodeResponse = DecodeSubmitRiskBlockFeedbackResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSubmitRiskBlockFeedbackRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SubmitRiskBlockFeedbackDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "submitRiskBlockFeedback", err)
 		}
 		return decodeResponse(resp)
 	}

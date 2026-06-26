@@ -968,6 +968,64 @@ func BuildCreateRiskPolicyBypassRequestPayload(riskCreateRiskPolicyBypassRequest
 	return v, nil
 }
 
+// BuildGetRiskBlockPayload builds the payload for the risk getRiskBlock
+// endpoint from CLI flags.
+func BuildGetRiskBlockPayload(riskGetRiskBlockID string, riskGetRiskBlockSessionToken string) (*risk.GetRiskBlockPayload, error) {
+	var err error
+	var id string
+	{
+		id = riskGetRiskBlockID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskBlockSessionToken != "" {
+			sessionToken = &riskGetRiskBlockSessionToken
+		}
+	}
+	v := &risk.GetRiskBlockPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSubmitRiskBlockFeedbackPayload builds the payload for the risk
+// submitRiskBlockFeedback endpoint from CLI flags.
+func BuildSubmitRiskBlockFeedbackPayload(riskSubmitRiskBlockFeedbackBody string, riskSubmitRiskBlockFeedbackSessionToken string) (*risk.SubmitRiskBlockFeedbackPayload, error) {
+	var err error
+	var body SubmitRiskBlockFeedbackRequestBody
+	{
+		err = json.Unmarshal([]byte(riskSubmitRiskBlockFeedbackBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"sentiment\": \"down\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if !(body.Sentiment == "up" || body.Sentiment == "down") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sentiment", body.Sentiment, []any{"up", "down"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if riskSubmitRiskBlockFeedbackSessionToken != "" {
+			sessionToken = &riskSubmitRiskBlockFeedbackSessionToken
+		}
+	}
+	v := &risk.SubmitRiskBlockFeedbackPayload{
+		ID:        body.ID,
+		Sentiment: body.Sentiment,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListRiskPolicyBypassRequestsPayload builds the payload for the risk
 // listRiskPolicyBypassRequests endpoint from CLI flags.
 func BuildListRiskPolicyBypassRequestsPayload(riskListRiskPolicyBypassRequestsPolicyID string, riskListRiskPolicyBypassRequestsStatus string, riskListRiskPolicyBypassRequestsApikeyToken string, riskListRiskPolicyBypassRequestsSessionToken string, riskListRiskPolicyBypassRequestsProjectSlugInput string) (*risk.ListRiskPolicyBypassRequestsPayload, error) {

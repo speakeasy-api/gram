@@ -82,6 +82,16 @@ func CreateRiskPolicyBypassRequestRiskPath() string {
 	return "/rpc/risk.createPolicyBypassRequest"
 }
 
+// GetRiskBlockRiskPath returns the URL path to the risk service getRiskBlock HTTP endpoint.
+func GetRiskBlockRiskPath() string {
+	return "/rpc/risk.getBlock"
+}
+
+// SubmitRiskBlockFeedbackRiskPath returns the URL path to the risk service submitRiskBlockFeedback HTTP endpoint.
+func SubmitRiskBlockFeedbackRiskPath() string {
+	return "/rpc/risk.submitBlockFeedback"
+}
+
 // ListRiskPolicyBypassRequestsRiskPath returns the URL path to the risk service listRiskPolicyBypassRequests HTTP endpoint.
 func ListRiskPolicyBypassRequestsRiskPath() string {
 	return "/rpc/risk.listPolicyBypassRequests"

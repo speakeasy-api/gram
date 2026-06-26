@@ -112,7 +112,7 @@ func UsageCommands() []string {
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer|list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|list-client-sessions|create-client|update-client|delete-client|remove-client-from-mcp-server|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|test-detection-rule)",
+		"risk (create-risk-policy|list-risk-policies|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|test-detection-rule)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|list-tool-usage-traces|get-tool-usage-filter-options|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
@@ -1592,6 +1592,14 @@ func ParseEndpoint(
 		riskCreateRiskPolicyBypassRequestBodyFlag         = riskCreateRiskPolicyBypassRequestFlags.String("body", "REQUIRED", "")
 		riskCreateRiskPolicyBypassRequestSessionTokenFlag = riskCreateRiskPolicyBypassRequestFlags.String("session-token", "", "")
 
+		riskGetRiskBlockFlags            = flag.NewFlagSet("get-risk-block", flag.ExitOnError)
+		riskGetRiskBlockIDFlag           = riskGetRiskBlockFlags.String("id", "REQUIRED", "")
+		riskGetRiskBlockSessionTokenFlag = riskGetRiskBlockFlags.String("session-token", "", "")
+
+		riskSubmitRiskBlockFeedbackFlags            = flag.NewFlagSet("submit-risk-block-feedback", flag.ExitOnError)
+		riskSubmitRiskBlockFeedbackBodyFlag         = riskSubmitRiskBlockFeedbackFlags.String("body", "REQUIRED", "")
+		riskSubmitRiskBlockFeedbackSessionTokenFlag = riskSubmitRiskBlockFeedbackFlags.String("session-token", "", "")
+
 		riskListRiskPolicyBypassRequestsFlags                = flag.NewFlagSet("list-risk-policy-bypass-requests", flag.ExitOnError)
 		riskListRiskPolicyBypassRequestsPolicyIDFlag         = riskListRiskPolicyBypassRequestsFlags.String("policy-id", "", "")
 		riskListRiskPolicyBypassRequestsStatusFlag           = riskListRiskPolicyBypassRequestsFlags.String("status", "", "")
@@ -2483,6 +2491,8 @@ func ParseEndpoint(
 	riskGetRiskRuleBreakdownFlags.Usage = riskGetRiskRuleBreakdownUsage
 	riskGetRiskPolicyStatusFlags.Usage = riskGetRiskPolicyStatusUsage
 	riskCreateRiskPolicyBypassRequestFlags.Usage = riskCreateRiskPolicyBypassRequestUsage
+	riskGetRiskBlockFlags.Usage = riskGetRiskBlockUsage
+	riskSubmitRiskBlockFeedbackFlags.Usage = riskSubmitRiskBlockFeedbackUsage
 	riskListRiskPolicyBypassRequestsFlags.Usage = riskListRiskPolicyBypassRequestsUsage
 	riskApproveRiskPolicyBypassRequestFlags.Usage = riskApproveRiskPolicyBypassRequestUsage
 	riskDenyRiskPolicyBypassRequestFlags.Usage = riskDenyRiskPolicyBypassRequestUsage
@@ -3638,6 +3648,12 @@ func ParseEndpoint(
 
 			case "create-risk-policy-bypass-request":
 				epf = riskCreateRiskPolicyBypassRequestFlags
+
+			case "get-risk-block":
+				epf = riskGetRiskBlockFlags
+
+			case "submit-risk-block-feedback":
+				epf = riskSubmitRiskBlockFeedbackFlags
 
 			case "list-risk-policy-bypass-requests":
 				epf = riskListRiskPolicyBypassRequestsFlags
@@ -4907,6 +4923,12 @@ func ParseEndpoint(
 			case "create-risk-policy-bypass-request":
 				endpoint = c.CreateRiskPolicyBypassRequest()
 				data, err = riskc.BuildCreateRiskPolicyBypassRequestPayload(*riskCreateRiskPolicyBypassRequestBodyFlag, *riskCreateRiskPolicyBypassRequestSessionTokenFlag)
+			case "get-risk-block":
+				endpoint = c.GetRiskBlock()
+				data, err = riskc.BuildGetRiskBlockPayload(*riskGetRiskBlockIDFlag, *riskGetRiskBlockSessionTokenFlag)
+			case "submit-risk-block-feedback":
+				endpoint = c.SubmitRiskBlockFeedback()
+				data, err = riskc.BuildSubmitRiskBlockFeedbackPayload(*riskSubmitRiskBlockFeedbackBodyFlag, *riskSubmitRiskBlockFeedbackSessionTokenFlag)
 			case "list-risk-policy-bypass-requests":
 				endpoint = c.ListRiskPolicyBypassRequests()
 				data, err = riskc.BuildListRiskPolicyBypassRequestsPayload(*riskListRiskPolicyBypassRequestsPolicyIDFlag, *riskListRiskPolicyBypassRequestsStatusFlag, *riskListRiskPolicyBypassRequestsApikeyTokenFlag, *riskListRiskPolicyBypassRequestsSessionTokenFlag, *riskListRiskPolicyBypassRequestsProjectSlugInputFlag)
@@ -11199,6 +11221,8 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    get-risk-rule-breakdown: Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy-status: Get the analysis status of a risk policy including progress and workflow state.`)
 	fmt.Fprintln(os.Stderr, `    create-risk-policy-bypass-request: Create or refresh a risk policy bypass request from a signed request URL token.`)
+	fmt.Fprintln(os.Stderr, `    get-risk-block: Get a tool call block by its risk result ID for the durable block page.`)
+	fmt.Fprintln(os.Stderr, `    submit-risk-block-feedback: Record thumbs-up/thumbs-down feedback for a tool call block from the block page.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-policy-bypass-requests: List current risk policy bypass request workflow records.`)
 	fmt.Fprintln(os.Stderr, `    approve-risk-policy-bypass-request: Approve a risk policy bypass request for the requested policy target.`)
 	fmt.Fprintln(os.Stderr, `    deny-risk-policy-bypass-request: Deny a risk policy bypass request, updating workflow state.`)
@@ -11617,6 +11641,46 @@ func riskCreateRiskPolicyBypassRequestUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy-bypass-request --body '{\n      \"request_token\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func riskGetRiskBlockUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk get-risk-block", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a tool call block by its risk result ID for the durable block page.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-block --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func riskSubmitRiskBlockFeedbackUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk submit-risk-block-feedback", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record thumbs-up/thumbs-down feedback for a tool call block from the block page.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk submit-risk-block-feedback --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"sentiment\": \"down\"\n   }' --session-token \"abc123\"")
 }
 
 func riskListRiskPolicyBypassRequestsUsage() {
