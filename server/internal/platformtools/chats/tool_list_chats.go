@@ -17,6 +17,7 @@ type ListChats struct {
 type listChatsInput struct {
 	Search         *string `json:"search,omitempty" jsonschema:"Substring matched against chat ID, external user ID, and title."`
 	ExternalUserID *string `json:"external_user_id,omitempty" jsonschema:"Restrict results to chats produced by this external user ID."`
+	AgentType      *string `json:"agent_type,omitempty" jsonschema:"Filter by agent type. Comma-separated list of agent type keys (e.g. 'claude,codex,cursor') matched against each session's inferred source; empty for no filter."`
 	AssistantID    *string `json:"assistant_id,omitempty" jsonschema:"Restrict results to chats produced by this assistant ID."`
 	HasRisk        *string `json:"has_risk,omitempty" jsonschema:"Restrict to chats with ('true') or without ('false') risk findings."`
 	Pinned         *string `json:"pinned,omitempty" jsonschema:"Restrict to pinned ('true') or unpinned ('false') chats."`
@@ -64,6 +65,7 @@ func (s *ListChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload 
 	input := listChatsInput{
 		Search:         nil,
 		ExternalUserID: nil,
+		AgentType:      nil,
 		AssistantID:    nil,
 		HasRisk:        nil,
 		Pinned:         nil,
@@ -93,7 +95,7 @@ func (s *ListChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload 
 		ChatSessionsToken: nil,
 		Search:            input.Search,
 		ExternalUserID:    input.ExternalUserID,
-		AgentType:         nil,
+		AgentType:         input.AgentType,
 		AssistantID:       input.AssistantID,
 		HasRisk:           input.HasRisk,
 		Pinned:            input.Pinned,
