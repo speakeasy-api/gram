@@ -6829,11 +6829,11 @@ paths:
                     description: Filter by external user ID
                     type: string
                 - allowEmptyValue: true
-                  description: Filter by agent type. Comma-separated list of agent type keys (e.g. 'claude,codex,cursor') matched against each session's inferred source; empty for no filter.
+                  description: Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.
                   in: query
-                  name: agent_type
+                  name: source
                   schema:
-                    description: Filter by agent type. Comma-separated list of agent type keys (e.g. 'claude,codex,cursor') matched against each session's inferred source; empty for no filter.
+                    description: Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.
                     type: string
                 - allowEmptyValue: true
                   description: Filter to chats produced by this assistant
@@ -7025,6 +7025,104 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListChats
+                type: query
+    /rpc/chat.listSources:
+        get:
+            description: List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.
+            operationId: listChatSources
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSourcesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
+            summary: listSources chat
+            tags:
+                - chat
+            x-speakeasy-name-override: listSources
+            x-speakeasy-react-hook:
+                name: ListChatSources
                 type: query
     /rpc/chat.load:
         get:
@@ -41275,6 +41373,16 @@ components:
                         $ref: '#/components/schemas/ShadowMCPApprovalRequest'
             required:
                 - requests
+        ListSourcesResult:
+            type: object
+            properties:
+                sources:
+                    type: array
+                    items:
+                        type: string
+                    description: The distinct agent sources present in this project's chats (raw source strings such as 'claude-code', 'Codex', 'playground').
+            required:
+                - sources
         ListToolFiltersResult:
             type: object
             properties:

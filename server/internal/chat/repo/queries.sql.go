@@ -105,7 +105,7 @@ candidate_chats AS (
           AND cmsrc.source IS NOT NULL
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      ) ILIKE ANY ($11::text[])
+      ) = ANY ($11::text[])
     )
 ),
 chat_activity AS (
@@ -133,7 +133,7 @@ type CountChatsParams struct {
 	AssistantID    interface{}
 	HasRiskFilter  string
 	MinRiskScore   int32
-	SourcePatterns []string
+	Sources        []string
 }
 
 // risk_counts pre-aggregates active findings per chat once for the whole
@@ -151,7 +151,7 @@ func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, 
 		arg.AssistantID,
 		arg.HasRiskFilter,
 		arg.MinRiskScore,
-		arg.SourcePatterns,
+		arg.Sources,
 	)
 	var total int64
 	err := row.Scan(&total)
@@ -1448,6 +1448,54 @@ func (q *Queries) ListChatResolutions(ctx context.Context, chatID uuid.UUID) ([]
 	return items, nil
 }
 
+const listChatSources = `-- name: ListChatSources :many
+WITH latest_sources AS (
+  SELECT DISTINCT ON (cm.chat_id) cm.source AS source
+  FROM chats c
+  JOIN chat_messages cm ON cm.chat_id = c.id
+  WHERE c.project_id = $1
+    AND c.deleted IS FALSE
+    AND ($2::text = '' OR c.external_user_id = $2::text)
+    AND ($3::text = '' OR c.user_id = $3::text)
+    AND cm.source IS NOT NULL
+  ORDER BY cm.chat_id, cm.created_at DESC
+)
+SELECT DISTINCT source
+FROM latest_sources
+WHERE source IS NOT NULL
+ORDER BY source
+`
+
+type ListChatSourcesParams struct {
+	ProjectID      uuid.UUID
+	ExternalUserID string
+	UserID         string
+}
+
+// Distinct inferred source (the latest non-null message source) across the
+// project's chats, honoring the same visibility scoping as ListChats. Feeds the
+// agent-type filter options on the Agent Sessions page so the list reflects the
+// sources actually present in the data rather than a hardcoded catalog.
+func (q *Queries) ListChatSources(ctx context.Context, arg ListChatSourcesParams) ([]pgtype.Text, error) {
+	rows, err := q.db.Query(ctx, listChatSources, arg.ProjectID, arg.ExternalUserID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Text
+	for rows.Next() {
+		var source pgtype.Text
+		if err := rows.Scan(&source); err != nil {
+			return nil, err
+		}
+		items = append(items, source)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChats = `-- name: ListChats :many
 WITH risk_counts AS (
   SELECT cm.chat_id, COUNT(*)::integer AS cnt
@@ -1512,7 +1560,7 @@ candidate_chats AS (
           AND cmsrc.source IS NOT NULL
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      ) ILIKE ANY ($9::text[])
+      ) = ANY ($9::text[])
     )
 ),
 chat_stats AS (
@@ -1586,7 +1634,7 @@ type ListChatsParams struct {
 	AssistantID    interface{}
 	HasRiskFilter  string
 	MinRiskScore   int32
-	SourcePatterns []string
+	Sources        []string
 	FromTime       pgtype.Timestamptz
 	ToTime         pgtype.Timestamptz
 	SortBy         interface{}
@@ -1622,7 +1670,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.AssistantID,
 		arg.HasRiskFilter,
 		arg.MinRiskScore,
-		arg.SourcePatterns,
+		arg.Sources,
 		arg.FromTime,
 		arg.ToTime,
 		arg.SortBy,
@@ -2191,6 +2239,34 @@ type SeedChatMessageContentParams struct {
 // id, for exercising the text-search windowed view.
 func (q *Queries) SeedChatMessageContent(ctx context.Context, arg SeedChatMessageContentParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, seedChatMessageContent, arg.ChatID, arg.ProjectID, arg.Content)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedChatMessageWithSource = `-- name: SeedChatMessageWithSource :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, source, created_at)
+VALUES ($1, $2, 'user', 'test message', $3, COALESCE($4::timestamptz, clock_timestamp()))
+RETURNING id
+`
+
+type SeedChatMessageWithSourceParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.NullUUID
+	Source    pgtype.Text
+	CreatedAt pgtype.Timestamptz
+}
+
+// Test fixture: insert a chat message carrying a specific source. The per-chat
+// inferred source (used by the agent-type filter and ListChatSources) is the
+// latest non-null message source, so source-filter tests seed messages this way.
+func (q *Queries) SeedChatMessageWithSource(ctx context.Context, arg SeedChatMessageWithSourceParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedChatMessageWithSource,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Source,
+		arg.CreatedAt,
+	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err

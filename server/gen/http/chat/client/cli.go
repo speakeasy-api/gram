@@ -19,7 +19,7 @@ import (
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
 // from CLI flags.
-func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsAgentType string, chatListChatsAssistantID string, chatListChatsHasRisk string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
+func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsHasRisk string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
 	var err error
 	var search *string
 	{
@@ -33,10 +33,10 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 			externalUserID = &chatListChatsExternalUserID
 		}
 	}
-	var agentType *string
+	var source *string
 	{
-		if chatListChatsAgentType != "" {
-			agentType = &chatListChatsAgentType
+		if chatListChatsSource != "" {
+			source = &chatListChatsSource
 		}
 	}
 	var assistantID *string
@@ -193,7 +193,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	v := &chat.ListChatsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
-	v.AgentType = agentType
+	v.Source = source
 	v.AssistantID = assistantID
 	v.HasRisk = hasRisk
 	v.Pinned = pinned
@@ -518,6 +518,35 @@ func BuildSubmitFeedbackPayload(chatSubmitFeedbackBody string, chatSubmitFeedbac
 		ID:       body.ID,
 		Feedback: body.Feedback,
 	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
+// BuildListSourcesPayload builds the payload for the chat listSources endpoint
+// from CLI flags.
+func BuildListSourcesPayload(chatListSourcesSessionToken string, chatListSourcesProjectSlugInput string, chatListSourcesChatSessionsToken string) (*chat.ListSourcesPayload, error) {
+	var sessionToken *string
+	{
+		if chatListSourcesSessionToken != "" {
+			sessionToken = &chatListSourcesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatListSourcesProjectSlugInput != "" {
+			projectSlugInput = &chatListSourcesProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatListSourcesChatSessionsToken != "" {
+			chatSessionsToken = &chatListSourcesChatSessionsToken
+		}
+	}
+	v := &chat.ListSourcesPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

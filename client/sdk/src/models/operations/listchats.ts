@@ -80,9 +80,9 @@ export type ListChatsRequest = {
    */
   externalUserId?: string | undefined;
   /**
-   * Filter by agent type. Comma-separated list of agent type keys (e.g. 'claude,codex,cursor') matched against each session's inferred source; empty for no filter.
+   * Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.
    */
-  agentType?: string | undefined;
+  source?: string | undefined;
   /**
    * Filter to chats produced by this assistant
    */
@@ -252,7 +252,7 @@ export const SortOrder$outboundSchema: z.ZodMiniEnum<typeof SortOrder> = z.enum(
 export type ListChatsRequest$Outbound = {
   search?: string | undefined;
   external_user_id?: string | undefined;
-  agent_type?: string | undefined;
+  source?: string | undefined;
   assistant_id?: string | undefined;
   has_risk?: string | undefined;
   pinned?: string | undefined;
@@ -276,7 +276,7 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     search: z.optional(z.string()),
     externalUserId: z.optional(z.string()),
-    agentType: z.optional(z.string()),
+    source: z.optional(z.string()),
     assistantId: z.optional(z.string()),
     hasRisk: z.optional(HasRisk$outboundSchema),
     pinned: z.optional(Pinned$outboundSchema),
@@ -294,7 +294,6 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       externalUserId: "external_user_id",
-      agentType: "agent_type",
       assistantId: "assistant_id",
       hasRisk: "has_risk",
       minRiskScore: "min_risk_score",

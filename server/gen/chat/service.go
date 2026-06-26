@@ -44,6 +44,9 @@ type Service interface {
 	SetPinned(context.Context, *SetPinnedPayload) (err error)
 	// Submit user feedback for a chat (success/failure)
 	SubmitFeedback(context.Context, *SubmitFeedbackPayload) (res *SubmitFeedbackResult, err error)
+	// List the distinct agent sources present in this project's chats, for
+	// populating the agent-type filter on the Agent Sessions page.
+	ListSources(context.Context, *ListSourcesPayload) (res *ListSourcesResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -68,7 +71,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"listChats", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "submitFeedback"}
+var MethodNames = [8]string{"listChats", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "submitFeedback", "listSources"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -335,10 +338,11 @@ type ListChatsPayload struct {
 	Search *string
 	// Filter by external user ID
 	ExternalUserID *string
-	// Filter by agent type. Comma-separated list of agent type keys (e.g.
-	// 'claude,codex,cursor') matched against each session's inferred source; empty
-	// for no filter.
-	AgentType *string
+	// Filter by agent source. Comma-separated list of exact source values (e.g.
+	// 'claude-code,Codex,playground') matched against each session's inferred
+	// source; empty for no filter. Use chat.listSources to discover the available
+	// values.
+	Source *string
 	// Filter to chats produced by this assistant
 	AssistantID *string
 	// Filter by whether chat has risk findings: 'true', 'false', or empty for no
@@ -370,6 +374,21 @@ type ListChatsResult struct {
 	Chats []*ChatOverview
 	// Total number of chats (before pagination)
 	Total int
+}
+
+// ListSourcesPayload is the payload type of the chat service listSources
+// method.
+type ListSourcesPayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+}
+
+// ListSourcesResult is the result type of the chat service listSources method.
+type ListSourcesResult struct {
+	// The distinct agent sources present in this project's chats (raw source
+	// strings such as 'claude-code', 'Codex', 'playground').
+	Sources []string
 }
 
 // LoadChatPayload is the payload type of the chat service loadChat method.

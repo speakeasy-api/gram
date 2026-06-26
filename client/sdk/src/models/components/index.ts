@@ -221,6 +221,7 @@ export * from "./listsessionspayload.js";
 export * from "./listsessionsresult.js";
 export * from "./listshadowmcpaccessrulesresult.js";
 export * from "./listshadowmcpapprovalrequestsresult.js";
+export * from "./listsourcesresult.js";
 export * from "./listtoolfiltersresult.js";
 export * from "./listtoolsetsresult.js";
 export * from "./listtoolsetsummariesresult.js";
