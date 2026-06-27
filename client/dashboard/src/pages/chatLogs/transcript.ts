@@ -218,14 +218,6 @@ export function rowIsFlagged(
   );
 }
 
-/** Whether a row renders the message with this `seq` (a tool row spans its
- * assistant call and the tool-result message). Used to locate a search match's
- * row so the transcript can scroll to it. */
-export function rowMatchesSeq(row: TranscriptRow, seq: number): boolean {
-  if (row.kind === "message") return row.message.seq === seq;
-  return row.callMessage?.seq === seq || row.resultMessage?.seq === seq;
-}
-
 /** Whether a row renders any message whose `seq` is in `seqs` (e.g. the
  * server-reported risk finding seqs from a risk-windowed load). The seq-based
  * counterpart to rowIsFlagged that doesn't need per-message risk results, so it

@@ -773,7 +773,7 @@ function LoadDivider({
 // re-rendering the expensive ToolUI on each next/prev.
 /** The query field + occurrence index the global navigator is currently on,
  * within the row this is passed to (null for every non-active row). */
-export interface ActiveField {
+interface ActiveField {
   key: SearchFieldKey;
   index: number;
 }
