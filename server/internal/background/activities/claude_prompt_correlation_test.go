@@ -71,7 +71,7 @@ func TestCorrelateClaudePromptsReturnsNonTimeoutCandidateErrors(t *testing.T) {
 	require.ErrorContains(t, err, "find Claude user prompt match")
 }
 
-func TestCorrelateClaudePromptsSkipsPerMessageCandidateTimeout(t *testing.T) {
+func TestCorrelateClaudePromptsReturnsPerMessageCandidateTimeout(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeClaudePromptStore{
@@ -83,15 +83,13 @@ func TestCorrelateClaudePromptsSkipsPerMessageCandidateTimeout(t *testing.T) {
 
 	result, err := act.Do(context.Background(), fakeCorrelateClaudePromptsArgs())
 
-	require.NoError(t, err)
-	require.False(t, result.HasMore)
-	require.Zero(t, result.AfterMessageSeq)
-	require.Zero(t, result.AfterEventSequence)
-	require.Zero(t, result.AfterEventTimeUnixNano)
+	require.Nil(t, result)
+	require.ErrorIs(t, err, errClaudePromptCorrelationMatchTimeout)
+	require.ErrorContains(t, err, "find Claude user prompt match")
 	require.False(t, store.backfilled)
 }
 
-func TestCorrelateClaudePromptsStopsPassOnCandidateTimeoutEvenWithMoreRows(t *testing.T) {
+func TestCorrelateClaudePromptsReturnsCandidateTimeoutBeforeLaterRows(t *testing.T) {
 	t.Parallel()
 
 	rows := make([]activitiesrepo.ListUnlinkedClaudeUserMessagesForCorrelationRow, 0, claudePromptCorrelationMessageBatchSize+1)
@@ -105,11 +103,9 @@ func TestCorrelateClaudePromptsStopsPassOnCandidateTimeoutEvenWithMoreRows(t *te
 
 	result, err := act.Do(context.Background(), fakeCorrelateClaudePromptsArgs())
 
-	require.NoError(t, err)
-	require.False(t, result.HasMore)
-	require.Zero(t, result.AfterMessageSeq)
-	require.Zero(t, result.AfterEventSequence)
-	require.Zero(t, result.AfterEventTimeUnixNano)
+	require.Nil(t, result)
+	require.ErrorIs(t, err, errClaudePromptCorrelationMatchTimeout)
+	require.False(t, store.backfilled)
 }
 
 func TestCorrelateClaudePromptsReturnsBackfillErrors(t *testing.T) {
