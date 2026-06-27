@@ -405,6 +405,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		hasMoreBefore  bool
 		hasMoreAfter   bool
 		riskSegments   []*gen.RiskSegment
+		riskSeqs       []int64
 		matchSegments  []*gen.RiskSegment
 		matchSeqs      []int64
 		// latestPageRows holds the repo rows of the initial newest page so we can
@@ -442,6 +443,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load risk-windowed messages").LogError(ctx, s.logger)
 		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
+		riskSeqs = make([]int64, 0, len(rows))
 		for i := range rows {
 			r := rows[i]
 			toolCalls := string(r.ToolCalls)
@@ -459,6 +461,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 				PromptID:       conv.FromPGText[string](r.MessageID),
 				CreatedAt:      r.CreatedAt.Time.Format(time.RFC3339),
 				Generation:     int(r.Generation),
+			}
+			if r.IsRisk {
+				riskSeqs = append(riskSeqs, r.Seq)
 			}
 		}
 		riskSegments = buildRiskSegments(rows)
@@ -650,6 +655,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		HasMoreBefore:        hasMoreBefore,
 		HasMoreAfter:         hasMoreAfter,
 		RiskSegments:         riskSegments,
+		RiskSeqs:             riskSeqs,
 		MatchSegments:        matchSegments,
 		MatchSeqs:            matchSeqs,
 		Totals: &gen.ChatTotals{

@@ -97,6 +97,10 @@ type Chat struct {
 	// messages, each spanning a risk finding and its surrounding context. Use each
 	// segment's cursors to expand it.
 	RiskSegments []*RiskSegment
+	// Present only when `risk_only` was requested: the `seq` of every message that
+	// has an active risk finding, ascending. These are the flagged messages
+	// themselves; surrounding-context messages in `messages` are not listed here.
+	RiskSeqs []int64
 	// Present only when `query` was requested: contiguous runs of returned
 	// messages, each spanning one or more query matches and their surrounding
 	// context. Use each segment's cursors to expand it.
@@ -399,7 +403,8 @@ type LoadChatPayload struct {
 	FromStart bool
 	// When true, return only messages that have active risk findings, each padded
 	// with a fixed window of surrounding messages, grouped into contiguous
-	// segments (see `risk_segments`). Cursors are ignored in this mode; expand a
+	// segments (see `risk_segments`). The seqs of the flagged messages themselves
+	// are listed in `risk_seqs`. Cursors are ignored in this mode; expand a
 	// segment with a follow-up `before_seq`/`after_seq` request. Mutually
 	// exclusive with `query`.
 	RiskOnly bool

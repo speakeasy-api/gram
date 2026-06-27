@@ -1707,7 +1707,9 @@ risk_rns AS (
       AND rr.false_positive_at IS NULL
   )
 )
-SELECT o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.created_at, o.risk_analyzed_at, o.rn, o.total
+SELECT
+  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.created_at, o.risk_analyzed_at, o.rn, o.total,
+  EXISTS (SELECT 1 FROM risk_rns r WHERE r.rn = o.rn) AS is_risk
 FROM ordered o
 WHERE EXISTS (
   SELECT 1 FROM risk_rns r
@@ -1757,6 +1759,7 @@ type ListRiskWindowedMessagesRow struct {
 	RiskAnalyzedAt    pgtype.Timestamptz
 	Rn                int64
 	Total             int64
+	IsRisk            bool
 }
 
 // Risk-only view: returns every message within +/- @context_size ordinal
@@ -1765,7 +1768,9 @@ type ListRiskWindowedMessagesRow struct {
 // is the generation's message count, so the caller can fold consecutive rn into
 // contiguous segments and decide whether earlier (rn > 1) or later (rn < total)
 // messages remain to be expanded. Overlapping windows merge naturally via set
-// membership.
+// membership. is_risk flags the seed rows (the flagged messages themselves) so
+// the caller can return the explicit risk seq list (context rows are
+// is_risk = false).
 func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWindowedMessagesParams) ([]ListRiskWindowedMessagesRow, error) {
 	rows, err := q.db.Query(ctx, listRiskWindowedMessages,
 		arg.ContextSize,
@@ -1814,6 +1819,7 @@ func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWind
 			&i.RiskAnalyzedAt,
 			&i.Rn,
 			&i.Total,
+			&i.IsRisk,
 		); err != nil {
 			return nil, err
 		}

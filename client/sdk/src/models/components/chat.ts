@@ -71,6 +71,10 @@ export type Chat = {
    */
   riskSegments?: Array<RiskSegment> | undefined;
   /**
+   * Present only when `risk_only` was requested: the `seq` of every message that has an active risk finding, ascending. These are the flagged messages themselves; surrounding-context messages in `messages` are not listed here.
+   */
+  riskSeqs?: Array<number> | undefined;
+  /**
    * The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)
    */
   source?: string | undefined;
@@ -132,6 +136,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
     num_messages: z.int(),
     risk_findings_count: z.optional(z.int()),
     risk_segments: z.optional(z.array(RiskSegment$inboundSchema)),
+    risk_seqs: z.optional(z.array(z.int())),
     source: z.optional(z.string()),
     title: z.string(),
     total_cost: z.optional(z.number()),
@@ -159,6 +164,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "num_messages": "numMessages",
       "risk_findings_count": "riskFindingsCount",
       "risk_segments": "riskSegments",
+      "risk_seqs": "riskSeqs",
       "total_cost": "totalCost",
       "total_input_tokens": "totalInputTokens",
       "total_output_tokens": "totalOutputTokens",

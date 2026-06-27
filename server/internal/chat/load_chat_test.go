@@ -544,3 +544,137 @@ func TestLoadChat_Totals_GenerationScoped(t *testing.T) {
 	require.Equal(t, int64(5), older.Totals.UserMessages)
 	require.Equal(t, int64(2), older.Totals.RiskOnly)
 }
+
+// TestLoadChat_RiskOnly_ReturnsRiskSeqs verifies that risk_only returns the
+// exact seqs of the flagged messages in `risk_seqs` — the surrounding context
+// messages come back in `messages` but are NOT listed as findings. This is the
+// authorized "which messages are risky" signal the dashboard filters on without
+// the org-admin-only risk.results.list endpoint.
+func TestLoadChat_RiskOnly_ReturnsRiskSeqs(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, ctx, ti, "u", "", "risk chat")
+	ids := seedNMessages(t, ctx, ti, chatID, 30)
+	seqs := allSeqs(t, ctx, ti, chatID, ids)
+
+	// Findings on positions 13 and 25 (indexes 12, 24) → disjoint ±5 windows.
+	attachRiskTo(t, ctx, ti, ids[12], ids[24])
+
+	p := loadPayload(chatID.String())
+	p.RiskOnly = true
+	res, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+
+	// risk_seqs are exactly the two flagged messages, ascending — not the
+	// surrounding context, even though context is present in messages.
+	require.Equal(t, []int64{seqs[12], seqs[24]}, res.RiskSeqs)
+
+	// Every risk seq is present among the returned messages, and a known context
+	// row (position 8, index 7) is returned but is not a finding.
+	returned := make(map[int64]bool, len(res.Messages))
+	for _, m := range res.Messages {
+		returned[m.Seq] = true
+	}
+	for _, s := range res.RiskSeqs {
+		require.True(t, returned[s], "risk seq %d must be among returned messages", s)
+	}
+	require.True(t, returned[seqs[7]], "context message should be windowed in")
+	require.NotContains(t, res.RiskSeqs, seqs[7], "context message must not be a finding")
+
+	// risk_seqs is a risk-only signal; query-mode fields stay empty.
+	require.Empty(t, res.MatchSeqs)
+	require.Empty(t, res.MatchSegments)
+}
+
+// TestLoadChat_Search_AcrossManyPages verifies the search-windowed view finds
+// matches anywhere in the generation — not just within one keyset page. With a
+// thread far larger than a normal page and matches near both ends, a single
+// query response returns both, each in its own segment.
+func TestLoadChat_Search_AcrossManyPages(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, ctx, ti, "u", "", "search chat")
+	// 120 messages — well beyond the default 50-per-page keyset window. Matches
+	// sit at positions 50 and 116, far enough apart that the newest 50-message
+	// page (positions 71..120) holds only one: a per-page search would miss the
+	// other. The windowed search scans the whole generation, so it finds both.
+	const total = 120
+	for i := 1; i <= total; i++ {
+		content := "ordinary message"
+		if i == 50 || i == 116 {
+			content = "this line has a NEEDLE in it"
+		}
+		seedMessageContent(t, ctx, ti, chatID, content)
+	}
+
+	allP := loadPayload(chatID.String())
+	allP.Limit = 200
+	all, err := ti.service.LoadChat(ctx, allP)
+	require.NoError(t, err)
+	require.Len(t, all.Messages, total)
+	firstMatch, lastMatch := all.Messages[49].Seq, all.Messages[115].Seq
+
+	q := "needle"
+	p := loadPayload(chatID.String())
+	p.Query = &q
+	res, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+
+	// Both matches come back in one response despite spanning many pages.
+	require.Equal(t, []int64{firstMatch, lastMatch}, res.MatchSeqs)
+	require.Len(t, res.MatchSegments, 2, "matches form two disjoint windows")
+	// First window (around position 50) has messages on both sides; the last
+	// window reaches the final message, so nothing remains after it.
+	require.True(t, res.MatchSegments[0].HasMoreBefore, "context exists before the first window")
+	require.True(t, res.MatchSegments[0].HasMoreAfter, "context exists between the two windows")
+	require.False(t, res.MatchSegments[1].HasMoreAfter, "last window reaches the final message")
+}
+
+// TestLoadChat_RiskAndSearch_SameThread verifies risk and search work
+// independently on a thread that has both a finding and a query match: risk_only
+// returns the finding (and no matches), query returns the match (and no
+// findings). The two windowed modes are per-request exclusive but coexist in the
+// same data.
+func TestLoadChat_RiskAndSearch_SameThread(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, ctx, ti, "u", "", "mixed chat")
+	// 20 messages: position 5 carries the search needle, position 15 carries the
+	// risk finding — distinct messages so the two views don't overlap.
+	const total = 20
+	ids := make([]uuid.UUID, total)
+	for i := 1; i <= total; i++ {
+		content := "ordinary message"
+		if i == 5 {
+			content = "this line has a NEEDLE in it"
+		}
+		ids[i-1] = seedMessageContent(t, ctx, ti, chatID, content)
+	}
+	seqs := allSeqs(t, ctx, ti, chatID, ids)
+	attachRiskTo(t, ctx, ti, ids[14]) // finding on position 15
+
+	// risk_only returns the finding and nothing search-related.
+	riskP := loadPayload(chatID.String())
+	riskP.RiskOnly = true
+	riskRes, err := ti.service.LoadChat(ctx, riskP)
+	require.NoError(t, err)
+	require.Equal(t, []int64{seqs[14]}, riskRes.RiskSeqs)
+	require.Len(t, riskRes.RiskSegments, 1)
+	require.Empty(t, riskRes.MatchSeqs)
+
+	// query returns the match and nothing risk-related.
+	q := "needle"
+	searchP := loadPayload(chatID.String())
+	searchP.Query = &q
+	searchRes, err := ti.service.LoadChat(ctx, searchP)
+	require.NoError(t, err)
+	require.Equal(t, []int64{seqs[4]}, searchRes.MatchSeqs)
+	require.Len(t, searchRes.MatchSegments, 1)
+	require.Empty(t, searchRes.RiskSeqs)
+}

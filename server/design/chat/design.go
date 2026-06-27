@@ -108,7 +108,7 @@ var _ = Service("chat", func() {
 			Attribute("from_start", Boolean, "When true, return the oldest page of the generation (the start of the thread), ordered oldest to newest, with `has_more_before=false`. Page forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`, or `risk_only` is set.", func() {
 				Default(false)
 			})
-			Attribute("risk_only", Boolean, "When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.", func() {
+			Attribute("risk_only", Boolean, "When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). The seqs of the flagged messages themselves are listed in `risk_seqs`. Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.", func() {
 				Default(false)
 			})
 			Attribute("query", String, "When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). The seqs that actually matched are listed in `match_seqs`. Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.", func() {
@@ -296,6 +296,7 @@ var Chat = Type("Chat", func() {
 	Attribute("has_more_before", Boolean, "Whether older messages exist before the first message in this page (within the returned generation). Load them with a `before_seq` cursor.")
 	Attribute("has_more_after", Boolean, "Whether newer messages exist after the last message in this page (within the returned generation). Load them with an `after_seq` cursor.")
 	Attribute("risk_segments", ArrayOf(RiskSegment), "Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment's cursors to expand it.")
+	Attribute("risk_seqs", ArrayOf(Int64), "Present only when `risk_only` was requested: the `seq` of every message that has an active risk finding, ascending. These are the flagged messages themselves; surrounding-context messages in `messages` are not listed here.")
 	Attribute("match_segments", ArrayOf(RiskSegment), "Present only when `query` was requested: contiguous runs of returned messages, each spanning one or more query matches and their surrounding context. Use each segment's cursors to expand it.")
 	Attribute("match_seqs", ArrayOf(Int64), "Present only when `query` was requested: the `seq` of every message whose text matched the query, ascending. These are the jump-to-match navigation targets; surrounding-context messages in `messages` are not listed here.")
 	Attribute("agent_usage", AgentUsage, "Agent-specific usage enrichment for the chat, when available.")

@@ -525,7 +525,9 @@ LIMIT @lim::integer;
 -- is the generation's message count, so the caller can fold consecutive rn into
 -- contiguous segments and decide whether earlier (rn > 1) or later (rn < total)
 -- messages remain to be expanded. Overlapping windows merge naturally via set
--- membership.
+-- membership. is_risk flags the seed rows (the flagged messages themselves) so
+-- the caller can return the explicit risk seq list (context rows are
+-- is_risk = false).
 WITH ordered AS (
   SELECT
     cm.*,
@@ -547,7 +549,9 @@ risk_rns AS (
       AND rr.false_positive_at IS NULL
   )
 )
-SELECT o.*
+SELECT
+  o.*,
+  EXISTS (SELECT 1 FROM risk_rns r WHERE r.rn = o.rn) AS is_risk
 FROM ordered o
 WHERE EXISTS (
   SELECT 1 FROM risk_rns r

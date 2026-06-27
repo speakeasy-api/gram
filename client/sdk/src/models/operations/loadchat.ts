@@ -45,7 +45,7 @@ export type LoadChatRequest = {
    */
   fromStart?: boolean | undefined;
   /**
-   * When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.
+   * When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). The seqs of the flagged messages themselves are listed in `risk_seqs`. Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.
    */
   riskOnly?: boolean | undefined;
   /**

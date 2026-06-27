@@ -66,6 +66,10 @@ type LoadChatResponseBody struct {
 	// messages, each spanning a risk finding and its surrounding context. Use each
 	// segment's cursors to expand it.
 	RiskSegments []*RiskSegmentResponseBody `form:"risk_segments,omitempty" json:"risk_segments,omitempty" xml:"risk_segments,omitempty"`
+	// Present only when `risk_only` was requested: the `seq` of every message that
+	// has an active risk finding, ascending. These are the flagged messages
+	// themselves; surrounding-context messages in `messages` are not listed here.
+	RiskSeqs []int64 `form:"risk_seqs,omitempty" json:"risk_seqs,omitempty" xml:"risk_seqs,omitempty"`
 	// Present only when `query` was requested: contiguous runs of returned
 	// messages, each spanning one or more query matches and their surrounding
 	// context. Use each segment's cursors to expand it.
@@ -1608,6 +1612,12 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 				continue
 			}
 			v.RiskSegments[i] = unmarshalRiskSegmentResponseBodyToChatRiskSegment(val)
+		}
+	}
+	if body.RiskSeqs != nil {
+		v.RiskSeqs = make([]int64, len(body.RiskSeqs))
+		for i, val := range body.RiskSeqs {
+			v.RiskSeqs[i] = val
 		}
 	}
 	if body.MatchSegments != nil {

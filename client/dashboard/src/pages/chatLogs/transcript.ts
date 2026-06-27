@@ -11,6 +11,70 @@ type MessageEntryType = Extract<
   "user" | "assistant" | "system"
 >;
 
+// Strip the injected `<message-context>…</message-context>` envelope (event id,
+// timestamp, user id) and trailing whitespace the harness prepends to prompts —
+// it's machine plumbing, not part of the conversation.
+function cleanMessageText(raw: string): string {
+  return raw
+    .replace(/^\s*<message-context>[\s\S]*?<\/message-context>/i, "")
+    .replace(/[ \t]+$/gm, "")
+    .trim();
+}
+
+/** Render-time plain text of a message's content (string, multimodal text
+ * parts, or JSON fallback). The single source of truth shared by the renderer
+ * and the search-occurrence enumeration so counts and marks stay aligned. */
+export function messageText(content: unknown): string {
+  if (typeof content === "string") return cleanMessageText(content);
+  if (Array.isArray(content)) {
+    return cleanMessageText(
+      content
+        .map((part) =>
+          part &&
+          typeof part === "object" &&
+          "text" in part &&
+          typeof (part as { text: unknown }).text === "string"
+            ? (part as { text: string }).text
+            : "",
+        )
+        .filter(Boolean)
+        .join("\n"),
+    );
+  }
+  if (content == null) return "";
+  return JSON.stringify(content, null, 2);
+}
+
+/** Render-time string of a tool call's arguments. */
+export function argsToString(
+  args: string | object | undefined,
+): string | undefined {
+  if (args === undefined) return undefined;
+  return typeof args === "string" ? args : JSON.stringify(args, null, 2);
+}
+
+/** Case-insensitive, non-overlapping occurrences of `query` in `text`. The one
+ * source of truth for both the search highlighter (which marks these ranges) and
+ * the occurrence counter/navigator (which counts them) — they MUST agree or the
+ * "n/total" position desyncs from the bright mark. */
+export function findQueryRanges(
+  text: string,
+  query: string,
+): Array<{ start: number; end: number }> {
+  const q = query.trim();
+  if (!q) return [];
+  const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (let m = re.exec(text); m !== null; m = re.exec(text)) {
+    if (m[0].length === 0) {
+      re.lastIndex++; // defensive: never loop on a zero-length match
+      continue;
+    }
+    ranges.push({ start: m.index, end: m.index + m[0].length });
+  }
+  return ranges;
+}
+
 /** A plain user / assistant / system turn rendered as a chat bubble. */
 export interface MessageRow {
   kind: "message";
@@ -160,6 +224,83 @@ export function rowIsFlagged(
 export function rowMatchesSeq(row: TranscriptRow, seq: number): boolean {
   if (row.kind === "message") return row.message.seq === seq;
   return row.callMessage?.seq === seq || row.resultMessage?.seq === seq;
+}
+
+/** Whether a row renders any message whose `seq` is in `seqs` (e.g. the
+ * server-reported risk finding seqs from a risk-windowed load). The seq-based
+ * counterpart to rowIsFlagged that doesn't need per-message risk results, so it
+ * works without the org-admin-only risk.results.list endpoint. */
+export function rowHasSeqIn(
+  row: TranscriptRow,
+  seqs: ReadonlySet<number>,
+): boolean {
+  if (row.kind === "message") return seqs.has(row.message.seq);
+  return (
+    (row.callMessage != null && seqs.has(row.callMessage.seq)) ||
+    (row.resultMessage != null && seqs.has(row.resultMessage.seq))
+  );
+}
+
+/** A query-highlighted field within a row, in render order. A plain message has
+ * one "text" field; a tool spans "name" (header), "args" (Arguments), and
+ * "output" (Output). */
+export type SearchFieldKey = "text" | "name" | "args" | "output";
+
+export interface RowSearchField {
+  key: SearchFieldKey;
+  /** Number of query occurrences rendered in this field. */
+  count: number;
+}
+
+/** The ordered, query-highlighted fields of a row with their occurrence counts —
+ * the per-row contribution to the unified occurrence navigator. Mirrors EXACTLY
+ * what the renderer highlights (see ChatTranscript): risk-flagged messages and
+ * risk-flagged tool sections render the risk highlighter, not the query one, so
+ * they contribute nothing here; system rows aren't query-highlighted either. If
+ * this diverges from the render, next/prev desyncs from the visible marks. */
+export function rowSearchFields(
+  row: TranscriptRow,
+  query: string,
+  riskResultsByMessage: ReadonlyMap<string, readonly unknown[]>,
+): RowSearchField[] {
+  const q = query.trim();
+  if (!q) return [];
+  const flagged = (id: string) =>
+    (riskResultsByMessage.get(id)?.length ?? 0) > 0;
+
+  if (row.kind === "message") {
+    // System rows render a collapsed <details> without query highlighting, and
+    // flagged rows render the risk highlighter — neither contributes occurrences.
+    if (row.entryType === "system" || flagged(row.message.id)) return [];
+    const count = findQueryRanges(messageText(row.message.content), q).length;
+    return count > 0 ? [{ key: "text", count }] : [];
+  }
+
+  const fields: RowSearchField[] = [];
+  const name =
+    row.toolCall?.function?.name || row.toolCall?.name || "Tool result";
+  const nameCount = findQueryRanges(name, q).length;
+  if (nameCount > 0) fields.push({ key: "name", count: nameCount });
+
+  // A section that has risk findings renders the risk highlighter instead of the
+  // search one, so it contributes no search occurrences.
+  const callFlagged = row.callMessage ? flagged(row.callMessage.id) : false;
+  const request = argsToString(row.toolCall?.function?.arguments);
+  if (!callFlagged && request) {
+    const c = findQueryRanges(request, q).length;
+    if (c > 0) fields.push({ key: "args", count: c });
+  }
+  const resultFlagged = row.resultMessage
+    ? flagged(row.resultMessage.id)
+    : false;
+  const result = row.resultMessage
+    ? messageText(row.resultMessage.content)
+    : undefined;
+  if (!resultFlagged && result) {
+    const c = findQueryRanges(result, q).length;
+    if (c > 0) fields.push({ key: "output", count: c });
+  }
+  return fields;
 }
 
 /** Coarse message-type bucket for the header transcript filter. System turns

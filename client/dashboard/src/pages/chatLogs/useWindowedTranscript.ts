@@ -28,6 +28,14 @@ export interface WindowedTranscript {
   loadingKey: WindowLoadKey | null;
   isLoading: boolean;
   isError: boolean;
+  /** Seqs of messages that matched the query, ascending — the jump targets.
+   * Empty in risk-only mode (risk findings aren't jump targets). */
+  matchSeqs: number[];
+  /** Seqs of messages that have an active risk finding, ascending. Populated in
+   * risk-only mode (empty in search mode). Lets callers identify the flagged
+   * messages from the authorized chat.load response, without the org-admin-only
+   * risk.results.list endpoint. */
+  riskSeqs: number[];
 }
 
 interface WindowState {
@@ -37,12 +45,17 @@ interface WindowState {
   hasMoreAfter: boolean;
 }
 
-/** The initial windowed request (everything but the chat id), e.g.
- * `{ riskOnly: true }` or `{ query }`. */
+/** The initial windowed request (everything but the chat id). Exactly one mode
+ * is used: `{ riskOnly: true }` windows around risk findings, `{ query }`
+ * windows around text-search matches. */
 export interface WindowedRequest {
   riskOnly?: boolean;
   query?: string;
 }
+
+// Stable empty array so search consumers' memo/effect deps don't see a new
+// identity every render while there are no matches (or in risk-only mode).
+const EMPTY_SEQS: number[] = [];
 
 // mergeSorted unions two message lists, dedupes by seq, and keeps ascending order.
 function mergeSorted(a: ChatMessage[], b: ChatMessage[]): ChatMessage[] {
@@ -67,19 +80,22 @@ function buildInitial(chat: Chat, segments: RiskSegment[]): WindowState {
   };
 }
 
-// useWindowedTranscript loads a windowed slice of a chat (messages around risk
-// findings, or around text-search matches) plus surrounding context, then lets
-// the user expand the edges and fill the gaps between disjoint windows. The mode
-// is decided by `request` (the initial load) and `segmentsOf` (which response
-// field carries the window segments). The incremental expansion is identical for
-// both modes: plain before_seq/after_seq page loads merged into the window.
+// useWindowedTranscript loads a windowed slice of a chat plus surrounding
+// context, then lets the user expand the edges and fill the gaps between
+// disjoint windows. The mode is decided by `request`: `{ riskOnly: true }`
+// windows around risk findings (segments in `risk_segments`), `{ query }`
+// windows around text-search matches (segments in `match_segments`, plus
+// `match_seqs` jump targets). The incremental expansion is identical for both
+// modes: plain before_seq/after_seq page loads merged into the window.
 export function useWindowedTranscript(
   chatId: string,
   enabled: boolean,
   request: WindowedRequest,
-  segmentsOf: (chat: Chat) => RiskSegment[] | undefined,
 ): WindowedTranscript {
   const client = useSdkClient();
+  // Which response field carries the window segments depends on the mode. A
+  // primitive (not a derived array) so it's a stable effect dependency.
+  const riskOnly = request.riskOnly ?? false;
   const base = useLoadChat(
     { id: chatId, limit: WINDOW_INITIAL_LIMIT, ...request },
     undefined,
@@ -115,10 +131,12 @@ export function useWindowedTranscript(
   // or refetch). User expansions and any prior incremental-load error are reset.
   useEffect(() => {
     if (base.data) {
-      setState(buildInitial(base.data, segmentsOf(base.data) ?? []));
+      const segments =
+        (riskOnly ? base.data.riskSegments : base.data.matchSegments) ?? [];
+      setState(buildInitial(base.data, segments));
       setLoadError(false);
     }
-  }, [base.data, segmentsOf]);
+  }, [base.data, riskOnly]);
 
   // Runs one incremental page load: ignores the result if the active request
   // changed mid-flight (chat switch or new query), and records failures so they
@@ -210,5 +228,10 @@ export function useWindowedTranscript(
     loadingKey,
     isLoading: base.isLoading,
     isError: base.isError || loadError,
+    // matchSeqs/riskSeqs come from the initial windowed response and don't change
+    // as the user expands the window, so read them straight off the base chat
+    // (stable react-query identity). Each is empty in the other mode.
+    matchSeqs: base.data?.matchSeqs ?? EMPTY_SEQS,
+    riskSeqs: base.data?.riskSeqs ?? EMPTY_SEQS,
   };
 }
