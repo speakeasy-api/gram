@@ -117,17 +117,18 @@ func (c *CorrelateClaudePrompts) Do(ctx context.Context, args CorrelateClaudePro
 		match, ok, err := c.findClaudeUserPromptMatch(ctx, args.ProjectID, args.ChatID, args.SessionID, message, cursor)
 		if err != nil {
 			if errors.Is(err, errClaudePromptCorrelationMatchTimeout) {
-				result.AfterMessageSeq = message.seq
 				// One slow ClickHouse query must not abort the run: that would
-				// leave the backlog unprocessed and, because a run is scheduled
-				// per prompt event, spin into a retry storm. Skip it and keep
-				// draining the rest.
+				// retry the whole workflow and can also leave us unable to know
+				// which telemetry event belongs to this message. Stop this pass
+				// without advancing cursors so a later scheduled run can retry
+				// the message without letting later messages reuse its event.
 				c.logger.WarnContext(ctx, "skipped Claude prompt correlation for message",
 					attr.SlogChatID(args.ChatID.String()),
 					attr.SlogMessageID(message.id.String()),
 					attr.SlogError(err),
 				)
-				continue
+				result.HasMore = false
+				break
 			}
 			return nil, fmt.Errorf("find Claude user prompt match: %w", err)
 		}

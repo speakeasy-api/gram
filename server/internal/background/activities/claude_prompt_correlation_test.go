@@ -85,7 +85,31 @@ func TestCorrelateClaudePromptsSkipsPerMessageCandidateTimeout(t *testing.T) {
 
 	require.NoError(t, err)
 	require.False(t, result.HasMore)
+	require.Zero(t, result.AfterMessageSeq)
+	require.Zero(t, result.AfterEventSequence)
+	require.Zero(t, result.AfterEventTimeUnixNano)
 	require.False(t, store.backfilled)
+}
+
+func TestCorrelateClaudePromptsStopsPassOnCandidateTimeoutEvenWithMoreRows(t *testing.T) {
+	t.Parallel()
+
+	rows := make([]activitiesrepo.ListUnlinkedClaudeUserMessagesForCorrelationRow, 0, claudePromptCorrelationMessageBatchSize+1)
+	for i := 1; i <= claudePromptCorrelationMessageBatchSize+1; i++ {
+		rows = append(rows, fakeClaudePromptMessageRowWithSeq(int64(i)))
+	}
+	store := &fakeClaudePromptStore{rows: rows}
+	act := newTestCorrelateClaudePrompts(t, store, &fakeClaudePromptTelemetry{
+		waitForContextDone: true,
+	})
+
+	result, err := act.Do(context.Background(), fakeCorrelateClaudePromptsArgs())
+
+	require.NoError(t, err)
+	require.False(t, result.HasMore)
+	require.Zero(t, result.AfterMessageSeq)
+	require.Zero(t, result.AfterEventSequence)
+	require.Zero(t, result.AfterEventTimeUnixNano)
 }
 
 func TestCorrelateClaudePromptsReturnsBackfillErrors(t *testing.T) {
