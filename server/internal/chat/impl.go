@@ -497,6 +497,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			resultMessages[i] = &gen.ChatMessage{
 				ID:             r.ID.String(),
 				Seq:            r.Seq,
+				IsRisk:         nil, // is_risk is a risk_only-mode signal
 				Role:           r.Role,
 				Model:          r.Model.String,
 				UserID:         &r.UserID.String,
@@ -1464,6 +1465,7 @@ func (s *Service) buildGenMessage(ctx context.Context, m repo.ChatMessage) *gen.
 	return &gen.ChatMessage{
 		ID:             m.ID.String(),
 		Seq:            m.Seq,
+		IsRisk:         nil, // is_risk is a risk_only-mode signal
 		Role:           m.Role,
 		Model:          m.Model.String,
 		UserID:         &m.UserID.String,
