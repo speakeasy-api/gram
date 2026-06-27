@@ -93,6 +93,32 @@ func seedRiskOnChat(t *testing.T, ctx context.Context, ti *chatTestInstance, cha
 	require.NoError(t, err)
 }
 
+// seedRiskOnChatDisabledPolicy seeds a found risk result whose policy is
+// disabled. The finding row is real, but every risk surface must treat it as
+// absent because the policy is off (mirrors a policy disabled after detection).
+func seedRiskOnChatDisabledPolicy(t *testing.T, ctx context.Context, ti *chatTestInstance, chatID uuid.UUID) {
+	t.Helper()
+	r := repo.New(ti.conn)
+	msgID, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+	})
+	require.NoError(t, err)
+	policyID, err := r.SeedDisabledRiskPolicy(ctx, repo.SeedDisabledRiskPolicyParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+	err = r.SeedRiskResult(ctx, repo.SeedRiskResultParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		RiskPolicyID:   policyID,
+		ChatMessageID:  msgID,
+		Found:          true,
+	})
+	require.NoError(t, err)
+}
+
 // initSessionCtx creates a session-authenticated context and overrides ProjectID
 // to ti.projectID so that ListChats scopes to the same project as seeded chats.
 func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
@@ -617,6 +643,40 @@ func TestListChats_RiskFindingsCountInResult(t *testing.T) {
 	require.Len(t, result.Chats, 1)
 	require.NotNil(t, result.Chats[0].RiskFindingsCount)
 	require.Equal(t, 3, *result.Chats[0].RiskFindingsCount)
+}
+
+// TestListChats_DisabledPolicyFinding_NotCounted verifies that a found risk
+// result under a disabled policy is excluded from the per-chat count and from
+// the has_risk filter — matching the risk.results.list detail view, so the
+// chat-list "N risk" badge can't disagree with an empty detail panel.
+func TestListChats_DisabledPolicyFinding_NotCounted(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-disabled")
+
+	chatID := seedChat(t, ctx, ti, "", "ext-disabled", "chat with disabled-policy finding")
+	seedRiskOnChatDisabledPolicy(t, ctx, ti, chatID)
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 1)
+	require.NotNil(t, result.Chats[0].RiskFindingsCount)
+	require.Equal(t, 0, *result.Chats[0].RiskFindingsCount, "disabled-policy finding must not count")
+
+	// has_risk=true must not surface the chat; has_risk=false must.
+	hasRisk := "true"
+	pTrue := defaultPayload()
+	pTrue.HasRisk = &hasRisk
+	resTrue, err := ti.service.ListChats(ctx, pTrue)
+	require.NoError(t, err)
+	require.Empty(t, resTrue.Chats, "disabled-policy finding must not match has_risk=true")
+
+	noRisk := "false"
+	pFalse := defaultPayload()
+	pFalse.HasRisk = &noRisk
+	resFalse, err := ti.service.ListChats(ctx, pFalse)
+	require.NoError(t, err)
+	require.Len(t, resFalse.Chats, 1, "chat with only a disabled-policy finding reads as no-risk")
 }
 
 // TestListChats_InvalidFromTimestamp verifies that a malformed from timestamp returns a bad-request error.
