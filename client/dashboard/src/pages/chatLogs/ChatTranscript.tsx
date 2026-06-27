@@ -50,9 +50,11 @@ import {
   formatUsageCost,
 } from "./claudeUsage";
 import {
+  argsToString,
   type DisplayItem,
+  messageText,
   type MessageRow,
-  rowMatchesSeq,
+  type SearchFieldKey,
   type ToolRow,
   type TranscriptRow,
   type TurnAuthor,
@@ -65,10 +67,10 @@ import {
 } from "./chatRisk";
 import {
   distinctRiskCount,
-  highlightQuery,
   resultsAreSensitive,
   useRowReveal,
 } from "./chatHelpers";
+import { QueryHighlight } from "./QueryHighlight";
 import { getCategoryCodeForFinding } from "@/pages/security/risk-utils";
 import { CreateExclusionContext } from "./exclusionContext";
 
@@ -90,45 +92,6 @@ interface RowContext {
 // Fade non-risky rows so the findings stand out.
 function dimClass(dim: boolean): string {
   return dim ? "opacity-40" : "";
-}
-
-// Strip the injected `<message-context>…</message-context>` envelope (event id,
-// timestamp, user id) and trailing whitespace the harness prepends to prompts —
-// it's machine plumbing, not part of the conversation.
-function cleanMessageText(raw: string): string {
-  return (
-    raw
-      // Only the leading injected envelope, not literal tags mid-message.
-      .replace(/^\s*<message-context>[\s\S]*?<\/message-context>/i, "")
-      .replace(/[ \t]+$/gm, "")
-      .trim()
-  );
-}
-
-function messageText(content: unknown): string {
-  if (typeof content === "string") return cleanMessageText(content);
-  if (Array.isArray(content)) {
-    return cleanMessageText(
-      content
-        .map((part) =>
-          part &&
-          typeof part === "object" &&
-          "text" in part &&
-          typeof (part as { text: unknown }).text === "string"
-            ? (part as { text: string }).text
-            : "",
-        )
-        .filter(Boolean)
-        .join("\n"),
-    );
-  }
-  if (content == null) return "";
-  return JSON.stringify(content, null, 2);
-}
-
-function argsToString(args: string | object | undefined): string | undefined {
-  if (args === undefined) return undefined;
-  return typeof args === "string" ? args : JSON.stringify(args, null, 2);
 }
 
 function CostBadge({ usage }: { usage: ClaudeUsageMatch }) {
@@ -399,11 +362,13 @@ function TurnHeader({
 function UserMessageRow({
   row,
   ctx,
-  active,
+  activeTextOccurrence,
 }: {
   row: MessageRow;
   ctx: RowContext;
-  active: boolean;
+  /** Index of the active search occurrence within this message's text, or null
+   * when this row doesn't hold the active occurrence. */
+  activeTextOccurrence: number | null;
 }) {
   const { message } = row;
   const results = ctx.riskResultsByMessage.get(message.id);
@@ -429,9 +394,15 @@ function UserMessageRow({
           />
         ) : (
           <div className="whitespace-pre-wrap">
-            {ctx.searchQuery
-              ? highlightQuery(text, ctx.searchQuery, active)
-              : text}
+            {ctx.searchQuery ? (
+              <QueryHighlight
+                text={text}
+                query={ctx.searchQuery}
+                activeIndex={activeTextOccurrence}
+              />
+            ) : (
+              text
+            )}
           </div>
         )}
       </div>
@@ -457,11 +428,13 @@ function UserMessageRow({
 function AssistantMessageRow({
   row,
   ctx,
-  active,
+  activeTextOccurrence,
 }: {
   row: MessageRow;
   ctx: RowContext;
-  active: boolean;
+  /** Index of the active search occurrence within this message's text, or null
+   * when this row doesn't hold the active occurrence. */
+  activeTextOccurrence: number | null;
 }) {
   const { message } = row;
   const results = ctx.riskResultsByMessage.get(message.id);
@@ -483,7 +456,11 @@ function AssistantMessageRow({
           // While searching, render plain (non-markdown) text so query hits can
           // be highlighted inline — markdown output can't carry <mark> spans.
           <div className="whitespace-pre-wrap">
-            {highlightQuery(text, ctx.searchQuery, active)}
+            <QueryHighlight
+              text={text}
+              query={ctx.searchQuery}
+              activeIndex={activeTextOccurrence}
+            />
           </div>
         ) : (
           <MessageContent markdown content={text} />
@@ -528,17 +505,29 @@ function SystemMessageRow({ row, ctx }: { row: MessageRow; ctx: RowContext }) {
 function MessageRowView({
   row,
   ctx,
-  active,
+  activeTextOccurrence,
 }: {
   row: MessageRow;
   ctx: RowContext;
-  active: boolean;
+  activeTextOccurrence: number | null;
 }) {
   switch (row.entryType) {
     case "user":
-      return <UserMessageRow row={row} ctx={ctx} active={active} />;
+      return (
+        <UserMessageRow
+          row={row}
+          ctx={ctx}
+          activeTextOccurrence={activeTextOccurrence}
+        />
+      );
     case "assistant":
-      return <AssistantMessageRow row={row} ctx={ctx} active={active} />;
+      return (
+        <AssistantMessageRow
+          row={row}
+          ctx={ctx}
+          activeTextOccurrence={activeTextOccurrence}
+        />
+      );
     case "system":
       return <SystemMessageRow row={row} ctx={ctx} />;
   }
@@ -587,12 +576,21 @@ function ToolRowView({
   row,
   ctx,
   active,
+  activeNameOccurrence,
+  activeArgsOccurrence,
+  activeOutputOccurrence,
 }: {
   row: ToolRow;
   ctx: RowContext;
-  /** This tool holds the active search match → expand it (and remount on
+  /** This tool holds the active search occurrence → expand it (and remount on
    * toggle so it collapses again when navigation moves to another match). */
   active: boolean;
+  /** Active occurrence index within the tool name, or null. */
+  activeNameOccurrence: number | null;
+  /** Active occurrence index within the Arguments section, or null. */
+  activeArgsOccurrence: number | null;
+  /** Active occurrence index within the Output section, or null. */
+  activeOutputOccurrence: number | null;
 }) {
   const openExclusion = useContext(CreateExclusionContext);
   const name =
@@ -614,16 +612,14 @@ function ToolRowView({
   // Search: which of this tool's sections contain the query (case-insensitive,
   // mirroring the server's ILIKE) — drives which section auto-opens + highlights.
   const queryLc = ctx.searchQuery?.trim().toLowerCase();
-  const nameMatches = !!queryLc && name.toLowerCase().includes(queryLc);
   const requestMatches =
     !!queryLc && (request?.toLowerCase().includes(queryLc) ?? false);
   const resultMatches =
     !!queryLc && (result?.toLowerCase().includes(queryLc) ?? false);
-  // The active match is at the message level, but an assistant message can spawn
-  // several tool rows that all share its seq. Treat this tool as the active match
-  // only when its OWN name/args/output matches, so navigating to the message
-  // opens just the tool that actually matched — not every sibling tool.
-  const toolActive = active && (nameMatches || requestMatches || resultMatches);
+  // Each tool row is a distinct display item, so the active occurrence's row
+  // index already identifies exactly this tool — no need to re-check which
+  // section matched (that's what the per-field active indices below carry).
+  const toolActive = active;
   const searchSection: SectionMatch[] = ctx.searchQuery
     ? [{ value: ctx.searchQuery, label: "match" }]
     : [];
@@ -634,7 +630,12 @@ function ToolRowView({
         headerBadge: <RiskBadge results={callResults} />,
       }
     : requestMatches
-      ? { matches: searchSection, masked: false, tone: "search" as const }
+      ? {
+          matches: searchSection,
+          masked: false,
+          tone: "search" as const,
+          activeOccurrence: activeArgsOccurrence,
+        }
       : undefined;
   const resultHighlight = resultResults?.length
     ? {
@@ -643,7 +644,12 @@ function ToolRowView({
         headerBadge: <RiskBadge results={resultResults} />,
       }
     : resultMatches
-      ? { matches: searchSection, masked: false, tone: "search" as const }
+      ? {
+          matches: searchSection,
+          masked: false,
+          tone: "search" as const,
+          activeOccurrence: activeOutputOccurrence,
+        }
       : undefined;
 
   const toolUseId = row.toolCall?.id ?? row.resultMessage?.toolCallId ?? "";
@@ -672,7 +678,7 @@ function ToolRowView({
         requestHighlight={requestHighlight}
         resultHighlight={resultHighlight}
         nameQuery={ctx.searchQuery}
-        searchActive={toolActive}
+        nameActiveOccurrence={activeNameOccurrence}
       />
     </div>
   );
@@ -715,10 +721,15 @@ export interface TranscriptPagination {
    * to the same index). null when not navigating matches. */
   scrollToItemIndex?: number | null;
   scrollNonce?: number;
-  /** seq of the currently-active search match. The row holding it expands (a
-   * matched tool opens); navigating away collapses it again. null when not
-   * searching. */
-  activeMatchSeq?: number | null;
+  /** The currently-active search occurrence: which display item, which field of
+   * that row, and which occurrence within the field. The row holding it expands
+   * (a matched tool opens) and renders that single occurrence bright; everything
+   * else is pale. null when not searching / no matches. */
+  activeOccurrence?: {
+    itemIndex: number;
+    fieldKey: SearchFieldKey;
+    indexInField: number;
+  } | null;
 }
 
 /** Edge "load older/newer" affordance + the risk-gap "load in-between" marker. */
@@ -760,29 +771,65 @@ function LoadDivider({
 // (scrollNonce/scrollToItemIndex churn in `pagination`), but a row's content
 // only depends on (row, ctx) — both stable across navigation — so this skips
 // re-rendering the expensive ToolUI on each next/prev.
+/** The query field + occurrence index the global navigator is currently on,
+ * within the row this is passed to (null for every non-active row). */
+interface ActiveField {
+  key: SearchFieldKey;
+  index: number;
+}
+
 const RowView = memo(function RowView({
   row,
   ctx,
   active,
+  activeField,
 }: {
   row: TranscriptRow;
   ctx: RowContext;
-  /** This row holds the currently-active search match. */
+  /** This row holds the currently-active search occurrence (drives tool expand). */
   active: boolean;
+  /** Which field + occurrence in this row is active, or null when none is. */
+  activeField: ActiveField | null;
 }) {
-  return row.kind === "message" ? (
-    <MessageRowView row={row} ctx={ctx} active={active} />
-  ) : (
-    <ToolRowView row={row} ctx={ctx} active={active} />
+  if (row.kind === "message") {
+    return (
+      <MessageRowView
+        row={row}
+        ctx={ctx}
+        activeTextOccurrence={
+          activeField?.key === "text" ? activeField.index : null
+        }
+      />
+    );
+  }
+  return (
+    <ToolRowView
+      row={row}
+      ctx={ctx}
+      active={active}
+      activeNameOccurrence={
+        activeField?.key === "name" ? activeField.index : null
+      }
+      activeArgsOccurrence={
+        activeField?.key === "args" ? activeField.index : null
+      }
+      activeOutputOccurrence={
+        activeField?.key === "output" ? activeField.index : null
+      }
+    />
   );
 });
 
 function DisplayItemView({
   item,
+  index,
   ctx,
   pagination,
 }: {
   item: DisplayItem;
+  /** This item's position in the display list — matched against the active
+   * occurrence's itemIndex to decide if this row holds it. */
+  index: number;
   ctx: RowContext;
   pagination: TranscriptPagination;
 }) {
@@ -827,12 +874,23 @@ function DisplayItemView({
         />
       );
     case "row": {
-      // Only the row holding the active match is "active"; computed here (not in
-      // ctx) so navigation re-renders just the two toggling rows, not all of them.
-      const active =
-        pagination.activeMatchSeq != null &&
-        rowMatchesSeq(item.row, pagination.activeMatchSeq);
-      return <RowView row={item.row} ctx={ctx} active={active} />;
+      // Only the row holding the active occurrence is "active"; computed here
+      // (not in ctx) so navigation re-renders just the toggling rows, not all of
+      // them. The active row gets the field + occurrence index to render bright;
+      // every other row gets null and stays pale (and skips re-render via memo).
+      const occ = pagination.activeOccurrence;
+      const active = occ != null && occ.itemIndex === index;
+      const activeField: ActiveField | null = active
+        ? { key: occ.fieldKey, index: occ.indexInField }
+        : null;
+      return (
+        <RowView
+          row={item.row}
+          ctx={ctx}
+          active={active}
+          activeField={activeField}
+        />
+      );
     }
   }
 }
@@ -1005,6 +1063,7 @@ export function ChatTranscript({
             >
               <DisplayItemView
                 item={items[virtualRow.index]!}
+                index={virtualRow.index}
                 ctx={ctx}
                 pagination={pagination}
               />
