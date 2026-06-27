@@ -67,10 +67,10 @@ import {
 } from "./chatRisk";
 import {
   distinctRiskCount,
-  QueryHighlight,
   resultsAreSensitive,
   useRowReveal,
 } from "./chatHelpers";
+import { QueryHighlight } from "./QueryHighlight";
 import { getCategoryCodeForFinding } from "@/pages/security/risk-utils";
 import { CreateExclusionContext } from "./exclusionContext";
 
