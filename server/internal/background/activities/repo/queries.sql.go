@@ -396,14 +396,14 @@ WHERE chat_id = $1
   AND role = 'user'
   AND content != ''
   AND (message_id IS NULL OR message_id = '')
-  AND created_at >= $3
 ORDER BY seq ASC, created_at ASC
+LIMIT $3
 `
 
 type ListUnlinkedClaudeUserMessagesForCorrelationParams struct {
-	ChatID       uuid.UUID
-	ProjectID    uuid.NullUUID
-	CreatedAfter pgtype.Timestamptz
+	ChatID     uuid.UUID
+	ProjectID  uuid.NullUUID
+	LimitCount int32
 }
 
 type ListUnlinkedClaudeUserMessagesForCorrelationRow struct {
@@ -412,12 +412,10 @@ type ListUnlinkedClaudeUserMessagesForCorrelationRow struct {
 	CreatedAt pgtype.Timestamptz
 }
 
-// A message can only correlate to a Claude telemetry prompt observed within a
-// short window of its creation, so messages older than @created_after are
-// unmatchable. Bounding the fetch by recency keeps a chat with a large unlinked
-// history from being re-scanned in full on every prompt event.
+// Fetch a bounded prefix of the unlinked backlog. The caller requests one extra
+// row to detect whether another drain pass is needed.
 func (q *Queries) ListUnlinkedClaudeUserMessagesForCorrelation(ctx context.Context, arg ListUnlinkedClaudeUserMessagesForCorrelationParams) ([]ListUnlinkedClaudeUserMessagesForCorrelationRow, error) {
-	rows, err := q.db.Query(ctx, listUnlinkedClaudeUserMessagesForCorrelation, arg.ChatID, arg.ProjectID, arg.CreatedAfter)
+	rows, err := q.db.Query(ctx, listUnlinkedClaudeUserMessagesForCorrelation, arg.ChatID, arg.ProjectID, arg.LimitCount)
 	if err != nil {
 		return nil, err
 	}

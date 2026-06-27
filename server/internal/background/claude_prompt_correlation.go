@@ -43,12 +43,17 @@ func CorrelateClaudePromptsWorkflow(ctx workflow.Context, params CorrelateClaude
 	})
 
 	var a *Activities
-	if err := workflow.ExecuteActivity(
-		ctx,
-		a.CorrelateClaudePrompts,
-		activities.CorrelateClaudePromptsArgs(params),
-	).Get(ctx, nil); err != nil {
-		return fmt.Errorf("correlate Claude prompts: %w", err)
+	for {
+		var result activities.CorrelateClaudePromptsResult
+		if err := workflow.ExecuteActivity(
+			ctx,
+			a.CorrelateClaudePrompts,
+			activities.CorrelateClaudePromptsArgs(params),
+		).Get(ctx, &result); err != nil {
+			return fmt.Errorf("correlate Claude prompts: %w", err)
+		}
+		if !result.HasMore {
+			return nil
+		}
 	}
-	return nil
 }

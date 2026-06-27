@@ -88,10 +88,8 @@ WHERE d.organization_id = ANY($1::text[])
   );
 
 -- name: ListUnlinkedClaudeUserMessagesForCorrelation :many
--- A message can only correlate to a Claude telemetry prompt observed within a
--- short window of its creation, so messages older than @created_after are
--- unmatchable. Bounding the fetch by recency keeps a chat with a large unlinked
--- history from being re-scanned in full on every prompt event.
+-- Fetch a bounded prefix of the unlinked backlog. The caller requests one extra
+-- row to detect whether another drain pass is needed.
 SELECT id, content, created_at
 FROM chat_messages
 WHERE chat_id = @chat_id
@@ -99,8 +97,8 @@ WHERE chat_id = @chat_id
   AND role = 'user'
   AND content != ''
   AND (message_id IS NULL OR message_id = '')
-  AND created_at >= @created_after
-ORDER BY seq ASC, created_at ASC;
+ORDER BY seq ASC, created_at ASC
+LIMIT @limit_count;
 
 -- name: BackfillClaudeUserMessagePromptID :exec
 UPDATE chat_messages

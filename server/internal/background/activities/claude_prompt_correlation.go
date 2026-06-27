@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -23,11 +24,9 @@ const (
 	claudePromptCorrelationMinScoreGap    = 0.02
 	claudePromptCorrelationMaxTimeDelta   = 10 * time.Minute
 
-	// claudePromptCorrelationLookback bounds how far back unlinked messages are
-	// considered. It comfortably exceeds claudePromptCorrelationMaxTimeDelta plus
-	// telemetry ingestion lag, so a message older than this can no longer match a
-	// prompt and re-scanning it on every run would be wasted work.
-	claudePromptCorrelationLookback = 1 * time.Hour
+	// Fetch one extra row to detect whether the workflow should immediately run
+	// another bounded drain pass.
+	claudePromptCorrelationMessageBatchSize = 25
 
 	// claudePromptCorrelationMatchTimeout bounds the ClickHouse candidate query
 	// for a single message so one slow query cannot consume the whole activity
@@ -35,17 +34,30 @@ const (
 	claudePromptCorrelationMatchTimeout = 5 * time.Second
 )
 
+var errClaudePromptCorrelationMatchTimeout = errors.New("claude prompt correlation match timed out")
+
+type claudePromptCorrelationStore interface {
+	ListUnlinkedClaudeUserMessagesForCorrelation(context.Context, activitiesrepo.ListUnlinkedClaudeUserMessagesForCorrelationParams) ([]activitiesrepo.ListUnlinkedClaudeUserMessagesForCorrelationRow, error)
+	BackfillClaudeUserMessagePromptID(context.Context, activitiesrepo.BackfillClaudeUserMessagePromptIDParams) error
+}
+
+type claudePromptCorrelationTelemetry interface {
+	ListClaudeUserPromptCandidatesForCorrelation(context.Context, telemetryrepo.ListClaudeUserPromptCandidatesForCorrelationParams) ([]telemetryrepo.ClaudeUserPromptCandidate, error)
+}
+
 type CorrelateClaudePrompts struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	chConn clickhouse.Conn
+	logger       *slog.Logger
+	store        claudePromptCorrelationStore
+	telemetry    claudePromptCorrelationTelemetry
+	matchTimeout time.Duration
 }
 
 func NewCorrelateClaudePrompts(logger *slog.Logger, db *pgxpool.Pool, chConn clickhouse.Conn) *CorrelateClaudePrompts {
 	return &CorrelateClaudePrompts{
-		logger: logger.With(attr.SlogComponent("correlate_claude_prompts")),
-		db:     db,
-		chConn: chConn,
+		logger:       logger.With(attr.SlogComponent("correlate_claude_prompts")),
+		store:        activitiesrepo.New(db),
+		telemetry:    telemetryrepo.New(chConn),
+		matchTimeout: claudePromptCorrelationMatchTimeout,
 	}
 }
 
@@ -55,72 +67,80 @@ type CorrelateClaudePromptsArgs struct {
 	SessionID string
 }
 
+type CorrelateClaudePromptsResult struct {
+	HasMore bool
+}
+
 type claudeUnlinkedUserMessage struct {
 	id        uuid.UUID
 	content   string
 	createdAt time.Time
 }
 
-func (c *CorrelateClaudePrompts) Do(ctx context.Context, args CorrelateClaudePromptsArgs) error {
-	messages, err := c.listUnlinkedUserMessages(ctx, args.ProjectID, args.ChatID)
+func (c *CorrelateClaudePrompts) Do(ctx context.Context, args CorrelateClaudePromptsArgs) (*CorrelateClaudePromptsResult, error) {
+	messages, hasMore, err := c.listUnlinkedUserMessages(ctx, args.ProjectID, args.ChatID)
 	if err != nil {
-		return fmt.Errorf("list unlinked Claude user messages: %w", err)
+		return nil, fmt.Errorf("list unlinked Claude user messages: %w", err)
 	}
 	if len(messages) == 0 {
-		return nil
+		return &CorrelateClaudePromptsResult{HasMore: hasMore}, nil
 	}
 
 	deadline, hasDeadline := ctx.Deadline()
 
 	var cursor claudePromptCorrelationCursor
-	for _, message := range messages {
+	for idx, message := range messages {
 		// Stop before the activity deadline so a partially drained backlog
 		// completes successfully and the remainder is picked up by a later run,
 		// rather than the whole activity failing and re-running from scratch.
 		if hasDeadline && time.Until(deadline) <= claudePromptCorrelationMatchTimeout {
+			hasMore = hasMore || idx < len(messages)
 			break
 		}
 
 		match, ok, err := c.findClaudeUserPromptMatch(ctx, args.ProjectID, args.ChatID, args.SessionID, message, cursor)
 		if err != nil {
-			// One message's correlation failing (typically a slow ClickHouse
-			// query) must not abort the run: that would leave the backlog
-			// unprocessed and, because a run is scheduled per prompt event, spin
-			// into a retry storm. Skip it and keep draining the rest.
-			c.logger.WarnContext(ctx, "skipped Claude prompt correlation for message",
-				attr.SlogChatID(args.ChatID.String()),
-				attr.SlogMessageID(message.id.String()),
-				attr.SlogError(err),
-			)
-			continue
+			if errors.Is(err, errClaudePromptCorrelationMatchTimeout) {
+				// One slow ClickHouse query must not abort the run: that would
+				// leave the backlog unprocessed and, because a run is scheduled
+				// per prompt event, spin into a retry storm. Skip it and keep
+				// draining the rest.
+				c.logger.WarnContext(ctx, "skipped Claude prompt correlation for message",
+					attr.SlogChatID(args.ChatID.String()),
+					attr.SlogMessageID(message.id.String()),
+					attr.SlogError(err),
+				)
+				continue
+			}
+			return nil, fmt.Errorf("find Claude user prompt match: %w", err)
 		}
 		if !ok {
 			continue
 		}
 
 		if err := c.backfillMessagePromptID(ctx, args.ProjectID, args.ChatID, message.id, match.PromptID); err != nil {
-			c.logger.WarnContext(ctx, "skipped Claude prompt id backfill for message",
-				attr.SlogChatID(args.ChatID.String()),
-				attr.SlogMessageID(message.id.String()),
-				attr.SlogError(err),
-			)
-			continue
+			return nil, fmt.Errorf("backfill Claude prompt ID: %w", err)
 		}
 		cursor.eventSequence = match.EventSequence
 		cursor.timeUnixNano = match.TimeUnixNano
 	}
 
-	return nil
+	return &CorrelateClaudePromptsResult{HasMore: hasMore}, nil
 }
 
-func (c *CorrelateClaudePrompts) listUnlinkedUserMessages(ctx context.Context, projectID uuid.UUID, chatID uuid.UUID) ([]claudeUnlinkedUserMessage, error) {
-	rows, err := activitiesrepo.New(c.db).ListUnlinkedClaudeUserMessagesForCorrelation(ctx, activitiesrepo.ListUnlinkedClaudeUserMessagesForCorrelationParams{
-		ChatID:       chatID,
-		ProjectID:    conv.ToNullUUID(projectID),
-		CreatedAfter: conv.ToPGTimestamptz(time.Now().Add(-claudePromptCorrelationLookback)),
+func (c *CorrelateClaudePrompts) listUnlinkedUserMessages(ctx context.Context, projectID uuid.UUID, chatID uuid.UUID) ([]claudeUnlinkedUserMessage, bool, error) {
+	rows, err := c.store.ListUnlinkedClaudeUserMessagesForCorrelation(ctx, activitiesrepo.ListUnlinkedClaudeUserMessagesForCorrelationParams{
+		ChatID:     chatID,
+		ProjectID:  conv.ToNullUUID(projectID),
+		LimitCount: claudePromptCorrelationMessageBatchSize + 1,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("query unlinked user messages: %w", err)
+		return nil, false, fmt.Errorf("query unlinked user messages: %w", err)
+	}
+
+	hasMore := len(rows) > claudePromptCorrelationMessageBatchSize
+	if hasMore {
+		rows = rows[:claudePromptCorrelationMessageBatchSize]
 	}
 
 	messages := make([]claudeUnlinkedUserMessage, 0, len(rows))
@@ -131,7 +151,7 @@ func (c *CorrelateClaudePrompts) listUnlinkedUserMessages(ctx context.Context, p
 			createdAt: row.CreatedAt.Time,
 		})
 	}
-	return messages, nil
+	return messages, hasMore, nil
 }
 
 type claudePromptCorrelationCursor struct {
@@ -154,10 +174,10 @@ func (c *CorrelateClaudePrompts) findClaudeUserPromptMatch(
 		return noMatch, false, nil
 	}
 
-	queryCtx, cancel := context.WithTimeout(ctx, claudePromptCorrelationMatchTimeout)
+	queryCtx, cancel := context.WithTimeout(ctx, c.matchTimeout)
 	defer cancel()
 
-	candidates, err := telemetryrepo.New(c.chConn).ListClaudeUserPromptCandidatesForCorrelation(queryCtx, telemetryrepo.ListClaudeUserPromptCandidatesForCorrelationParams{
+	candidates, err := c.telemetry.ListClaudeUserPromptCandidatesForCorrelation(queryCtx, telemetryrepo.ListClaudeUserPromptCandidatesForCorrelationParams{
 		GramProjectID:          projectID.String(),
 		GramChatID:             chatID.String(),
 		SessionID:              sessionID,
@@ -169,6 +189,9 @@ func (c *CorrelateClaudePrompts) findClaudeUserPromptMatch(
 		MaxTimeDeltaNanos:      claudePromptCorrelationMaxTimeDelta.Nanoseconds(),
 	})
 	if err != nil {
+		if errors.Is(queryCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+			return noMatch, false, errClaudePromptCorrelationMatchTimeout
+		}
 		return noMatch, false, fmt.Errorf("query Claude user prompt candidates: %w", err)
 	}
 	if len(candidates) == 0 {
@@ -184,7 +207,7 @@ func (c *CorrelateClaudePrompts) backfillMessagePromptID(ctx context.Context, pr
 	if strings.TrimSpace(promptID) == "" {
 		return nil
 	}
-	err := activitiesrepo.New(c.db).BackfillClaudeUserMessagePromptID(ctx, activitiesrepo.BackfillClaudeUserMessagePromptIDParams{
+	err := c.store.BackfillClaudeUserMessagePromptID(ctx, activitiesrepo.BackfillClaudeUserMessagePromptIDParams{
 		PromptID:  conv.ToPGText(promptID),
 		MessageID: messageID,
 		ChatID:    chatID,
