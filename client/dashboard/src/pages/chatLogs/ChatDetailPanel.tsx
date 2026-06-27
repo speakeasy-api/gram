@@ -930,7 +930,11 @@ function ChatDetailPanel({
         ? (afterSeq: number) => windowed.loadingKey === `gap:${afterSeq}`
         : undefined,
       initialScrollIndex,
-      scrollToFinding: dimNonRisk || searchActive,
+      // Every windowed view (risk focus, the risky-only toggle, or search) opens
+      // mid-thread, so suppress the top-of-list auto-load + jump-to-start button
+      // that the plain from-start transcript uses — otherwise the window's top
+      // edge eagerly expands older messages on mount.
+      scrollToFinding: riskWindowed || searchActive,
       scrollToItemIndex: activeOccurrence?.itemIndex ?? null,
       scrollNonce,
       activeOccurrence: activeOccurrence
@@ -944,7 +948,6 @@ function ChatDetailPanel({
   }, [
     hasMoreBefore,
     hasMoreAfter,
-    dimNonRisk,
     riskWindowed,
     searchActive,
     riskTranscript,
