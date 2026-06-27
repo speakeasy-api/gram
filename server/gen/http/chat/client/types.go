@@ -75,18 +75,10 @@ type LoadChatResponseBody struct {
 	// messages, each spanning a risk finding and its surrounding context. Use each
 	// segment's cursors to expand it.
 	RiskSegments []*RiskSegmentResponseBody `form:"risk_segments,omitempty" json:"risk_segments,omitempty" xml:"risk_segments,omitempty"`
-	// Present only when `risk_only` was requested: the `seq` of every message that
-	// has an active risk finding, ascending. These are the flagged messages
-	// themselves; surrounding-context messages in `messages` are not listed here.
-	RiskSeqs []int64 `form:"risk_seqs,omitempty" json:"risk_seqs,omitempty" xml:"risk_seqs,omitempty"`
 	// Present only when `query` was requested: contiguous runs of returned
 	// messages, each spanning one or more query matches and their surrounding
 	// context. Use each segment's cursors to expand it.
 	MatchSegments []*RiskSegmentResponseBody `form:"match_segments,omitempty" json:"match_segments,omitempty" xml:"match_segments,omitempty"`
-	// Present only when `query` was requested: the `seq` of every message whose
-	// text matched the query, ascending. These are the jump-to-match navigation
-	// targets; surrounding-context messages in `messages` are not listed here.
-	MatchSeqs []int64 `form:"match_seqs,omitempty" json:"match_seqs,omitempty" xml:"match_seqs,omitempty"`
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsageResponseBody `form:"agent_usage,omitempty" json:"agent_usage,omitempty" xml:"agent_usage,omitempty"`
 	// Whole-generation trace-entry totals for the returned generation. Because
@@ -1458,6 +1450,9 @@ type ChatMessageResponseBody struct {
 	// contiguous (the sequence is shared across chats), so do not infer gaps from
 	// arithmetic differences.
 	Seq *int64 `form:"seq,omitempty" json:"seq,omitempty" xml:"seq,omitempty"`
+	// Present only in `risk_only` mode: true when this message has an active risk
+	// finding, false for the surrounding-context messages padded around it.
+	IsRisk *bool `form:"is_risk,omitempty" json:"is_risk,omitempty" xml:"is_risk,omitempty"`
 	// The role of the message
 	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
 	// The content of the message — string for plain text, array for
@@ -1813,12 +1808,6 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 			v.RiskSegments[i] = unmarshalRiskSegmentResponseBodyToChatRiskSegment(val)
 		}
 	}
-	if body.RiskSeqs != nil {
-		v.RiskSeqs = make([]int64, len(body.RiskSeqs))
-		for i, val := range body.RiskSeqs {
-			v.RiskSeqs[i] = val
-		}
-	}
 	if body.MatchSegments != nil {
 		v.MatchSegments = make([]*chat.RiskSegment, len(body.MatchSegments))
 		for i, val := range body.MatchSegments {
@@ -1827,12 +1816,6 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 				continue
 			}
 			v.MatchSegments[i] = unmarshalRiskSegmentResponseBodyToChatRiskSegment(val)
-		}
-	}
-	if body.MatchSeqs != nil {
-		v.MatchSeqs = make([]int64, len(body.MatchSeqs))
-		for i, val := range body.MatchSeqs {
-			v.MatchSeqs[i] = val
 		}
 	}
 	if body.AgentUsage != nil {

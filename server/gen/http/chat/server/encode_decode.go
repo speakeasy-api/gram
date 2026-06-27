@@ -1828,6 +1828,7 @@ func marshalChatChatMessageToChatMessageResponseBody(v *chat.ChatMessage) *ChatM
 	res := &ChatMessageResponseBody{
 		ID:             v.ID,
 		Seq:            v.Seq,
+		IsRisk:         v.IsRisk,
 		Role:           v.Role,
 		Content:        v.Content,
 		Model:          v.Model,

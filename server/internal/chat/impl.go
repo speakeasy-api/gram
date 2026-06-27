@@ -407,9 +407,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		hasMoreBefore  bool
 		hasMoreAfter   bool
 		riskSegments   []*gen.RiskSegment
-		riskSeqs       []int64
 		matchSegments  []*gen.RiskSegment
-		matchSeqs      []int64
 		// latestPageRows holds the repo rows of the initial newest page so we can
 		// infer the chat source from them; only populated on that first request.
 		latestPageRows []repo.ChatMessage
@@ -445,13 +443,17 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load risk-windowed messages").LogError(ctx, s.logger)
 		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
-		riskSeqs = make([]int64, 0, len(rows))
 		for i := range rows {
 			r := rows[i]
 			toolCalls := string(r.ToolCalls)
+			// is_risk marks the flagged messages themselves (vs the surrounding
+			// context windowed in around them) so the dashboard can filter to
+			// findings without the server exposing internal seq positions.
+			isRisk := r.IsRisk
 			resultMessages[i] = &gen.ChatMessage{
 				ID:             r.ID.String(),
 				Seq:            r.Seq,
+				IsRisk:         &isRisk,
 				Role:           r.Role,
 				Model:          r.Model.String,
 				UserID:         &r.UserID.String,
@@ -463,9 +465,6 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 				PromptID:       conv.FromPGText[string](r.MessageID),
 				CreatedAt:      r.CreatedAt.Time.Format(time.RFC3339),
 				Generation:     int(r.Generation),
-			}
-			if r.IsRisk {
-				riskSeqs = append(riskSeqs, r.Seq)
 			}
 		}
 		riskSegments = buildRiskSegments(rows)
@@ -492,7 +491,6 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load search-windowed messages").LogError(ctx, s.logger)
 		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
-		matchSeqs = make([]int64, 0, len(rows))
 		for i := range rows {
 			r := rows[i]
 			toolCalls := string(r.ToolCalls)
@@ -510,9 +508,6 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 				PromptID:       conv.FromPGText[string](r.MessageID),
 				CreatedAt:      r.CreatedAt.Time.Format(time.RFC3339),
 				Generation:     int(r.Generation),
-			}
-			if r.IsMatch {
-				matchSeqs = append(matchSeqs, r.Seq)
 			}
 		}
 		matchSegments = buildSearchSegments(rows)
@@ -657,9 +652,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		HasMoreBefore:        hasMoreBefore,
 		HasMoreAfter:         hasMoreAfter,
 		RiskSegments:         riskSegments,
-		RiskSeqs:             riskSeqs,
 		MatchSegments:        matchSegments,
-		MatchSeqs:            matchSeqs,
 		Totals: &gen.ChatTotals{
 			Total:             totals.Total,
 			UserMessages:      totals.UserMessages,

@@ -28,14 +28,6 @@ export interface WindowedTranscript {
   loadingKey: WindowLoadKey | null;
   isLoading: boolean;
   isError: boolean;
-  /** Seqs of messages that matched the query, ascending — the jump targets.
-   * Empty in risk-only mode (risk findings aren't jump targets). */
-  matchSeqs: number[];
-  /** Seqs of messages that have an active risk finding, ascending. Populated in
-   * risk-only mode (empty in search mode). Lets callers identify the flagged
-   * messages from the authorized chat.load response, without the org-admin-only
-   * risk.results.list endpoint. */
-  riskSeqs: number[];
 }
 
 interface WindowState {
@@ -52,10 +44,6 @@ export interface WindowedRequest {
   riskOnly?: boolean;
   query?: string;
 }
-
-// Stable empty array so search consumers' memo/effect deps don't see a new
-// identity every render while there are no matches (or in risk-only mode).
-const EMPTY_SEQS: number[] = [];
 
 // mergeSorted unions two message lists, dedupes by seq, and keeps ascending order.
 function mergeSorted(a: ChatMessage[], b: ChatMessage[]): ChatMessage[] {
@@ -84,9 +72,9 @@ function buildInitial(chat: Chat, segments: RiskSegment[]): WindowState {
 // context, then lets the user expand the edges and fill the gaps between
 // disjoint windows. The mode is decided by `request`: `{ riskOnly: true }`
 // windows around risk findings (segments in `risk_segments`), `{ query }`
-// windows around text-search matches (segments in `match_segments`, plus
-// `match_seqs` jump targets). The incremental expansion is identical for both
-// modes: plain before_seq/after_seq page loads merged into the window.
+// windows around text-search matches (segments in `match_segments`). The
+// incremental expansion is identical for both modes: plain before_seq/after_seq
+// page loads merged into the window.
 export function useWindowedTranscript(
   chatId: string,
   enabled: boolean,
@@ -228,10 +216,5 @@ export function useWindowedTranscript(
     loadingKey,
     isLoading: base.isLoading,
     isError: base.isError || loadError,
-    // matchSeqs/riskSeqs come from the initial windowed response and don't change
-    // as the user expands the window, so read them straight off the base chat
-    // (stable react-query identity). Each is empty in the other mode.
-    matchSeqs: base.data?.matchSeqs ?? EMPTY_SEQS,
-    riskSeqs: base.data?.riskSeqs ?? EMPTY_SEQS,
   };
 }

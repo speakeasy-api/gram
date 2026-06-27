@@ -47,10 +47,6 @@ export type Chat = {
    */
   matchSegments?: Array<RiskSegment> | undefined;
   /**
-   * Present only when `query` was requested: the `seq` of every message whose text matched the query, ascending. These are the jump-to-match navigation targets; surrounding-context messages in `messages` are not listed here.
-   */
-  matchSeqs?: Array<number> | undefined;
-  /**
    * The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
    */
   maxGeneration: number;
@@ -70,10 +66,6 @@ export type Chat = {
    * Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment's cursors to expand it.
    */
   riskSegments?: Array<RiskSegment> | undefined;
-  /**
-   * Present only when `risk_only` was requested: the `seq` of every message that has an active risk finding, ascending. These are the flagged messages themselves; surrounding-context messages in `messages` are not listed here.
-   */
-  riskSeqs?: Array<number> | undefined;
   /**
    * The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)
    */
@@ -130,13 +122,11 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       z.transform(v => new Date(v)),
     ),
     match_segments: z.optional(z.array(RiskSegment$inboundSchema)),
-    match_seqs: z.optional(z.array(z.int())),
     max_generation: z.int(),
     messages: z.array(ChatMessage$inboundSchema),
     num_messages: z.int(),
     risk_findings_count: z.optional(z.int()),
     risk_segments: z.optional(z.array(RiskSegment$inboundSchema)),
-    risk_seqs: z.optional(z.array(z.int())),
     source: z.optional(z.string()),
     title: z.string(),
     total_cost: z.optional(z.number()),
@@ -159,12 +149,10 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "has_more_before": "hasMoreBefore",
       "last_message_timestamp": "lastMessageTimestamp",
       "match_segments": "matchSegments",
-      "match_seqs": "matchSeqs",
       "max_generation": "maxGeneration",
       "num_messages": "numMessages",
       "risk_findings_count": "riskFindingsCount",
       "risk_segments": "riskSegments",
-      "risk_seqs": "riskSeqs",
       "total_cost": "totalCost",
       "total_input_tokens": "totalInputTokens",
       "total_output_tokens": "totalOutputTokens",

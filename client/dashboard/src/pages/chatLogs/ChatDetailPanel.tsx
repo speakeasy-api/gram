@@ -69,7 +69,7 @@ import {
   buildTranscript,
   type MessageCategory,
   rowCategory,
-  rowHasSeqIn,
+  rowHasRiskFlag,
   rowIsFlagged,
   rowSearchFields,
   type SearchFieldKey,
@@ -793,15 +793,6 @@ function ChatDetailPanel({
     () => buildTranscript(chatMessages),
     [chatMessages],
   );
-  // Flagged-message seqs reported by the risk-windowed load (active whenever
-  // riskyOnly is on). This is the authorized "which messages are risky" source —
-  // it rides chat.load, so it works even when the org-admin-only
-  // risk.results.list (which powers riskResultsByMessage and the match-detail
-  // badges) is forbidden for this user.
-  const riskSeqSet = useMemo(
-    () => new Set(riskTranscript.riskSeqs),
-    [riskTranscript.riskSeqs],
-  );
   // Apply the header filters at the row level so generation dividers and risk
   // gaps recompute against exactly what's shown (no orphaned dividers).
   const filterActive = typeFilter.size < ALL_CATEGORIES.size || riskyOnly;
@@ -811,15 +802,17 @@ function ChatDetailPanel({
       rows = rows.filter((r) => typeFilter.has(rowCategory(r)));
     }
     if (riskyOnly) {
-      // Prefer the server-reported risk seqs; fall back to per-message risk
-      // results (admin path) so the filter still works if seqs are absent.
+      // `is_risk` on each windowed message is the authorized "which messages are
+      // risky" signal — it rides chat.load (no internal seq exposed), so the
+      // filter works even when the org-admin-only risk.results.list (which powers
+      // the match-detail badges) is forbidden. Fall back to per-message risk
+      // results for safety.
       rows = rows.filter(
-        (r) =>
-          rowHasSeqIn(r, riskSeqSet) || rowIsFlagged(r, riskResultsByMessage),
+        (r) => rowHasRiskFlag(r) || rowIsFlagged(r, riskResultsByMessage),
       );
     }
     return rows;
-  }, [transcriptRows, typeFilter, riskyOnly, riskSeqSet, riskResultsByMessage]);
+  }, [transcriptRows, typeFilter, riskyOnly, riskResultsByMessage]);
   const hasMoreBefore = active.hasMoreBefore;
   const hasMoreAfter = active.hasMoreAfter;
   const windowGaps = riskWindowed
@@ -852,8 +845,8 @@ function ChatDetailPanel({
   // Unified per-occurrence search navigation: flat-map the loaded display rows
   // into every query occurrence (message text / tool name / args / output) in
   // document order — mirroring exactly what the renderer highlights — so next/prev
-  // steps each occurrence, not each matching message. (searchTranscript.matchSeqs
-  // still drives the windowed load; here we navigate the rendered occurrences.)
+  // steps each occurrence, not each matching message. (The `query` windowed load
+  // decides which messages are loaded; here we navigate the rendered occurrences.)
   const occurrences = useMemo(() => {
     if (!searchActive) return EMPTY_OCCURRENCES;
     const out: Occurrence[] = [];

@@ -6380,19 +6380,19 @@ paths:
             description: When true, return the oldest page of the generation (the start of the thread), ordered oldest to newest, with `has_more_before=false`. Page forward from there with `after_seq`. Ignored when `before_seq`, `after_seq`, or `risk_only` is set.
             type: boolean
         - allowEmptyValue: true
-          description: When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). The seqs of the flagged messages themselves are listed in `risk_seqs`. Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.
+          description: 'When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). The flagged messages themselves are marked with `is_risk` on each `ChatMessage` (surrounding context is `is_risk: false`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.'
           in: query
           name: risk_only
           schema:
             default: false
-            description: When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). The seqs of the flagged messages themselves are listed in `risk_seqs`. Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.
+            description: 'When true, return only messages that have active risk findings, each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `risk_segments`). The flagged messages themselves are marked with `is_risk` on each `ChatMessage` (surrounding context is `is_risk: false`). Cursors are ignored in this mode; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `query`.'
             type: boolean
         - allowEmptyValue: true
-          description: When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). The seqs that actually matched are listed in `match_seqs`. Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
+          description: When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
           in: query
           name: query
           schema:
-            description: When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). The seqs that actually matched are listed in `match_seqs`. Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
+            description: When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
             maxLength: 200
             minLength: 1
             type: string
@@ -35501,12 +35501,6 @@ components:
           items:
             $ref: '#/components/schemas/RiskSegment'
           description: 'Present only when `query` was requested: contiguous runs of returned messages, each spanning one or more query matches and their surrounding context. Use each segment''s cursors to expand it.'
-        match_seqs:
-          type: array
-          items:
-            type: integer
-            format: int64
-          description: 'Present only when `query` was requested: the `seq` of every message whose text matched the query, ascending. These are the jump-to-match navigation targets; surrounding-context messages in `messages` are not listed here.'
         max_generation:
           type: integer
           description: The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
@@ -35529,12 +35523,6 @@ components:
           items:
             $ref: '#/components/schemas/RiskSegment'
           description: 'Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment''s cursors to expand it.'
-        risk_seqs:
-          type: array
-          items:
-            type: integer
-            format: int64
-          description: 'Present only when `risk_only` was requested: the `seq` of every message that has an active risk finding, ascending. These are the flagged messages themselves; surrounding-context messages in `messages` are not listed here.'
         source:
           type: string
           description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
@@ -35600,6 +35588,9 @@ components:
         id:
           type: string
           description: The ID of the message
+        is_risk:
+          type: boolean
+          description: 'Present only in `risk_only` mode: true when this message has an active risk finding, false for the surrounding-context messages padded around it.'
         model:
           type: string
           description: The model that generated the message

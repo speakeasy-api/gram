@@ -218,19 +218,14 @@ export function rowIsFlagged(
   );
 }
 
-/** Whether a row renders any message whose `seq` is in `seqs` (e.g. the
- * server-reported risk finding seqs from a risk-windowed load). The seq-based
- * counterpart to rowIsFlagged that doesn't need per-message risk results, so it
- * works without the org-admin-only risk.results.list endpoint. */
-export function rowHasSeqIn(
-  row: TranscriptRow,
-  seqs: ReadonlySet<number>,
-): boolean {
-  if (row.kind === "message") return seqs.has(row.message.seq);
-  return (
-    (row.callMessage != null && seqs.has(row.callMessage.seq)) ||
-    (row.resultMessage != null && seqs.has(row.resultMessage.seq))
-  );
+/** Whether a row renders a message flagged with `is_risk` by a risk-windowed
+ * load (a tool row spans its call + result message). The authorized counterpart
+ * to rowIsFlagged: it reads the per-message flag off chat.load, so it needs
+ * neither per-message risk results (the org-admin-only risk.results.list) nor
+ * any exposed seq. */
+export function rowHasRiskFlag(row: TranscriptRow): boolean {
+  if (row.kind === "message") return row.message.isRisk === true;
+  return row.callMessage?.isRisk === true || row.resultMessage?.isRisk === true;
 }
 
 /** A query-highlighted field within a row, in render order. A plain message has
