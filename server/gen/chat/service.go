@@ -39,6 +39,9 @@ type Service interface {
 	CreditUsage(context.Context, *CreditUsagePayload) (res *CreditUsageResult, err error)
 	// Soft-delete a chat by its ID
 	DeleteChat(context.Context, *DeleteChatPayload) (err error)
+	// Pin or unpin a chat. Pinned chats surface in a dedicated section above
+	// recents on the chat page.
+	SetPinned(context.Context, *SetPinnedPayload) (err error)
 	// Submit user feedback for a chat (success/failure)
 	SubmitFeedback(context.Context, *SubmitFeedbackPayload) (res *SubmitFeedbackResult, err error)
 }
@@ -65,7 +68,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"listChats", "loadChat", "generateTitle", "creditUsage", "deleteChat", "submitFeedback"}
+var MethodNames = [7]string{"listChats", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "submitFeedback"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -341,6 +344,9 @@ type ListChatsPayload struct {
 	// Filter by whether chat has risk findings: 'true', 'false', or empty for no
 	// filter.
 	HasRisk *string
+	// Filter by pinned state: 'true' for pinned chats, 'false' for unpinned, or
+	// empty for no filter.
+	Pinned *string
 	// Filter to chats with at least this many active risk findings (inclusive).
 	// Omit or pass 0 for no threshold.
 	MinRiskScore *int
@@ -434,6 +440,16 @@ type RiskSegment struct {
 	// Whether messages exist after this segment within the generation. Expand with
 	// an `after_seq` request using `last_seq`.
 	HasMoreAfter bool
+}
+
+// SetPinnedPayload is the payload type of the chat service setPinned method.
+type SetPinnedPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the chat to pin or unpin
+	ID string
+	// True to pin the chat, false to unpin it
+	Pinned bool
 }
 
 // SubmitFeedbackPayload is the payload type of the chat service submitFeedback

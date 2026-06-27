@@ -20,6 +20,7 @@ var Assistant = Type("Assistant", func() {
 	Attribute("project_id", String, "The project ID owning the assistant.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("created_by_user_id", String, "The ID of the user who created the assistant, if known.")
 	Attribute("name", String, "The assistant name.")
 	Attribute("model", String, "The model identifier used by the assistant.")
 	Attribute("instructions", String, "The system instructions for the assistant.")

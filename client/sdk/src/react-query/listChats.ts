@@ -106,6 +106,7 @@ export function setListChatsData(
       externalUserId?: string | undefined;
       assistantId?: string | undefined;
       hasRisk?: operations.HasRisk | undefined;
+      pinned?: operations.Pinned | undefined;
       minRiskScore?: number | undefined;
       from?: Date | undefined;
       to?: Date | undefined;
@@ -133,6 +134,7 @@ export function invalidateListChats(
       externalUserId?: string | undefined;
       assistantId?: string | undefined;
       hasRisk?: operations.HasRisk | undefined;
+      pinned?: operations.Pinned | undefined;
       minRiskScore?: number | undefined;
       from?: Date | undefined;
       to?: Date | undefined;

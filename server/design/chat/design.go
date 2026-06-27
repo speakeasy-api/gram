@@ -29,6 +29,9 @@ var _ = Service("chat", func() {
 			Attribute("has_risk", String, "Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.", func() {
 				Enum("", "true", "false")
 			})
+			Attribute("pinned", String, "Filter by pinned state: 'true' for pinned chats, 'false' for unpinned, or empty for no filter.", func() {
+				Enum("", "true", "false")
+			})
 			Attribute("min_risk_score", Int, "Filter to chats with at least this many active risk findings (inclusive). Omit or pass 0 for no threshold.", func() {
 				Minimum(0)
 			})
@@ -65,6 +68,7 @@ var _ = Service("chat", func() {
 			Param("external_user_id")
 			Param("assistant_id")
 			Param("has_risk")
+			Param("pinned")
 			Param("min_risk_score")
 			Param("from")
 			Param("to")
@@ -220,6 +224,30 @@ var _ = Service("chat", func() {
 
 		Meta("openapi:operationId", "deleteChat")
 		Meta("openapi:extension:x-speakeasy-name-override", "delete")
+	})
+
+	Method("setPinned", func() {
+		Description("Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The ID of the chat to pin or unpin")
+			Attribute("pinned", Boolean, "True to pin the chat, false to unpin it")
+			Required("id", "pinned")
+		})
+
+		HTTP(func() {
+			POST("/rpc/chat.setPinned")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "setChatPinned")
+		Meta("openapi:extension:x-speakeasy-name-override", "setPinned")
 	})
 
 	Method("submitFeedback", func() {

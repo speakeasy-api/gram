@@ -37,7 +37,7 @@ func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(
 	require.NoError(t, err)
 
 	fullURL := "https://mcp.example.com/server"
-	token := riskPolicyBypassRequestToken(t, authCtx, policy.ID, fullURL)
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, fullURL)
 
 	beforeCreateAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestCreate)
 	require.NoError(t, err)
@@ -122,7 +122,7 @@ func TestCreateApprovePolicyBypassRequest_AddsServerIdentityGrant(t *testing.T) 
 	require.NoError(t, err)
 
 	serverIdentity := "mise mcp"
-	token := riskPolicyBypassRequestTokenForServerIdentity(t, authCtx, policy.ID, serverIdentity)
+	token := riskPolicyBypassRequestTokenForServerIdentity(t, ti, authCtx, policy.ID, serverIdentity)
 	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
 		RequestToken: token,
 	})
@@ -165,7 +165,7 @@ func TestApprovePolicyBypassRequest_CanGrantAllUsers(t *testing.T) {
 
 	fullURL := "https://mcp.example.com/all-users"
 	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
-		RequestToken: riskPolicyBypassRequestToken(t, authCtx, policy.ID, fullURL),
+		RequestToken: riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, fullURL),
 	})
 	require.NoError(t, err)
 
@@ -296,7 +296,7 @@ func TestApprovePolicyBypassRequest_CanGrantRole(t *testing.T) {
 
 	fullURL := "https://mcp.example.com/role"
 	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
-		RequestToken: riskPolicyBypassRequestToken(t, authCtx, policy.ID, fullURL),
+		RequestToken: riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, fullURL),
 	})
 	require.NoError(t, err)
 
@@ -335,7 +335,7 @@ func TestApprovePolicyBypassRequest_ApprovedRequestReplacesGrantedPrincipals(t *
 
 	fullURL := "https://mcp.example.com/replace-principals"
 	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
-		RequestToken: riskPolicyBypassRequestToken(t, authCtx, policy.ID, fullURL),
+		RequestToken: riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, fullURL),
 	})
 	require.NoError(t, err)
 
@@ -374,7 +374,7 @@ func TestApprovePolicyBypassRequest_RejectsUnknownRolePrincipal(t *testing.T) {
 	require.NoError(t, err)
 
 	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
-		RequestToken: riskPolicyBypassRequestToken(t, authCtx, policy.ID, "https://mcp.example.com/unknown-role"),
+		RequestToken: riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, "https://mcp.example.com/unknown-role"),
 	})
 	require.NoError(t, err)
 
@@ -400,7 +400,7 @@ func TestCreatePolicyBypassRequest_AfterDeny_ResetsExistingRequestToRequested(t 
 	})
 	require.NoError(t, err)
 
-	token := riskPolicyBypassRequestToken(t, authCtx, policy.ID, "https://mcp.example.com/denied")
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, "https://mcp.example.com/denied")
 	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
 		RequestToken: token,
 	})
@@ -452,7 +452,7 @@ func TestCreatePolicyBypassRequest_AfterApprove_PreservesApprovedStateAndGrant(t
 	require.NoError(t, err)
 
 	fullURL := "https://mcp.example.com/approved"
-	token := riskPolicyBypassRequestToken(t, authCtx, policy.ID, fullURL)
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, fullURL)
 	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
 		RequestToken: token,
 	})
@@ -495,7 +495,7 @@ func TestDenyPolicyBypassRequest_RejectsApprovedRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	fullURL := "https://mcp.example.com/deny-approved"
-	token := riskPolicyBypassRequestToken(t, authCtx, policy.ID, fullURL)
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, fullURL)
 	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
 		RequestToken: token,
 	})
@@ -530,7 +530,7 @@ func TestCreatePolicyBypassRequest_WithoutFullURLCreatesWholePolicyTarget(t *tes
 	require.NoError(t, err)
 
 	host := "mcp.example.com"
-	token, _, err := risk.GeneratePolicyBypassRequestToken("test-jwt-secret", risk.PolicyBypassRequestTokenInput{
+	token, _, err := risk.GeneratePolicyBypassRequestToken(ctx, ti.cacheAdapter, risk.PolicyBypassRequestTokenInput{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              authCtx.ProjectID.String(),
 		RequesterUserID:        authCtx.UserID,
@@ -561,7 +561,9 @@ func TestCreatePolicyBypassRequest_WithoutFullURLCreatesWholePolicyTarget(t *tes
 func TestGeneratePolicyBypassRequestToken_RequiresEvidence(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := risk.GeneratePolicyBypassRequestToken("test-jwt-secret", risk.PolicyBypassRequestTokenInput{
+	// Evidence is validated before the cache is touched, so a nil cache is
+	// fine here — the call must fail on the missing evidence first.
+	_, _, err := risk.GeneratePolicyBypassRequestToken(t.Context(), nil, risk.PolicyBypassRequestTokenInput{
 		OrganizationID:         "org_test",
 		ProjectID:              "00000000-0000-0000-0000-000000000001",
 		RequesterUserID:        "user_test",
@@ -578,10 +580,10 @@ func TestGeneratePolicyBypassRequestToken_RequiresEvidence(t *testing.T) {
 	require.ErrorContains(t, err, "policy bypass request evidence is required")
 }
 
-func riskPolicyBypassRequestToken(t *testing.T, authCtx *contextvalues.AuthContext, policyID string, fullURL string) string {
+func riskPolicyBypassRequestToken(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, policyID string, fullURL string) string {
 	t.Helper()
 
-	token, _, err := risk.GeneratePolicyBypassRequestToken("test-jwt-secret", risk.PolicyBypassRequestTokenInput{
+	token, _, err := risk.GeneratePolicyBypassRequestToken(t.Context(), ti.cacheAdapter, risk.PolicyBypassRequestTokenInput{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              authCtx.ProjectID.String(),
 		RequesterUserID:        authCtx.UserID,
@@ -599,10 +601,10 @@ func riskPolicyBypassRequestToken(t *testing.T, authCtx *contextvalues.AuthConte
 	return token
 }
 
-func riskPolicyBypassRequestTokenForServerIdentity(t *testing.T, authCtx *contextvalues.AuthContext, policyID string, serverIdentity string) string {
+func riskPolicyBypassRequestTokenForServerIdentity(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, policyID string, serverIdentity string) string {
 	t.Helper()
 
-	token, _, err := risk.GeneratePolicyBypassRequestToken("test-jwt-secret", risk.PolicyBypassRequestTokenInput{
+	token, _, err := risk.GeneratePolicyBypassRequestToken(t.Context(), ti.cacheAdapter, risk.PolicyBypassRequestTokenInput{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              authCtx.ProjectID.String(),
 		RequesterUserID:        authCtx.UserID,

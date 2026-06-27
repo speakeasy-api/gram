@@ -3352,6 +3352,13 @@ CREATE TABLE IF NOT EXISTS tool_call_blocks (
   chat_id uuid,
   chat_message_id uuid,
 
+  -- The Gram user whose agent triggered the block, captured at deny time.
+  -- Used to authorize the durable block page (the owner may view their own
+  -- block). Stored directly rather than derived via chat_id so it is available
+  -- even when session capture is disabled and no chat row was persisted. Empty
+  -- string when the user could not be resolved at deny time.
+  user_id TEXT NOT NULL,
+
   feedback TEXT,
   feedback_user_id TEXT,
   feedback_at timestamptz,
