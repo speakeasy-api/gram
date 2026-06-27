@@ -62,45 +62,62 @@ func NewCorrelateClaudePrompts(logger *slog.Logger, db *pgxpool.Pool, chConn cli
 }
 
 type CorrelateClaudePromptsArgs struct {
-	ProjectID uuid.UUID
-	ChatID    uuid.UUID
-	SessionID string
+	ProjectID              uuid.UUID
+	ChatID                 uuid.UUID
+	SessionID              string
+	AfterMessageSeq        int64
+	AfterEventSequence     int64
+	AfterEventTimeUnixNano int64
 }
 
 type CorrelateClaudePromptsResult struct {
-	HasMore bool
+	HasMore                bool
+	AfterMessageSeq        int64
+	AfterEventSequence     int64
+	AfterEventTimeUnixNano int64
 }
 
 type claudeUnlinkedUserMessage struct {
 	id        uuid.UUID
+	seq       int64
 	content   string
 	createdAt time.Time
 }
 
 func (c *CorrelateClaudePrompts) Do(ctx context.Context, args CorrelateClaudePromptsArgs) (*CorrelateClaudePromptsResult, error) {
-	messages, hasMore, err := c.listUnlinkedUserMessages(ctx, args.ProjectID, args.ChatID)
+	messages, hasMore, err := c.listUnlinkedUserMessages(ctx, args.ProjectID, args.ChatID, args.AfterMessageSeq)
 	if err != nil {
 		return nil, fmt.Errorf("list unlinked Claude user messages: %w", err)
 	}
+	result := &CorrelateClaudePromptsResult{
+		HasMore:                hasMore,
+		AfterMessageSeq:        args.AfterMessageSeq,
+		AfterEventSequence:     args.AfterEventSequence,
+		AfterEventTimeUnixNano: args.AfterEventTimeUnixNano,
+	}
 	if len(messages) == 0 {
-		return &CorrelateClaudePromptsResult{HasMore: hasMore}, nil
+		return result, nil
 	}
 
 	deadline, hasDeadline := ctx.Deadline()
 
-	var cursor claudePromptCorrelationCursor
-	for idx, message := range messages {
+	cursor := claudePromptCorrelationCursor{
+		eventSequence: args.AfterEventSequence,
+		timeUnixNano:  args.AfterEventTimeUnixNano,
+	}
+	for _, message := range messages {
 		// Stop before the activity deadline so a partially drained backlog
 		// completes successfully and the remainder is picked up by a later run,
 		// rather than the whole activity failing and re-running from scratch.
-		if hasDeadline && time.Until(deadline) <= claudePromptCorrelationMatchTimeout {
-			hasMore = hasMore || idx < len(messages)
+		if hasDeadline && time.Until(deadline) <= c.matchTimeout {
+			result.HasMore = true
 			break
 		}
 
 		match, ok, err := c.findClaudeUserPromptMatch(ctx, args.ProjectID, args.ChatID, args.SessionID, message, cursor)
 		if err != nil {
 			if errors.Is(err, errClaudePromptCorrelationMatchTimeout) {
+				result.AfterMessageSeq = message.seq
 				// One slow ClickHouse query must not abort the run: that would
 				// leave the backlog unprocessed and, because a run is scheduled
 				// per prompt event, spin into a retry storm. Skip it and keep
@@ -114,6 +131,7 @@ func (c *CorrelateClaudePrompts) Do(ctx context.Context, args CorrelateClaudePro
 			}
 			return nil, fmt.Errorf("find Claude user prompt match: %w", err)
 		}
+		result.AfterMessageSeq = message.seq
 		if !ok {
 			continue
 		}
@@ -123,16 +141,19 @@ func (c *CorrelateClaudePrompts) Do(ctx context.Context, args CorrelateClaudePro
 		}
 		cursor.eventSequence = match.EventSequence
 		cursor.timeUnixNano = match.TimeUnixNano
+		result.AfterEventSequence = match.EventSequence
+		result.AfterEventTimeUnixNano = match.TimeUnixNano
 	}
 
-	return &CorrelateClaudePromptsResult{HasMore: hasMore}, nil
+	return result, nil
 }
 
-func (c *CorrelateClaudePrompts) listUnlinkedUserMessages(ctx context.Context, projectID uuid.UUID, chatID uuid.UUID) ([]claudeUnlinkedUserMessage, bool, error) {
+func (c *CorrelateClaudePrompts) listUnlinkedUserMessages(ctx context.Context, projectID uuid.UUID, chatID uuid.UUID, afterMessageSeq int64) ([]claudeUnlinkedUserMessage, bool, error) {
 	rows, err := c.store.ListUnlinkedClaudeUserMessagesForCorrelation(ctx, activitiesrepo.ListUnlinkedClaudeUserMessagesForCorrelationParams{
-		ChatID:     chatID,
-		ProjectID:  conv.ToNullUUID(projectID),
-		LimitCount: claudePromptCorrelationMessageBatchSize + 1,
+		ChatID:          chatID,
+		ProjectID:       conv.ToNullUUID(projectID),
+		AfterMessageSeq: afterMessageSeq,
+		LimitCount:      claudePromptCorrelationMessageBatchSize + 1,
 	})
 	if err != nil {
 		return nil, false, fmt.Errorf("query unlinked user messages: %w", err)
@@ -147,6 +168,7 @@ func (c *CorrelateClaudePrompts) listUnlinkedUserMessages(ctx context.Context, p
 	for _, row := range rows {
 		messages = append(messages, claudeUnlinkedUserMessage{
 			id:        row.ID,
+			seq:       row.Seq,
 			content:   row.Content,
 			createdAt: row.CreatedAt.Time,
 		})

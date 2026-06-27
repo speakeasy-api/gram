@@ -389,25 +389,28 @@ func (q *Queries) GetUserEmailsByOrgIDs(ctx context.Context, dollar_1 []string) 
 }
 
 const listUnlinkedClaudeUserMessagesForCorrelation = `-- name: ListUnlinkedClaudeUserMessagesForCorrelation :many
-SELECT id, content, created_at
+SELECT id, seq, content, created_at
 FROM chat_messages
 WHERE chat_id = $1
   AND (project_id IS NULL OR project_id = $2)
   AND role = 'user'
   AND content != ''
   AND (message_id IS NULL OR message_id = '')
+  AND seq > $3
 ORDER BY seq ASC, created_at ASC
-LIMIT $3
+LIMIT $4
 `
 
 type ListUnlinkedClaudeUserMessagesForCorrelationParams struct {
-	ChatID     uuid.UUID
-	ProjectID  uuid.NullUUID
-	LimitCount int32
+	ChatID          uuid.UUID
+	ProjectID       uuid.NullUUID
+	AfterMessageSeq int64
+	LimitCount      int32
 }
 
 type ListUnlinkedClaudeUserMessagesForCorrelationRow struct {
 	ID        uuid.UUID
+	Seq       int64
 	Content   string
 	CreatedAt pgtype.Timestamptz
 }
@@ -415,7 +418,12 @@ type ListUnlinkedClaudeUserMessagesForCorrelationRow struct {
 // Fetch a bounded prefix of the unlinked backlog. The caller requests one extra
 // row to detect whether another drain pass is needed.
 func (q *Queries) ListUnlinkedClaudeUserMessagesForCorrelation(ctx context.Context, arg ListUnlinkedClaudeUserMessagesForCorrelationParams) ([]ListUnlinkedClaudeUserMessagesForCorrelationRow, error) {
-	rows, err := q.db.Query(ctx, listUnlinkedClaudeUserMessagesForCorrelation, arg.ChatID, arg.ProjectID, arg.LimitCount)
+	rows, err := q.db.Query(ctx, listUnlinkedClaudeUserMessagesForCorrelation,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.AfterMessageSeq,
+		arg.LimitCount,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +431,12 @@ func (q *Queries) ListUnlinkedClaudeUserMessagesForCorrelation(ctx context.Conte
 	var items []ListUnlinkedClaudeUserMessagesForCorrelationRow
 	for rows.Next() {
 		var i ListUnlinkedClaudeUserMessagesForCorrelationRow
-		if err := rows.Scan(&i.ID, &i.Content, &i.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.Content,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

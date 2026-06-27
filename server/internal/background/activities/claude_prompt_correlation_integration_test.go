@@ -87,9 +87,12 @@ func TestCorrelateClaudePrompts_MatchesOldMessageWhenEventTimeIsClose(t *testing
 	var messages []chatrepo.ChatMessage
 	require.Eventually(t, func() bool {
 		result, err := act.Do(ctx, activities.CorrelateClaudePromptsArgs{
-			ProjectID: project.ID,
-			ChatID:    chatID,
-			SessionID: sessionID,
+			ProjectID:              project.ID,
+			ChatID:                 chatID,
+			SessionID:              sessionID,
+			AfterMessageSeq:        0,
+			AfterEventSequence:     0,
+			AfterEventTimeUnixNano: 0,
 		})
 		require.NoError(t, err)
 		require.False(t, result.HasMore)
