@@ -107,10 +107,6 @@ type Chat struct {
 	// messages, each spanning one or more query matches and their surrounding
 	// context. Use each segment's cursors to expand it.
 	MatchSegments []*RiskSegment
-	// Present only when `query` was requested: the `seq` of every message whose
-	// text matched the query, ascending. These are the jump-to-match navigation
-	// targets; surrounding-context messages in `messages` are not listed here.
-	MatchSeqs []int64
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsage
 	// Whole-generation trace-entry totals for the returned generation. Because
@@ -158,6 +154,9 @@ type ChatMessage struct {
 	// contiguous (the sequence is shared across chats), so do not infer gaps from
 	// arithmetic differences.
 	Seq int64
+	// Present only in `risk_only` mode: true when this message has an active risk
+	// finding, false for the surrounding-context messages padded around it.
+	IsRisk *bool
 	// The role of the message
 	Role string
 	// The content of the message — string for plain text, array for
@@ -428,18 +427,18 @@ type LoadChatPayload struct {
 	FromStart bool
 	// When true, return only messages that have active risk findings, each padded
 	// with a fixed window of surrounding messages, grouped into contiguous
-	// segments (see `risk_segments`). Cursors are ignored in this mode; expand a
-	// segment with a follow-up `before_seq`/`after_seq` request. Mutually
-	// exclusive with `query`.
+	// segments (see `risk_segments`). The flagged messages themselves are marked
+	// with `is_risk` on each `ChatMessage` (surrounding context is `is_risk:
+	// false`). Cursors are ignored in this mode; expand a segment with a follow-up
+	// `before_seq`/`after_seq` request. Mutually exclusive with `query`.
 	RiskOnly bool
 	// When set (and `risk_only` is false), return only messages whose text matches
 	// this query (case-insensitive substring over message text, tool
 	// names/arguments, and structured content), each padded with a fixed window of
 	// surrounding messages, grouped into contiguous segments (see
-	// `match_segments`). The seqs that actually matched are listed in
-	// `match_seqs`. Cursors are ignored on the initial request; expand a segment
-	// with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with
-	// `risk_only`.
+	// `match_segments`). Cursors are ignored on the initial request; expand a
+	// segment with a follow-up `before_seq`/`after_seq` request. Mutually
+	// exclusive with `risk_only`.
 	Query *string
 }
 

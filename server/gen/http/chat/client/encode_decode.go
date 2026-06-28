@@ -1976,6 +1976,7 @@ func unmarshalChatMessageResponseBodyToChatChatMessage(v *ChatMessageResponseBod
 	res := &chat.ChatMessage{
 		ID:             *v.ID,
 		Seq:            *v.Seq,
+		IsRisk:         v.IsRisk,
 		Role:           *v.Role,
 		Content:        v.Content,
 		Model:          *v.Model,

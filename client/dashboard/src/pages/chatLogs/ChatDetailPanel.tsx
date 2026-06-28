@@ -56,8 +56,7 @@ import {
   type ExclusionSheetState,
 } from "@/pages/security/exclusion-sheet";
 import { useChatTranscript } from "./useChatTranscript";
-import { useChatRiskTranscript } from "./useChatRiskTranscript";
-import { useChatSearchTranscript } from "./useChatSearchTranscript";
+import { useWindowedTranscript } from "./useWindowedTranscript";
 import { CreateExclusionContext } from "./exclusionContext";
 import { findingToExclusionState } from "./chatHelpers";
 import {
@@ -70,8 +69,10 @@ import {
   buildTranscript,
   type MessageCategory,
   rowCategory,
+  rowHasRiskFlag,
   rowIsFlagged,
-  rowMatchesSeq,
+  rowSearchFields,
+  type SearchFieldKey,
 } from "./transcript";
 import { cn } from "@/lib/utils";
 import {
@@ -109,9 +110,19 @@ interface ChatDetailSheetProps extends Omit<ChatDetailPanelProps, "chatId"> {
 
 type ViewMode = "chat" | "tools" | "exclusion";
 
+/** One navigable search hit: a single query occurrence within one field of one
+ * display row. `key` is stable across pagination (built from the row id, not its
+ * shifting index) so the active occurrence survives loading more messages. */
+interface Occurrence {
+  key: string;
+  itemIndex: number;
+  fieldKey: SearchFieldKey;
+  indexInField: number;
+}
+
 // Stable empty array for the no-search case, so memo/effect deps that read the
-// match list don't see a fresh identity every render.
-const EMPTY_MATCH_SEQS: number[] = [];
+// occurrence list don't see a fresh identity every render.
+const EMPTY_OCCURRENCES: Occurrence[] = [];
 
 // Identity for a finding, used to optimistically hide it the moment an exclusion
 // is created for it (the server reconcile is async, so a refetch lags).
@@ -291,11 +302,15 @@ function MessageFilterBar({
   onTypeFilterChange,
   riskyOnly,
   onRiskyOnlyChange,
+  showRiskyOnly,
 }: {
   typeFilter: ReadonlySet<MessageCategory>;
   onTypeFilterChange: (next: Set<MessageCategory>) => void;
   riskyOnly: boolean;
   onRiskyOnlyChange: (next: boolean) => void;
+  /** The "Risky only" view is driven by risk findings, which are an org-admin
+   * resource (risk.results.list). Hide the toggle for everyone else. */
+  showRiskyOnly: boolean;
 }) {
   const toggleType = (key: MessageCategory) => {
     const next = new Set(typeFilter);
@@ -330,18 +345,22 @@ function MessageFilterBar({
           );
         })}
       </div>
-      <div className="bg-border h-5 w-px" />
-      <div className="flex items-center gap-2">
-        <Switch
-          checked={riskyOnly}
-          onCheckedChange={onRiskyOnlyChange}
-          aria-label="Show only risky messages"
-          className={riskyOnly ? "bg-red-800" : undefined}
-        />
-        <span className="text-muted-foreground text-xs font-medium">
-          Risky only
-        </span>
-      </div>
+      {showRiskyOnly && (
+        <>
+          <div className="bg-border h-5 w-px" />
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={riskyOnly}
+              onCheckedChange={onRiskyOnlyChange}
+              aria-label="Show only risky messages"
+              className={riskyOnly ? "bg-red-800" : undefined}
+            />
+            <span className="text-muted-foreground text-xs font-medium">
+              Risky only
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -472,6 +491,7 @@ function ChatDetailHeader({
   onTypeFilterChange,
   riskyOnly,
   onRiskyOnlyChange,
+  showRiskyOnly,
   searchBar,
   onExport,
   onDelete,
@@ -488,6 +508,7 @@ function ChatDetailHeader({
   onTypeFilterChange: (next: Set<MessageCategory>) => void;
   riskyOnly: boolean;
   onRiskyOnlyChange: (next: boolean) => void;
+  showRiskyOnly: boolean;
   /** Optional find-in-conversation bar (normal view only). */
   searchBar?: ReactNode;
   onExport: () => void;
@@ -584,6 +605,7 @@ function ChatDetailHeader({
               onTypeFilterChange={onTypeFilterChange}
               riskyOnly={riskyOnly}
               onRiskyOnlyChange={onRiskyOnlyChange}
+              showRiskyOnly={showRiskyOnly}
             />
           </div>
         </div>
@@ -616,6 +638,9 @@ function ChatDetailPanel({
   const isSuperAdmin = useIsAdmin();
   const { hasScope } = useRBAC();
   const canManageChat = isSuperAdmin || hasScope("org:admin");
+  // Risk findings are an org-admin resource (risk.results.list is org-admin
+  // gated). Only admins get the risk-windowed "Risky only" view + its data.
+  const canViewRisk = isSuperAdmin || hasScope("org:admin");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [view, setView] = useState<ViewMode>("chat");
   // Header transcript filter — which message types to show (all on by default)
@@ -635,11 +660,14 @@ function ChatDetailPanel({
     ReadonlySet<string>
   >(() => new Set());
   // Find-in-conversation: the raw input, its debounced value (which drives the
-  // search request + its react-query key), the active match index for prev/next
-  // navigation, and a nonce bumped on each jump so re-pressing next re-scrolls.
+  // search request + its react-query key), the active occurrence (tracked by a
+  // stable key so paging in more rows doesn't shift which occurrence is current),
+  // and a nonce bumped on each jump so re-pressing next re-scrolls.
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeMatchIdx, setActiveMatchIdx] = useState(0);
+  const [activeOccurrenceKey, setActiveOccurrenceKey] = useState<string | null>(
+    null,
+  );
   const [scrollNonce, setScrollNonce] = useState(0);
   useEffect(() => {
     const handle = setTimeout(() => setSearchQuery(searchInput.trim()), 250);
@@ -652,23 +680,30 @@ function ChatDetailPanel({
   // generation by seq keyset. Only the active transcript is enabled so we don't
   // double-fetch.
   const dimNonRisk = riskFocus || dimNonRiskProp;
+  // The risk-windowed view loads via the server `risk_only` param so every
+  // finding is fetched no matter which page it sits on. Two entry points turn it
+  // on: opening from the has-risk filter / risk focus (`dimNonRisk`, which dims
+  // non-flagged context), and the in-panel "Risky only" toggle (`riskyOnly`,
+  // which hard-filters down to just the flagged rows in `visibleRows` below). A
+  // plain client-side filter can't do this — it only sees the loaded page.
+  const riskWindowed = (dimNonRisk || riskyOnly) && canViewRisk;
   // Always load the latest page for chat-level enrichment (cost, agent usage,
   // source) — the risk-only load omits it. Risk views additionally load the
   // server-windowed findings and render those instead of the latest page.
   const transcript = useChatTranscript(chatId, true);
-  const riskTranscript = useChatRiskTranscript(chatId, dimNonRisk);
-  // Search is a third windowed mode, available only in the normal (non-risk)
-  // view. Disabled (no fetch) until there's a debounced query.
+  const riskTranscript = useWindowedTranscript(chatId, riskWindowed, {
+    riskOnly: true,
+  });
+  // Search is a third windowed mode, available only in the normal (non-risk,
+  // non-risky-only) view. Disabled (no fetch) until there's a debounced query.
   const searchActive =
-    !dimNonRisk &&
+    !riskWindowed &&
     searchQuery.length > 0 &&
     searchQuery.length <= MAX_SEARCH_QUERY_LEN;
-  const searchTranscript = useChatSearchTranscript(
-    chatId,
-    searchQuery,
-    searchActive,
-  );
-  const active = dimNonRisk
+  const searchTranscript = useWindowedTranscript(chatId, searchActive, {
+    query: searchQuery,
+  });
+  const active = riskWindowed
     ? riskTranscript
     : searchActive
       ? searchTranscript
@@ -682,7 +717,7 @@ function ChatDetailPanel({
   // re-fetch updates the transcript in place — its loading shows in the search
   // bar and as a "Searching…" empty state instead.
   const chatLoading =
-    transcript.isLoading || (dimNonRisk && riskTranscript.isLoading);
+    transcript.isLoading || (riskWindowed && riskTranscript.isLoading);
   const chatLoadHasErrors = active.isError;
 
   const {
@@ -713,7 +748,7 @@ function ChatDetailPanel({
     setOptimisticExcluded(new Set());
     setSearchInput("");
     setSearchQuery("");
-    setActiveMatchIdx(0);
+    setActiveOccurrenceKey(null);
   }, [chatId]);
 
   const logs = useMemo(
@@ -767,13 +802,20 @@ function ChatDetailPanel({
       rows = rows.filter((r) => typeFilter.has(rowCategory(r)));
     }
     if (riskyOnly) {
-      rows = rows.filter((r) => rowIsFlagged(r, riskResultsByMessage));
+      // `is_risk` on each windowed message is the authorized "which messages are
+      // risky" signal — it rides chat.load (no internal seq exposed), so the
+      // filter works even when the org-admin-only risk.results.list (which powers
+      // the match-detail badges) is forbidden. Fall back to per-message risk
+      // results for safety.
+      rows = rows.filter(
+        (r) => rowHasRiskFlag(r) || rowIsFlagged(r, riskResultsByMessage),
+      );
     }
     return rows;
   }, [transcriptRows, typeFilter, riskyOnly, riskResultsByMessage]);
   const hasMoreBefore = active.hasMoreBefore;
   const hasMoreAfter = active.hasMoreAfter;
-  const windowGaps = dimNonRisk
+  const windowGaps = riskWindowed
     ? riskTranscript.gaps
     : searchActive
       ? searchTranscript.gaps
@@ -800,41 +842,65 @@ function ChatDetailPanel({
     return idx >= 0 ? idx : null;
   }, [dimNonRisk, displayItems, riskResultsByMessage]);
 
-  // Search match navigation. matchSeqs (jump targets) come from the server;
-  // every match is loaded by construction, so mapping the active match to a
-  // display-item index resolves as soon as results render.
-  const matchSeqs = searchActive
-    ? searchTranscript.matchSeqs
-    : EMPTY_MATCH_SEQS;
-  const matchCount = matchSeqs.length;
-  // A fresh result set (new query) snaps the active match back to the first.
+  // Unified per-occurrence search navigation: flat-map the loaded display rows
+  // into every query occurrence (message text / tool name / args / output) in
+  // document order — mirroring exactly what the renderer highlights — so next/prev
+  // steps each occurrence, not each matching message. (The `query` windowed load
+  // decides which messages are loaded; here we navigate the rendered occurrences.)
+  const occurrences = useMemo(() => {
+    if (!searchActive) return EMPTY_OCCURRENCES;
+    const out: Occurrence[] = [];
+    displayItems.forEach((it, itemIndex) => {
+      if (it.type !== "row") return;
+      for (const f of rowSearchFields(
+        it.row,
+        searchQuery,
+        riskResultsByMessage,
+      )) {
+        for (let k = 0; k < f.count; k++) {
+          out.push({
+            key: `${it.id}:${f.key}:${k}`,
+            itemIndex,
+            fieldKey: f.key,
+            indexInField: k,
+          });
+        }
+      }
+    });
+    return out;
+  }, [searchActive, displayItems, searchQuery, riskResultsByMessage]);
+  const matchCount = occurrences.length;
+  // A fresh result set (new query) snaps back to the first occurrence.
   useEffect(() => {
-    setActiveMatchIdx(0);
+    setActiveOccurrenceKey(null);
   }, [searchQuery]);
-  const matchItemIndex = useMemo(() => {
-    if (!searchActive) return null;
-    const seq = matchSeqs[activeMatchIdx];
-    if (seq == null) return null;
-    const idx = displayItems.findIndex(
-      (it) => it.type === "row" && rowMatchesSeq(it.row, seq),
-    );
-    return idx >= 0 ? idx : null;
-  }, [searchActive, matchSeqs, activeMatchIdx, displayItems]);
+  // Resolve the active occurrence by its stable key, falling back to the first
+  // (key is null right after a query change, or stale if its row scrolled out of
+  // the loaded window).
+  const activeOccurrenceIdx = useMemo(() => {
+    if (occurrences.length === 0) return 0;
+    if (activeOccurrenceKey == null) return 0;
+    const i = occurrences.findIndex((o) => o.key === activeOccurrenceKey);
+    return i >= 0 ? i : 0;
+  }, [occurrences, activeOccurrenceKey]);
+  const activeOccurrence = occurrences[activeOccurrenceIdx] ?? null;
   const goToMatch = useCallback(
     (delta: number) => {
-      if (matchCount === 0) return;
-      setActiveMatchIdx((prev) => (prev + delta + matchCount) % matchCount);
+      if (occurrences.length === 0) return;
+      const next =
+        (activeOccurrenceIdx + delta + occurrences.length) % occurrences.length;
+      setActiveOccurrenceKey(occurrences[next]?.key ?? null);
       // Bump so re-pressing next/prev re-scrolls even when the index is unchanged
-      // (e.g. a single match), since the scroll effect keys on this nonce.
+      // (e.g. a single occurrence), since the scroll effect keys on this nonce.
       setScrollNonce((n) => n + 1);
     },
-    [matchCount],
+    [occurrences, activeOccurrenceIdx],
   );
 
   const transcriptPagination = useMemo<TranscriptPagination>(() => {
     // Risk and search are both server-windowed; only their source differs. The
     // plain keyset transcript drives edge loads directly when neither is active.
-    const windowed = dimNonRisk
+    const windowed = riskWindowed
       ? riskTranscript
       : searchActive
         ? searchTranscript
@@ -857,24 +923,32 @@ function ChatDetailPanel({
         ? (afterSeq: number) => windowed.loadingKey === `gap:${afterSeq}`
         : undefined,
       initialScrollIndex,
-      scrollToFinding: dimNonRisk || searchActive,
-      scrollToItemIndex: matchItemIndex,
+      // Every windowed view (risk focus, the risky-only toggle, or search) opens
+      // mid-thread, so suppress the top-of-list auto-load + jump-to-start button
+      // that the plain from-start transcript uses — otherwise the window's top
+      // edge eagerly expands older messages on mount.
+      scrollToFinding: riskWindowed || searchActive,
+      scrollToItemIndex: activeOccurrence?.itemIndex ?? null,
       scrollNonce,
-      activeMatchSeq: searchActive ? (matchSeqs[activeMatchIdx] ?? null) : null,
+      activeOccurrence: activeOccurrence
+        ? {
+            itemIndex: activeOccurrence.itemIndex,
+            fieldKey: activeOccurrence.fieldKey,
+            indexInField: activeOccurrence.indexInField,
+          }
+        : null,
     };
   }, [
     hasMoreBefore,
     hasMoreAfter,
-    dimNonRisk,
+    riskWindowed,
     searchActive,
     riskTranscript,
     searchTranscript,
     transcript,
     initialScrollIndex,
-    matchItemIndex,
     scrollNonce,
-    matchSeqs,
-    activeMatchIdx,
+    activeOccurrence,
   ]);
 
   const rowCtx = useMemo<RowContext>(
@@ -982,13 +1056,14 @@ function ChatDetailPanel({
         onTypeFilterChange={setTypeFilter}
         riskyOnly={riskyOnly}
         onRiskyOnlyChange={setRiskyOnly}
+        showRiskyOnly={canViewRisk}
         searchBar={
-          dimNonRisk ? undefined : (
+          riskWindowed ? undefined : (
             <ThreadSearchBar
               value={searchInput}
               onChange={setSearchInput}
               matchCount={matchCount}
-              activeIndex={activeMatchIdx}
+              activeIndex={activeOccurrenceIdx}
               loading={searchActive && searchTranscript.isLoading}
               onPrev={() => goToMatch(-1)}
               onNext={() => goToMatch(1)}

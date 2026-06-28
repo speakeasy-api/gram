@@ -474,7 +474,6 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		hasMoreAfter   bool
 		riskSegments   []*gen.RiskSegment
 		matchSegments  []*gen.RiskSegment
-		matchSeqs      []int64
 		// latestPageRows holds the repo rows of the initial newest page so we can
 		// infer the chat source from them; only populated on that first request.
 		latestPageRows []repo.ChatMessage
@@ -513,9 +512,14 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		for i := range rows {
 			r := rows[i]
 			toolCalls := string(r.ToolCalls)
+			// is_risk marks the flagged messages themselves (vs the surrounding
+			// context windowed in around them) so the dashboard can filter to
+			// findings without the server exposing internal seq positions.
+			isRisk := r.IsRisk
 			resultMessages[i] = &gen.ChatMessage{
 				ID:             r.ID.String(),
 				Seq:            r.Seq,
+				IsRisk:         &isRisk,
 				Role:           r.Role,
 				Model:          r.Model.String,
 				UserID:         &r.UserID.String,
@@ -553,13 +557,13 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load search-windowed messages").LogError(ctx, s.logger)
 		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
-		matchSeqs = make([]int64, 0, len(rows))
 		for i := range rows {
 			r := rows[i]
 			toolCalls := string(r.ToolCalls)
 			resultMessages[i] = &gen.ChatMessage{
 				ID:             r.ID.String(),
 				Seq:            r.Seq,
+				IsRisk:         nil, // is_risk is a risk_only-mode signal
 				Role:           r.Role,
 				Model:          r.Model.String,
 				UserID:         &r.UserID.String,
@@ -571,9 +575,6 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 				PromptID:       conv.FromPGText[string](r.MessageID),
 				CreatedAt:      r.CreatedAt.Time.Format(time.RFC3339),
 				Generation:     int(r.Generation),
-			}
-			if r.IsMatch {
-				matchSeqs = append(matchSeqs, r.Seq)
 			}
 		}
 		matchSegments = buildSearchSegments(rows)
@@ -719,7 +720,6 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		HasMoreAfter:         hasMoreAfter,
 		RiskSegments:         riskSegments,
 		MatchSegments:        matchSegments,
-		MatchSeqs:            matchSeqs,
 		Totals: &gen.ChatTotals{
 			Total:             totals.Total,
 			UserMessages:      totals.UserMessages,
@@ -1531,6 +1531,7 @@ func (s *Service) buildGenMessage(ctx context.Context, m repo.ChatMessage) *gen.
 	return &gen.ChatMessage{
 		ID:             m.ID.String(),
 		Seq:            m.Seq,
+		IsRisk:         nil, // is_risk is a risk_only-mode signal
 		Role:           m.Role,
 		Model:          m.Model.String,
 		UserID:         &m.UserID.String,

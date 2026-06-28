@@ -53,6 +53,10 @@ WITH risk_counts AS (
   SELECT cm.chat_id, COUNT(*)::integer AS cnt
   FROM risk_results rr
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  -- A finding only counts while its policy is still enabled and not deleted, so
+  -- disabling/deleting a policy retires its findings everywhere (keeps this
+  -- count in sync with the risk.results.list detail view).
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
   WHERE rr.project_id = $3
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
@@ -200,6 +204,9 @@ WHERE c.project_id = $1
       $8::text = 'true' AND EXISTS (
         SELECT 1 FROM risk_results rr
         JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        -- Gate on the policy still being enabled and not deleted so the
+        -- has-risk list filter agrees with the per-chat count and detail view.
+        JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
         WHERE cm.chat_id = c.id
           AND rr.project_id = $1
           AND rr.found IS TRUE
@@ -211,6 +218,9 @@ WHERE c.project_id = $1
       $8::text = 'false' AND NOT EXISTS (
         SELECT 1 FROM risk_results rr
         JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        -- Gate on the policy still being enabled and not deleted so the
+        -- has-risk list filter agrees with the per-chat count and detail view.
+        JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
         WHERE cm.chat_id = c.id
           AND rr.project_id = $1
           AND rr.found IS TRUE
@@ -561,6 +571,9 @@ SELECT
     SELECT COUNT(*)::bigint FROM ordered o
     WHERE EXISTS (
       SELECT 1 FROM risk_results rr
+      -- Only count a finding while its policy is enabled and not deleted (see
+      -- the risk_counts CTE / risk.results.list for the same gate).
+      JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
       WHERE rr.chat_message_id = o.id
         AND rr.project_id = $1::uuid
         AND rr.found IS TRUE
@@ -1501,6 +1514,10 @@ WITH risk_counts AS (
   SELECT cm.chat_id, COUNT(*)::integer AS cnt
   FROM risk_results rr
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  -- A finding only counts while its policy is still enabled and not deleted, so
+  -- disabling/deleting a policy retires its findings everywhere (keeps this
+  -- count in sync with the risk.results.list detail view).
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
   WHERE rr.project_id = $1
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
@@ -1788,6 +1805,10 @@ risk_rns AS (
   SELECT o.rn FROM ordered o
   WHERE EXISTS (
     SELECT 1 FROM risk_results rr
+    -- is_risk only fires while the finding's policy is enabled and not deleted,
+    -- so a since-disabled policy drops out of the "Risky only" view too (matches
+    -- risk.results.list, which drives the highlight detail).
+    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
     WHERE rr.chat_message_id = o.id
       AND rr.project_id = $3::uuid
       AND rr.found IS TRUE
@@ -1795,7 +1816,9 @@ risk_rns AS (
       AND rr.false_positive_at IS NULL
   )
 )
-SELECT o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.created_at, o.risk_analyzed_at, o.rn, o.total
+SELECT
+  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.created_at, o.risk_analyzed_at, o.rn, o.total,
+  EXISTS (SELECT 1 FROM risk_rns r WHERE r.rn = o.rn) AS is_risk
 FROM ordered o
 WHERE EXISTS (
   SELECT 1 FROM risk_rns r
@@ -1845,6 +1868,7 @@ type ListRiskWindowedMessagesRow struct {
 	RiskAnalyzedAt    pgtype.Timestamptz
 	Rn                int64
 	Total             int64
+	IsRisk            bool
 }
 
 // Risk-only view: returns every message within +/- @context_size ordinal
@@ -1853,7 +1877,9 @@ type ListRiskWindowedMessagesRow struct {
 // is the generation's message count, so the caller can fold consecutive rn into
 // contiguous segments and decide whether earlier (rn > 1) or later (rn < total)
 // messages remain to be expanded. Overlapping windows merge naturally via set
-// membership.
+// membership. is_risk flags the seed rows (the flagged messages themselves) so
+// the caller can return the explicit risk seq list (context rows are
+// is_risk = false).
 func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWindowedMessagesParams) ([]ListRiskWindowedMessagesRow, error) {
 	rows, err := q.db.Query(ctx, listRiskWindowedMessages,
 		arg.ContextSize,
@@ -1902,6 +1928,7 @@ func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWind
 			&i.RiskAnalyzedAt,
 			&i.Rn,
 			&i.Total,
+			&i.IsRisk,
 		); err != nil {
 			return nil, err
 		}
@@ -2267,6 +2294,27 @@ func (q *Queries) SeedChatMessageWithSource(ctx context.Context, arg SeedChatMes
 		arg.Source,
 		arg.CreatedAt,
 	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedDisabledRiskPolicy = `-- name: SeedDisabledRiskPolicy :one
+INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, action, auto_name, version)
+VALUES ($1, $2, 'test-policy-disabled', '{}', FALSE, 'flag', TRUE, 1)
+RETURNING id
+`
+
+type SeedDisabledRiskPolicyParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Test fixture: insert a disabled risk policy and return its id. Findings under
+// a disabled (or deleted) policy must drop out of every risk surface — the
+// per-chat count, the is_risk flag, and the risk.results.list detail alike.
+func (q *Queries) SeedDisabledRiskPolicy(ctx context.Context, arg SeedDisabledRiskPolicyParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedDisabledRiskPolicy, arg.ProjectID, arg.OrganizationID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err

@@ -53,12 +53,3 @@ Language hint for syntax highlighting
 > `optional` **highlight**: [`SectionHighlight`](SectionHighlight.md)
 
 Flagged substrings — renders a navigable highlighted view + header icon.
-
-***
-
-### searchActive?
-
-> `optional` **searchActive**: `boolean`
-
-Search tone only: whether this tool holds the active thread match (bright
-vs pale marks).

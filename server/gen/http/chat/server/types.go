@@ -80,10 +80,6 @@ type LoadChatResponseBody struct {
 	// messages, each spanning one or more query matches and their surrounding
 	// context. Use each segment's cursors to expand it.
 	MatchSegments []*RiskSegmentResponseBody `form:"match_segments,omitempty" json:"match_segments,omitempty" xml:"match_segments,omitempty"`
-	// Present only when `query` was requested: the `seq` of every message whose
-	// text matched the query, ascending. These are the jump-to-match navigation
-	// targets; surrounding-context messages in `messages` are not listed here.
-	MatchSeqs []int64 `form:"match_seqs,omitempty" json:"match_seqs,omitempty" xml:"match_seqs,omitempty"`
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsageResponseBody `form:"agent_usage,omitempty" json:"agent_usage,omitempty" xml:"agent_usage,omitempty"`
 	// Whole-generation trace-entry totals for the returned generation. Because
@@ -1644,6 +1640,9 @@ type ChatMessageResponseBody struct {
 	// contiguous (the sequence is shared across chats), so do not infer gaps from
 	// arithmetic differences.
 	Seq int64 `form:"seq" json:"seq" xml:"seq"`
+	// Present only in `risk_only` mode: true when this message has an active risk
+	// finding, false for the surrounding-context messages padded around it.
+	IsRisk *bool `form:"is_risk,omitempty" json:"is_risk,omitempty" xml:"is_risk,omitempty"`
 	// The role of the message
 	Role string `form:"role" json:"role" xml:"role"`
 	// The content of the message — string for plain text, array for
@@ -1836,12 +1835,6 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 				continue
 			}
 			body.MatchSegments[i] = marshalChatRiskSegmentToRiskSegmentResponseBody(val)
-		}
-	}
-	if res.MatchSeqs != nil {
-		body.MatchSeqs = make([]int64, len(res.MatchSeqs))
-		for i, val := range res.MatchSeqs {
-			body.MatchSeqs[i] = val
 		}
 	}
 	if res.AgentUsage != nil {

@@ -223,6 +223,10 @@ WITH risk_counts AS (
   SELECT cm.chat_id, COUNT(*)::integer AS cnt
   FROM risk_results rr
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  -- A finding only counts while its policy is still enabled and not deleted, so
+  -- disabling/deleting a policy retires its findings everywhere (keeps this
+  -- count in sync with the risk.results.list detail view).
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
   WHERE rr.project_id = @project_id
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
@@ -300,6 +304,10 @@ WITH risk_counts AS (
   SELECT cm.chat_id, COUNT(*)::integer AS cnt
   FROM risk_results rr
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  -- A finding only counts while its policy is still enabled and not deleted, so
+  -- disabling/deleting a policy retires its findings everywhere (keeps this
+  -- count in sync with the risk.results.list detail view).
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
   WHERE rr.project_id = @project_id
     AND rr.found IS TRUE
     AND rr.excluded_at IS NULL
@@ -514,6 +522,9 @@ SELECT
     SELECT COUNT(*)::bigint FROM ordered o
     WHERE EXISTS (
       SELECT 1 FROM risk_results rr
+      -- Only count a finding while its policy is enabled and not deleted (see
+      -- the risk_counts CTE / risk.results.list for the same gate).
+      JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
       WHERE rr.chat_message_id = o.id
         AND rr.project_id = @project_id::uuid
         AND rr.found IS TRUE
@@ -578,7 +589,9 @@ LIMIT @lim::integer;
 -- is the generation's message count, so the caller can fold consecutive rn into
 -- contiguous segments and decide whether earlier (rn > 1) or later (rn < total)
 -- messages remain to be expanded. Overlapping windows merge naturally via set
--- membership.
+-- membership. is_risk flags the seed rows (the flagged messages themselves) so
+-- the caller can return the explicit risk seq list (context rows are
+-- is_risk = false).
 WITH ordered AS (
   SELECT
     cm.*,
@@ -593,6 +606,10 @@ risk_rns AS (
   SELECT o.rn FROM ordered o
   WHERE EXISTS (
     SELECT 1 FROM risk_results rr
+    -- is_risk only fires while the finding's policy is enabled and not deleted,
+    -- so a since-disabled policy drops out of the "Risky only" view too (matches
+    -- risk.results.list, which drives the highlight detail).
+    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
     WHERE rr.chat_message_id = o.id
       AND rr.project_id = @project_id::uuid
       AND rr.found IS TRUE
@@ -600,7 +617,9 @@ risk_rns AS (
       AND rr.false_positive_at IS NULL
   )
 )
-SELECT o.*
+SELECT
+  o.*,
+  EXISTS (SELECT 1 FROM risk_rns r WHERE r.rn = o.rn) AS is_risk
 FROM ordered o
 WHERE EXISTS (
   SELECT 1 FROM risk_rns r
@@ -776,6 +795,9 @@ WHERE c.project_id = @project_id
       @has_risk_filter::text = 'true' AND EXISTS (
         SELECT 1 FROM risk_results rr
         JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        -- Gate on the policy still being enabled and not deleted so the
+        -- has-risk list filter agrees with the per-chat count and detail view.
+        JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
         WHERE cm.chat_id = c.id
           AND rr.project_id = @project_id
           AND rr.found IS TRUE
@@ -787,6 +809,9 @@ WHERE c.project_id = @project_id
       @has_risk_filter::text = 'false' AND NOT EXISTS (
         SELECT 1 FROM risk_results rr
         JOIN chat_messages cm ON cm.id = rr.chat_message_id
+        -- Gate on the policy still being enabled and not deleted so the
+        -- has-risk list filter agrees with the per-chat count and detail view.
+        JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
         WHERE cm.chat_id = c.id
           AND rr.project_id = @project_id
           AND rr.found IS TRUE
@@ -996,6 +1021,14 @@ RETURNING id;
 -- Test fixture: insert a minimal risk policy and return its id.
 INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, action, auto_name, version)
 VALUES (@project_id, @organization_id, 'test-policy', '{}', TRUE, 'flag', TRUE, 1)
+RETURNING id;
+
+-- name: SeedDisabledRiskPolicy :one
+-- Test fixture: insert a disabled risk policy and return its id. Findings under
+-- a disabled (or deleted) policy must drop out of every risk surface — the
+-- per-chat count, the is_risk flag, and the risk.results.list detail alike.
+INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, action, auto_name, version)
+VALUES (@project_id, @organization_id, 'test-policy-disabled', '{}', FALSE, 'flag', TRUE, 1)
 RETURNING id;
 
 -- name: SeedRiskResult :exec
