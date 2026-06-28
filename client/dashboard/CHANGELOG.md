@@ -1,5 +1,22 @@
 # dashboard
 
+## 0.78.0
+
+### Minor Changes
+
+- 0cd8e96: Add an agent type filter to the Agent Sessions page, populated from the agent sources actually present in each project's chats via a new `chat.listSources` endpoint.
+- 7763a1b: Tool-call blocks are now durable, first-class entities with a stable `/blocks/<id>` URL and 👍/👎 feedback. When the risk engine blocks a tool call, the block is persisted and its reason is injected into the agent-facing response (Claude `PermissionDecisionReason`, Cursor `AgentMessage`, Codex `reason`) along with a link to the block page, so the agent can reason about the denial instead of hallucinating one. New session-scoped, org-admin-gated `getRiskBlock` and `submitRiskBlockFeedback` endpoints back an in-app `BlockDetailPage` (under `AppLayout`) and a slug-free redirect resolver for the agent's external link, with a "More Info" link from the Risk Events modal.
+
+### Patch Changes
+
+- 0405ac9: Distribute → MCP → Tools now shows the same text permission labels (Read-only, Destructive, Idempotent) as Connect → Catalog → MCP, instead of icon-only badges, for quicker at-a-glance access to a tool's behavior hints.
+- 3464cb8: Show the assistant's creator as its owner. Assistants already recorded who created them; that attribution is now surfaced as a profile avatar (reusing the org-home member avatar treatment) on both the assistant card and the assistant setup page's overview panel. The owner resolves to one of three states: the creating member (avatar + name, full name on hover), "No owner" when the assistant was never attributed, or "Orphaned, no owner" when the creator is no longer a member of the organization. Backed by a new optional `created_by_user_id` field on the `Assistant` API type.
+- dd03a11: Plugin detail now shows an explicit "Up to date" badge and surfaces the last-published time even when there are unpublished changes, rounding out the publish-freshness affordance.
+- a5d57cb: Fix the chat detail "Risky only" filter and rework search-within-thread. The filter previously showed nothing on threads whose findings sat on other transcript pages, and only worked for org admins via the separate risk-results endpoint. `chat.load` (risk_only) now returns `risk_seqs` — the seqs of the flagged messages — so the panel windows the full thread and filters on the authorized load (the toggle is shown only to org admins). Search now steps through every occurrence in document order — within a message's text and inside a tool call's arguments and output — with the active occurrence highlighted distinctly, instead of stepping per message and washing every hit the same colour.
+- b6a94ad: Fix the risk policy creation Detect step so the Continue button enables when only category-level detectors (Prompt Injection, Shadow MCP, Destructive Tools, Destructive CLI Commands) are selected. These categories have no individual sub-rules, so the previous `hasEnabledDetector` check treated them as empty and kept Continue/Save disabled.
+- Updated dependencies [a5d57cb]
+  - @gram-ai/elements@1.38.2
+
 ## 0.77.1
 
 ### Patch Changes
